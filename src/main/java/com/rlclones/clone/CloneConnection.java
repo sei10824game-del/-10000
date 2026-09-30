@@ -1,0 +1,39 @@
+package com.rlclones.clone;
+
+import io.netty.channel.embedded.EmbeddedChannel;
+import net.minecraft.network.Connection;
+import net.minecraft.network.PacketSendListener;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.PacketFlow;
+
+import javax.annotation.Nullable;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+
+/**
+ * In-memory connection for clone players. Everything the server "sends" to a clone is dropped:
+ * clones read the world directly through their own perception instead of through packets.
+ */
+public class CloneConnection extends Connection {
+    public CloneConnection() {
+        super(PacketFlow.SERVERBOUND);
+        this.channel = new EmbeddedChannel();
+        this.address = new InetSocketAddress(InetAddress.getLoopbackAddress(), 0);
+    }
+
+    @Override
+    public void send(Packet<?> packet) {
+    }
+
+    @Override
+    public void send(Packet<?> packet, @Nullable PacketSendListener listener) {
+    }
+
+    @Override
+    public void setReadOnly() {
+    }
+
+    @Override
+    public void handleDisconnection() {
+    }
+}
