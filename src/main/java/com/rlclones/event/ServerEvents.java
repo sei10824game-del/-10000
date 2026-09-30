@@ -421,6 +421,35 @@ public final class ServerEvents {
     }
 
     @SubscribeEvent
+    public static void onCrafted(PlayerEvent.ItemCraftedEvent event) {
+        Player p = event.getEntity();
+        if (p.level().isClientSide) {
+            return;
+        }
+        var item = event.getCrafting().getItem();
+        boolean gear = item instanceof net.minecraft.world.item.TieredItem || item instanceof net.minecraft.world.item.ArmorItem
+                || item instanceof net.minecraft.world.item.ShieldItem;
+        AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.CRAFT, gear ? 1.5f : 0.2f, -1, 0);
+        CloneController c = controllerOf(p);
+        if (c != null) {
+            c.onCrafted(event.getCrafting());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onSmelted(PlayerEvent.ItemSmeltedEvent event) {
+        Player p = event.getEntity();
+        if (p.level().isClientSide) {
+            return;
+        }
+        AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.CRAFT, 0.5f, -1, 0);
+        CloneController c = controllerOf(p);
+        if (c != null) {
+            c.onSmelted();
+        }
+    }
+
+    @SubscribeEvent
     public static void onFinishUsing(LivingEntityUseItemEvent.Finish event) {
         if (event.getEntity() instanceof ServerPlayer p && event.getItem().isEdible()) {
             AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.EAT, 1, -1, 0);

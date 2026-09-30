@@ -56,6 +56,7 @@ public final class CloneManager {
     private final MinecraftServer server;
     private final Map<UUID, ClonePlayer> clones = new LinkedHashMap<>();
     private final Map<UUID, Long> deadSince = new HashMap<>();
+    private final Map<UUID, CloneConnection> connections = new HashMap<>();
     private Brain shared;
     private long ticks;
     private boolean restored;
@@ -219,7 +220,7 @@ public final class CloneManager {
     @Nullable
     public ClonePlayer summon(@Nullable ServerPlayer summoner, ServerLevel level, Vec3 pos, float yaw) {
         restore();
-        if (clones.size() >= Config.get(Config.MAX_CLONES, 16)) {
+        if (clones.size() >= Config.cloneLimit()) {
             return null;
         }
         CloneRoster r = roster();
@@ -258,7 +259,10 @@ public final class CloneManager {
     }
 
     private void login(ClonePlayer clone) {
-        server.getPlayerList().placeNewPlayer(new CloneConnection(), clone);
+        CloneConnection connection = new CloneConnection();
+        connections.put(clone.getUUID(), connection);
+        server.getPlayerList().placeNewPlayer(connection, clone);
+        connection.setOwner(clone);
         clone.showAllSkinLayers();
         clones.put(clone.getUUID(), clone);
     }
@@ -345,9 +349,9 @@ public final class CloneManager {
                 Vec3 front = sender.position().add(new Vec3(look.x, 0, look.z).normalize().scale(2.0));
                 ClonePlayer c = summon(sender, sender.serverLevel(), front, sender.getYRot() + 180f);
                 if (c == null) {
-                    sender.displayClientMessage(Component.translatable("rlclones.msg.limit", Config.get(Config.MAX_CLONES, 16)).withStyle(ChatFormatting.RED), true);
+                    sender.displayClientMessage(Component.translatable("rlclones.msg.limit", Config.cloneLimitLabel()).withStyle(ChatFormatting.RED), true);
                 } else {
-                    sender.displayClientMessage(Component.translatable("rlclones.msg.summoned", c.getGameProfile().getName(), clones.size(), Config.get(Config.MAX_CLONES, 16)).withStyle(ChatFormatting.AQUA), true);
+                    sender.displayClientMessage(Component.translatable("rlclones.msg.summoned", c.getGameProfile().getName(), clones.size(), Config.cloneLimitLabel()).withStyle(ChatFormatting.AQUA), true);
                 }
             }
             case TOGGLE_LINK -> {
@@ -403,6 +407,10 @@ public final class CloneManager {
 
         ClonePlayer fresh = new ClonePlayer(server, level, old.getGameProfile(), old.getCloneBrain());
         fresh.connection = old.connection;
+        CloneConnection ears = connections.get(old.getUUID());
+        if (ears != null) {
+            ears.setOwner(fresh);
+        }
         fresh.connection.player = fresh;
         fresh.restoreFrom(old, false);
         fresh.setId(old.getId());
@@ -457,6 +465,10 @@ public final class CloneManager {
             }
         } else if (!isLinked()) {
             saveBrain(id.toString(), clone.getCloneBrain());
+        }
+        CloneConnection ears = connections.remove(id);
+        if (ears != null) {
+            ears.setOwner(null);
         }
         clone.connection.onDisconnect(reason);
         if (forever) {

@@ -13,7 +13,8 @@ public enum Option {
     GATHER_WOOD(300),
     MINE(300),
     HUNT(160),
-    REST(60);
+    REST(60),
+    CRAFT(400);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

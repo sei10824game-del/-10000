@@ -83,7 +83,8 @@ public final class CombatState {
         q[CombatAction.RETREAT.ordinal()] = dist <= 1 && own < 2 ? 0.4f : (far ? -0.2f : 0f);
         q[CombatAction.STRAFE_LEFT.ordinal()] = ranged && (windup || far) ? 0.3f : 0f;
         q[CombatAction.STRAFE_RIGHT.ordinal()] = ranged && (windup || far) ? 0.3f : 0f;
-        q[CombatAction.BLOCK.ordinal()] = ranged && windup ? 0.5f : (dist <= 1 && enemy == 2 ? 0.3f : 0f);
+        // Raise the shield when the enemy is able to hit us and we cannot answer yet, or against charged shots.
+        q[CombatAction.BLOCK.ordinal()] = ranged && windup ? 1.0f : (dist <= 1 && enemy == 2 ? (own < 2 ? 1.2f : 0.6f) : (dist <= 1 ? 0.2f : 0f));
         q[CombatAction.HOLD.ordinal()] = dist == 2 && own < 2 ? 0.3f : -0.05f;
         q[CombatAction.SHOOT.ordinal()] = far ? (explosive ? 0.8f : 0.4f) : -0.3f;
         q[CombatAction.PILLAR.ordinal()] = crowd >= 1 && hp == 0 ? 0.3f : -0.1f;

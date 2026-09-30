@@ -287,6 +287,7 @@ public final class AgentWatcher {
                 case PICKUP -> r += Math.min(e.amount(), 5f) * 0.2f;
                 case BREAK_LOG -> r += 0.5f;
                 case BREAK_ORE -> r += 0.8f;
+                case CRAFT -> r += e.amount();
                 default -> {
                 }
             }
@@ -301,6 +302,7 @@ public final class AgentWatcher {
         boolean picked = false;
         boolean logs = false;
         boolean ores = false;
+        boolean crafted = false;
         for (AgentEvents.Event e : events) {
             switch (e.kind()) {
                 case ATTACK, DEALT, KILL_HOSTILE -> {
@@ -315,6 +317,7 @@ public final class AgentWatcher {
                 case PICKUP -> picked = true;
                 case BREAK_LOG -> logs = true;
                 case BREAK_ORE -> ores = true;
+                case CRAFT -> crafted = true;
                 default -> {
                 }
             }
@@ -324,6 +327,9 @@ public final class AgentWatcher {
         }
         if (fought) {
             return Option.FIGHT;
+        }
+        if (crafted || agent.containerMenu != agent.inventoryMenu) {
+            return Option.CRAFT;
         }
         if (hunted) {
             return Option.HUNT;

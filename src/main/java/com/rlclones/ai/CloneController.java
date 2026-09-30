@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -39,6 +40,7 @@ public final class CloneController {
     private final Perception perception;
     private final Motor motor;
     private final AgentWatcher watcher;
+    private final Crafting crafting;
     private final Int2LongOpenHashMap enemyLastAttack = new Int2LongOpenHashMap();
     private final Int2LongOpenHashMap enemyLastShot = new Int2LongOpenHashMap();
     private final LongOpenHashSet visitedChunks = new LongOpenHashSet();
@@ -82,6 +84,7 @@ public final class CloneController {
         this.perception = new Perception(self);
         this.motor = new Motor(self);
         this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
+        this.crafting = new Crafting(self, motor, perception);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
     }
@@ -96,6 +99,10 @@ public final class CloneController {
 
     public Motor motor() {
         return motor;
+    }
+
+    public Crafting crafting() {
+        return crafting;
     }
 
     public AgentWatcher watcher() {
@@ -134,6 +141,7 @@ public final class CloneController {
             watcher.update(now);
         }
         if ((now + self.getId()) % 40 == 0 && !self.isUsingItem() && option != Option.GATHER_WOOD && option != Option.MINE
+                && option != Option.CRAFT && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
         }
@@ -146,6 +154,59 @@ public final class CloneController {
         }
         motor.tick();
     }
+
+    /**
+     * Hearing. Receives exactly the sounds a human client would get. Creature sounds are matched to the creature
+     * making them (its voice identifies the kind); the clone then knows something is there even out of sight,
+     * remembers it and turns towards the noise like a player would.
+     */
+    public void hear(SoundEvent sound, double x, double y, double z, int entityId) {
+        ServerLevel level = self.serverLevel();
+        String path = sound.getLocation().getPath();
+        Entity source;
+        Vec3 pos;
+        if (entityId >= 0) {
+            source = level.getEntity(entityId);
+            if (source == null) {
+                return;
+            }
+            pos = source.position();
+        } else {
+            if (!path.startsWith("entity.")) {
+                return;
+            }
+            pos = new Vec3(x, y, z);
+            String[] parts = path.split("\\.");
+            String kind = parts.length > 1 ? parts[1] : "";
+            source = null;
+            double best = Double.MAX_VALUE;
+            for (LivingEntity e : level.getEntitiesOfClass(LivingEntity.class, new net.minecraft.world.phys.AABB(pos, pos).inflate(2.5), e -> e != self && e.isAlive())) {
+                double d = e.position().distanceToSqr(pos) - (Perception.typeId(e).endsWith(":" + kind) ? 100 : 0);
+                if (d < best) {
+                    best = d;
+                    source = e;
+                }
+            }
+        }
+        if (source == null || source == self || perception.isVisible(source)) {
+            return;
+        }
+        long now = now();
+        Perception.Seen s = perception.hear(source, pos, now);
+        heardSounds++;
+        if (source instanceof Creeper && path.contains("primed") && s.swellStart < 0) {
+            s.swellStart = now;
+        }
+        boolean hostile = Senses.isHostileTo(source, self) || source instanceof net.minecraft.world.entity.monster.Enemy;
+        if (hostile || Senses.isAgent(source)) {
+            if (hostile || lookBackTicks <= 0) {
+                lookBack = pos.add(0, source.getBbHeight() * 0.8, 0);
+                lookBackTicks = 12;
+            }
+        }
+    }
+
+    public long heardSounds;
 
     /** Only perceive and learn from others (used when the clone's own AI is switched off). */
     public void passiveTick() {
@@ -358,6 +419,17 @@ public final class CloneController {
         }
     }
 
+    public void onCrafted(net.minecraft.world.item.ItemStack stack) {
+        net.minecraft.world.item.Item item = stack.getItem();
+        boolean gear = item instanceof net.minecraft.world.item.TieredItem || item instanceof net.minecraft.world.item.ArmorItem
+                || item instanceof net.minecraft.world.item.ShieldItem;
+        optionReward += gear ? 1.5f : 0.2f;
+    }
+
+    public void onSmelted() {
+        optionReward += 0.5f;
+    }
+
     public void onShieldBlock(float blocked) {
         stepReward += blocked * 0.5f;
     }
@@ -390,6 +462,7 @@ public final class CloneController {
             case GATHER_WOOD -> runHarvest(Perception.BlockKind.LOG);
             case MINE -> runHarvest(Perception.BlockKind.ORE);
             case REST -> runRest();
+            case CRAFT -> crafting.tick() == Crafting.Status.DONE;
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -435,6 +508,9 @@ public final class CloneController {
         int mask2 = died ? 0 : Senses.strategyMask(perception, self, self, now);
         float gamma = (float) Math.pow(0.995, Math.max(1, optionTicks));
         brain().learn(Brain.STRATEGY, optionState, option.ordinal(), optionReward, s2, died, gamma, mask2, 1f, false);
+        if (option == Option.CRAFT) {
+            crafting.reset();
+        }
         if (self.isUsingItem() && !died) {
             self.stopUsingItem();
         }
@@ -516,6 +592,7 @@ public final class CloneController {
             targetType = Perception.typeId(target);
             combatState = -1;
             action = null;
+            Equipment.manage(self, true); // weapon in hand, shield in the off hand before the fight starts
             if (!hunt) {
                 brain().knowledge(targetType).encounters++;
             }
@@ -660,6 +737,9 @@ public final class CloneController {
             }
             case BLOCK -> {
                 motor.lookAt(t);
+                if (gap > Senses.REACH_GAP) {
+                    motor.moveToward(t.position()); // advance behind the raised shield
+                }
                 if (!self.isUsingItem()) {
                     if (!Equipment.hasShield(self) || !motor.useHeldItem(InteractionHand.OFF_HAND)) {
                         actionDone = true;

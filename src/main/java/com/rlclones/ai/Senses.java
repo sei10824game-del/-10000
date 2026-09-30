@@ -238,7 +238,7 @@ public final class Senses {
         BlockPos best = null;
         double bestD = radius * radius;
         boolean breaking = Config.get(Config.ALLOW_BLOCK_BREAKING, true);
-        if (!breaking) {
+        if (!breaking && (kind == Perception.BlockKind.LOG || kind == Perception.BlockKind.ORE)) {
             return null;
         }
         for (Map.Entry<BlockPos, Perception.BlockKind> e : observer.blocks().entrySet()) {
@@ -304,6 +304,11 @@ public final class Senses {
         }
         if (nearestAnimal(observer, agent, now, 24) != null) {
             mask |= Option.HUNT.bit();
+        }
+        boolean craft = agent instanceof com.rlclones.clone.ClonePlayer c ? c.controller().crafting().hasWork()
+                : agent instanceof ServerPlayer sp && Crafting.plan(sp) != null;
+        if (craft) {
+            mask |= Option.CRAFT.bit();
         }
         return mask;
     }

@@ -10,6 +10,9 @@ import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.ElytraItem;
+import net.minecraft.world.item.FireworkRocketItem;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ShieldItem;
 import net.minecraft.world.level.block.Block;
@@ -191,20 +194,30 @@ public final class Equipment {
             if (s.getItem() instanceof ArmorItem armor) {
                 EquipmentSlot slot = armor.getEquipmentSlot();
                 ItemStack worn = p.getItemBySlot(slot);
-                if (worn.isEmpty() || armorScore(s) > armorScore(worn)) {
+                boolean keepElytra = slot == EquipmentSlot.CHEST && isUsableElytra(worn) && (p.isFallFlying() || !p.onGround());
+                if (!keepElytra && (worn.isEmpty() || armorScore(s) > armorScore(worn))) {
                     p.setItemSlot(slot, s.copy());
                     inv.items.set(i, worn.copy());
                 }
             }
         }
-        if (p.getOffhandItem().isEmpty()) {
+        ItemStack off = p.getOffhandItem();
+        if (!(off.getItem() instanceof ShieldItem) && !off.is(Items.TOTEM_OF_UNDYING)) {
             for (int i = 0; i < inv.items.size(); i++) {
                 ItemStack s = inv.items.get(i);
                 if (s.getItem() instanceof ShieldItem) {
                     p.setItemSlot(EquipmentSlot.OFFHAND, s.copy());
-                    inv.items.set(i, ItemStack.EMPTY);
+                    inv.items.set(i, off.copy());
                     break;
                 }
+            }
+        }
+        // no chest armour at all -> wear the elytra so a fall can always turn into a glide
+        if (p.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) {
+            int el = elytraSlot(p);
+            if (el >= 0) {
+                p.setItemSlot(EquipmentSlot.CHEST, inv.items.get(el).copy());
+                inv.items.set(el, ItemStack.EMPTY);
             }
         }
         if (holdWeapon) {
@@ -213,6 +226,56 @@ public final class Equipment {
                 select(p, weapon);
             }
         }
+    }
+
+    // ------------------------------------------------------------------ elytra / rockets
+
+    public static boolean isUsableElytra(ItemStack s) {
+        return s.getItem() instanceof ElytraItem && ElytraItem.isFlyEnabled(s);
+    }
+
+    public static boolean wearsElytra(Player p) {
+        return isUsableElytra(p.getItemBySlot(EquipmentSlot.CHEST));
+    }
+
+    public static int elytraSlot(Player p) {
+        Inventory inv = p.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            if (isUsableElytra(inv.items.get(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static boolean hasElytra(Player p) {
+        return wearsElytra(p) || elytraSlot(p) >= 0;
+    }
+
+    /** Swap the elytra onto the chest (the current chest piece goes into the inventory), like right-clicking it. */
+    public static boolean equipElytra(Player p) {
+        if (wearsElytra(p)) {
+            return true;
+        }
+        int slot = elytraSlot(p);
+        if (slot < 0) {
+            return false;
+        }
+        Inventory inv = p.getInventory();
+        ItemStack worn = p.getItemBySlot(EquipmentSlot.CHEST).copy();
+        p.setItemSlot(EquipmentSlot.CHEST, inv.items.get(slot).copy());
+        inv.items.set(slot, worn);
+        return true;
+    }
+
+    public static int rocketSlot(Player p) {
+        Inventory inv = p.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            if (inv.items.get(i).getItem() instanceof FireworkRocketItem) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static double armorScore(ItemStack s) {

@@ -50,12 +50,12 @@ public class CloneSpawnEggItem extends Item {
         ClonePlayer clone = manager.summon(summoner, serverLevel, Vec3.atBottomCenterOf(spawn), yaw);
         if (clone == null) {
             if (player != null) {
-                player.displayClientMessage(Component.translatable("rlclones.msg.limit", Config.get(Config.MAX_CLONES, 16)).withStyle(ChatFormatting.RED), true);
+                player.displayClientMessage(Component.translatable("rlclones.msg.limit", Config.cloneLimitLabel()).withStyle(ChatFormatting.RED), true);
             }
             return InteractionResult.FAIL;
         }
         if (player != null) {
-            player.displayClientMessage(Component.translatable("rlclones.msg.summoned", clone.getGameProfile().getName(), manager.clones().size(), Config.get(Config.MAX_CLONES, 16)).withStyle(ChatFormatting.AQUA), true);
+            player.displayClientMessage(Component.translatable("rlclones.msg.summoned", clone.getGameProfile().getName(), manager.clones().size(), Config.cloneLimitLabel()).withStyle(ChatFormatting.AQUA), true);
             if (!player.getAbilities().instabuild) {
                 ctx.getItemInHand().shrink(1);
             }

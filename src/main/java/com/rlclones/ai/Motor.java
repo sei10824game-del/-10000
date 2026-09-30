@@ -59,6 +59,11 @@ public final class Motor {
     private int progressTimer;
     private int stuckCount;
 
+    // elytra flight
+    private Vec3 flightGoal;
+    private int takeoffTicks;
+    private int rocketCooldown;
+
     // mining
     private BlockPos breakingPos;
     private float breakProgress;
@@ -142,6 +147,17 @@ public final class Motor {
      */
     public boolean navigate(Vec3 goal, double arrive, boolean run) {
         Vec3 pos = self.position();
+        if (self.isFallFlying() || takeoffTicks > 0) {
+            flightGoal = goal;
+            return false;
+        }
+        if (horizontalDistance(pos, goal) > 40 && self.onGround() && Equipment.hasElytra(self) && Equipment.rocketSlot(self) >= 0
+                && self.level().canSeeSky(self.blockPosition().above(2))) {
+            flightGoal = goal;
+            takeoffTicks = 1;
+            clearPath();
+            return false;
+        }
         if (horizontalDistance(pos, goal) <= arrive && Math.abs(pos.y - goal.y) < 2.0) {
             clearPath();
             return true;
@@ -160,7 +176,8 @@ public final class Motor {
             while (!path.isDone()) {
                 Node n = path.getNextNode();
                 Vec3 c = new Vec3(n.x + 0.5, n.y, n.z + 0.5);
-                if (horizontalDistance(pos, c) < 0.45 && Math.abs(pos.y - n.y) < 1.2) {
+                // swimming: path nodes may lie on the bottom while we float at the surface -> judge horizontally
+                if (horizontalDistance(pos, c) < 0.45 && (Math.abs(pos.y - n.y) < 1.2 || self.isInWater())) {
                     path.advance();
                 } else {
                     break;
@@ -370,9 +387,82 @@ public final class Motor {
         }
     }
 
+    // ------------------------------------------------------------------ elytra
+
+    public boolean isFlying() {
+        return self.isFallFlying() || takeoffTicks > 0;
+    }
+
+    private void flight() {
+        if (rocketCooldown > 0) {
+            rocketCooldown--;
+        }
+        // reflex: falling with an elytra -> open it (a player presses jump in mid-air)
+        if (!self.isFallFlying() && takeoffTicks == 0 && !self.onGround() && !self.isInWater() && self.fallDistance > 4.0F
+                && Equipment.hasElytra(self)) {
+            Equipment.equipElytra(self);
+            self.tryToStartFallFlying();
+        }
+        if (takeoffTicks > 0) {
+            takeoffTicks++;
+            Equipment.equipElytra(self);
+            float yaw = flightGoal == null ? self.getYRot() : yawTo(flightGoal);
+            lookAngles(yaw, -35f);
+            if (self.onGround() && takeoffTicks < 5) {
+                jump = true;
+            } else if (!self.onGround() && !self.isFallFlying() && self.tryToStartFallFlying()) {
+                fireRocket();
+                takeoffTicks = 0;
+            }
+            if (takeoffTicks > 25) {
+                takeoffTicks = 0;
+            }
+            return;
+        }
+        if (!self.isFallFlying()) {
+            if (self.onGround()) {
+                flightGoal = null;
+            }
+            return;
+        }
+        if (flightGoal == null) {
+            lookAngles(self.getYRot(), 12f); // plain glide down
+            return;
+        }
+        Vec3 pos = self.position();
+        double h = horizontalDistance(pos, flightGoal);
+        float pitch;
+        if (h < 14) {
+            pitch = 40f; // come down to land
+        } else {
+            double wantAlt = flightGoal.y + Math.min(30.0, h * 0.25);
+            pitch = (float) Mth.clamp((pos.y - wantAlt) * 2.0, -30.0, 30.0);
+            if (self.getDeltaMovement().length() < 0.9 && rocketCooldown <= 0 && Equipment.rocketSlot(self) >= 0) {
+                fireRocket();
+            }
+        }
+        lookAngles(yawTo(flightGoal), pitch);
+    }
+
+    private void fireRocket() {
+        int slot = Equipment.rocketSlot(self);
+        if (slot < 0) {
+            return;
+        }
+        Equipment.select(self, slot);
+        if (useHeldItem(InteractionHand.MAIN_HAND)) {
+            rocketCooldown = 30;
+        }
+    }
+
+    private float yawTo(Vec3 p) {
+        return (float) Math.toDegrees(Mth.atan2(p.z - self.getZ(), p.x - self.getX())) - 90.0F;
+    }
+
     // ------------------------------------------------------------------ apply
 
     public void tick() {
+        flight();
         // rotation
         float yaw = self.getYRot();
         float pitch = self.getXRot();
@@ -441,9 +531,8 @@ public final class Motor {
             jump = true;
         }
         if (self.isInWater() || self.isInLava()) {
-            if (moving || self.getAirSupply() < self.getMaxAirSupply() / 2 || self.isInLava()) {
-                jump = true;
-            }
+            // swim: keep the head above the surface; with forward input this also climbs out onto a ledge
+            jump = true;
         }
         self.zza = zza;
         self.xxa = xxa;

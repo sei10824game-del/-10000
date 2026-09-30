@@ -36,7 +36,7 @@ import java.util.Map;
  * Seen things are remembered for a while so the clone has object permanence.
  */
 public final class Perception {
-    public enum BlockKind {LOG, ORE}
+    public enum BlockKind {LOG, ORE, TABLE, FURNACE}
 
     public static final class Seen {
         public final Entity entity;
@@ -52,6 +52,8 @@ public final class Perception {
         public long swellStart = -1;
         public boolean flaggedBurn;
         public boolean flaggedClimb;
+        /** Last tick this entity was only heard (not seen); -1 if never. */
+        public long heardAt = -1;
 
         Seen(Entity entity, long now) {
             this.entity = entity;
@@ -283,6 +285,12 @@ public final class Perception {
     }
 
     public static BlockKind classify(BlockState state) {
+        if (state.is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE)) {
+            return BlockKind.TABLE;
+        }
+        if (state.getBlock() instanceof net.minecraft.world.level.block.AbstractFurnaceBlock) {
+            return BlockKind.FURNACE;
+        }
         if (state.is(BlockTags.LOGS)) {
             return BlockKind.LOG;
         }
@@ -300,6 +308,27 @@ public final class Perception {
         } else {
             blocks.remove(pos);
         }
+    }
+
+    /**
+     * The clone heard this entity at {@code pos} (it may be behind it or behind a wall). Like a player it now knows
+     * roughly where it is, but it is not "visible" until it actually comes into view.
+     */
+    public Seen hear(Entity e, Vec3 pos, long now) {
+        Seen s = memory.get(e.getId());
+        if (s == null || s.entity != e) {
+            s = new Seen(e, now);
+            s.pos = pos;
+            s.prevPos = pos;
+            memory.put(e.getId(), s);
+        } else if (!s.visible) {
+            s.prevPos = pos;
+            s.prevSeen = now;
+            s.pos = pos;
+            s.lastSeen = now;
+        }
+        s.heardAt = now;
+        return s;
     }
 
     public void forgetBlock(BlockPos pos) {

@@ -14,7 +14,7 @@ import java.util.UUID;
  */
 public final class AgentEvents {
     public enum Kind {
-        ATTACK, DEALT, HURT, KILL_HOSTILE, KILL_ANIMAL, DEATH, PICKUP, BREAK_LOG, BREAK_ORE, BREAK_OTHER, PILLAR, EAT, BLOCKED, SHOOT
+        ATTACK, DEALT, HURT, KILL_HOSTILE, KILL_ANIMAL, DEATH, PICKUP, BREAK_LOG, BREAK_ORE, BREAK_OTHER, PILLAR, EAT, BLOCKED, SHOOT, CRAFT
     }
 
     public static final int FLAG_CRIT = 1;

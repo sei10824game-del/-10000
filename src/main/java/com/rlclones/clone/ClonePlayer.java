@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.damagesource.DamageSource;
 
 import javax.annotation.Nullable;
@@ -65,6 +66,18 @@ public class ClonePlayer extends ServerPlayer {
             }
         }
         this.doTick();
+    }
+
+    /** Called for every sound packet a human client at this position would have received. */
+    public void hear(SoundEvent sound, double x, double y, double z, int entityId) {
+        if (!this.isAlive() || this.isRemoved()) {
+            return;
+        }
+        try {
+            controller.hear(sound, x, y, z, entityId);
+        } catch (RuntimeException e) {
+            CloneManager.reportError(this, e);
+        }
     }
 
     public boolean isAiEnabled() {

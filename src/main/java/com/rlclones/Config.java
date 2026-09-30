@@ -29,7 +29,7 @@ public final class Config {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
 
         b.push("clones");
-        MAX_CLONES = b.comment("Maximum number of clones alive at the same time.").defineInRange("maxClones", 16, 1, 256);
+        MAX_CLONES = b.comment("Maximum number of clones alive at the same time. 0 = unlimited.").defineInRange("maxClones", 0, 0, 1_000_000);
         OPS_ONLY = b.comment("Only operators may summon clones or toggle link / respawn.").define("opsOnly", false);
         RESPAWN_DELAY = b.comment("Ticks a dead clone waits before respawning (when respawn is ON).").defineInRange("respawnDelayTicks", 40, 1, 20 * 60);
         DESPAWN_DELAY = b.comment("Ticks a dead clone lingers before being removed for good (when respawn is OFF). Pressing P during this time still saves it.").defineInRange("despawnDelayTicks", 60, 1, 20 * 60);
@@ -60,6 +60,18 @@ public final class Config {
     }
 
     private Config() {
+    }
+
+    /** Clone cap; 0 in the config means unlimited. */
+    public static int cloneLimit() {
+        int v = get(MAX_CLONES, 0);
+        return v <= 0 ? Integer.MAX_VALUE : v;
+    }
+
+    /** Human readable clone cap for messages. */
+    public static String cloneLimitLabel() {
+        int v = get(MAX_CLONES, 0);
+        return v <= 0 ? "\u221e" : Integer.toString(v);
     }
 
     /** Reads a config value, falling back to a default while the config is not loaded yet. */

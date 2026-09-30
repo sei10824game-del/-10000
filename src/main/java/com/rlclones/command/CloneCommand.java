@@ -110,7 +110,7 @@ public final class CloneCommand {
         }
         int total = made;
         if (total == 0) {
-            src.sendFailure(Component.translatable("rlclones.msg.limit", Config.get(Config.MAX_CLONES, 16)));
+            src.sendFailure(Component.translatable("rlclones.msg.limit", Config.cloneLimitLabel()));
         } else {
             src.sendSuccess(() -> Component.translatable("rlclones.cmd.summoned", total), true);
         }

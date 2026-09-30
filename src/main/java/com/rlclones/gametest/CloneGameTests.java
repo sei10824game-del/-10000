@@ -301,6 +301,136 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    // ------------------------------------------------------------------ v2 features
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "many")
+    public static void noCloneLimitByDefault(GameTestHelper h) {
+        List<ClonePlayer> made = new ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            made.add(clone(h, 2.5 + (i % 6) * 2, 2.5 + (i / 6) * 2, 0f, false));
+        }
+        h.assertTrue(made.size() == 24, "24 clones (more than the old cap of 16) must be allowed");
+        finish(h, made.toArray(new ClonePlayer[0]));
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40)
+    public static void hearsMobOutOfSight(GameTestHelper h) {
+        ClonePlayer c = clone(h, 8.5, 7.5, -90f, false); // facing +X
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(4.5, 2, 7.5)); // behind it
+        husk.setNoAi(true);
+        h.runAfterDelay(2, () -> {
+            var p = c.controller().perception();
+            h.assertFalse(p.canSee(husk), "husk is behind the clone");
+            h.assertTrue(p.get(husk) == null, "not known before it makes a sound");
+            husk.playAmbientSound();
+            var heard = p.get(husk);
+            h.assertTrue(heard != null && heard.heardAt >= 0, "clone should hear the husk groan behind it");
+            h.assertFalse(p.isVisible(husk), "heard, not seen");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400)
+    public static void cloneSwimsAcrossAndClimbsOut(GameTestHelper h) {
+        for (int x = 1; x <= 9; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.WATER);
+                }
+            }
+        }
+        for (int x = 10; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 5; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
+        Vec3 goal = h.absoluteVec(new Vec3(11.5, 6, 7.5));
+        h.onEachTick(() -> {
+            c.controller().motor().navigate(goal, 0.8, false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.isAlive(), "clone must not drown");
+            h.assertTrue(c.getY() >= goal.y - 0.1 && c.position().distanceTo(goal) < 2.0, "clone should swim across and climb onto the ledge");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600)
+    public static void craftsThroughTheUi(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 3));
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.WOODEN_SWORD) >= 1, "clone should craft a wooden sword (logs -> planks -> table -> sticks -> sword)");
+            boolean table = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 3, 13)))) {
+                table |= h.getLevel().getBlockState(p).is(Blocks.CRAFTING_TABLE);
+            }
+            h.assertTrue(table, "clone should have placed a crafting table and used it");
+            h.assertTrue(c.containerMenu == c.inventoryMenu || c.controller().crafting().isUsingUi(), "menus are handled");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1000)
+    public static void smeltsInAFurnace(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.FURNACE));
+        c.getInventory().add(new ItemStack(Items.RAW_IRON, 2));
+        c.getInventory().add(new ItemStack(Items.COAL, 1));
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 2, "clone should smelt raw iron through the furnace screen, has "
+                    + c.getInventory().countItem(Items.IRON_INGOT));
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 200)
+    public static void clonesGlideWithElytra(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.ELYTRA));
+        Vec3 high = h.absoluteVec(new Vec3(7.5, 45, 7.5));
+        c.teleportTo(h.getLevel(), high.x, high.y, high.z, 0f, 0f);
+        boolean[] flew = {false};
+        h.onEachTick(() -> flew[0] |= c.isFallFlying());
+        h.succeedWhen(() -> {
+            h.assertTrue(flew[0], "clone should put on the elytra and glide when falling");
+            h.assertTrue(c.isAlive(), "and survive");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200)
+    public static void clonesRaiseShields(GameTestHelper h) {
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.SHIELD));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 3000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 3000, 2));
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(8.5, 2, 7.5));
+        husk.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 3000, 4));
+        boolean[] blocked = {false};
+        h.onEachTick(() -> blocked[0] |= c.isBlocking());
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getOffhandItem().is(Items.SHIELD), "shield goes to the off hand");
+            h.assertTrue(blocked[0], "clone should raise its shield against the husk");
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 60, batch = "egg")
     public static void spawnEggSummonsClone(GameTestHelper h) {
         CloneManager m = manager(h);
