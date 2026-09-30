@@ -405,9 +405,15 @@ public final class CloneGameTests {
         Vec3 high = h.absoluteVec(new Vec3(7.5, 45, 7.5));
         c.teleportTo(h.getLevel(), high.x, high.y, high.z, 0f, 0f);
         boolean[] flew = {false};
-        h.onEachTick(() -> flew[0] |= c.isFallFlying());
+        double[] maxFall = {0};
+        h.onEachTick(() -> {
+            flew[0] |= c.isFallFlying();
+            maxFall[0] = Math.max(maxFall[0], c.fallDistance);
+        });
         h.succeedWhen(() -> {
-            h.assertTrue(flew[0], "clone should put on the elytra and glide when falling");
+            h.assertTrue(flew[0], "clone should put on the elytra and glide when falling: y=" + c.getY() + " ground=" + c.onGround()
+                    + " maxFall=" + maxFall[0] + " chest=" + c.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST)
+                    + " errors=" + CloneManager.errors() + " alive=" + c.isAlive() + " ai=" + c.isAiEnabled());
             h.assertTrue(c.isAlive(), "and survive");
             finish(h, c);
         });
