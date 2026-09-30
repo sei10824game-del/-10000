@@ -12,6 +12,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import com.rlclones.command.CloneCommand;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -144,7 +145,7 @@ public final class ServerEvents {
                 || !(event.getTarget() instanceof ClonePlayer clone) || player instanceof ClonePlayer) {
             return;
         }
-        player.openMenu(new SimpleMenuProvider((id, inv, p) -> ChestMenu.fourRows(id, inv, new CloneInventory(clone)), clone.getDisplayName()));
+        player.openMenu(new SimpleMenuProvider((id, inv, p) -> new ChestMenu(MenuType.GENERIC_9x4, id, inv, new CloneInventory(clone), 4), clone.getDisplayName()));
         event.setCancellationResult(InteractionResult.SUCCESS);
         event.setCanceled(true);
     }
