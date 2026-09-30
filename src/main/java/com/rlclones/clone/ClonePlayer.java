@@ -9,6 +9,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.damagesource.DamageSource;
 
 import javax.annotation.Nullable;
@@ -93,6 +95,16 @@ public class ClonePlayer extends ServerPlayer {
             this.setJumping(false);
             this.setSprinting(false);
         }
+    }
+
+    /**
+     * A human's fall distance / fall damage is computed when its client sends movement packets
+     * ({@code doCheckFallDamage}); the server-side override is a no-op. Clones move on the server,
+     * so route the physics callback to the same player code path: falls hurt, crits and elytra work.
+     */
+    @Override
+    protected void checkFallDamage(double dy, boolean onGround, BlockState state, BlockPos pos) {
+        this.doCheckFallDamage(dy, onGround);
     }
 
     @Override
