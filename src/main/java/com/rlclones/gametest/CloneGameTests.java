@@ -775,10 +775,12 @@ public final class CloneGameTests {
         h.setBlock(new BlockPos(7, 1, 7), Blocks.MAGMA_BLOCK);
         h.setBlock(new BlockPos(7, 0, 11), Blocks.STONE);
         h.setBlock(new BlockPos(7, 1, 11), Blocks.MAGMA_BLOCK);
-        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         ClonePlayer friend = clone(h, 4.5, 11.5, -135f, false);
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 1));
         String magma = "minecraft:magma_block";
+        // stand on the magma until the spawn protection (60 ticks) wears off, then act freely
+        h.runAfterDelay(90, () -> c.setAiEnabled(true));
         h.succeedWhen(() -> {
             h.assertTrue(c.getCloneBrain().isHarmful(magma), "magma damage should teach that magma blocks are harmful");
             h.assertFalse(c.getCloneBrain().isHarmful("minecraft:stone"), "the floor is not harmful");

@@ -40,6 +40,9 @@ public final class Expedition {
     private static final Pattern RALLY = Pattern.compile("^RALLY (-?\\d+) (-?\\d+) (-?\\d+) TO (-?\\d+) (-?\\d+) (-?\\d+) need=(\\d+)");
     private static final int GATHER_TICKS = 600;
     private static final int COOLDOWN = 12000;
+    /** A clone first gets to know its surroundings (5 minutes) before it leads anyone into the unknown. */
+    private static final int FIRST_DELAY = 6000;
+    private static final double JOIN_RADIUS = 96;
 
     private final ServerPlayer self;
     private final Motor motor;
@@ -59,7 +62,7 @@ public final class Expedition {
     private int totalTicks;
     private int waitTicks;
     private Vec3 wander;
-    private long lastLed = -COOLDOWN;
+    private long lastLed;
 
     // member
     @Nullable
@@ -75,6 +78,7 @@ public final class Expedition {
     public Expedition(ServerPlayer self, Motor motor) {
         this.self = self;
         this.motor = motor;
+        this.lastLed = self.level().getGameTime() - COOLDOWN + FIRST_DELAY;
     }
 
     public boolean isLeading() {
@@ -161,7 +165,7 @@ public final class Expedition {
     public boolean canJoin(long now) {
         Offer o = offer;
         return o != null && !committed() && now - o.tick() < GATHER_TICKS && o.dimension() == self.level().dimension()
-                && joiners(o.leaderName()).size() < o.need() && Math.sqrt(self.blockPosition().distSqr(o.rally())) < 160;
+                && joiners(o.leaderName()).size() < o.need() && Math.sqrt(self.blockPosition().distSqr(o.rally())) < JOIN_RADIUS;
     }
 
     // ================================================================== chat

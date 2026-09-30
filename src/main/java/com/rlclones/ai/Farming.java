@@ -41,7 +41,7 @@ public final class Farming {
     private int ticks;
     private int tries;
     private int collect;
-    private long cachedAt = Long.MIN_VALUE;
+    private long cachedAt = -1000;
     private boolean cachedWork;
 
     public int tilled;
