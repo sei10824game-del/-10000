@@ -269,6 +269,11 @@ public final class CloneManager {
             return;
         }
         restored = true;
+        restoreMissing();
+    }
+
+    /** Logs in every roster clone that is not currently online (position, inventory and brain come from disk). */
+    public void restoreMissing() {
         CloneRoster r = roster();
         for (Map.Entry<UUID, CompoundTag> e : new ArrayList<>(r.profiles.entrySet())) {
             if (server.getPlayerList().getPlayer(e.getKey()) != null) {

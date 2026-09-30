@@ -9,7 +9,13 @@ import com.rlclones.ai.combat.CombatState;
 import com.rlclones.clone.ClientAction;
 import com.rlclones.clone.CloneManager;
 import com.rlclones.clone.ClonePlayer;
+import com.rlclones.registry.ModItems;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
@@ -284,6 +290,52 @@ public final class CloneGameTests {
         h.assertTrue(m.isRespawnEnabled() == was, "P toggles back");
         made.add(sender);
         finish(h, made.toArray(new ClonePlayer[0]));
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "egg")
+    public static void spawnEggSummonsClone(GameTestHelper h) {
+        CloneManager m = manager(h);
+        ClonePlayer user = clone(h, 4.5, 7.5, -90f, false);
+        user.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(ModItems.CLONE_SPAWN_EGG.get(), 2));
+        int before = m.clones().size();
+        BlockPos floor = h.absolutePos(new BlockPos(8, 1, 7));
+        InteractionResult r = user.getMainHandItem().useOn(new UseOnContext(user, InteractionHand.MAIN_HAND,
+                new BlockHitResult(Vec3.atCenterOf(floor).add(0, 0.5, 0), Direction.UP, floor, false)));
+        h.assertTrue(r.consumesAction(), "egg use should succeed, got " + r);
+        h.assertTrue(m.clones().size() == before + 1, "spawn egg summons one clone");
+        h.assertTrue(user.getMainHandItem().getCount() == 1, "egg is consumed in survival");
+        List<ClonePlayer> made = new ArrayList<>();
+        for (ClonePlayer c : m.clones()) {
+            if (c != user && c.blockPosition().closerThan(floor.above(), 1.5)) {
+                made.add(c);
+            }
+        }
+        h.assertTrue(made.size() == 1, "clone stands on the clicked block");
+        made.add(user);
+        finish(h, made.toArray(new ClonePlayer[0]));
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "persist")
+    public static void clonesAndBrainsSurviveRelog(GameTestHelper h) {
+        CloneManager m = manager(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.GOLDEN_APPLE, 3));
+        c.getCloneBrain().knowledge("minecraft:creeper").fuseTicks.add(30);
+        String name = c.getGameProfile().getName();
+        UUID id = c.getUUID();
+        Vec3 pos = c.position();
+        m.remove(c, false, Component.literal("server stopping"));
+        h.assertTrue(m.byName(name) == null, "clone logged out");
+        m.restoreMissing();
+        ClonePlayer back = m.byName(name);
+        h.assertTrue(back != null && back != c && back.getUUID().equals(id), "clone restored from the roster");
+        h.assertTrue(back.position().distanceTo(pos) < 0.5, "restored at its saved position");
+        h.assertTrue(back.getInventory().countItem(Items.GOLDEN_APPLE) == 3, "inventory restored from player data");
+        h.assertTrue(back.getCloneBrain() != c.getCloneBrain() && back.getCloneBrain().knowledge("minecraft:creeper").fuseTicks.count() == 1,
+                "brain reloaded from disk");
+        finish(h, back);
         h.succeed();
     }
 

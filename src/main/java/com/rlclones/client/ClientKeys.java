@@ -7,6 +7,11 @@ import com.rlclones.network.ModNetwork;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraftforge.client.event.ScreenEvent;
+
+import java.util.Arrays;
+import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
@@ -47,6 +52,20 @@ public final class ClientKeys {
 
     private static boolean matches(KeyMapping mapping, InputConstants.Key key) {
         return !mapping.isUnbound() && mapping.getKey().equals(key) && mapping.getKeyModifier().isActive(mapping.getKeyConflictContext());
+    }
+
+    /** CI smoke test (-Drlclones.smokeTest=true): report that the client reached the title screen, then quit. */
+    @SubscribeEvent
+    public static void onScreenInit(ScreenEvent.Init.Post event) {
+        if (!Boolean.getBoolean("rlclones.smokeTest") || !(event.getScreen() instanceof TitleScreen)) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        List<KeyMapping> all = Arrays.asList(mc.options.keyMappings);
+        boolean registered = all.contains(ClientSetup.SUMMON) && all.contains(ClientSetup.LINK) && all.contains(ClientSetup.RESPAWN);
+        RLClones.LOGGER.info("RLCLONES_CLIENT_READY registered={} keys={},{},{}", registered,
+                ClientSetup.SUMMON.getKey().getName(), ClientSetup.LINK.getKey().getName(), ClientSetup.RESPAWN.getKey().getName());
+        mc.stop();
     }
 
     /** P is the vanilla "social interactions" key: move that binding out of the way once so P toggles respawn. */
