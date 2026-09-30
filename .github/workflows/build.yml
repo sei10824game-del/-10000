@@ -68,6 +68,7 @@ jobs:
         run: |
           mkdir -p run/config
           printf 'earlyWindowControl = false\nversionCheck = false\n' > run/config/fml.toml
+          printf 'onboardAccessibility:false\n' > run/options.txt
           xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew runClient --no-daemon > client-console.log 2>&1 &
           GRADLE_PID=$!
           for i in $(seq 1 120); do

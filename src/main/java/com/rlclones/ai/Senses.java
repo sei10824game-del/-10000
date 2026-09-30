@@ -61,7 +61,8 @@ public final class Senses {
     }
 
     public static boolean isFoodAnimal(Entity e) {
-        return e instanceof LivingEntity le && le.isAlive() && !le.isBaby() && FOOD_ANIMALS.contains(e.getType());
+        // never hunt someone's named or leashed animals
+        return e instanceof Mob m && m.isAlive() && !m.isBaby() && !m.hasCustomName() && !m.isLeashed() && FOOD_ANIMALS.contains(e.getType());
     }
 
     public static double gap(Entity a, Entity b) {

@@ -14,6 +14,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -255,11 +256,30 @@ public final class Perception {
                 continue;
             }
             BlockPos pos = hit.getBlockPos().immutable();
-            BlockKind kind = classify(level.getBlockState(pos));
+            BlockKind kind = classify(level, pos);
             if (kind != null) {
                 blocks.put(pos, kind);
             }
         }
+    }
+
+    /** Like {@link #classify(BlockState)}, but logs only count when they belong to a natural tree (not a house wall). */
+    public static BlockKind classify(Level level, BlockPos pos) {
+        BlockKind kind = classify(level.getBlockState(pos));
+        if (kind == BlockKind.LOG && !isTreeLog(level, pos)) {
+            return null;
+        }
+        return kind;
+    }
+
+    private static boolean isTreeLog(Level level, BlockPos pos) {
+        for (BlockPos p : BlockPos.betweenClosed(pos.offset(-2, 0, -2), pos.offset(2, 5, 2))) {
+            BlockState s = level.getBlockState(p);
+            if (s.getBlock() instanceof LeavesBlock && s.hasProperty(LeavesBlock.PERSISTENT) && !s.getValue(LeavesBlock.PERSISTENT)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static BlockKind classify(BlockState state) {
@@ -274,7 +294,7 @@ public final class Perception {
 
     /** Remember a block the clone is looking at directly (e.g. the block it just mined next to). */
     public void noteBlock(BlockPos pos) {
-        BlockKind kind = classify(self.level().getBlockState(pos));
+        BlockKind kind = classify(self.level(), pos);
         if (kind != null) {
             blocks.put(pos.immutable(), kind);
         } else {
