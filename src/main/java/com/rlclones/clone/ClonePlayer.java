@@ -104,7 +104,7 @@ public class ClonePlayer extends ServerPlayer {
      */
     @Override
     protected void checkFallDamage(double dy, boolean onGround, BlockState state, BlockPos pos) {
-        this.doCheckFallDamage(dy, onGround);
+        this.doCheckFallDamage(this.getDeltaMovement().x, dy, this.getDeltaMovement().z, onGround);
     }
 
     @Override
