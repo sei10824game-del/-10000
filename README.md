@@ -86,7 +86,7 @@
 ./gradlew build              # build/libs/rlclones-1.0.0.jar
 ./gradlew runGameTestServer  # 実サーバー上で受け入れテスト（GameTest）を実行
 ```
-GitHub Actions でビルドとGameTestを自動で実行し、jarを成果物（artifact）としてアップロードします。
+GitHub Actions でビルドとGameTestを自動で実行し、jarを成果物（artifact `rlclones-jar`）としてアップロードします。あわせて、仮想ディスプレイ上でクライアントを起動し、タイトル画面まで到達することとZ/X/Pキーが登録されていることも確認しています（`client-smoke` ジョブ）。
 
 GameTest（`src/main/java/com/rlclones/gametest/CloneGameTests.java`）で確認している内容：
 * クローンがプレイヤーリストに入った本物のプレイヤーであること（サバイバル・体力20・リーチ3・装備の自動選択）
@@ -98,4 +98,6 @@ GameTest（`src/main/java/com/rlclones/gametest/CloneGameTests.java`）で確認
 * 脳の保存・読み込みと、重み付き統合が正しく動くこと
 * Xで脳を共有 / 解除できること、リンク中に召喚したクローンも共有に加わること
 * Zで召喚、Pでリスポーンを切り替えられること
+* スポーンエッグで、クリックしたブロックの上に召喚でき、エッグが1つ消費されること
+* ログアウトしてから復元したとき、位置・持ち物・脳（学習内容）が元どおりに戻ること（サーバー再起動と同じ流れ）
 * リスポーンONでは同じUUIDと同じ脳のまま復活し、OFFでは消滅すること
