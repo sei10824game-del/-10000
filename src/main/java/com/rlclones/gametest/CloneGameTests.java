@@ -204,6 +204,14 @@ public final class CloneGameTests {
                 c.controller().motor().lookAt(Vec3.atCenterOf(abs));
                 c.controller().motor().tick();
                 c.controller().motor().mine(abs);
+            } else {
+                // walk onto the drop, as the COLLECT behaviour does
+                for (net.minecraft.world.entity.item.ItemEntity item : h.getLevel().getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class, c.getBoundingBox().inflate(4))) {
+                    c.controller().motor().moveToward(item.position());
+                    break;
+                }
+                c.controller().motor().tick();
             }
         });
         h.succeedWhen(() -> {
