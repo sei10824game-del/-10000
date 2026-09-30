@@ -33,7 +33,7 @@ import java.util.UUID;
 
 /**
  * Acceptance tests that run on a real headless server ({@code ./gradlew runGameTestServer}).
- * Arena: 15x15 stone floor at y=0, barrier walls, open sky.
+ * Arena: 15x15 stone floor (relative y=1, entities stand at y=2), barrier walls, open sky.
  */
 @GameTestHolder(RLClones.MODID)
 @PrefixGameTestTemplate(false)
@@ -50,7 +50,7 @@ public final class CloneGameTests {
     }
 
     private static ClonePlayer clone(GameTestHelper h, double x, double z, float yaw, boolean ai) {
-        Vec3 pos = h.absoluteVec(new Vec3(x, 1, z));
+        Vec3 pos = h.absoluteVec(new Vec3(x, 2, z));
         ClonePlayer c = manager(h).summon(null, h.getLevel(), pos, yaw);
         if (c == null) {
             throw new IllegalStateException("clone could not be summoned");
@@ -72,7 +72,7 @@ public final class CloneGameTests {
     }
 
     private static Pig pig(GameTestHelper h, double x, double z) {
-        Pig pig = h.spawn(EntityType.PIG, new Vec3(x, 1, z));
+        Pig pig = h.spawn(EntityType.PIG, new Vec3(x, 2, z));
         pig.setNoAi(true);
         return pig;
     }
@@ -103,12 +103,12 @@ public final class CloneGameTests {
     public static void visionRespectsFovAndWalls(GameTestHelper h) {
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, false); // facing +X
         for (int z = 9; z <= 13; z++) {
-            for (int y = 1; y <= 3; y++) {
+            for (int y = 2; y <= 4; y++) {
                 h.setBlock(new BlockPos(6, y, z), Blocks.STONE);
             }
         }
         for (int z = 1; z <= 5; z++) {
-            for (int y = 1; y <= 3; y++) {
+            for (int y = 2; y <= 4; y++) {
                 h.setBlock(new BlockPos(6, y, z), Blocks.GLASS);
             }
         }
@@ -138,7 +138,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
         c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 2000, 2));
-        Husk husk = h.spawn(EntityType.HUSK, new Vec3(10.5, 1, 7.5));
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(10.5, 2, 7.5));
         h.succeedWhen(() -> {
             h.assertTrue(!husk.isAlive(), "clone should kill the husk");
             Brain b = c.getCloneBrain();
@@ -154,7 +154,7 @@ public final class CloneGameTests {
         ClonePlayer victim = clone(h, 11.5, 7.5, 90f, false);
         victim.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 2000, 4));
         victim.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 2000, 4));
-        Husk husk = h.spawn(EntityType.HUSK, new Vec3(9.5, 1, 7.5));
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(9.5, 2, 7.5));
         husk.setTarget(victim);
         h.succeedWhen(() -> {
             husk.setTarget(victim);
@@ -177,7 +177,7 @@ public final class CloneGameTests {
         ClonePlayer fighter = clone(h, 7.5, 7.5, -90f, true);
         fighter.getInventory().add(new ItemStack(Items.IRON_SWORD));
         fighter.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 2000, 2));
-        h.spawn(EntityType.HUSK, new Vec3(12.5, 1, 7.5));
+        h.spawn(EntityType.HUSK, new Vec3(12.5, 2, 7.5));
         h.succeedWhen(() -> {
             Brain b = observer.getCloneBrain();
             h.assertTrue(b.imitationUpdates >= 5, "observer should learn from watching, got " + b.imitationUpdates);
@@ -190,7 +190,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 400)
     public static void cloneMinesLikePlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
-        BlockPos log = new BlockPos(6, 1, 7);
+        BlockPos log = new BlockPos(6, 2, 7);
         h.setBlock(log, Blocks.OAK_LOG);
         BlockPos abs = h.absolutePos(log);
         h.onEachTick(() -> {
