@@ -74,6 +74,8 @@ public final class Storage {
     private final Set<BlockPos> looted = new HashSet<>();
     private final Map<BlockPos, Boolean> strayCache = new HashMap<>();
     private final Set<BlockPos> fullChests = new HashSet<>();
+    /** Chests that could not be reached / opened; not tried again for a while. */
+    private final Map<BlockPos, Long> unreachable = new HashMap<>();
 
     public int deposits;
     public int withdrawals;
@@ -283,7 +285,7 @@ public final class Storage {
             }
             for (BlockPos c : b.chests) {
                 double d = Vec3.atCenterOf(c).distanceTo(self.position());
-                if (d >= bestD) {
+                if (d >= bestD || blocked(c)) {
                     continue;
                 }
                 for (var e : bases.contents(b.dimension, c).entrySet()) {
@@ -327,7 +329,7 @@ public final class Storage {
         BlockPos best = null;
         double bestD = 32 * 32;
         for (Map.Entry<BlockPos, Perception.BlockKind> e : perception.blocks().entrySet()) {
-            if (e.getValue() != Perception.BlockKind.CHEST || looted.contains(e.getKey())) {
+            if (e.getValue() != Perception.BlockKind.CHEST || looted.contains(e.getKey()) || blocked(e.getKey())) {
                 continue;
             }
             double d = e.getKey().distToCenterSqr(self.position());
@@ -374,7 +376,15 @@ public final class Storage {
 
     // ================================================================== execution
 
+    private boolean blocked(BlockPos pos) {
+        Long since = unreachable.get(pos);
+        return since != null && self.level().getGameTime() - since < 6000;
+    }
+
     public void begin(Mode mode) {
+        if (self.containerMenu != self.inventoryMenu) {
+            self.closeContainer();
+        }
         this.mode = mode;
         stage = 0;
         ticks = 0;
@@ -406,6 +416,9 @@ public final class Storage {
             case STORE -> storeTick();
             case FETCH -> fetchTick();
         };
+        if (s == Status.FAILED && chest != null) {
+            unreachable.put(chest.immutable(), self.level().getGameTime());
+        }
         if (s != Status.WORKING) {
             reset();
         }
