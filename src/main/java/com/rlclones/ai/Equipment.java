@@ -9,7 +9,11 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.TridentItem;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.ElytraItem;
 import net.minecraft.world.item.FireworkRocketItem;
 import net.minecraft.world.item.Items;
@@ -49,7 +53,7 @@ public final class Equipment {
         double bestScore = 1.0;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
-            if (s.isEmpty() || s.getItem() instanceof BowItem || s.isEdible()) {
+            if (s.isEmpty() || isLauncher(s) || s.isEdible()) {
                 continue;
             }
             double score = attackDamage(s);
@@ -72,15 +76,167 @@ public final class Equipment {
         return false;
     }
 
-    public static int bowSlot(Player p) {
+    // ------------------------------------------------------------------ ranged & special weapons (vanilla and modded)
+
+    /** How a ranged weapon is operated, detected from its class or its use animation (works for modded items too). */
+    public enum RangedKind {NONE, BOW, CROSSBOW, THROWN}
+
+    public static RangedKind rangedKind(ItemStack s) {
+        if (s.isEmpty()) {
+            return RangedKind.NONE;
+        }
+        Item item = s.getItem();
+        if (item instanceof CrossbowItem) {
+            return RangedKind.CROSSBOW;
+        }
+        if (item instanceof ProjectileWeaponItem) {
+            return RangedKind.BOW;
+        }
+        if (item instanceof TridentItem) {
+            return RangedKind.THROWN;
+        }
+        return switch (s.getUseAnimation()) {
+            case BOW -> RangedKind.BOW;
+            case CROSSBOW -> RangedKind.CROSSBOW;
+            case SPEAR -> RangedKind.THROWN;
+            default -> RangedKind.NONE;
+        };
+    }
+
+    /** Pure launchers (bows / crossbows) are not used as melee weapons. */
+    public static boolean isLauncher(ItemStack s) {
+        RangedKind k = rangedKind(s);
+        return k == RangedKind.BOW || k == RangedKind.CROSSBOW;
+    }
+
+    /** Can this ranged weapon be fired right now (ammo, riptide rules)? */
+    public static boolean canFire(Player p, ItemStack s) {
+        RangedKind k = rangedKind(s);
+        if (k == RangedKind.NONE) {
+            return false;
+        }
+        if (k == RangedKind.THROWN) {
+            return EnchantmentHelper.getRiptide(s) <= 0 || p.isInWaterOrRain();
+        }
+        if (s.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(s)) {
+            return true;
+        }
+        if (s.getItem() instanceof ProjectileWeaponItem) {
+            return p.getAbilities().instabuild || !p.getProjectile(s).isEmpty();
+        }
+        return true; // modded launcher with its own ammo logic: just try it
+    }
+
+    /** Muzzle speed used for aiming (blocks/tick). */
+    public static double projectileSpeed(ItemStack s) {
+        return switch (rangedKind(s)) {
+            case CROSSBOW -> 3.15;
+            case THROWN -> 2.5;
+            default -> 3.0;
+        };
+    }
+
+    /** Best usable ranged weapon: a loaded crossbow first, then crossbow, bow, throwables. -1 if none. */
+    public static int rangedSlot(Player p) {
         Inventory inv = p.getInventory();
+        int best = -1;
+        int bestScore = 0;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
-            if (s.getItem() instanceof BowItem && (!p.getProjectile(s).isEmpty() || p.getAbilities().instabuild)) {
+            if (!canFire(p, s)) {
+                continue;
+            }
+            int score = switch (rangedKind(s)) {
+                case CROSSBOW -> CrossbowItem.isCharged(s) ? 5 : 3;
+                case BOW -> 4;
+                case THROWN -> 2;
+                default -> 0;
+            };
+            if (i == inv.selected) {
+                score++;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    private static final String[] WEAPON_WORDS = {"gun", "staff", "wand", "blaster", "launcher", "cannon", "rifle", "pistol", "shotgun",
+            "sling", "javelin", "spear", "throwing", "shuriken", "kunai", "dart", "bomb", "grenade", "boomerang", "scythe", "hammer",
+            "katana", "dagger", "rapier", "halberd", "glaive", "sword", "axe", "mace", "whip", "tome", "scepter", "rod"};
+
+    /**
+     * A weapon with a right-click ability that is neither a known launcher nor food / shield: modded swords with skills,
+     * guns, magic staffs, throwing weapons... The clone tries it (USE_ITEM) and learns per enemy whether it pays off.
+     */
+    public static boolean isSpecialWeapon(ItemStack s) {
+        if (s.isEmpty() || s.isEdible() || s.getItem() instanceof ShieldItem || s.getItem() instanceof BlockItem
+                || rangedKind(s) != RangedKind.NONE || !overridesUse(s.getItem())) {
+            return false;
+        }
+        if (attackDamage(s) >= 3.0) {
+            return true;
+        }
+        net.minecraft.resources.ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(s.getItem());
+        if (id == null) {
+            return false;
+        }
+        String path = id.getPath();
+        for (String w : WEAPON_WORDS) {
+            if (path.contains(w)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static int specialSlot(Player p) {
+        Inventory inv = p.getInventory();
+        if (isSpecialWeapon(inv.getSelected()) && !p.getCooldowns().isOnCooldown(inv.getSelected().getItem())) {
+            return inv.selected;
+        }
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (isSpecialWeapon(s) && !p.getCooldowns().isOnCooldown(s.getItem())) {
                 return i;
             }
         }
         return -1;
+    }
+
+    private static final java.lang.reflect.Method ITEM_USE = findUseMethod();
+    private static final java.util.Map<Class<?>, Boolean> USE_OVERRIDES = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static java.lang.reflect.Method findUseMethod() {
+        for (java.lang.reflect.Method m : Item.class.getDeclaredMethods()) {
+            Class<?>[] params = m.getParameterTypes();
+            if (m.getReturnType() == net.minecraft.world.InteractionResultHolder.class && params.length == 3
+                    && params[0] == net.minecraft.world.level.Level.class && params[1] == Player.class
+                    && params[2] == net.minecraft.world.InteractionHand.class) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /** Does the item's class (or a parent below Item) implement its own right-click behaviour? Mapping independent. */
+    public static boolean overridesUse(Item item) {
+        if (ITEM_USE == null) {
+            return false;
+        }
+        return USE_OVERRIDES.computeIfAbsent(item.getClass(), cls -> {
+            for (Class<?> c = cls; c != null && c != Item.class; c = c.getSuperclass()) {
+                try {
+                    c.getDeclaredMethod(ITEM_USE.getName(), ITEM_USE.getParameterTypes());
+                    return true;
+                } catch (NoSuchMethodException ignored) {
+                    // keep walking up
+                }
+            }
+            return false;
+        });
     }
 
     public static double foodScore(Player p, ItemStack s) {

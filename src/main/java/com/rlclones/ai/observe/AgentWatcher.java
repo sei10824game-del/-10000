@@ -9,7 +9,6 @@ import com.rlclones.ai.strategy.Option;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.BowItem;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -205,8 +204,11 @@ public final class AgentWatcher {
         if (agent.isBlocking()) {
             return CombatAction.BLOCK.ordinal();
         }
-        if (agent.isUsingItem() && agent.getUseItem().getItem() instanceof BowItem) {
+        if (agent.isUsingItem() && com.rlclones.ai.Equipment.rangedKind(agent.getUseItem()) != com.rlclones.ai.Equipment.RangedKind.NONE) {
             return CombatAction.SHOOT.ordinal();
+        }
+        if (agent.isUsingItem() && com.rlclones.ai.Equipment.isSpecialWeapon(agent.getUseItem())) {
+            return CombatAction.USE_ITEM.ordinal();
         }
         if (enemy == null) {
             return -1;

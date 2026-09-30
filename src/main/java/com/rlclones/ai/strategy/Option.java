@@ -14,7 +14,9 @@ public enum Option {
     MINE(300),
     HUNT(160),
     REST(60),
-    CRAFT(400);
+    CRAFT(400),
+    /** Answer a call for help read in chat: go to the reported coordinates. */
+    HELP(600);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

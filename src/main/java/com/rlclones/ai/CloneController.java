@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
@@ -20,7 +21,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Creeper;
-import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -41,6 +43,13 @@ public final class CloneController {
     private final Motor motor;
     private final AgentWatcher watcher;
     private final Crafting crafting;
+    private final Escape escape;
+    private boolean escaping;
+    private long escapeFailedAt = -100000;
+    private final List<Chat.Request> requests = new java.util.ArrayList<>();
+    private final it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap<Alarm> alarmTimes = new it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap<>();
+    private long lastAlarm = -100000;
+    private Chat.Request answering;
     private final Int2LongOpenHashMap enemyLastAttack = new Int2LongOpenHashMap();
     private final Int2LongOpenHashMap enemyLastShot = new Int2LongOpenHashMap();
     private final LongOpenHashSet visitedChunks = new LongOpenHashSet();
@@ -85,6 +94,7 @@ public final class CloneController {
         this.motor = new Motor(self);
         this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
         this.crafting = new Crafting(self, motor, perception);
+        this.escape = new Escape(self, motor);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
     }
@@ -101,6 +111,14 @@ public final class CloneController {
         return motor;
     }
 
+    public Escape escape() {
+        return escape;
+    }
+
+    public boolean isEscaping() {
+        return escaping;
+    }
+
     public Crafting crafting() {
         return crafting;
     }
@@ -108,6 +126,9 @@ public final class CloneController {
     public AgentWatcher watcher() {
         return watcher;
     }
+
+    /** Debug / test hook: always pick this combat action when it is available. */
+    public CombatAction forcedAction;
 
     public Option option() {
         return option;
@@ -145,7 +166,29 @@ public final class CloneController {
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
         }
-        runStrategy(now);
+        if (((now + self.getId()) % 10) == 0) {
+            checkAlarms(now);
+        }
+        if (!escaping && ((now + self.getId()) % 20) == 0 && now - escapeFailedAt > 600 && !motor.isFlying()
+                && !hostileWithin(3.5, now) && escape.isTrapped()) {
+            // reflex, like a player who notices he fell into a hole: get out before doing anything else
+            if (option != null) {
+                finishOption(false);
+            }
+            escaping = true;
+            escape.start(motor.recentGoal());
+        }
+        if (escaping) {
+            Escape.Status st = escape.tick();
+            if (st != Escape.Status.WORKING) {
+                escaping = false;
+                if (st == Escape.Status.FAILED) {
+                    escapeFailedAt = now;
+                }
+            }
+        } else {
+            runStrategy(now);
+        }
         if (lookBackTicks > 0) {
             lookBackTicks--;
             if (!motor.hasLookIntent() && lookBack != null) {
@@ -207,6 +250,158 @@ public final class CloneController {
     }
 
     public long heardSounds;
+
+    // ------------------------------------------------------------------ chat: emergencies and calls for help
+
+    public enum Alarm {
+        LAVA("lava", true), FIRE("fire", true), DROWNING("drowning", true), EXPLOSION("explosion", true),
+        LOW_HEALTH("low_health", true), TRAPPED("trapped", true), OUTNUMBERED("outnumbered", false),
+        OUTMATCHED("outmatched", false), STARVING("starving", false);
+
+        public final String key;
+        public final boolean urgent;
+
+        Alarm(String key, boolean urgent) {
+            this.key = key;
+            this.urgent = urgent;
+        }
+    }
+
+    private boolean hostileWithin(double radius, long now) {
+        for (Perception.Seen s : Senses.threats(perception, self, now, radius + 2)) {
+            if (Senses.gap(self, s.entity) <= radius) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Look at the own situation; if it is an emergency / we are outnumbered, say where and why in chat. */
+    private void checkAlarms(long now) {
+        if (now - lastAlarm < 100) {
+            return;
+        }
+        float hp = self.getHealth() / Math.max(1f, self.getMaxHealth());
+        List<Perception.Seen> threats = Senses.threats(perception, self, now, 12);
+        Alarm alarm = null;
+        Component detail = Component.empty();
+        String plainDetail = "";
+        if (self.isInLava()) {
+            alarm = Alarm.LAVA;
+        } else if (self.isOnFire() && hp < 0.6f) {
+            alarm = Alarm.FIRE;
+        } else if (self.isInWater() && self.getAirSupply() < self.getMaxAirSupply() * 0.3) {
+            alarm = Alarm.DROWNING;
+        } else if (threats.stream().anyMatch(s -> s.entity instanceof Creeper c && c.getSwellDir() > 0 && s.entity.distanceTo(self) < 5)) {
+            alarm = Alarm.EXPLOSION;
+        } else if (threats.size() >= 3 || (!threats.isEmpty() && Senses.threatLevel(perception, self, self.getCloneBrain(), now) == 2 && hp > 0.3f)) {
+            alarm = threats.size() >= 3 ? Alarm.OUTNUMBERED : Alarm.OUTMATCHED;
+            it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap<net.minecraft.world.entity.EntityType<?>> counts = new it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap<>();
+            for (Perception.Seen s : threats) {
+                counts.mergeInt(s.entity.getType(), 1, Integer::sum);
+            }
+            net.minecraft.network.chat.MutableComponent list = Component.empty();
+            StringBuilder plain = new StringBuilder();
+            boolean first = true;
+            for (var e : counts.object2IntEntrySet()) {
+                if (!first) {
+                    list.append(", ");
+                    plain.append(',');
+                }
+                first = false;
+                list.append(e.getKey().getDescription()).append("×" + e.getIntValue());
+                plain.append(net.minecraft.world.entity.EntityType.getKey(e.getKey())).append('=').append(e.getIntValue());
+            }
+            detail = list;
+            plainDetail = plain.toString();
+        } else if (hp <= 0.3f && !threats.isEmpty()) {
+            alarm = Alarm.LOW_HEALTH;
+            detail = threats.get(0).entity.getType().getDescription();
+            plainDetail = threats.get(0).typeId;
+        } else if (now - escapeFailedAt < 200) {
+            alarm = Alarm.TRAPPED;
+        } else if (self.getFoodData().getFoodLevel() == 0 && Equipment.bestFoodSlot(self) < 0) {
+            alarm = Alarm.STARVING;
+        }
+        if (alarm == null) {
+            return;
+        }
+        if (now - alarmTimes.getOrDefault(alarm, -100000L) < 600) {
+            return;
+        }
+        alarmTimes.put(alarm, now);
+        lastAlarm = now;
+        boolean urgent = alarm.urgent || (alarm == Alarm.OUTNUMBERED && hp < 0.5f);
+        net.minecraft.core.BlockPos p = self.blockPosition();
+        String plain = (urgent ? "SOS " : "HELP ") + p.getX() + " " + p.getY() + " " + p.getZ() + " " + alarm.key + (plainDetail.isEmpty() ? "" : " " + plainDetail);
+        Component reason = Component.translatable("rlclones.reason." + alarm.key, detail);
+        Chat.say(self, Component.translatable(urgent ? "rlclones.chat.sos" : "rlclones.chat.help", p.getX(), p.getY(), p.getZ(), reason), plain);
+        lastAlarmSent = alarm;
+    }
+
+    public Alarm lastAlarmSent;
+
+    /** Read a chat line (from a clone or a real player). Calls for help are remembered. */
+    public void onChat(net.minecraft.server.level.ServerPlayer sender, String text) {
+        Chat.Request r = Chat.parse(sender, text, now());
+        if (r == null || r.from().equals(self.getUUID())) {
+            return;
+        }
+        requests.removeIf(q -> q.from().equals(r.from()));
+        requests.add(r);
+        while (requests.size() > 6) {
+            requests.remove(0);
+        }
+    }
+
+    public List<Chat.Request> requests() {
+        return requests;
+    }
+
+    public Chat.Request activeRequest() {
+        long now = now();
+        requests.removeIf(r -> now - r.tick() > 1200);
+        Chat.Request best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (Chat.Request r : requests) {
+            if (r.dimension() != self.level().dimension()) {
+                continue;
+            }
+            double d = r.pos().distanceTo(self.position());
+            if (d > 160) {
+                continue;
+            }
+            double score = d - (r.urgent() ? 32 : 0);
+            if (score < bestScore) {
+                bestScore = score;
+                best = r;
+            }
+        }
+        return best;
+    }
+
+    public boolean hasHelpRequest() {
+        return activeRequest() != null;
+    }
+
+    private boolean runHelp() {
+        Chat.Request r = activeRequest();
+        if (r == null) {
+            return true;
+        }
+        if (answering != r) {
+            answering = r;
+            Chat.say(self, Component.translatable("rlclones.chat.coming", r.fromName()), "OMW " + r.fromName());
+        }
+        if (self.position().distanceTo(r.pos()) <= 5) {
+            optionReward += 1.0f; // arrived to help: team reward
+            requests.remove(r);
+            answering = null;
+            return true;
+        }
+        motor.navigate(r.pos(), 4.0, true);
+        return motor.stuckCount() > 4;
+    }
 
     /** Only perceive and learn from others (used when the clone's own AI is switched off). */
     public void passiveTick() {
@@ -463,6 +658,7 @@ public final class CloneController {
             case MINE -> runHarvest(Perception.BlockKind.ORE);
             case REST -> runRest();
             case CRAFT -> crafting.tick() == Crafting.Status.DONE;
+            case HELP -> runHelp();
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -611,7 +807,7 @@ public final class CloneController {
                         (float) Config.get(Config.DISCOUNT, 0.9), mask, 1f, false);
             }
             CombatAction prev = action;
-            int a = brain().chooseCombat(targetType, s, mask);
+            int a = forcedAction != null && (mask & forcedAction.bit()) != 0 ? forcedAction.ordinal() : brain().chooseCombat(targetType, s, mask);
             if (a < 0) {
                 return;
             }
@@ -641,14 +837,14 @@ public final class CloneController {
                         (float) Config.get(Config.DISCOUNT, 0.9), Senses.combatMask(self), 1f, false);
             }
         }
-        if (!died && self.isUsingItem() && (action == CombatAction.BLOCK || action == CombatAction.SHOOT)) {
-            if (action == CombatAction.SHOOT) {
+        if (!died && self.isUsingItem() && (action == CombatAction.BLOCK || action == CombatAction.SHOOT || action == CombatAction.USE_ITEM)) {
+            if (action == CombatAction.SHOOT || action == CombatAction.USE_ITEM) {
                 self.releaseUsingItem();
             } else {
                 self.stopUsingItem();
             }
         }
-        if (!died && (action == CombatAction.SHOOT || action == CombatAction.PILLAR)) {
+        if (!died && (action == CombatAction.SHOOT || action == CombatAction.PILLAR || action == CombatAction.USE_ITEM)) {
             Equipment.manage(self, true);
         }
         action = null;
@@ -660,10 +856,10 @@ public final class CloneController {
         if (prev == CombatAction.BLOCK && action != CombatAction.BLOCK && self.isUsingItem()) {
             self.stopUsingItem();
         }
-        if (prev == CombatAction.SHOOT && action != CombatAction.SHOOT && self.isUsingItem()) {
+        if ((prev == CombatAction.SHOOT || prev == CombatAction.USE_ITEM) && action != prev && self.isUsingItem()) {
             self.releaseUsingItem();
         }
-        if ((prev == CombatAction.SHOOT || prev == CombatAction.PILLAR) && action != prev) {
+        if ((prev == CombatAction.SHOOT || prev == CombatAction.PILLAR || prev == CombatAction.USE_ITEM) && action != prev) {
             Equipment.manage(self, true);
         }
         switch (action) {
@@ -672,7 +868,12 @@ public final class CloneController {
                 pillarPlaced = false;
                 Equipment.select(self, Equipment.pillarBlockSlot(self));
             }
-            case SHOOT -> Equipment.select(self, Equipment.bowSlot(self));
+            case SHOOT -> {
+                if (!Equipment.canFire(self, self.getMainHandItem())) {
+                    Equipment.select(self, Equipment.rangedSlot(self));
+                }
+            }
+            case USE_ITEM -> Equipment.select(self, Equipment.specialSlot(self));
             default -> {
             }
         }
@@ -748,47 +949,124 @@ public final class CloneController {
             }
             case HOLD -> motor.lookAt(t);
             case SHOOT -> shoot(t, gap);
+            case USE_ITEM -> useSpecial(t);
             case PILLAR -> pillar();
         }
     }
 
+    /** Fire whatever ranged weapon we carry, operated the way that weapon type is operated by a player. */
     private void shoot(Entity t, double gap) {
-        if (!(self.getMainHandItem().getItem() instanceof BowItem)) {
-            int bow = Equipment.bowSlot(self);
-            if (bow < 0) {
+        ItemStack held = self.getMainHandItem();
+        if (!Equipment.canFire(self, held)) {
+            int slot = Equipment.rangedSlot(self);
+            if (slot < 0) {
                 actionDone = true;
                 return;
             }
-            Equipment.select(self, bow);
+            if (self.isUsingItem()) {
+                self.stopUsingItem();
+            }
+            Equipment.select(self, slot);
+            held = self.getMainHandItem();
         }
-        aimBow(t);
+        aimProjectile(t, Equipment.projectileSpeed(held));
+        boolean canSee = perception.canSee(t);
+        switch (Equipment.rangedKind(held)) {
+            case CROSSBOW -> {
+                if (held.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(held)) {
+                    if (actionTicks >= 2 && canSee) {
+                        motor.useHeldItem(InteractionHand.MAIN_HAND); // loaded: right-click fires
+                        actionDone = true;
+                    }
+                    return;
+                }
+                if (!self.isUsingItem()) {
+                    if (actionTicks < 3) {
+                        motor.useHeldItem(InteractionHand.MAIN_HAND); // start winding
+                    } else {
+                        actionDone = true;
+                    }
+                    return;
+                }
+                int charge = held.getItem() instanceof CrossbowItem ? CrossbowItem.getChargeDuration(held) : 25;
+                if (self.getTicksUsingItem() >= charge + 1) {
+                    self.releaseUsingItem(); // loaded; fired on a following tick
+                }
+            }
+            case THROWN -> {
+                if (!self.isUsingItem()) {
+                    if (actionTicks < 3) {
+                        motor.useHeldItem(InteractionHand.MAIN_HAND);
+                    } else {
+                        actionDone = true;
+                    }
+                    return;
+                }
+                if (self.getTicksUsingItem() >= 12 && canSee) {
+                    self.releaseUsingItem();
+                    actionDone = true;
+                }
+            }
+            default -> {
+                if (!self.isUsingItem()) {
+                    if (actionTicks < 3) {
+                        motor.useHeldItem(InteractionHand.MAIN_HAND);
+                    } else {
+                        actionDone = true;
+                    }
+                    return;
+                }
+                if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
+                    self.releaseUsingItem();
+                    actionDone = true;
+                }
+            }
+        }
+    }
+
+    /** Right-click a special weapon; hold it like a charge item if it starts "using", release after a while. */
+    private void useSpecial(Entity t) {
+        if (!Equipment.isSpecialWeapon(self.getMainHandItem())) {
+            int slot = Equipment.specialSlot(self);
+            if (slot < 0) {
+                actionDone = true;
+                return;
+            }
+            Equipment.select(self, slot);
+        }
+        motor.lookAt(t);
         if (!self.isUsingItem()) {
-            if (actionTicks < 3) {
+            if (actionTicks == 1 || actionTicks == 2) {
                 motor.useHeldItem(InteractionHand.MAIN_HAND);
-            } else {
+                if (!self.isUsingItem()) {
+                    self.swing(InteractionHand.MAIN_HAND);
+                    actionDone = true; // instant ability
+                }
+            } else if (actionTicks > 2) {
                 actionDone = true;
             }
             return;
         }
-        if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && perception.canSee(t))) {
+        int hold = Math.max(10, Math.min(self.getUseItem().getUseDuration(), 20));
+        if (self.getTicksUsingItem() >= hold) {
             self.releaseUsingItem();
             actionDone = true;
         }
     }
 
-    private void aimBow(Entity t) {
+    private void aimProjectile(Entity t, double speed) {
         Vec3 eye = self.getEyePosition();
         Vec3 aim = t.getBoundingBox().getCenter();
         double dx = aim.x - eye.x;
         double dz = aim.z - eye.z;
         double horiz = Math.sqrt(dx * dx + dz * dz);
-        double flight = horiz / 3.0;
+        double flight = horiz / speed;
         aim = aim.add(t.getDeltaMovement().multiply(flight, 0, flight));
         dx = aim.x - eye.x;
         dz = aim.z - eye.z;
         horiz = Math.sqrt(dx * dx + dz * dz) * 1.05;
         double dy = aim.y - eye.y;
-        double v = 3.0;
+        double v = speed;
         double g = 0.05;
         double v2 = v * v;
         double root = v2 * v2 - g * (g * horiz * horiz + 2 * dy * v2);
@@ -871,7 +1149,7 @@ public final class CloneController {
     }
 
     private boolean runCollect(long now) {
-        ItemEntity item = Senses.nearestItem(perception, self, now, 16);
+        Entity item = Senses.nearestItem(perception, self, now, 16);
         if (item == null) {
             return true;
         }

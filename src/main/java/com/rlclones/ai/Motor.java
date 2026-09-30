@@ -145,8 +145,18 @@ public final class Motor {
      *
      * @return true once within {@code arrive} blocks of the goal
      */
+    private Vec3 lastGoal;
+    private long lastGoalTick;
+
+    /** Where we were last trying to walk to (within the last 5 s), or null. */
+    public Vec3 recentGoal() {
+        return lastGoal != null && self.level().getGameTime() - lastGoalTick < 100 ? lastGoal : null;
+    }
+
     public boolean navigate(Vec3 goal, double arrive, boolean run) {
         Vec3 pos = self.position();
+        lastGoal = goal;
+        lastGoalTick = self.level().getGameTime();
         if (self.isFallFlying() || takeoffTicks > 0) {
             flightGoal = goal;
             return false;

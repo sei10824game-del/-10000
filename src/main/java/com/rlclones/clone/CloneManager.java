@@ -258,6 +258,51 @@ public final class CloneManager {
         return pos;
     }
 
+    // ------------------------------------------------------------------ player slots
+
+    private static java.lang.reflect.Field maxPlayersField;
+    private int baseMaxPlayers = -1;
+
+    /** PlayerList.maxPlayers: the only non-static final int field of PlayerList (mapping independent lookup). */
+    private static java.lang.reflect.Field maxPlayersField() {
+        if (maxPlayersField == null) {
+            for (java.lang.reflect.Field f : PlayerList.class.getDeclaredFields()) {
+                int mod = f.getModifiers();
+                if (f.getType() == int.class && java.lang.reflect.Modifier.isFinal(mod) && !java.lang.reflect.Modifier.isStatic(mod)) {
+                    f.setAccessible(true);
+                    maxPlayersField = f;
+                    break;
+                }
+            }
+        }
+        return maxPlayersField;
+    }
+
+    /**
+     * Clones must never take the slots of real players: otherwise a world saved with many clones answers
+     * "server is full" to its own owner. Raise the cap by the number of online clones.
+     */
+    public void updatePlayerSlots() {
+        try {
+            java.lang.reflect.Field f = maxPlayersField();
+            if (f == null) {
+                return;
+            }
+            PlayerList list = server.getPlayerList();
+            if (baseMaxPlayers < 0) {
+                baseMaxPlayers = f.getInt(list);
+            }
+            long cap = (long) baseMaxPlayers + clones.size();
+            f.setInt(list, (int) Math.min(Integer.MAX_VALUE, cap));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            RLClones.LOGGER.warn("Could not adjust the player slot limit for clones", e);
+        }
+    }
+
+    public int realPlayerSlots() {
+        return baseMaxPlayers < 0 ? server.getPlayerList().getMaxPlayers() : baseMaxPlayers;
+    }
+
     private void login(ClonePlayer clone) {
         CloneConnection connection = new CloneConnection();
         connections.put(clone.getUUID(), connection);
@@ -265,6 +310,7 @@ public final class CloneManager {
         connection.setOwner(clone);
         clone.showAllSkinLayers();
         clones.put(clone.getUUID(), clone);
+        updatePlayerSlots();
     }
 
     /** Bring back every clone listed in the world save (called once the server has started). */
@@ -388,6 +434,7 @@ public final class CloneManager {
         if (player instanceof ClonePlayer c && clones.get(c.getUUID()) == c) {
             clones.remove(c.getUUID());
             deadSince.remove(c.getUUID());
+            updatePlayerSlots();
         }
     }
 
@@ -471,6 +518,7 @@ public final class CloneManager {
             ears.setOwner(null);
         }
         clone.connection.onDisconnect(reason);
+        updatePlayerSlots();
         if (forever) {
             Path dir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
             try {

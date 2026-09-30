@@ -66,5 +66,6 @@ public final class StrategyState {
         q[Option.HUNT.ordinal()] = animals && !hasFood && food <= 1 ? 0.8f : 0.1f;
         q[Option.REST.ordinal()] = hp < 2 && threat == 0 ? 0.3f : 0.05f;
         q[Option.CRAFT.ordinal()] = threat == 0 ? 0.7f : -0.3f;
+        q[Option.HELP.ordinal()] = threat == 0 ? (hp == 2 ? 1.0f : hp == 1 ? 0.5f : -0.3f) : threat == 1 ? 0.2f : -0.5f;
     }
 }

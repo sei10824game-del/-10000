@@ -11,8 +11,10 @@ public enum CombatAction {
     STRAFE_RIGHT(5),
     BLOCK(8),
     HOLD(4),
-    SHOOT(30),
-    PILLAR(14);
+    SHOOT(40),
+    PILLAR(14),
+    /** Right-click the held special weapon (modded ability, gun, staff...); the effect is learned per enemy. */
+    USE_ITEM(25);
 
     public static final CombatAction[] VALUES = values();
     public static final int COUNT = VALUES.length;

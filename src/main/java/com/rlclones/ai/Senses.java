@@ -130,8 +130,11 @@ public final class Senses {
         if (!Equipment.hasShield(agent)) {
             mask &= ~CombatAction.BLOCK.bit();
         }
-        if (Equipment.bowSlot(agent) < 0) {
+        if (Equipment.rangedSlot(agent) < 0) {
             mask &= ~CombatAction.SHOOT.bit();
+        }
+        if (Equipment.specialSlot(agent) < 0) {
+            mask &= ~CombatAction.USE_ITEM.bit();
         }
         boolean headroom = agent.level().getBlockState(agent.blockPosition().above(2)).getCollisionShape(agent.level(), agent.blockPosition().above(2)).isEmpty();
         if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(agent) < 0 || !agent.onGround() || !headroom) {
@@ -187,11 +190,14 @@ public final class Senses {
         return false;
     }
 
-    public static ItemEntity nearestItem(Perception observer, Player agent, long now, double radius) {
-        ItemEntity best = null;
+    /** Nearest thing to pick up: dropped items, and thrown tridents / arrows that can be collected. */
+    public static Entity nearestItem(Perception observer, Player agent, long now, double radius) {
+        Entity best = null;
         double bestD = radius;
         for (Perception.Seen s : observer.remembered()) {
-            if (s.entity instanceof ItemEntity item && s.alive() && now - s.lastSeen <= 100 && !item.hasPickUpDelay()) {
+            boolean pickable = s.entity instanceof ItemEntity item ? !item.hasPickUpDelay() : Perception.isRetrievable(s.entity);
+            if (pickable && !s.entity.isRemoved() && now - s.lastSeen <= 100) {
+                Entity item = s.entity;
                 double d = s.pos.distanceTo(agent.position());
                 if (d < bestD) {
                     bestD = d;
@@ -309,6 +315,9 @@ public final class Senses {
                 : agent instanceof ServerPlayer sp && Crafting.plan(sp) != null;
         if (craft) {
             mask |= Option.CRAFT.bit();
+        }
+        if (agent instanceof com.rlclones.clone.ClonePlayer c && c.controller().hasHelpRequest()) {
+            mask |= Option.HELP.bit();
         }
         return mask;
     }

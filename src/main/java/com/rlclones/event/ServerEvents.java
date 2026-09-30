@@ -420,6 +420,14 @@ public final class ServerEvents {
         }
     }
 
+    /** Clones read the chat of real players too ("help 100 64 -20", "助けて"...). */
+    @SubscribeEvent
+    public static void onPlayerChat(net.minecraftforge.event.ServerChatEvent event) {
+        if (!(event.getPlayer() instanceof ClonePlayer)) {
+            com.rlclones.ai.Chat.deliver(event.getPlayer(), event.getRawText());
+        }
+    }
+
     @SubscribeEvent
     public static void onCrafted(PlayerEvent.ItemCraftedEvent event) {
         Player p = event.getEntity();

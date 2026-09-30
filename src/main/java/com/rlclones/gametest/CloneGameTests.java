@@ -310,6 +310,10 @@ public final class CloneGameTests {
             made.add(clone(h, 2.5 + (i % 6) * 2, 2.5 + (i / 6) * 2, 0f, false));
         }
         h.assertTrue(made.size() == 24, "24 clones (more than the old cap of 16) must be allowed");
+        var list = h.getLevel().getServer().getPlayerList();
+        h.assertTrue(list.canPlayerLogin(new java.net.InetSocketAddress("127.0.0.1", 25565),
+                new com.mojang.authlib.GameProfile(UUID.randomUUID(), "RealPlayer")) == null,
+                "a real player must still be able to join although clones exceed max-players (" + list.getMaxPlayers() + ")");
         finish(h, made.toArray(new ClonePlayer[0]));
         h.succeed();
     }
@@ -453,6 +457,159 @@ public final class CloneGameTests {
             h.assertTrue(blocked[0], "clone should raise its shield against the husk");
             finish(h, c);
         });
+    }
+
+    // ------------------------------------------------------------------ v3: weapons, escaping, chat
+
+    private static void walls(GameTestHelper h, int cx, int cz, int top, net.minecraft.world.level.block.Block block) {
+        for (int y = 2; y <= top; y++) {
+            h.setBlock(new BlockPos(cx + 1, y, cz), block);
+            h.setBlock(new BlockPos(cx - 1, y, cz), block);
+            h.setBlock(new BlockPos(cx, y, cz + 1), block);
+            h.setBlock(new BlockPos(cx, y, cz - 1), block);
+        }
+    }
+
+    private static Husk dummy(GameTestHelper h, double x, double z) {
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(x, 2, z));
+        husk.setNoAi(true);
+        husk.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        return husk;
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 20)
+    public static void recognisesWeaponKinds(GameTestHelper h) {
+        h.assertTrue(com.rlclones.ai.Equipment.rangedKind(new ItemStack(Items.CROSSBOW)) == com.rlclones.ai.Equipment.RangedKind.CROSSBOW, "crossbow");
+        h.assertTrue(com.rlclones.ai.Equipment.rangedKind(new ItemStack(Items.BOW)) == com.rlclones.ai.Equipment.RangedKind.BOW, "bow");
+        h.assertTrue(com.rlclones.ai.Equipment.rangedKind(new ItemStack(Items.TRIDENT)) == com.rlclones.ai.Equipment.RangedKind.THROWN, "trident");
+        h.assertTrue(com.rlclones.ai.Equipment.overridesUse(Items.TRIDENT), "trident has a right-click use");
+        h.assertFalse(com.rlclones.ai.Equipment.overridesUse(Items.DIAMOND_SWORD), "plain sword has none");
+        h.assertFalse(com.rlclones.ai.Equipment.isSpecialWeapon(new ItemStack(Items.DIAMOND_SWORD)), "sword is a plain melee weapon");
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600)
+    public static void firesCrossbow(GameTestHelper h) {
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.CROSSBOW));
+        c.getInventory().add(new ItemStack(Items.ARROW, 16));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        dummy(h, 11.5, 7.5);
+        boolean[] fired = {false};
+        h.onEachTick(() -> fired[0] |= !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.AbstractArrow.class,
+                c.getBoundingBox().inflate(20), a -> a.getOwner() == c).isEmpty());
+        h.succeedWhen(() -> {
+            h.assertTrue(fired[0], "clone should load and fire the crossbow");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600)
+    public static void throwsTrident(GameTestHelper h) {
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.TRIDENT));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        dummy(h, 11.5, 7.5);
+        boolean[] thrown = {false};
+        h.onEachTick(() -> thrown[0] |= !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.ThrownTrident.class,
+                c.getBoundingBox().inflate(20), a -> a.getOwner() == c).isEmpty());
+        h.succeedWhen(() -> {
+            h.assertTrue(thrown[0], "clone should throw the trident");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800)
+    public static void retrievesThrownTrident(GameTestHelper h) {
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        var trident = new net.minecraft.world.entity.projectile.ThrownTrident(h.getLevel(), c, new ItemStack(Items.TRIDENT));
+        trident.pickup = net.minecraft.world.entity.projectile.AbstractArrow.Pickup.ALLOWED;
+        Vec3 at = h.absoluteVec(new Vec3(9.5, 2.2, 7.5));
+        trident.setPos(at.x, at.y, at.z);
+        trident.setDeltaMovement(0, -0.1, 0);
+        h.getLevel().addFreshEntity(trident);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.TRIDENT) >= 1, "clone should walk over and pick its trident up");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "escape")
+    public static void digsOutOfAPit(GameTestHelper h) {
+        walls(h, 7, 7, 4, Blocks.STONE);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        BlockPos pit = h.absolutePos(new BlockPos(7, 2, 7));
+        h.succeedWhen(() -> {
+            BlockPos b = c.blockPosition();
+            h.assertTrue(!(b.getX() == pit.getX() && b.getZ() == pit.getZ()) || b.getY() >= pit.getY() + 3,
+                    "clone should dig itself out of the pit (mined " + c.controller().escape().blocksMined + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "escape")
+    public static void pillarsOutOfAPit(GameTestHelper h) {
+        walls(h, 7, 7, 4, Blocks.OBSIDIAN);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.DIRT, 8));
+        BlockPos pit = h.absolutePos(new BlockPos(7, 2, 7));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getY() >= pit.getY() + 3 || !(c.blockPosition().getX() == pit.getX() && c.blockPosition().getZ() == pit.getZ()),
+                    "clone should pillar up out of the pit (placed " + c.controller().escape().blocksPlaced + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "chat")
+    public static void callsSosInLavaAndOthersRead(GameTestHelper h) {
+        ClonePlayer victim = clone(h, 7.5, 7.5, 0f, true);
+        ClonePlayer listener = clone(h, 2.5, 2.5, 0f, false);
+        victim.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        h.setBlock(new BlockPos(7, 2, 7), Blocks.LAVA);
+        String name = victim.getGameProfile().getName();
+        h.succeedWhen(() -> {
+            boolean said = com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": SOS ") && l.contains(" lava"));
+            h.assertTrue(said, "clone in lava should post SOS with its coordinates in chat");
+            boolean read = listener.controller().requests().stream().anyMatch(r -> r.urgent() && r.fromName().equals(name)
+                    && r.pos().distanceTo(victim.position()) < 3);
+            h.assertTrue(read, "another clone should read the SOS and its coordinates");
+            finish(h, victim, listener);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "chat2")
+    public static void callsForBackupWhenOutnumbered(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 6000, 3));
+        dummy(h, 7.5, 10.5);
+        dummy(h, 9.5, 9.5);
+        dummy(h, 5.5, 9.5);
+        String name = c.getGameProfile().getName();
+        h.succeedWhen(() -> {
+            boolean said = com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": ") && l.contains(" outnumbered ")
+                    && l.contains("minecraft:husk=3"));
+            h.assertTrue(said, "clone facing 3 husks should call for backup in chat");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "chat3")
+    public static void readsPlayersCallForHelp(GameTestHelper h) {
+        ClonePlayer speaker = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer listener = clone(h, 10.5, 10.5, 0f, false);
+        com.rlclones.ai.Chat.deliver(speaker, "助けて！ 120 64 -35 ゾンビがいっぱい");
+        var r = listener.controller().requests();
+        h.assertTrue(r.size() == 1 && r.get(0).urgent() && Math.abs(r.get(0).pos().x - 120.5) < 1e-6 && Math.abs(r.get(0).pos().z + 34.5) < 1e-6,
+                "clone should understand a Japanese call for help with coordinates");
+        com.rlclones.ai.Chat.deliver(speaker, "help");
+        h.assertTrue(listener.controller().requests().get(0).pos().distanceTo(speaker.position()) < 1e-6,
+                "without coordinates the speaker's position is used");
+        finish(h, speaker, listener);
+        h.succeed();
     }
 
     @GameTest(template = ARENA, timeoutTicks = 60, batch = "egg")

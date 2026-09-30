@@ -314,7 +314,7 @@ public final class Brain {
             int calm = CombatState.encode(dist, 2, 1, 2, 0, 0, 1);
             int charged = CombatState.encode(dist, 0, 2, 2, 0, 0, 1);
             int windup = CombatState.encode(dist, 2, 2, 2, 1, 0, 1);
-            int mask = CombatAction.ALL & ~CombatAction.SHOOT.bit() & ~CombatAction.BLOCK.bit() & ~CombatAction.PILLAR.bit();
+            int mask = CombatAction.ALL & ~CombatAction.SHOOT.bit() & ~CombatAction.BLOCK.bit() & ~CombatAction.PILLAR.bit() & ~CombatAction.USE_ITEM.bit();
             lines.add(String.format(Locale.ROOT, "%-11s ready:%-13s recharging:%-13s enemy-windup:%s",
                     CombatState.DIST_NAMES[dist],
                     CombatAction.VALUES[greedy(type, calm, mask)].key(),

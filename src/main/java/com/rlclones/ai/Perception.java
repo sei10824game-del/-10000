@@ -100,6 +100,13 @@ public final class Perception {
         this.self = self;
     }
 
+    /** Arrows / tridents lying around that a player could pick up. */
+    public static boolean isRetrievable(Entity e) {
+        return e instanceof net.minecraft.world.entity.projectile.AbstractArrow a
+                && a.pickup == net.minecraft.world.entity.projectile.AbstractArrow.Pickup.ALLOWED
+                && (a.getDeltaMovement().lengthSqr() < 0.25 || a.tickCount > 60);
+    }
+
     public static String typeId(Entity e) {
         net.minecraft.resources.ResourceLocation key = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(e.getType());
         return key == null ? "unknown" : key.toString();
@@ -114,7 +121,7 @@ public final class Perception {
         Level level = self.level();
         AABB box = self.getBoundingBox().inflate(range);
         List<Entity> candidates = level.getEntities(self, box, e -> e.isAlive() && !e.isSpectator()
-                && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt));
+                && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || isRetrievable(e)));
         Vec3 eye = self.getEyePosition();
         candidates.sort(Comparator.comparingDouble(e -> e.distanceToSqr(eye)));
         int checked = 0;

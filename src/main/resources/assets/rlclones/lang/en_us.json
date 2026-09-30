@@ -27,5 +27,17 @@
   "rlclones.cmd.no_knowledge": "Nothing learned about %s yet",
   "rlclones.cmd.policy": "Learned combat policy (best action by distance):",
   "rlclones.cmd.ai_on": "%s now acts on its own",
-  "rlclones.cmd.ai_off": "%s stands still and only watches and learns"
+  "rlclones.cmd.ai_off": "%s stands still and only watches and learns",
+  "rlclones.chat.sos": "[SOS] X:%s Y:%s Z:%s - %s",
+  "rlclones.chat.help": "[Need backup] X:%s Y:%s Z:%s - %s",
+  "rlclones.chat.coming": "On my way, %s!",
+  "rlclones.reason.lava": "burning in lava",
+  "rlclones.reason.fire": "on fire",
+  "rlclones.reason.drowning": "drowning",
+  "rlclones.reason.explosion": "a creeper is about to explode",
+  "rlclones.reason.outnumbered": "too many enemies (%s)",
+  "rlclones.reason.outmatched": "enemy too strong (%s)",
+  "rlclones.reason.low_health": "low health, attacked by %s",
+  "rlclones.reason.trapped": "stuck in a hole and can't get out",
+  "rlclones.reason.starving": "starving, no food"
 }
