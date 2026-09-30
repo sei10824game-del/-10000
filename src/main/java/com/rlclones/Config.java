@@ -62,16 +62,34 @@ public final class Config {
     private Config() {
     }
 
+    /** Set by /rlclone limit; wins over the config file (which may still hold an old value such as 16). */
+    private static Integer limitOverride;
+
+    private static int rawLimit() {
+        return limitOverride != null ? limitOverride : get(MAX_CLONES, 0);
+    }
+
     /** Clone cap; 0 in the config means unlimited. */
     public static int cloneLimit() {
-        int v = get(MAX_CLONES, 0);
+        int v = rawLimit();
         return v <= 0 ? Integer.MAX_VALUE : v;
     }
 
     /** Human readable clone cap for messages. */
     public static String cloneLimitLabel() {
-        int v = get(MAX_CLONES, 0);
+        int v = rawLimit();
         return v <= 0 ? "\u221e" : Integer.toString(v);
+    }
+
+    /** Change the clone cap at runtime (0 = unlimited) and write it to the config file when it is loaded. */
+    public static void setCloneLimit(int limit) {
+        limitOverride = Math.max(0, limit);
+        try {
+            MAX_CLONES.set(limitOverride);
+            MAX_CLONES.save();
+        } catch (RuntimeException e) {
+            // config not loaded (yet): the override still applies for this session
+        }
     }
 
     /** Reads a config value, falling back to a default while the config is not loaded yet. */

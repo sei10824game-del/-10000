@@ -21,6 +21,7 @@ import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.AxeItem;
+import net.minecraft.world.item.HoeItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -76,6 +77,9 @@ public final class Crafting {
 
     public int crafted;
     public int smelted;
+    /** Something a higher-level task needs right now (a chest for the base, a hoe for the field...); crafted first. */
+    @Nullable
+    public Item forcedTarget;
 
     public Crafting(ServerPlayer self, Motor motor, Perception perception) {
         this.self = self;
@@ -159,6 +163,9 @@ public final class Crafting {
     /** Items that would improve the clone, most important first. */
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null) {
+            out.add(c.controller().crafting().forcedTarget);
+        }
         double weapon = bestWeapon(p);
         for (Item sword : SWORDS) {
             if (Equipment.attackDamage(new ItemStack(sword)) > weapon + 0.01) {
@@ -184,6 +191,9 @@ public final class Crafting {
             if (armorUpgrade(p, (ArmorItem) it)) {
                 out.add(it);
             }
+        }
+        if (tierOf(p, HoeItem.class) < 0 && Farming.seedSlot(p) >= 0) {
+            out.add(Items.WOODEN_HOE); // seeds but nothing to till with
         }
         return out;
     }

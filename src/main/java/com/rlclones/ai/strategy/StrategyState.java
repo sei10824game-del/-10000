@@ -67,5 +67,11 @@ public final class StrategyState {
         q[Option.REST.ordinal()] = hp < 2 && threat == 0 ? 0.3f : 0.05f;
         q[Option.CRAFT.ordinal()] = threat == 0 ? 0.7f : -0.3f;
         q[Option.HELP.ordinal()] = threat == 0 ? (hp == 2 ? 1.0f : hp == 1 ? 0.5f : -0.3f) : threat == 1 ? 0.2f : -0.5f;
+        q[Option.STORE.ordinal()] = threat == 0 ? 0.8f : -0.5f;
+        q[Option.FETCH.ordinal()] = threat == 0 ? 0.9f : -0.3f;
+        q[Option.LOOT.ordinal()] = threat == 0 ? 0.6f : -0.3f;
+        q[Option.FARM.ordinal()] = threat == 0 ? 0.5f : -0.4f;
+        q[Option.EXPEDITION.ordinal()] = threat == 0 && hp == 2 ? 0.15f : -0.5f;
+        q[Option.JOIN.ordinal()] = threat == 0 ? 0.8f : 0.1f;
     }
 }

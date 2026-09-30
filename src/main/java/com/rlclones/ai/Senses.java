@@ -316,8 +316,8 @@ public final class Senses {
         if (craft) {
             mask |= Option.CRAFT.bit();
         }
-        if (agent instanceof com.rlclones.clone.ClonePlayer c && c.controller().hasHelpRequest()) {
-            mask |= Option.HELP.bit();
+        if (agent instanceof com.rlclones.clone.ClonePlayer c) {
+            mask |= c.controller().extraOptions(now);
         }
         return mask;
     }

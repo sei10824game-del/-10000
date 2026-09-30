@@ -696,4 +696,353 @@ public final class CloneGameTests {
             h.assertTrue(CloneManager.errors() == 0, "no AI errors");
         });
     }
+
+    // ------------------------------------------------------------------ AC round 4: help count / resolved
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "resolve")
+    public static void reportsResolvedSoHelpersStayAway(GameTestHelper h) {
+        ClonePlayer victim = clone(h, 7.5, 7.5, 0f, true);
+        ClonePlayer helper = clone(h, 2.5, 2.5, 0f, false);
+        victim.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        h.setBlock(new BlockPos(7, 2, 7), Blocks.LAVA);
+        String name = victim.getGameProfile().getName();
+        boolean[] cleared = {false};
+        h.onEachTick(() -> {
+            if (!cleared[0] && helper.controller().requests().stream().anyMatch(r -> r.fromName().equals(name))) {
+                cleared[0] = true;
+                h.setBlock(new BlockPos(7, 2, 7), Blocks.AIR); // the lava is gone: emergency over
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(cleared[0], "helper should first read the SOS");
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": RESOLVED ")),
+                    "victim should announce in chat that the emergency is resolved");
+            h.assertTrue(helper.controller().requests().stream().noneMatch(r -> r.fromName().equals(name)),
+                    "helpers forget a call that was resolved");
+            h.assertFalse(helper.controller().hasHelpRequest(), "nobody should still go there");
+            finish(h, victim, helper);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "chat4")
+    public static void onlyAsManyHelpersAsNeeded(GameTestHelper h) {
+        ClonePlayer asker = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer a = clone(h, 10.5, 10.5, 0f, false);
+        ClonePlayer b = clone(h, 10.5, 3.5, 0f, false);
+        ClonePlayer late = clone(h, 3.5, 10.5, 0f, false);
+        String an = asker.getGameProfile().getName();
+        BlockPos p = asker.blockPosition();
+        com.rlclones.ai.Chat.deliver(asker, "HELP " + p.getX() + " " + p.getY() + " " + p.getZ() + " outnumbered minecraft:zombie=3 need=2");
+        h.assertTrue(late.controller().requests().size() == 1 && late.controller().requests().get(0).need() == 2, "need count is read from chat");
+        h.assertTrue(late.controller().hasHelpRequest(), "nobody on the way yet: go");
+        com.rlclones.ai.Chat.deliver(a, "OMW " + an);
+        h.assertTrue(late.controller().hasHelpRequest(), "1 of 2 helpers on the way: still needed");
+        com.rlclones.ai.Chat.deliver(b, "OMW " + an);
+        h.assertFalse(late.controller().hasHelpRequest(), "2 of 2 helpers on the way: the rest stay put");
+        com.rlclones.ai.Chat.deliver(asker, "もう大丈夫、解決した！");
+        h.assertTrue(late.controller().requests().isEmpty(), "a player's 'resolved' message clears the call");
+        com.rlclones.ai.Chat.deliver(asker, "応援 3人 来て 10 64 10");
+        h.assertTrue(late.controller().requests().get(0).need() == 3, "'3人' in a player's message sets the number needed");
+        finish(h, asker, a, b, late);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "chat5")
+    public static void asksForMoreHelpAgainstMoreEnemies(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 5.5, 0f, true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 6000, 3));
+        dummy(h, 7.5, 9.5);
+        dummy(h, 9.5, 9.5);
+        dummy(h, 5.5, 9.5);
+        dummy(h, 8.5, 11.5);
+        dummy(h, 6.5, 11.5);
+        String name = c.getGameProfile().getName();
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().lastAlarmSent == com.rlclones.ai.CloneController.Alarm.OUTNUMBERED, "should call for backup");
+            h.assertTrue(c.controller().lastNeed >= 3, "5 enemies should need at least 3 helpers, asked for " + c.controller().lastNeed);
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": HELP ") && l.endsWith(" need=" + c.controller().lastNeed)),
+                    "the number needed is in the chat message");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 4: harmful blocks
+
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "hazard")
+    public static void learnsMagmaRemovesItAndTellsOthers(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 0, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 1, 7), Blocks.MAGMA_BLOCK);
+        h.setBlock(new BlockPos(7, 0, 11), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 1, 11), Blocks.MAGMA_BLOCK);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        ClonePlayer friend = clone(h, 4.5, 11.5, -135f, false);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 1));
+        String magma = "minecraft:magma_block";
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getCloneBrain().isHarmful(magma), "magma damage should teach that magma blocks are harmful");
+            h.assertFalse(c.getCloneBrain().isHarmful("minecraft:stone"), "the floor is not harmful");
+            h.assertBlockNotPresent(Blocks.MAGMA_BLOCK, new BlockPos(7, 1, 7));
+            h.assertBlockNotPresent(Blocks.MAGMA_BLOCK, new BlockPos(7, 1, 11));
+            h.assertTrue(c.controller().hazardsCleaned >= 2, "both magma blocks should be broken by the clone");
+            h.assertTrue(friend.getCloneBrain().isHarmful(magma), "a clone nearby should be told about the harmful block");
+            finish(h, c, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "hazard2")
+    public static void learnsUnknownHarmfulBlock(GameTestHelper h) {
+        // stands for a modded block (e.g. an infection block) that hurts with its own / generic damage type
+        h.setBlock(new BlockPos(7, 1, 7), Blocks.MOSS_BLOCK);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var src = h.getLevel().damageSources().generic();
+        c.controller().onEnvironmentDamage(src);
+        h.assertFalse(c.getCloneBrain().isHarmful("minecraft:moss_block"), "one hit is not enough evidence");
+        c.controller().onEnvironmentDamage(src);
+        c.controller().onEnvironmentDamage(src);
+        h.assertTrue(c.getCloneBrain().isHarmful("minecraft:moss_block"), "the block touched every time it hurt is learned as harmful");
+        h.assertFalse(c.getCloneBrain().isHarmful("minecraft:barrier") || c.getCloneBrain().isHarmful("minecraft:stone"), "only the culprit");
+        finish(h, c);
+        h.succeed();
+    }
+
+    // ------------------------------------------------------------------ AC round 4: clone limit command
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "limit")
+    public static void limitCommandChangesTheCap(GameTestHelper h) {
+        var server = h.getLevel().getServer();
+        int existing = manager(h).clones().size();
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "rlclone limit " + (existing + 2));
+        h.assertTrue(com.rlclones.Config.cloneLimit() == existing + 2, "/rlclone limit N sets the cap");
+        ClonePlayer a = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer b = clone(h, 5.5, 3.5, 0f, false);
+        ClonePlayer over = manager(h).summon(null, h.getLevel(), h.absoluteVec(new Vec3(7.5, 2, 7.5)), 0f);
+        h.assertTrue(over == null, "the cap is enforced");
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "rlclone limit 100");
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false);
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "rlclone limit unlimited");
+        h.assertTrue(com.rlclones.Config.cloneLimit() == Integer.MAX_VALUE, "/rlclone limit unlimited removes the cap");
+        h.assertTrue(server.getPlayerList().getMaxPlayers() > server.getPlayerList().getPlayerCount(), "a real player can still join");
+        finish(h, a, b, c);
+        h.succeed();
+    }
+
+    // ------------------------------------------------------------------ AC round 4: chests and bases
+
+    private static void clearBases(GameTestHelper h) {
+        com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        b.bases.clear();
+        b.setDirty();
+    }
+
+    private static void runStorage(GameTestHelper h, ClonePlayer c, com.rlclones.ai.Storage.Mode mode, boolean[] started) {
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            ctl.perception().update(h.getLevel().getGameTime());
+            if (!started[0]) {
+                boolean can = switch (mode) {
+                    case LOOT -> ctl.storage().canLoot();
+                    case STORE -> ctl.storage().canStore();
+                    case FETCH -> ctl.storage().canFetch();
+                };
+                if (can) {
+                    ctl.storage().begin(mode);
+                    started[0] = true;
+                }
+            }
+            if (started[0]) {
+                ctl.storage().tick();
+            }
+            ctl.motor().tick();
+        });
+    }
+
+    private static boolean said(String name, String prefix) {
+        return com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": " + prefix));
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "loot")
+    public static void lootsStrayChest(GameTestHelper h) {
+        clearBases(h);
+        BlockPos rel = new BlockPos(7, 2, 11);
+        h.setBlock(rel, Blocks.CHEST);
+        BlockPos abs = h.absolutePos(rel);
+        ((net.minecraft.world.level.block.entity.ChestBlockEntity) h.getLevel().getBlockEntity(abs))
+                .setLootTable(net.minecraft.world.level.storage.loot.BuiltInLootTables.SIMPLE_DUNGEON, 42L);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        String name = c.getGameProfile().getName();
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.LOOT, new boolean[1]);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().storage().lootings >= 1, "clone should open the dungeon chest and take its loot");
+            h.assertFalse(c.getInventory().isEmpty(), "loot should be in the clone's inventory");
+            h.assertTrue(said(name, "LOOT " + abs.getX() + " " + abs.getY() + " " + abs.getZ() + " "), "looting is reported in chat with coordinates and items");
+            h.assertTrue(c.containerMenu == c.inventoryMenu, "the chest screen is closed again");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "store")
+    public static void buildsBaseAndStoresSurplus(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 16));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.BONE, 3));
+        c.getInventory().add(new ItemStack(Items.STRING, 4));
+        c.getInventory().add(new ItemStack(Items.GUNPOWDER, 2));
+        c.getInventory().add(new ItemStack(Items.FEATHER, 5));
+        h.assertTrue(com.rlclones.ai.Storage.needsStore(c), "surplus weapons and junk should make the clone want to store");
+        String name = c.getGameProfile().getName();
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.STORE, new boolean[1]);
+        h.succeedWhen(() -> {
+            com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+            com.rlclones.clone.Bases.Base base = bases.nearest(h.getLevel().dimension(), c.position(), 16);
+            h.assertTrue(base != null, "clone should found a base");
+            h.assertTrue(c.controller().storage().builder().placed >= 45, "clone should build the hut (placed " + c.controller().storage().builder().placed + ")");
+            h.assertTrue(!base.chests.isEmpty(), "a storage chest is placed in the base");
+            var chest = (net.minecraft.world.Container) h.getLevel().getBlockEntity(base.chests.get(0));
+            h.assertTrue(chest != null && chest.hasAnyOf(java.util.Set.of(Items.BONE, Items.STONE_SWORD, Items.STRING)), "surplus is put into the chest");
+            h.assertTrue(c.getInventory().countItem(Items.IRON_SWORD) == 1, "the weapon in use is kept");
+            h.assertTrue(said(name, "BASE ") && said(name, "DEPOSIT "), "base and deposit are reported in chat");
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": DEPOSIT ") && l.contains("minecraft:bone=3")),
+                    "the deposit message lists the items");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "fetch")
+    public static void fetchesNeededGearFromBase(GameTestHelper h) {
+        clearBases(h);
+        BlockPos rel = new BlockPos(7, 2, 11);
+        h.setBlock(rel, Blocks.CHEST);
+        BlockPos abs = h.absolutePos(rel);
+        var be = (net.minecraft.world.level.block.entity.ChestBlockEntity) h.getLevel().getBlockEntity(abs);
+        be.setItem(0, new ItemStack(Items.DIAMOND_SWORD));
+        be.setItem(1, new ItemStack(Items.IRON_CHESTPLATE));
+        be.setItem(2, new ItemStack(Items.DIRT, 10));
+        com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var base = bases.add(h.getLevel().dimension(), abs, "someone");
+        bases.addChest(base, abs);
+        bases.record(h.getLevel().dimension(), abs, be);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
+        h.assertTrue(c.controller().storage().canFetch(), "the base chest (known from the shared index) holds something better");
+        String name = c.getGameProfile().getName();
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.FETCH, new boolean[1]);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.DIAMOND_SWORD) + (c.getMainHandItem().is(Items.DIAMOND_SWORD) ? 1 : 0) >= 1, "clone takes the better sword");
+            h.assertTrue(c.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE)
+                    || c.getInventory().countItem(Items.IRON_CHESTPLATE) == 1, "and the armour");
+            h.assertTrue(be.countItem(Items.DIRT) == 10, "things it does not need stay in the chest");
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(name + ": WITHDRAW " + abs.getX() + " " + abs.getY() + " " + abs.getZ())
+                    && l.contains("minecraft:diamond_sword=1")), "withdrawal is reported in chat with coordinates and items");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "reuse")
+    public static void usesExistingBaseNearby(GameTestHelper h) {
+        clearBases(h);
+        BlockPos rel = new BlockPos(7, 2, 11);
+        h.setBlock(rel, Blocks.CHEST);
+        BlockPos abs = h.absolutePos(rel);
+        com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var base = bases.add(h.getLevel().dimension(), abs, "other-clone");
+        bases.addChest(base, abs);
+        ClonePlayer c = clone(h, 7.5, 5.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.BONE, 3));
+        c.getInventory().add(new ItemStack(Items.STRING, 4));
+        c.getInventory().add(new ItemStack(Items.GUNPOWDER, 2));
+        c.getInventory().add(new ItemStack(Items.FEATHER, 5));
+        String name = c.getGameProfile().getName();
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.STORE, new boolean[1]);
+        h.succeedWhen(() -> {
+            var be = (net.minecraft.world.Container) h.getLevel().getBlockEntity(abs);
+            h.assertTrue(be.hasAnyOf(java.util.Set.of(Items.BONE)), "surplus goes into the other clone's base chest");
+            h.assertTrue(bases.bases.size() == 1, "no second base is founded next to an existing one");
+            h.assertTrue(said(name, "DEPOSIT " + abs.getX() + " " + abs.getY() + " " + abs.getZ()), "deposit is reported in chat");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 4: farming
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "farm")
+    public static void tillsSoilByWaterAndPlants(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 1, 10), Blocks.WATER);
+        for (int x = 6; x <= 8; x++) {
+            h.setBlock(new BlockPos(x, 1, 11), Blocks.GRASS_BLOCK);
+        }
+        h.setBlock(new BlockPos(6, 1, 10), Blocks.DIRT);
+        h.setBlock(new BlockPos(8, 1, 10), Blocks.DIRT);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
+        c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 8));
+        h.assertTrue(c.controller().farming().hasWork(), "soil next to water + hoe + seeds = work");
+        h.onEachTick(() -> {
+            c.controller().farming().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int planted = 0;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(5, 1, 9)), h.absolutePos(new BlockPos(9, 1, 12)))) {
+                if (h.getLevel().getBlockState(p).is(Blocks.FARMLAND) && h.getLevel().getBlockState(p.above()).is(Blocks.WHEAT)) {
+                    planted++;
+                }
+            }
+            h.assertTrue(planted >= 4, "clone should till the soil by the water with the hoe and plant seeds (" + planted + ")");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 4: expeditions
+
+    @GameTest(template = ARENA, timeoutTicks = 2000, batch = "expedition")
+    public static void expeditionRalliesAndFollows(GameTestHelper h) {
+        ClonePlayer leader = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer m1 = clone(h, 11.5, 11.5, 0f, false);
+        ClonePlayer m2 = clone(h, 11.5, 3.5, 0f, false);
+        ClonePlayer extra = clone(h, 3.5, 11.5, 0f, false);
+        int need = leader.controller().expedition().companionsNeeded(h.absolutePos(new BlockPos(200, 2, 200)), leader.getCloneBrain());
+        h.assertTrue(need >= 1 && need <= 4, "leader decides how many companions it needs");
+        String ln = leader.getGameProfile().getName();
+        leader.controller().expedition().lead(h.absolutePos(new BlockPos(11, 2, 11)), 2);
+        double[] maxGap = {0};
+        h.onEachTick(() -> {
+            leader.controller().expedition().leadTick();
+            for (ClonePlayer m : List.of(m1, m2, extra)) {
+                var ex = m.controller().expedition();
+                if (ex.joinedOffer() == null && ex.completed == 0 && ex.canJoin(h.getLevel().getGameTime())) {
+                    ex.join();
+                }
+                if (ex.joinedOffer() != null) {
+                    ex.followTick();
+                }
+                m.controller().motor().tick();
+            }
+            leader.controller().motor().tick();
+            if (said(ln, "DEPART ") && m1.controller().expedition().joinedOffer() != null && leader.distanceTo(m1) > maxGap[0]) {
+                maxGap[0] = leader.distanceTo(m1);
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(ln + ": RALLY ") && l.endsWith(" need=2")),
+                    "leader calls a rally point with the number needed");
+            h.assertTrue(said(m1.getGameProfile().getName(), "JOIN " + ln) && said(m2.getGameProfile().getName(), "JOIN " + ln), "two clones answer");
+            h.assertTrue(extra.controller().expedition().joinedTrips == 0, "no more than needed join");
+            h.assertTrue(said(ln, "DEPART ") && said(ln, "EXPEDITION_END"), "the group departs and the leader ends the trip");
+            h.assertTrue(m1.controller().expedition().completed == 1 && m2.controller().expedition().completed == 1, "companions stay until the goal is reached");
+            h.assertTrue(maxGap[0] < 16, "companions follow the leader (max gap " + maxGap[0] + ")");
+            finish(h, leader, m1, m2, extra);
+        });
+    }
 }

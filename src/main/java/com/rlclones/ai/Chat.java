@@ -26,12 +26,16 @@ import java.util.regex.Pattern;
  */
 public final class Chat {
     /** A call for help read from chat. {@code urgent} = SOS (emergency), otherwise a request for more hands. */
-    public record Request(UUID from, String fromName, ResourceKey<Level> dimension, Vec3 pos, boolean urgent, String reason, long tick) {
+    public record Request(UUID from, String fromName, ResourceKey<Level> dimension, Vec3 pos, boolean urgent, String reason, int need, long tick) {
     }
 
     private static final Pattern COORDS = Pattern.compile("(-?\\d+)[\\s,/]+(-?\\d+)[\\s,/]+(-?\\d+)");
     private static final String[] SOS_WORDS = {"sos", "mayday", "助けて", "たすけて", "救援", "緊急", "ヘルプ"};
     private static final String[] HELP_WORDS = {"help", "backup", "応援", "来て", "きて", "手伝", "てつだ", "集合"};
+    private static final Pattern NEED = Pattern.compile("need=(\\d+)");
+    private static final Pattern PEOPLE = Pattern.compile("(\\d+)\\s*(人|名|体|people|persons|players|clones|of you)");
+    private static final String[] RESOLVED_WORDS = {"resolved", "all clear", "i'm fine", "im fine", "i'm ok", "i'm safe", "no longer need",
+            "解決", "もう大丈夫", "助かった", "たすかった", "もう平気", "応援不要", "救援不要"};
     private static final Deque<String> RECENT = new ArrayDeque<>();
 
     private Chat() {
@@ -96,7 +100,23 @@ public final class Chat {
                 // keep the speaker's position
             }
         }
-        return new Request(sender.getUUID(), sender.getGameProfile().getName(), sender.level().dimension(), pos, sos, reason, now);
+        int need = sos ? 2 : 1;
+        Matcher n = NEED.matcher(text);
+        Matcher people = PEOPLE.matcher(lower);
+        if (n.find()) {
+            need = Integer.parseInt(n.group(1));
+            reason = reason.replace(n.group(), "").trim();
+        } else if (people.find()) {
+            need = Integer.parseInt(people.group(1));
+        }
+        return new Request(sender.getUUID(), sender.getGameProfile().getName(), sender.level().dimension(), pos, sos, reason,
+                Math.max(1, Math.min(need, 64)), now);
+    }
+
+    /** "RESOLVED ...", "解決した", "もう大丈夫" ...: the speaker no longer needs the help it asked for. */
+    public static boolean isResolved(String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        return lower.startsWith("resolved") || contains(lower, RESOLVED_WORDS);
     }
 
     private static boolean contains(String text, String[] words) {

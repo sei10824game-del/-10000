@@ -247,6 +247,9 @@ public final class ServerEvents {
         if (Senses.isAgent(victim)) {
             AgentEvents.record(victim.getUUID(), now, AgentEvents.Kind.HURT, amount, attacker == null ? -1 : attacker.getId(), 0);
         }
+        if (victim instanceof ClonePlayer cp && attacker == null && event.getSource().getDirectEntity() == null) {
+            cp.controller().onEnvironmentDamage(event.getSource());
+        }
         if (Senses.isAgent(attacker)) {
             boolean hostile = Senses.isHostileTo(victim, (LivingEntity) attacker);
             AgentEvents.record(attacker.getUUID(), now, AgentEvents.Kind.DEALT, amount, victim.getId(), hostile ? AgentEvents.FLAG_HOSTILE : 0);

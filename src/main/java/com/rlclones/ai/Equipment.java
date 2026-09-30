@@ -279,7 +279,7 @@ public final class Equipment {
             return false;
         }
         Block block = bi.getBlock();
-        if (block instanceof EntityBlock || block instanceof FallingBlock) {
+        if (block instanceof EntityBlock || block instanceof FallingBlock || block instanceof net.minecraft.world.level.block.MagmaBlock) {
             return false;
         }
         BlockState state = block.defaultBlockState();
@@ -288,10 +288,19 @@ public final class Equipment {
                 && !state.is(net.minecraftforge.common.Tags.Blocks.STORAGE_BLOCKS);
     }
 
+    /** A block this player may build with: a full solid block it has not learned to be harmful. */
+    public static boolean isBuildingBlock(Player p, ItemStack s) {
+        if (!isPillarBlock(s)) {
+            return false;
+        }
+        return !(p instanceof com.rlclones.clone.ClonePlayer c && c.getCloneBrain() != null
+                && c.getCloneBrain().isHarmful(Perception.blockId(((BlockItem) s.getItem()).getBlock().defaultBlockState())));
+    }
+
     public static int pillarBlockSlot(Player p) {
         Inventory inv = p.getInventory();
         for (int i = 0; i < inv.items.size(); i++) {
-            if (isPillarBlock(inv.items.get(i))) {
+            if (isBuildingBlock(p, inv.items.get(i))) {
                 return i;
             }
         }

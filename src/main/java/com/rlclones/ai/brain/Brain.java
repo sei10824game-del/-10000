@@ -41,6 +41,21 @@ public final class Brain {
     public long deaths;
     public int members = 1;
 
+    /** Blocks learned to hurt on contact (magma, cactus, modded infection blocks...): block id -> evidence count. */
+    private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> harmfulBlocks = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
+
+    public boolean isHarmful(String blockId) {
+        return harmfulBlocks.getInt(blockId) > 0;
+    }
+
+    public void learnHarmful(String blockId) {
+        harmfulBlocks.mergeInt(blockId, 1, Integer::sum);
+    }
+
+    public Set<String> harmfulBlocks() {
+        return Collections.unmodifiableSet(harmfulBlocks.keySet());
+    }
+
     public EnemyKnowledge knowledge(String type) {
         return knowledge.computeIfAbsent(type, EnemyKnowledge::new);
     }
@@ -217,6 +232,9 @@ public final class Brain {
         tag.putLong("kills", kills);
         tag.putLong("deaths", deaths);
         tag.putInt("members", members);
+        CompoundTag hb = new CompoundTag();
+        harmfulBlocks.object2IntEntrySet().forEach(e -> hb.putInt(e.getKey(), e.getIntValue()));
+        tag.put("harmfulBlocks", hb);
         return tag;
     }
 
@@ -239,6 +257,10 @@ public final class Brain {
         b.kills = tag.getLong("kills");
         b.deaths = tag.getLong("deaths");
         b.members = Math.max(1, tag.getInt("members"));
+        CompoundTag hb = tag.getCompound("harmfulBlocks");
+        for (String k : hb.getAllKeys()) {
+            b.harmfulBlocks.put(k, hb.getInt(k));
+        }
         return b;
     }
 
@@ -274,6 +296,7 @@ public final class Brain {
         kills += b.kills;
         deaths += b.deaths;
         members += b.members;
+        b.harmfulBlocks.object2IntEntrySet().forEach(e -> harmfulBlocks.mergeInt(e.getKey(), e.getIntValue(), Integer::sum));
     }
 
     // ---------------------------------------------------------------- introspection

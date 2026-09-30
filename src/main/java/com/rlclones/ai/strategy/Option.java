@@ -16,7 +16,19 @@ public enum Option {
     REST(60),
     CRAFT(400),
     /** Answer a call for help read in chat: go to the reported coordinates. */
-    HELP(600);
+    HELP(600),
+    /** Put what cannot be used right now into a base chest (building a hut + chest first if there is no base). */
+    STORE(4800),
+    /** Take something needed back out of a base chest. */
+    FETCH(1200),
+    /** Rummage through a stray chest (dungeon, village, shipwreck...). */
+    LOOT(800),
+    /** Till soil next to water, plant seeds, harvest ripe crops. */
+    FARM(1200),
+    /** Lead a trip into unexplored land: call companions to a rally point, then go. */
+    EXPEDITION(12000),
+    /** Answer a rally call and follow its leader until the trip is over. */
+    JOIN(14000);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

@@ -86,11 +86,29 @@ public final class CloneCommand {
                                 .executes(CloneCommand::knowledgeList)
                                 .then(Commands.argument("type", StringArgumentType.greedyString()).suggests(TYPES)
                                         .executes(CloneCommand::knowledgeDetail))))
+                .then(Commands.literal("limit")
+                        .executes(ctx -> {
+                            ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.cmd.limit", Config.cloneLimitLabel()), false);
+                            return 1;
+                        })
+                        .then(Commands.literal("unlimited").requires(s -> s.hasPermission(2)).executes(ctx -> setLimit(ctx, 0)))
+                        .then(Commands.argument("max", IntegerArgumentType.integer(0, 1_000_000)).requires(s -> s.hasPermission(2))
+                                .executes(ctx -> setLimit(ctx, IntegerArgumentType.getInteger(ctx, "max")))))
                 .then(Commands.literal("save").requires(CloneCommand::mayControl).executes(ctx -> {
                     manager(ctx).saveAll();
                     ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.cmd.saved"), false);
                     return 1;
                 })));
+    }
+
+    private static int setLimit(CommandContext<CommandSourceStack> ctx, int max) {
+        Config.setCloneLimit(max);
+        CloneManager m = CloneManager.peek();
+        if (m != null) {
+            m.updatePlayerSlots();
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.cmd.limit_set", Config.cloneLimitLabel()), true);
+        return 1;
     }
 
     private static int summon(CommandContext<CommandSourceStack> ctx, int count) {

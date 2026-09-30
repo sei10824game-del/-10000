@@ -36,7 +36,7 @@ import java.util.Map;
  * Seen things are remembered for a while so the clone has object permanence.
  */
 public final class Perception {
-    public enum BlockKind {LOG, ORE, TABLE, FURNACE}
+    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL}
 
     public static final class Seen {
         public final Entity entity;
@@ -95,6 +95,8 @@ public final class Perception {
         }
     };
     private long lastUpdate = Long.MIN_VALUE;
+    /** Block ids this clone has learned hurt (magma, infection blocks...). */
+    private java.util.function.Predicate<String> harmful = id -> false;
 
     public Perception(ServerPlayer self) {
         this.self = self;
@@ -265,7 +267,7 @@ public final class Perception {
                 continue;
             }
             BlockPos pos = hit.getBlockPos().immutable();
-            BlockKind kind = classify(level, pos);
+            BlockKind kind = kindOf(pos);
             if (kind != null) {
                 blocks.put(pos, kind);
             }
@@ -304,12 +306,57 @@ public final class Perception {
         if (state.is(Tags.Blocks.ORES)) {
             return BlockKind.ORE;
         }
+        if (state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+                || state.getBlock() instanceof net.minecraft.world.level.block.BarrelBlock) {
+            return BlockKind.CHEST;
+        }
         return null;
+    }
+
+    /**
+     * Look over the ground around for blocks already known to hurt (in view and with a clear line to their top face,
+     * like a player scanning the floor after stepping on magma).
+     */
+    public void scanForHarmful(int radius) {
+        Level level = self.level();
+        Vec3 eye = self.getEyePosition();
+        BlockPos feet = self.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-radius, -3, -radius), feet.offset(radius, 2, radius))) {
+            BlockState st = level.getBlockState(p);
+            if (st.isAir() || !harmful.test(blockId(st))) {
+                continue;
+            }
+            Vec3 top = new Vec3(p.getX() + 0.5, p.getY() + 1.0, p.getZ() + 0.5);
+            double dist = eye.distanceTo(top);
+            if (!inFov(eye, top, 0.5, dist) && !p.equals(self.getOnPos())) {
+                continue;
+            }
+            BlockHitResult hit = level.clip(new ClipContext(eye, top.add(0, -0.05, 0), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+            if (hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(p)) {
+                blocks.put(p.immutable(), BlockKind.HARMFUL);
+            }
+        }
+    }
+
+    public void setHarmful(java.util.function.Predicate<String> harmful) {
+        this.harmful = harmful;
+    }
+
+    public static String blockId(BlockState state) {
+        return String.valueOf(net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()));
+    }
+
+    private BlockKind kindOf(BlockPos pos) {
+        BlockState state = self.level().getBlockState(pos);
+        if (!state.isAir() && harmful.test(blockId(state))) {
+            return BlockKind.HARMFUL;
+        }
+        return classify(self.level(), pos);
     }
 
     /** Remember a block the clone is looking at directly (e.g. the block it just mined next to). */
     public void noteBlock(BlockPos pos) {
-        BlockKind kind = classify(self.level(), pos);
+        BlockKind kind = kindOf(pos);
         if (kind != null) {
             blocks.put(pos.immutable(), kind);
         } else {

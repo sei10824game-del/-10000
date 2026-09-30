@@ -50,6 +50,30 @@ public final class CloneController {
     private final it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap<Alarm> alarmTimes = new it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap<>();
     private long lastAlarm = -100000;
     private Chat.Request answering;
+    /** Who said they are on their way, per requester name (read from "OMW name" in chat). */
+    private final java.util.Map<String, java.util.Set<java.util.UUID>> responders = new java.util.HashMap<>();
+    /** The emergency this clone called for help about and has not declared resolved yet. */
+    private Alarm openAlarm;
+    private BlockPos openAlarmPos;
+    private int clearChecks;
+    public int resolvedSent;
+    public int lastNeed;
+    private final Storage storage;
+    private final Farming farming;
+    private final Expedition expedition;
+    // harmful blocks (magma, infection blocks from mods...): learned from damage, removed, shared
+    private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> suspects = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
+    private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> safeGround = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
+    private int unknownHurts;
+    private long lastEnvHurt = -100000;
+    private BlockPos cleanTarget;
+    private int cleanTicks;
+    private long cleanWindowStart;
+    private int cleanedInWindow;
+    public int hazardsLearned;
+    public int hazardsCleaned;
+    public int hazardsShared;
+    public int hazardsReceived;
     private final Int2LongOpenHashMap enemyLastAttack = new Int2LongOpenHashMap();
     private final Int2LongOpenHashMap enemyLastShot = new Int2LongOpenHashMap();
     private final LongOpenHashSet visitedChunks = new LongOpenHashSet();
@@ -95,6 +119,13 @@ public final class CloneController {
         this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
         this.crafting = new Crafting(self, motor, perception);
         this.escape = new Escape(self, motor);
+        this.storage = new Storage(self, motor, perception, crafting);
+        this.farming = new Farming(self, motor);
+        this.expedition = new Expedition(self, motor);
+        perception.setHarmful(id -> {
+            Brain b = self.getCloneBrain();
+            return b != null && b.isHarmful(id);
+        });
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
     }
@@ -125,6 +156,30 @@ public final class CloneController {
 
     public AgentWatcher watcher() {
         return watcher;
+    }
+
+    public Storage storage() {
+        return storage;
+    }
+
+    public Farming farming() {
+        return farming;
+    }
+
+    public Expedition expedition() {
+        return expedition;
+    }
+
+    public java.util.Set<java.util.UUID> responders(String requester) {
+        return responders.getOrDefault(requester, java.util.Set.of());
+    }
+
+    public Alarm openAlarm() {
+        return openAlarm;
+    }
+
+    public BlockPos cleanTarget() {
+        return cleanTarget;
     }
 
     /** Debug / test hook: always pick this combat action when it is available. */
@@ -162,7 +217,8 @@ public final class CloneController {
             watcher.update(now);
         }
         if ((now + self.getId()) % 40 == 0 && !self.isUsingItem() && option != Option.GATHER_WOOD && option != Option.MINE
-                && option != Option.CRAFT && self.containerMenu == self.inventoryMenu && !motor.isFlying()
+                && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
+                && cleanTarget == null && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
         }
@@ -178,6 +234,7 @@ public final class CloneController {
             escaping = true;
             escape.start(motor.recentGoal());
         }
+        hazardTick(now);
         if (escaping) {
             Escape.Status st = escape.tick();
             if (st != Escape.Status.WORKING) {
@@ -186,6 +243,8 @@ public final class CloneController {
                     escapeFailedAt = now;
                 }
             }
+        } else if (cleanTarget != null) {
+            cleanUp();
         } else {
             runStrategy(now);
         }
@@ -276,16 +335,14 @@ public final class CloneController {
         return false;
     }
 
-    /** Look at the own situation; if it is an emergency / we are outnumbered, say where and why in chat. */
+    /** Look at the own situation; if it is an emergency / we are outnumbered, say where, why and how many should come. */
     private void checkAlarms(long now) {
-        if (now - lastAlarm < 100) {
-            return;
-        }
         float hp = self.getHealth() / Math.max(1f, self.getMaxHealth());
         List<Perception.Seen> threats = Senses.threats(perception, self, now, 12);
         Alarm alarm = null;
         Component detail = Component.empty();
         String plainDetail = "";
+        int need = 1;
         if (self.isInLava()) {
             alarm = Alarm.LAVA;
         } else if (self.isOnFire() && hp < 0.6f) {
@@ -297,8 +354,12 @@ public final class CloneController {
         } else if (threats.size() >= 3 || (!threats.isEmpty() && Senses.threatLevel(perception, self, self.getCloneBrain(), now) == 2 && hp > 0.3f)) {
             alarm = threats.size() >= 3 ? Alarm.OUTNUMBERED : Alarm.OUTMATCHED;
             it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap<net.minecraft.world.entity.EntityType<?>> counts = new it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap<>();
+            float enemyHealth = 0;
             for (Perception.Seen s : threats) {
                 counts.mergeInt(s.entity.getType(), 1, Integer::sum);
+                if (s.entity instanceof LivingEntity le) {
+                    enemyHealth += le.getHealth();
+                }
             }
             net.minecraft.network.chat.MutableComponent list = Component.empty();
             StringBuilder plain = new StringBuilder();
@@ -314,16 +375,40 @@ public final class CloneController {
             }
             detail = list;
             plainDetail = plain.toString();
+            // one helper per extra enemy (more when hurt), or by how much stronger the enemy is than us
+            need = alarm == Alarm.OUTNUMBERED ? Mth.clamp(threats.size() - 1 + (hp < 0.5f ? 1 : 0), 1, 6)
+                    : Mth.clamp(Math.round(enemyHealth / Math.max(10f, self.getHealth() + (float) Equipment.attackDamage(self.getMainHandItem()) * 2)), 1, 4);
         } else if (hp <= 0.3f && !threats.isEmpty()) {
             alarm = Alarm.LOW_HEALTH;
             detail = threats.get(0).entity.getType().getDescription();
             plainDetail = threats.get(0).typeId;
+            need = threats.size() >= 2 ? 2 : 1;
         } else if (now - escapeFailedAt < 200) {
             alarm = Alarm.TRAPPED;
         } else if (self.getFoodData().getFoodLevel() == 0 && Equipment.bestFoodSlot(self) < 0) {
             alarm = Alarm.STARVING;
         }
-        if (alarm == null) {
+        if (alarm != null && need > 1) {
+            // friends already standing next to us count
+            int allies = 0;
+            for (Perception.Seen s : perception.visible()) {
+                if (s.entity != self && Senses.isAgent(s.entity) && s.entity.distanceTo(self) < 12) {
+                    allies++;
+                }
+            }
+            need = Math.max(1, need - allies);
+        }
+        // the emergency we called about is over: say so, so nobody comes for nothing
+        if (openAlarm != null) {
+            if (alarm == null) {
+                if (++clearChecks >= 3) {
+                    resolve(false);
+                }
+            } else {
+                clearChecks = 0;
+            }
+        }
+        if (alarm == null || now - lastAlarm < 100) {
             return;
         }
         if (now - alarmTimes.getOrDefault(alarm, -100000L) < 600) {
@@ -332,19 +417,74 @@ public final class CloneController {
         alarmTimes.put(alarm, now);
         lastAlarm = now;
         boolean urgent = alarm.urgent || (alarm == Alarm.OUTNUMBERED && hp < 0.5f);
-        net.minecraft.core.BlockPos p = self.blockPosition();
-        String plain = (urgent ? "SOS " : "HELP ") + p.getX() + " " + p.getY() + " " + p.getZ() + " " + alarm.key + (plainDetail.isEmpty() ? "" : " " + plainDetail);
+        BlockPos p = self.blockPosition();
+        String plain = (urgent ? "SOS " : "HELP ") + p.getX() + " " + p.getY() + " " + p.getZ() + " " + alarm.key
+                + (plainDetail.isEmpty() ? "" : " " + plainDetail) + " need=" + need;
         Component reason = Component.translatable("rlclones.reason." + alarm.key, detail);
-        Chat.say(self, Component.translatable(urgent ? "rlclones.chat.sos" : "rlclones.chat.help", p.getX(), p.getY(), p.getZ(), reason), plain);
+        Chat.say(self, Component.translatable(urgent ? "rlclones.chat.sos" : "rlclones.chat.help", p.getX(), p.getY(), p.getZ(), reason, need), plain);
         lastAlarmSent = alarm;
+        lastNeed = need;
+        openAlarm = alarm;
+        openAlarmPos = p;
+        clearChecks = 0;
     }
 
     public Alarm lastAlarmSent;
 
-    /** Read a chat line (from a clone or a real player). Calls for help are remembered. */
+    /** Tell everyone the call for help is over (solved, or this clone died) and nobody needs to come any more. */
+    private void resolve(boolean died) {
+        if (openAlarm == null) {
+            return;
+        }
+        BlockPos p = openAlarmPos;
+        Chat.say(self, Component.translatable(died ? "rlclones.chat.cancel" : "rlclones.chat.resolved", p.getX(), p.getY(), p.getZ()),
+                "RESOLVED " + p.getX() + " " + p.getY() + " " + p.getZ() + (died ? " died" : ""));
+        alarmTimes.removeLong(openAlarm);
+        openAlarm = null;
+        clearChecks = 0;
+        resolvedSent++;
+    }
+
+    /** Read a chat line (from a clone or a real player). */
     public void onChat(net.minecraft.server.level.ServerPlayer sender, String text) {
-        Chat.Request r = Chat.parse(sender, text, now());
-        if (r == null || r.from().equals(self.getUUID())) {
+        if (sender.getUUID().equals(self.getUUID())) {
+            return;
+        }
+        long now = now();
+        String t = text.trim();
+        String name = sender.getGameProfile().getName();
+        if (t.startsWith("OMW ")) {
+            responders.computeIfAbsent(t.substring(4).trim(), k -> new java.util.HashSet<>()).add(sender.getUUID());
+            return;
+        }
+        if (t.startsWith("HAZARD ")) {
+            String[] parts = t.split(" ");
+            if (parts.length >= 3 && parts[2].startsWith("to=")
+                    && java.util.Arrays.asList(parts[2].substring(3).split(",")).contains(self.getGameProfile().getName())) {
+                if (!brain().isHarmful(parts[1])) {
+                    brain().learnHarmful(parts[1]);
+                    hazardsReceived++;
+                }
+            }
+            return;
+        }
+        if (expedition.onChat(sender, t, now)) {
+            return;
+        }
+        if (t.startsWith("DEPOSIT ") || t.startsWith("WITHDRAW ") || t.startsWith("LOOT ") || t.startsWith("BASE ") || t.startsWith("HAZARD_LEARNED")) {
+            return; // bases and their contents are shared knowledge already
+        }
+        if (Chat.isResolved(t)) {
+            requests.removeIf(q -> q.from().equals(sender.getUUID()));
+            responders.remove(name);
+            if (answering != null && answering.from().equals(sender.getUUID())) {
+                answering = null;
+                cancelledHelp++;
+            }
+            return;
+        }
+        Chat.Request r = Chat.parse(sender, t, now);
+        if (r == null) {
             return;
         }
         requests.removeIf(q -> q.from().equals(r.from()));
@@ -354,10 +494,13 @@ public final class CloneController {
         }
     }
 
+    public int cancelledHelp;
+
     public List<Chat.Request> requests() {
         return requests;
     }
 
+    /** The call for help this clone should answer: nearest / most urgent one that does not have enough helpers yet. */
     public Chat.Request activeRequest() {
         long now = now();
         requests.removeIf(r -> now - r.tick() > 1200);
@@ -370,6 +513,10 @@ public final class CloneController {
             double d = r.pos().distanceTo(self.position());
             if (d > 160) {
                 continue;
+            }
+            java.util.Set<java.util.UUID> coming = responders(r.fromName());
+            if (!coming.contains(self.getUUID()) && coming.size() >= r.need()) {
+                continue; // enough people are already on their way
             }
             double score = d - (r.urgent() ? 32 : 0);
             if (score < bestScore) {
@@ -387,11 +534,15 @@ public final class CloneController {
     private boolean runHelp() {
         Chat.Request r = activeRequest();
         if (r == null) {
-            return true;
+            answering = null;
+            return true; // resolved (or enough others went): stop, do not show up for nothing
         }
         if (answering != r) {
             answering = r;
-            Chat.say(self, Component.translatable("rlclones.chat.coming", r.fromName()), "OMW " + r.fromName());
+            java.util.Set<java.util.UUID> coming = responders.computeIfAbsent(r.fromName(), k -> new java.util.HashSet<>());
+            if (coming.add(self.getUUID())) {
+                Chat.say(self, Component.translatable("rlclones.chat.coming", r.fromName()), "OMW " + r.fromName());
+            }
         }
         if (self.position().distanceTo(r.pos()) <= 5) {
             optionReward += 1.0f; // arrived to help: team reward
@@ -401,6 +552,273 @@ public final class CloneController {
         }
         motor.navigate(r.pos(), 4.0, true);
         return motor.stuckCount() > 4;
+    }
+
+    // ------------------------------------------------------------------ harmful blocks
+
+    private static final java.util.Set<net.minecraft.resources.ResourceKey<net.minecraft.world.damagesource.DamageType>> NOT_FROM_BLOCKS = java.util.Set.of(
+            net.minecraft.world.damagesource.DamageTypes.FALL, net.minecraft.world.damagesource.DamageTypes.DROWN,
+            net.minecraft.world.damagesource.DamageTypes.STARVE, net.minecraft.world.damagesource.DamageTypes.IN_WALL,
+            net.minecraft.world.damagesource.DamageTypes.OUTSIDE_BORDER, net.minecraft.world.damagesource.DamageTypes.FELL_OUT_OF_WORLD,
+            net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL, net.minecraft.world.damagesource.DamageTypes.CRAMMING,
+            net.minecraft.world.damagesource.DamageTypes.FLY_INTO_WALL, net.minecraft.world.damagesource.DamageTypes.WITHER,
+            net.minecraft.world.damagesource.DamageTypes.DRY_OUT, net.minecraft.world.damagesource.DamageTypes.LIGHTNING_BOLT,
+            net.minecraft.world.damagesource.DamageTypes.ON_FIRE, net.minecraft.world.damagesource.DamageTypes.LAVA,
+            net.minecraft.world.damagesource.DamageTypes.EXPLOSION, net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION,
+            net.minecraft.world.damagesource.DamageTypes.FIREWORKS, net.minecraft.world.damagesource.DamageTypes.SONIC_BOOM,
+            net.minecraft.world.damagesource.DamageTypes.INDIRECT_MAGIC, net.minecraft.world.damagesource.DamageTypes.THORNS,
+            net.minecraft.world.damagesource.DamageTypes.BAD_RESPAWN_POINT, net.minecraft.world.damagesource.DamageTypes.FALLING_BLOCK,
+            net.minecraft.world.damagesource.DamageTypes.FALLING_ANVIL, net.minecraft.world.damagesource.DamageTypes.FALLING_STALACTITE);
+
+    /** Blocks the clone is standing on or touching right now. */
+    private java.util.Set<BlockPos> touching() {
+        java.util.Set<BlockPos> out = new java.util.LinkedHashSet<>();
+        out.add(self.getOnPos().immutable());
+        net.minecraft.world.phys.AABB box = self.getBoundingBox().inflate(0.05);
+        BlockPos.betweenClosedStream(box).forEach(p -> {
+            if (!self.level().getBlockState(p).isAir()) {
+                out.add(p.immutable());
+            }
+        });
+        return out;
+    }
+
+    /**
+     * Took damage without an attacker. Known block damage (magma = hot floor, cactus, berry bush, campfire...) is pinned
+     * on the block that caused it right away; unknown damage (e.g. infection blocks from mods) on the block that was
+     * touched every time it happened and never while standing around unhurt.
+     */
+    public void onEnvironmentDamage(DamageSource source) {
+        long now = now();
+        lastEnvHurt = now;
+        ServerLevel level = self.serverLevel();
+        if (NOT_FROM_BLOCKS.stream().anyMatch(source::is)) {
+            return;
+        }
+        java.util.Set<BlockPos> culprits = new java.util.LinkedHashSet<>();
+        if (source.is(net.minecraft.world.damagesource.DamageTypes.HOT_FLOOR)) {
+            culprits.add(self.getOnPos());
+        } else if (source.is(net.minecraft.world.damagesource.DamageTypes.CACTUS) || source.is(net.minecraft.world.damagesource.DamageTypes.SWEET_BERRY_BUSH)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.IN_FIRE) || source.is(net.minecraft.world.damagesource.DamageTypes.FREEZE)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.STALAGMITE)) {
+            for (BlockPos p : touching()) {
+                BlockState st = level.getBlockState(p);
+                boolean match = source.is(net.minecraft.world.damagesource.DamageTypes.CACTUS) ? st.getBlock() instanceof net.minecraft.world.level.block.CactusBlock
+                        : source.is(net.minecraft.world.damagesource.DamageTypes.SWEET_BERRY_BUSH) ? st.getBlock() instanceof net.minecraft.world.level.block.SweetBerryBushBlock
+                        : source.is(net.minecraft.world.damagesource.DamageTypes.FREEZE) ? st.is(net.minecraft.world.level.block.Blocks.POWDER_SNOW)
+                        : source.is(net.minecraft.world.damagesource.DamageTypes.STALAGMITE) ? st.getBlock() instanceof net.minecraft.world.level.block.PointedDripstoneBlock
+                        : st.is(net.minecraft.tags.BlockTags.FIRE) || st.is(net.minecraft.tags.BlockTags.CAMPFIRES);
+                if (match) {
+                    culprits.add(p);
+                }
+            }
+        } else {
+            if ((source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC) || source.is(net.minecraft.world.damagesource.DamageTypes.GENERIC))
+                    && (self.hasEffect(net.minecraft.world.effect.MobEffects.POISON) || self.hasEffect(net.minecraft.world.effect.MobEffects.HARM))) {
+                return;
+            }
+            unknownHurts++;
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (BlockPos p : touching()) {
+                String id = Perception.blockId(level.getBlockState(p));
+                if (seen.add(id)) {
+                    suspects.addTo(id, 1);
+                }
+            }
+            for (var e : suspects.object2IntEntrySet()) {
+                // present every time it hurt (at least 3 times) and hardly ever stood on safely
+                if (e.getIntValue() >= 3 && e.getIntValue() >= unknownHurts - 1 && safeGround.getInt(e.getKey()) < 3) {
+                    for (BlockPos p : touching()) {
+                        if (Perception.blockId(level.getBlockState(p)).equals(e.getKey())) {
+                            culprits.add(p);
+                        }
+                    }
+                }
+            }
+        }
+        for (BlockPos p : culprits) {
+            BlockState st = level.getBlockState(p);
+            if (st.isAir()) {
+                continue;
+            }
+            String id = Perception.blockId(st);
+            boolean known = brain().isHarmful(id);
+            brain().learnHarmful(id);
+            perception.noteBlock(p);
+            if (!known) {
+                hazardsLearned++;
+                Chat.say(self, Component.translatable("rlclones.chat.hazard_learned", st.getBlock().getName()), "HAZARD_LEARNED " + id);
+            }
+        }
+    }
+
+    private boolean safeToRemove(BlockPos p) {
+        ServerLevel level = self.serverLevel();
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+            if (level.getFluidState(p.relative(d)).is(net.minecraft.tags.FluidTags.LAVA)) {
+                return false;
+            }
+        }
+        BlockState st = level.getBlockState(p);
+        if (st.getDestroySpeed(level, p) < 0 || !self.mayInteract(level, p)) {
+            return false;
+        }
+        // do not dig the floor away above a drop or lava
+        BlockPos below = p.below();
+        return !level.getBlockState(below).isAir() || !self.getBoundingBox().inflate(0.3, 1, 0.3).intersects(new net.minecraft.world.phys.AABB(p));
+    }
+
+    /** Harmful-block housekeeping: remember safe ground, remove hazards in sight, tell nearby clones what hurts. */
+    private void hazardTick(long now) {
+        long phase = now + self.getId();
+        if (phase % 20 == 0 && self.onGround() && now - lastEnvHurt > 60 && safeGround.size() < 512) {
+            safeGround.addTo(Perception.blockId(self.level().getBlockState(self.getOnPos())), 1);
+        }
+        if (phase % 100 == 0) {
+            shareHazards();
+        }
+        if (phase % 20 == 0 && !brain().harmfulBlocks().isEmpty()) {
+            perception.scanForHarmful(8);
+        }
+        if (now - cleanWindowStart > 1200) {
+            cleanWindowStart = now;
+            cleanedInWindow = 0;
+        }
+        if (cleanTarget != null || escaping || phase % 20 != 0 || cleanedInWindow >= 16 || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)
+                || self.containerMenu != self.inventoryMenu || option == Option.FIGHT || option == Option.FLEE || motor.isFlying()
+                || self.isInLava() || hostileWithin(8, now) || brain().harmfulBlocks().isEmpty()) {
+            return;
+        }
+        BlockPos best = null;
+        double bestD = 10 * 10;
+        for (var e : perception.blocks().entrySet()) {
+            if (e.getValue() != Perception.BlockKind.HARMFUL) {
+                continue;
+            }
+            double d = e.getKey().distToCenterSqr(self.position());
+            if (d < bestD && brain().isHarmful(Perception.blockId(self.level().getBlockState(e.getKey()))) && safeToRemove(e.getKey())) {
+                bestD = d;
+                best = e.getKey();
+            }
+        }
+        if (best != null) {
+            cleanTarget = best;
+            cleanTicks = 0;
+        }
+    }
+
+    private void cleanUp() {
+        ServerLevel level = self.serverLevel();
+        BlockState st = level.getBlockState(cleanTarget);
+        if (st.isAir() || !brain().isHarmful(Perception.blockId(st))) {
+            perception.forgetBlock(cleanTarget);
+            cleanTarget = null;
+            return;
+        }
+        if (++cleanTicks > 400 || hostileWithin(6, now())) {
+            perception.forgetBlock(cleanTarget);
+            cleanTarget = null;
+            motor.resetMining();
+            return;
+        }
+        Vec3 c = Vec3.atCenterOf(cleanTarget);
+        if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 0.5) {
+            motor.navigate(c, 2.5, false);
+            if (motor.stuckCount() > 6) {
+                perception.forgetBlock(cleanTarget);
+                cleanTarget = null;
+            }
+            return;
+        }
+        motor.stop();
+        Equipment.select(self, Equipment.bestToolSlot(self, st));
+        if (motor.mine(cleanTarget)) {
+            hazardsCleaned++;
+            cleanedInWindow++;
+            stepReward += 0.5f;
+            perception.forgetBlock(cleanTarget);
+            cleanTarget = null;
+        }
+    }
+
+    /** Clones standing nearby that do not know a block is harmful get told (in chat, by name). */
+    private void shareHazards() {
+        Brain mine = brain();
+        if (mine.harmfulBlocks().isEmpty()) {
+            return;
+        }
+        java.util.Map<String, List<String>> lacking = new java.util.LinkedHashMap<>();
+        for (Perception.Seen s : perception.visible()) {
+            if (!(s.entity instanceof ClonePlayer other) || other == self || !other.isAlive() || other.distanceTo(self) > 16
+                    || other.getCloneBrain() == null || other.getCloneBrain() == mine) {
+                continue;
+            }
+            for (String id : mine.harmfulBlocks()) {
+                if (!other.getCloneBrain().isHarmful(id)) {
+                    lacking.computeIfAbsent(id, k -> new java.util.ArrayList<>()).add(other.getGameProfile().getName());
+                }
+            }
+        }
+        lacking.forEach((id, names) -> {
+            net.minecraft.world.level.block.Block block = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id));
+            Component blockName = block == null ? Component.literal(id) : block.getName();
+            Chat.say(self, Component.translatable("rlclones.chat.hazard", blockName, String.join(", ", names)), "HAZARD " + id + " to=" + String.join(",", names));
+            hazardsShared += names.size();
+        });
+    }
+
+    // ------------------------------------------------------------------ extra options (chests, farming, expeditions)
+
+    private boolean othersOnline() {
+        for (net.minecraft.server.level.ServerPlayer p : self.getServer().getPlayerList().getPlayers()) {
+            if (p != self && p.isAlive() && p.level() == self.level() && !p.isSpectator()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Options only a clone knows about itself (read from chat / its own plans). */
+    public int extraOptions(long now) {
+        int mask = 0;
+        if (hasHelpRequest()) {
+            mask |= Option.HELP.bit();
+        }
+        if (self.containerMenu == self.inventoryMenu) {
+            if (storage.canStore()) {
+                mask |= Option.STORE.bit();
+            }
+            if (storage.canFetch()) {
+                mask |= Option.FETCH.bit();
+            }
+            if (storage.canLoot()) {
+                mask |= Option.LOOT.bit();
+            }
+        }
+        if (farming.hasWork()) {
+            mask |= Option.FARM.bit();
+        }
+        if (expedition.isLeading() || (expedition.canLead(now) && othersOnline())) {
+            mask |= Option.EXPEDITION.bit();
+        }
+        if (expedition.joinedOffer() != null || expedition.canJoin(now)) {
+            mask |= Option.JOIN.bit();
+        }
+        return mask;
+    }
+
+    private boolean runStorage() {
+        int before = storage.deposits + storage.withdrawals + storage.lootings;
+        Storage.Status st = storage.tick();
+        optionReward += (storage.deposits + storage.withdrawals + storage.lootings - before) * 1.5f;
+        return st != Storage.Status.WORKING;
+    }
+
+    private boolean runFarm() {
+        int before = farming.tilled + farming.planted + farming.harvested;
+        Farming.Status st = farming.tick();
+        optionReward += (farming.tilled + farming.planted + farming.harvested - before) * 0.5f;
+        return st != Farming.Status.WORKING;
     }
 
     /** Only perceive and learn from others (used when the clone's own AI is switched off). */
@@ -633,6 +1051,10 @@ public final class CloneController {
         if (option != null) {
             finishOption(true);
         }
+        resolve(true);
+        expedition.abandon();
+        storage.reset();
+        cleanTarget = null;
         brain().deaths++;
         motor.resetMining();
     }
@@ -659,6 +1081,10 @@ public final class CloneController {
             case REST -> runRest();
             case CRAFT -> crafting.tick() == Crafting.Status.DONE;
             case HELP -> runHelp();
+            case STORE, FETCH, LOOT -> runStorage();
+            case FARM -> runFarm();
+            case EXPEDITION -> expedition.leadTick() != Expedition.Status.WORKING;
+            case JOIN -> expedition.followTick() != Expedition.Status.WORKING;
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -670,7 +1096,13 @@ public final class CloneController {
     private void startOption(long now) {
         int s = Senses.strategyState(perception, self, self, brain(), now);
         int mask = Senses.strategyMask(perception, self, self, now);
-        int o = brain().chooseStrategy(s, mask);
+        int o;
+        Option committed = expedition.isLeading() ? Option.EXPEDITION : expedition.joinedOffer() != null ? Option.JOIN : null;
+        if (committed != null && (mask & committed.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
+            o = committed.ordinal(); // a promise: keep going with the group until the trip is over
+        } else {
+            o = brain().chooseStrategy(s, mask);
+        }
         if (o < 0) {
             return;
         }
@@ -686,6 +1118,27 @@ public final class CloneController {
         blocksDone = 0;
         eatStarted = false;
         closeTicks = 0;
+        switch (option) {
+            case STORE -> storage.begin(Storage.Mode.STORE);
+            case FETCH -> storage.begin(Storage.Mode.FETCH);
+            case LOOT -> storage.begin(Storage.Mode.LOOT);
+            case FARM -> farming.reset();
+            case EXPEDITION -> {
+                if (!expedition.isLeading()) {
+                    BlockPos t = expedition.pickTarget(visitedChunks::contains);
+                    if (t != null) {
+                        expedition.lead(t, expedition.companionsNeeded(t, brain()));
+                    }
+                }
+            }
+            case JOIN -> {
+                if (expedition.joinedOffer() == null) {
+                    expedition.join();
+                }
+            }
+            default -> {
+            }
+        }
     }
 
     private void finishOption(boolean died) {
@@ -700,12 +1153,21 @@ public final class CloneController {
         if (died) {
             optionReward -= 30f;
         }
+        if (expedition.takeFinished()) {
+            optionReward += 5f;
+        }
         int s2 = died ? 0 : Senses.strategyState(perception, self, self, brain(), now);
         int mask2 = died ? 0 : Senses.strategyMask(perception, self, self, now);
         float gamma = (float) Math.pow(0.995, Math.max(1, optionTicks));
         brain().learn(Brain.STRATEGY, optionState, option.ordinal(), optionReward, s2, died, gamma, mask2, 1f, false);
         if (option == Option.CRAFT) {
             crafting.reset();
+        }
+        if (option == Option.STORE || option == Option.FETCH || option == Option.LOOT) {
+            storage.reset();
+        }
+        if (option == Option.FARM) {
+            farming.reset();
         }
         if (self.isUsingItem() && !died) {
             self.stopUsingItem();

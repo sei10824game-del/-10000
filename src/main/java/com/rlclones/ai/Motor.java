@@ -365,6 +365,44 @@ public final class Motor {
         return r.consumesAction() || self.isUsingItem();
     }
 
+    /**
+     * Place the held block at {@code target} by right-clicking a face of an adjacent solid block, exactly as a
+     * player builds (supports walls and roofs). Returns true if the block is there afterwards.
+     */
+    public boolean placeBlockAt(BlockPos target) {
+        ServerLevel level = self.serverLevel();
+        if (!level.getBlockState(target).canBeReplaced()) {
+            return false;
+        }
+        if (self.getBoundingBox().intersects(new AABB(target))) {
+            return false;
+        }
+        Direction[] order = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP};
+        for (Direction toSupport : order) {
+            BlockPos support = target.relative(toSupport);
+            BlockState st = level.getBlockState(support);
+            if (st.canBeReplaced() || st.getCollisionShape(level, support).isEmpty()) {
+                continue;
+            }
+            Direction face = toSupport.getOpposite();
+            Vec3 hitVec = Vec3.atCenterOf(support).add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
+            if (self.getEyePosition().distanceTo(hitVec) > BLOCK_REACH) {
+                continue;
+            }
+            lookAt(hitVec);
+            self.resetLastActionTime();
+            InteractionResult r = self.gameMode.useItemOn(self, level, self.getMainHandItem(), InteractionHand.MAIN_HAND,
+                    new BlockHitResult(hitVec, face, support, false));
+            if (r.consumesAction()) {
+                self.swing(InteractionHand.MAIN_HAND);
+            }
+            if (!level.getBlockState(target).canBeReplaced()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Right-click the top face of {@code against} with the main hand item (e.g. placing a block on it). */
     public boolean useOnTopFace(BlockPos against) {
         ItemStack stack = self.getMainHandItem();
