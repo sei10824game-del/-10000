@@ -193,7 +193,7 @@ public final class CloneManager {
             }
         } else {
             for (ClonePlayer c : clones.values()) {
-                saveBrain(c.getUUID().toString(), c.getBrain());
+                saveBrain(c.getUUID().toString(), c.getCloneBrain());
             }
         }
         roster().setDirty();
@@ -302,18 +302,18 @@ public final class CloneManager {
         if (on) {
             List<Brain> brains = new ArrayList<>();
             for (ClonePlayer c : clones.values()) {
-                brains.add(c.getBrain());
+                brains.add(c.getCloneBrain());
             }
             shared = Brain.merge(brains);
             for (ClonePlayer c : clones.values()) {
-                c.setBrain(shared);
+                c.setCloneBrain(shared);
             }
             r.linked = true;
         } else {
             Brain base = sharedBrain();
             for (ClonePlayer c : clones.values()) {
                 Brain copy = base.copy();
-                c.setBrain(copy);
+                c.setCloneBrain(copy);
                 saveBrain(c.getUUID().toString(), copy);
             }
             saveBrain("shared", base);
@@ -396,7 +396,7 @@ public final class CloneManager {
                 : Optional.empty();
         ServerLevel level = respawnLevel != null && spot.isPresent() ? respawnLevel : server.overworld();
 
-        ClonePlayer fresh = new ClonePlayer(server, level, old.getGameProfile(), old.getBrain());
+        ClonePlayer fresh = new ClonePlayer(server, level, old.getGameProfile(), old.getCloneBrain());
         fresh.connection = old.connection;
         fresh.connection.player = fresh;
         fresh.restoreFrom(old, false);
@@ -451,7 +451,7 @@ public final class CloneManager {
                 shared.members = Math.max(1, shared.members - 1);
             }
         } else if (!isLinked()) {
-            saveBrain(id.toString(), clone.getBrain());
+            saveBrain(id.toString(), clone.getCloneBrain());
         }
         clone.connection.onDisconnect(reason);
         if (forever) {

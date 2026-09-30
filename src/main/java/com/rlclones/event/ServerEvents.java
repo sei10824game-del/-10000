@@ -5,8 +5,14 @@ import com.rlclones.ai.CloneController;
 import com.rlclones.ai.Perception;
 import com.rlclones.ai.Senses;
 import com.rlclones.ai.observe.AgentEvents;
+import com.rlclones.clone.CloneInventory;
 import com.rlclones.clone.CloneManager;
 import com.rlclones.clone.ClonePlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import com.rlclones.command.CloneCommand;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.core.BlockPos;
@@ -128,6 +134,19 @@ public final class ServerEvents {
                 return true;
             });
         }
+    }
+
+    /** Sneak + right click a clone to open its inventory. */
+    @SubscribeEvent
+    public static void onInteract(PlayerInteractEvent.EntityInteract event) {
+        Player player = event.getEntity();
+        if (player.level().isClientSide || event.getHand() != InteractionHand.MAIN_HAND || !player.isShiftKeyDown()
+                || !(event.getTarget() instanceof ClonePlayer clone) || player instanceof ClonePlayer) {
+            return;
+        }
+        player.openMenu(new SimpleMenuProvider((id, inv, p) -> ChestMenu.fourRows(id, inv, new CloneInventory(clone)), clone.getDisplayName()));
+        event.setCancellationResult(InteractionResult.SUCCESS);
+        event.setCanceled(true);
     }
 
     @SubscribeEvent

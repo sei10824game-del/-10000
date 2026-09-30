@@ -37,7 +37,7 @@ public final class CloneCommand {
         ClonePlayer c = manager(ctx).byName(StringArgumentType.getString(ctx, "name"));
         List<String> types = new ArrayList<>();
         if (c != null) {
-            types.addAll(c.getBrain().allKnowledge().keySet());
+            types.addAll(c.getCloneBrain().allKnowledge().keySet());
         }
         return SharedSuggestionProvider.suggest(types, builder);
     };
@@ -75,6 +75,10 @@ public final class CloneCommand {
                         .executes(ctx -> setRespawn(ctx, !manager(ctx).isRespawnEnabled()))
                         .then(Commands.literal("on").executes(ctx -> setRespawn(ctx, true)))
                         .then(Commands.literal("off").executes(ctx -> setRespawn(ctx, false))))
+                .then(Commands.literal("ai").requires(CloneCommand::mayControl)
+                        .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES)
+                                .then(Commands.literal("on").executes(ctx -> setAi(ctx, true)))
+                                .then(Commands.literal("off").executes(ctx -> setAi(ctx, false)))))
                 .then(Commands.literal("brain")
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(CloneCommand::brain)))
                 .then(Commands.literal("knowledge")
@@ -154,6 +158,18 @@ public final class CloneCommand {
         return 1;
     }
 
+    private static int setAi(CommandContext<CommandSourceStack> ctx, boolean on) {
+        String name = StringArgumentType.getString(ctx, "name");
+        ClonePlayer c = manager(ctx).byName(name);
+        if (c == null) {
+            ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.unknown", name));
+            return 0;
+        }
+        c.setAiEnabled(on);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.cmd.ai_on" : "rlclones.cmd.ai_off", name), true);
+        return 1;
+    }
+
     private static int brain(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         CloneManager m = manager(ctx);
@@ -162,7 +178,7 @@ public final class CloneCommand {
             ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.unknown", name));
             return 0;
         }
-        Brain b = c.getBrain();
+        Brain b = c.getCloneBrain();
         CommandSourceStack src = ctx.getSource();
         String state = m.describe(c);
         src.sendSuccess(() -> Component.literal(state).withStyle(ChatFormatting.AQUA), false);
@@ -181,12 +197,12 @@ public final class CloneCommand {
             ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.unknown", name));
             return 0;
         }
-        Map<String, EnemyKnowledge> all = c.getBrain().allKnowledge();
+        Map<String, EnemyKnowledge> all = c.getCloneBrain().allKnowledge();
         CommandSourceStack src = ctx.getSource();
         src.sendSuccess(() -> Component.translatable("rlclones.cmd.knowledge_header", name, all.size()).withStyle(ChatFormatting.AQUA), false);
         all.forEach((type, k) -> {
             String line = String.format(Locale.ROOT, " - %s: seen %d, fights %d, observed attacks %d, combat states %d",
-                    type, k.sightings, k.encounters, k.observations(), c.getBrain().combatTypes().contains(type) ? c.getBrain().combatTable(type).size() : 0);
+                    type, k.sightings, k.encounters, k.observations(), c.getCloneBrain().combatTypes().contains(type) ? c.getCloneBrain().combatTable(type).size() : 0);
             src.sendSuccess(() -> Component.literal(line), false);
         });
         return all.size();
@@ -200,10 +216,10 @@ public final class CloneCommand {
             ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.unknown", name));
             return 0;
         }
-        EnemyKnowledge k = c.getBrain().knowledgeIfPresent(type);
+        EnemyKnowledge k = c.getCloneBrain().knowledgeIfPresent(type);
         if (k == null && !type.contains(":")) {
             type = "minecraft:" + type;
-            k = c.getBrain().knowledgeIfPresent(type);
+            k = c.getCloneBrain().knowledgeIfPresent(type);
         }
         if (k == null) {
             ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.no_knowledge", type));
@@ -216,7 +232,7 @@ public final class CloneCommand {
             src.sendSuccess(() -> Component.literal(line), false);
         }
         src.sendSuccess(() -> Component.translatable("rlclones.cmd.policy").withStyle(ChatFormatting.YELLOW), false);
-        for (String line : c.getBrain().describePolicy(type)) {
+        for (String line : c.getCloneBrain().describePolicy(type)) {
             src.sendSuccess(() -> Component.literal(line), false);
         }
         return 1;

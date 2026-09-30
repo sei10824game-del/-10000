@@ -81,13 +81,13 @@ public final class CloneController {
         this.self = self;
         this.perception = new Perception(self);
         this.motor = new Motor(self);
-        this.watcher = new AgentWatcher(self, perception, self::getBrain, this::sinceEnemyAttack);
+        this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
     }
 
     private Brain brain() {
-        return self.getBrain();
+        return self.getCloneBrain();
     }
 
     public Perception perception() {

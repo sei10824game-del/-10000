@@ -25,5 +25,7 @@
   "rlclones.cmd.status": "クローン%s体 | 学習リンク: %s | リスポーン: %s",
   "rlclones.cmd.knowledge_header": "%s が知っているエンティティ: %s種類",
   "rlclones.cmd.no_knowledge": "%s についてはまだ何も学習していません",
-  "rlclones.cmd.policy": "学習済みの戦い方（距離ごとの最善行動）:"
+  "rlclones.cmd.policy": "学習済みの戦い方（距離ごとの最善行動）:",
+  "rlclones.cmd.ai_on": "%s は自律行動を再開しました",
+  "rlclones.cmd.ai_off": "%s は行動を停止し、観察学習のみ行います"
 }

@@ -141,7 +141,7 @@ public final class CloneGameTests {
         Husk husk = h.spawn(EntityType.HUSK, new Vec3(10.5, 1, 7.5));
         h.succeedWhen(() -> {
             h.assertTrue(!husk.isAlive(), "clone should kill the husk");
-            Brain b = c.getBrain();
+            Brain b = c.getCloneBrain();
             h.assertTrue(b.ownUpdates > 0, "clone must have learned from its own fight");
             h.assertTrue(b.combatTypes().contains("minecraft:husk") && b.combatTable("minecraft:husk").size() > 0, "husk-specific combat table");
             finish(h, c);
@@ -158,7 +158,7 @@ public final class CloneGameTests {
         husk.setTarget(victim);
         h.succeedWhen(() -> {
             husk.setTarget(victim);
-            EnemyKnowledge k = observer.getBrain().knowledgeIfPresent("minecraft:husk");
+            EnemyKnowledge k = observer.getCloneBrain().knowledgeIfPresent("minecraft:husk");
             h.assertTrue(k != null, "observer knows husks");
             h.assertTrue(k.meleeDamage.count() >= 3, "observer saw at least 3 attacks, saw " + k.meleeDamage.count());
             h.assertTrue(k.meleeCooldown.known(), "cooldown learned");
@@ -178,7 +178,7 @@ public final class CloneGameTests {
         fighter.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 2000, 2));
         h.spawn(EntityType.HUSK, new Vec3(12.5, 1, 7.5));
         h.succeedWhen(() -> {
-            Brain b = observer.getBrain();
+            Brain b = observer.getCloneBrain();
             h.assertTrue(b.imitationUpdates >= 5, "observer should learn from watching, got " + b.imitationUpdates);
             h.assertTrue(b.ownUpdates == 0, "observer never acted itself");
             h.assertTrue(b.combatTypes().contains("minecraft:husk"), "observer built a husk combat table by watching");
@@ -242,20 +242,20 @@ public final class CloneGameTests {
         m.setLinked(false);
         ClonePlayer a = clone(h, 4.5, 4.5, 0f, false);
         ClonePlayer b = clone(h, 10.5, 10.5, 0f, false);
-        a.getBrain().knowledge("minecraft:skeleton").rangedDamage.add(2);
-        b.getBrain().knowledge("minecraft:skeleton").rangedDamage.add(4);
-        h.assertTrue(a.getBrain() != b.getBrain(), "separate brains while unlinked");
+        a.getCloneBrain().knowledge("minecraft:skeleton").rangedDamage.add(2);
+        b.getCloneBrain().knowledge("minecraft:skeleton").rangedDamage.add(4);
+        h.assertTrue(a.getCloneBrain() != b.getCloneBrain(), "separate brains while unlinked");
         m.handleAction(a, ClientAction.TOGGLE_LINK);
         h.assertTrue(m.isLinked(), "X toggles link on");
-        h.assertTrue(a.getBrain() == b.getBrain(), "linked clones share one brain");
-        EnemyKnowledge k = a.getBrain().knowledge("minecraft:skeleton");
+        h.assertTrue(a.getCloneBrain() == b.getCloneBrain(), "linked clones share one brain");
+        EnemyKnowledge k = a.getCloneBrain().knowledge("minecraft:skeleton");
         h.assertTrue(k.rangedDamage.count() == 2 && Math.abs(k.rangedDamage.get() - 3) < 1e-6, "experience of both clones merged");
         ClonePlayer late = clone(h, 7.5, 7.5, 0f, false);
-        h.assertTrue(late.getBrain() == a.getBrain(), "clones summoned while linked join the hive");
+        h.assertTrue(late.getCloneBrain() == a.getCloneBrain(), "clones summoned while linked join the hive");
         m.handleAction(a, ClientAction.TOGGLE_LINK);
         h.assertFalse(m.isLinked(), "X toggles link off");
-        h.assertTrue(a.getBrain() != b.getBrain(), "unlinked clones get their own copy");
-        h.assertTrue(b.getBrain().knowledge("minecraft:skeleton").rangedDamage.count() == 2, "copies keep the shared knowledge");
+        h.assertTrue(a.getCloneBrain() != b.getCloneBrain(), "unlinked clones get their own copy");
+        h.assertTrue(b.getCloneBrain().knowledge("minecraft:skeleton").rangedDamage.count() == 2, "copies keep the shared knowledge");
         finish(h, a, b, late);
         h.succeed();
     }
@@ -291,8 +291,8 @@ public final class CloneGameTests {
         CloneManager m = manager(h);
         m.setRespawn(true);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        c.getBrain().knowledge("minecraft:zombie").meleeDamage.add(3);
-        Brain brain = c.getBrain();
+        c.getCloneBrain().knowledge("minecraft:zombie").meleeDamage.add(3);
+        Brain brain = c.getCloneBrain();
         String name = c.getGameProfile().getName();
         UUID id = c.getUUID();
         c.kill();
@@ -301,7 +301,7 @@ public final class CloneGameTests {
             h.assertTrue(back != null && back != c, "a new clone body must exist");
             h.assertTrue(back.isAlive() && back.getHealth() == back.getMaxHealth(), "respawned alive with full health");
             h.assertTrue(back.getUUID().equals(id), "same identity");
-            h.assertTrue(back.getBrain() == brain, "keeps its brain (learning survives death)");
+            h.assertTrue(back.getCloneBrain() == brain, "keeps its brain (learning survives death)");
             h.assertTrue(h.getLevel().getServer().getPlayerList().getPlayer(id) == back, "player list points at the new body");
             m.setRespawn(false);
             finish(h, back);

@@ -29,11 +29,11 @@ public class ClonePlayer extends ServerPlayer {
         this.setMaxUpStep(0.6F);
     }
 
-    public Brain getBrain() {
+    public Brain getCloneBrain() {
         return brain;
     }
 
-    public void setBrain(Brain brain) {
+    public void setCloneBrain(Brain brain) {
         this.brain = brain;
     }
 

@@ -25,5 +25,7 @@
   "rlclones.cmd.status": "%s clones | learning link: %s | respawn: %s",
   "rlclones.cmd.knowledge_header": "%s knows %s entity types:",
   "rlclones.cmd.no_knowledge": "Nothing learned about %s yet",
-  "rlclones.cmd.policy": "Learned combat policy (best action by distance):"
+  "rlclones.cmd.policy": "Learned combat policy (best action by distance):",
+  "rlclones.cmd.ai_on": "%s now acts on its own",
+  "rlclones.cmd.ai_off": "%s stands still and only watches and learns"
 }
