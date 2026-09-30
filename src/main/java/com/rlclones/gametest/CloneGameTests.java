@@ -118,7 +118,7 @@ public final class CloneGameTests {
         Pig behindGlass = pig(h, 9.5, 3.5);
         h.runAfterDelay(5, () -> {
             var p = c.controller().perception();
-            h.assertTrue(p.canSee(front), "must see the pig in front");
+            h.assertTrue(p.canSee(front), "must see the pig in front: " + p.explain(front));
             h.assertFalse(p.canSee(behind), "must not see behind itself");
             h.assertFalse(p.canSee(behindWall), "must not see through stone");
             h.assertTrue(p.canSee(behindGlass), "should see through glass");
@@ -159,8 +159,9 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             husk.setTarget(victim);
             EnemyKnowledge k = observer.getCloneBrain().knowledgeIfPresent("minecraft:husk");
-            h.assertTrue(k != null, "observer knows husks");
-            h.assertTrue(k.meleeDamage.count() >= 3, "observer saw at least 3 attacks, saw " + k.meleeDamage.count());
+            h.assertTrue(k != null, "observer knows husks: " + observer.controller().perception().explain(husk));
+            h.assertTrue(k.meleeDamage.count() >= 3, "observer saw at least 3 attacks, saw " + k.meleeDamage.count()
+                    + " | husk target=" + husk.getTarget() + " gap=" + com.rlclones.ai.Senses.gap(husk, victim) + " | " + observer.controller().perception().explain(husk));
             h.assertTrue(k.meleeCooldown.known(), "cooldown learned");
             double cd = k.meleeCooldown.get();
             double range = k.meleeRange.get();

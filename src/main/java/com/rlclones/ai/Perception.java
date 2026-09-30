@@ -187,6 +187,20 @@ public final class Perception {
         return clearLine(eye, e.getEyePosition()) || clearLine(eye, center) || clearLine(eye, new Vec3(center.x, bb.minY + 0.1, center.z));
     }
 
+    /** Human-readable breakdown of the vision check (for debugging and test diagnostics). */
+    public String explain(Entity e) {
+        Vec3 eye = self.getEyePosition();
+        AABB bb = e.getBoundingBox();
+        Vec3 c = bb.getCenter();
+        double dist = eye.distanceTo(c);
+        double radius = Math.max(bb.getXsize(), bb.getYsize()) * 0.5;
+        return String.format(java.util.Locale.ROOT,
+                "eye=(%.2f,%.2f,%.2f) yaw=%.1f head=%.1f pitch=%.1f target=(%.2f,%.2f,%.2f) dist=%.2f range=%.1f light=%.2f invisible=%s fov=%s los=%s/%s/%s",
+                eye.x, eye.y, eye.z, self.getYRot(), self.getYHeadRot(), self.getXRot(), c.x, c.y, c.z, dist, maxRange(), lightFactor(e),
+                e.isInvisibleTo(self), inFov(eye, c, radius, dist), clearLine(eye, e.getEyePosition()), clearLine(eye, c),
+                clearLine(eye, new Vec3(c.x, bb.minY + 0.1, c.z)));
+    }
+
     private static boolean wearsSomething(LivingEntity le) {
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             if (!le.getItemBySlot(slot).isEmpty()) {
