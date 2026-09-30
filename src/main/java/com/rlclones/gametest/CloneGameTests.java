@@ -402,7 +402,7 @@ public final class CloneGameTests {
     public static void clonesGlideWithElytra(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.ELYTRA));
-        Vec3 high = h.absoluteVec(new Vec3(7.5, 45, 7.5));
+        Vec3 high = h.absoluteVec(new Vec3(7.5, 24, 7.5));
         c.teleportTo(h.getLevel(), high.x, high.y, high.z, 0f, 0f);
         boolean[] flew = {false};
         double[] maxFall = {0};
