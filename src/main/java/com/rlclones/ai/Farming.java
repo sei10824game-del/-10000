@@ -47,6 +47,15 @@ public final class Farming {
     public int tilled;
     public int planted;
     public int harvested;
+    private String last = "";
+
+    /** State for diagnostics. */
+    public String debug() {
+        return "job=" + job + " target=" + target + " tries=" + tries + " ticks=" + ticks + " tilled=" + tilled + " planted=" + planted
+                + " hand=" + self.getMainHandItem() + " last=" + last
+                + (target == null ? "" : " at=" + self.level().getBlockState(target) + " above=" + self.level().getBlockState(target.above()))
+                + " eye=" + self.getEyePosition();
+    }
 
     public Farming(ServerPlayer self, Motor motor) {
         this.self = self;
@@ -219,7 +228,9 @@ public final class Farming {
             case PLANT -> {
                 Equipment.select(self, seedSlot(self));
                 motor.lookAt(top);
-                if (motor.useOnTopFace(target) && !level.getBlockState(target.above()).isAir()) {
+                boolean used = motor.useOnTopFace(target);
+                last = "plant used=" + used;
+                if (used && !level.getBlockState(target.above()).isAir()) {
                     planted++;
                     target = null;
                 }
@@ -227,7 +238,9 @@ public final class Farming {
             case TILL -> {
                 Equipment.select(self, hoeSlot(self));
                 motor.lookAt(top);
-                if (motor.useOnTopFace(target) && level.getBlockState(target).getBlock() instanceof FarmBlock) {
+                boolean used = motor.useOnTopFace(target);
+                last = "till used=" + used + " now=" + level.getBlockState(target);
+                if (used && level.getBlockState(target).getBlock() instanceof FarmBlock) {
                     tilled++;
                     job = Job.PLANT; // plant right away on the fresh farmland
                     tries = 0;

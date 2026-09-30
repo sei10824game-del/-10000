@@ -785,7 +785,11 @@ public final class CloneGameTests {
             h.assertTrue(c.getCloneBrain().isHarmful(magma), "magma damage should teach that magma blocks are harmful");
             h.assertFalse(c.getCloneBrain().isHarmful("minecraft:stone"), "the floor is not harmful");
             h.assertBlockNotPresent(Blocks.MAGMA_BLOCK, new BlockPos(7, 1, 7));
-            h.assertBlockNotPresent(Blocks.MAGMA_BLOCK, new BlockPos(7, 1, 11));
+            h.assertTrue(!h.getLevel().getBlockState(h.absolutePos(new BlockPos(7, 1, 11))).is(Blocks.MAGMA_BLOCK),
+                    "second magma should be removed: pos=" + c.position() + " clean=" + c.controller().cleanTarget() + " cleaned=" + c.controller().hazardsCleaned
+                            + " option=" + c.controller().option() + " seen=" + c.controller().perception().blocks().entrySet().stream()
+                            .filter(e -> e.getValue() == com.rlclones.ai.Perception.BlockKind.HARMFUL).map(e -> e.getKey().toShortString()).toList()
+                            + " escaping=" + c.controller().isEscaping() + " pitch=" + c.getXRot());
             h.assertTrue(c.controller().hazardsCleaned >= 2, "both magma blocks should be broken by the clone");
             h.assertTrue(friend.getCloneBrain().isHarmful(magma), "a clone nearby should be told about the harmful block");
             finish(h, c, friend);
@@ -1001,7 +1005,8 @@ public final class CloneGameTests {
                     planted++;
                 }
             }
-            h.assertTrue(planted >= 4, "clone should till the soil by the water with the hoe and plant seeds (" + planted + ")");
+            h.assertTrue(planted >= 4, "clone should till the soil by the water with the hoe and plant seeds (" + planted + ") "
+                    + c.controller().farming().debug());
             finish(h, c);
         });
     }
