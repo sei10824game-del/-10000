@@ -42,6 +42,8 @@ public final class Farming {
     private int tries;
     private int collect;
     private long cachedAt = -1000;
+    /** Spots where the job did not work out (too dark for crops, out of reach...), skipped for a while. */
+    private final java.util.Map<BlockPos, Long> failed = new java.util.HashMap<>();
     private boolean cachedWork;
 
     public int tilled;
@@ -53,7 +55,9 @@ public final class Farming {
     public String debug() {
         return "job=" + job + " target=" + target + " tries=" + tries + " ticks=" + ticks + " tilled=" + tilled + " planted=" + planted
                 + " hand=" + self.getMainHandItem() + " last=" + last
-                + (target == null ? "" : " at=" + self.level().getBlockState(target) + " above=" + self.level().getBlockState(target.above()))
+                + (target == null ? "" : " at=" + self.level().getBlockState(target) + " above=" + self.level().getBlockState(target.above())
+                + " light=" + self.level().getRawBrightness(target.above(), 0) + " sky=" + self.level().canSeeSky(target.above())
+                + " survive=" + Blocks.WHEAT.defaultBlockState().canSurvive(self.level(), target.above()))
                 + " eye=" + self.getEyePosition();
     }
 
@@ -138,6 +142,10 @@ public final class Farming {
             if (j == null) {
                 continue;
             }
+            Long f = failed.get(p);
+            if (f != null && self.level().getGameTime() - f < 1200) {
+                continue;
+            }
             // harvest first, then plant, then till; nearest within a job
             double score = j.ordinal() * 1000 + p.distSqr(feet);
             if (score < bestScore && visible(level, p, j == Job.HARVEST)) {
@@ -214,6 +222,7 @@ public final class Farming {
         }
         motor.stop();
         if (++tries > 60) {
+            failed.put(target, level.getGameTime());
             target = null;
             return Status.WORKING;
         }

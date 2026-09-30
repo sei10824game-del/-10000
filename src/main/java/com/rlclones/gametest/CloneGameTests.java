@@ -423,7 +423,7 @@ public final class CloneGameTests {
         });
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 240)
+    @GameTest(template = ARENA, timeoutTicks = 240, batch = "fall")
     public static void fallDamageLikeAPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         Vec3 high = h.absoluteVec(new Vec3(7.5, 12, 7.5));
@@ -990,6 +990,7 @@ public final class CloneGameTests {
         }
         h.setBlock(new BlockPos(6, 1, 10), Blocks.DIRT);
         h.setBlock(new BlockPos(8, 1, 10), Blocks.DIRT);
+        h.setBlock(new BlockPos(10, 2, 12), Blocks.GLOWSTONE); // crops need light (>= 8) to be planted
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
         c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 8));

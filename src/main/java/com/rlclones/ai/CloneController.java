@@ -704,6 +704,7 @@ public final class CloneController {
         if (best != null) {
             cleanTarget = best;
             cleanTicks = 0;
+            motor.resetStuck();
         }
     }
 

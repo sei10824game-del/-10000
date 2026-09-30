@@ -155,6 +155,9 @@ public final class Motor {
 
     public boolean navigate(Vec3 goal, double arrive, boolean run) {
         Vec3 pos = self.position();
+        if (lastGoal == null || lastGoal.distanceToSqr(goal) > 16.0) {
+            resetStuck(); // a new destination: earlier trouble elsewhere does not count
+        }
         lastGoal = goal;
         lastGoalTick = self.level().getGameTime();
         if (self.isFallFlying() || takeoffTicks > 0) {
@@ -213,6 +216,12 @@ public final class Motor {
     public void clearPath() {
         path = null;
         pathGoal = null;
+    }
+
+    public void resetStuck() {
+        stuckCount = 0;
+        progressAnchor = null;
+        progressTimer = 0;
     }
 
     /** Number of consecutive "no progress" periods while trying to move; options use this to give up. */
