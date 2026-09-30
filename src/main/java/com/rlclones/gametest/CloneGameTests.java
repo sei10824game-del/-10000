@@ -428,6 +428,8 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         Vec3 high = h.absoluteVec(new Vec3(7.5, 12, 7.5));
         boolean[] dropped = {false};
+        float[] lowest = {20f};
+        h.onEachTick(() -> lowest[0] = Math.min(lowest[0], c.getHealth()));
         // wait out the 3 s spawn protection every freshly joined player has
         h.runAfterDelay(70, () -> {
             c.teleportTo(h.getLevel(), high.x, high.y, high.z, 0f, 0f);
@@ -436,7 +438,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(dropped[0] && c.onGround() && c.getY() < high.y - 5, "landed");
             // 10 blocks -> 7 damage for an unarmoured player
-            h.assertTrue(c.getHealth() <= 14f && c.getHealth() >= 12f, "fall damage should match a player's, health=" + c.getHealth());
+            h.assertTrue(lowest[0] <= 14f && lowest[0] >= 12f, "fall damage should match a player's, lowest health=" + lowest[0]);
             finish(h, c);
         });
     }

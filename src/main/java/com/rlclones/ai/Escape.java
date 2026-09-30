@@ -106,8 +106,11 @@ public final class Escape {
 
     // ------------------------------------------------------------------ escaping
 
+    private BlockPos startCell;
+
     public void start(@Nullable Vec3 goal) {
         this.goal = goal;
+        this.startCell = self.blockPosition();
         ticks = 0;
         dir = null;
         badDirs.clear();
@@ -122,7 +125,8 @@ public final class Escape {
             motor.resetMining();
             return Status.FAILED;
         }
-        if (ticks % 10 == 0 && pillarBase == null && self.onGround() && !isTrapped()) {
+        // finished only once we actually left the cell we were stuck in and are no longer boxed in
+        if (ticks % 10 == 0 && pillarBase == null && self.onGround() && !self.blockPosition().equals(startCell) && !isTrapped()) {
             motor.resetMining();
             return Status.DONE;
         }
