@@ -134,12 +134,12 @@ public final class Escape {
         if (pillarBase != null) {
             return pillar(feet);
         }
-        if (!pit) {
-            // open sides but every way down is a dangerous drop (e.g. on top of a tall pillar): dig down like a player
+        if (highUp(feet)) {
+            // open on every side but each way down is a dangerous drop (top of a tall pillar): dig down like a player
             return canBreak ? digDown(feet) : Status.FAILED;
         }
         boolean sameLevelGoal = goal != null && Math.abs(goal.y - feet.getY()) < 1.0;
-        if (canPlace && !solid(feet.above(2))) {
+        if (canPlace && pit && !solid(feet.above(2))) {
             return pillar(feet); // with blocks at hand, climbing out is the quickest and never breaks anything
         }
         if (!canBreak) {
@@ -161,6 +161,22 @@ public final class Escape {
         }
         motor.lookAt(Vec3.atCenterOf(below));
         return dig(below);
+    }
+
+    /** Every side is open air with no floor within a safe drop. */
+    private boolean highUp(BlockPos feet) {
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            BlockPos n = feet.relative(d);
+            if (solid(n) || solid(n.above())) {
+                return false;
+            }
+            for (int k = 1; k <= 3; k++) {
+                if (solid(n.below(k))) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /** The pit walls are higher than a jump in every direction. */
