@@ -1514,6 +1514,7 @@ public final class CloneController {
         fleeStuck = 0;
         lastFleeStuck = 0;
         fleeTurn = 0;
+        lastFleeDist = -1;
         cakeAt = null;
         cakeTicks = 0;
         goalTimer = 0;
@@ -1739,10 +1740,10 @@ public final class CloneController {
             }
         }
         if (!died && self.isUsingItem() && (action == CombatAction.BLOCK || action == CombatAction.SHOOT || action == CombatAction.USE_ITEM)) {
-            if (action == CombatAction.SHOOT || action == CombatAction.USE_ITEM) {
+            if ((action == CombatAction.SHOOT || action == CombatAction.USE_ITEM) && !drawnBow()) {
                 self.releaseUsingItem();
             } else {
-                self.stopUsingItem();
+                self.stopUsingItem(); // a half-aimed bow is lowered, not loosed (it might be pointing at a friend)
             }
         }
         if (!died && (action == CombatAction.SHOOT || action == CombatAction.PILLAR || action == CombatAction.USE_ITEM)) {
@@ -1753,12 +1754,20 @@ public final class CloneController {
         stepReward = 0;
     }
 
+    private boolean drawnBow() {
+        return Equipment.rangedKind(self.getUseItem()) == Equipment.RangedKind.BOW;
+    }
+
     private void beginAction(CombatAction prev) {
         if (prev == CombatAction.BLOCK && action != CombatAction.BLOCK && self.isUsingItem()) {
             self.stopUsingItem();
         }
         if ((prev == CombatAction.SHOOT || prev == CombatAction.USE_ITEM) && action != prev && self.isUsingItem()) {
-            self.releaseUsingItem();
+            if (drawnBow()) {
+                self.stopUsingItem();
+            } else {
+                self.releaseUsingItem();
+            }
         }
         if ((prev == CombatAction.SHOOT || prev == CombatAction.PILLAR || prev == CombatAction.USE_ITEM) && action != prev) {
             Equipment.manage(self, true);
@@ -2169,6 +2178,20 @@ public final class CloneController {
             perch.start(); // two blocks up, out of reach
             return true;
         }
+        Perception.Seen nearest = null;
+        for (Perception.Seen t : perception.remembered()) {
+            if (now - t.lastSeen < 200 && t.alive() && Senses.isHostileTo(t.entity, self)
+                    && (nearest == null || t.entity.distanceTo(self) < nearest.entity.distanceTo(self))) {
+                nearest = t;
+            }
+        }
+        if (nearest != null && (now % 20) == 0) {
+            double d = nearest.entity.distanceTo(self);
+            if (close && lastFleeDist >= 0 && d < lastFleeDist - 0.3) {
+                fleeStuck++; // the only way on leads back past it
+            }
+            lastFleeDist = d;
+        }
         if (motor.stuckCount() == 0) {
             lastFleeStuck = 0;
         } else {
@@ -2194,6 +2217,7 @@ public final class CloneController {
     private int fleeStuck;
     private int lastFleeStuck;
     private int fleeTurn;
+    private double lastFleeDist = -1;
 
     public int cakeBites;
     private BlockPos cakeAt;

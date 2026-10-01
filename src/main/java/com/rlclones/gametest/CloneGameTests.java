@@ -2505,12 +2505,13 @@ public final class CloneGameTests {
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.PORTAL;
+        long[] start = {h.getLevel().getGameTime()};
         h.succeedWhen(() -> {
             var pt = c.controller().portals();
             h.assertTrue(pt.netherTrips >= 1 && c.getCloneBrain().hasFlag(com.rlclones.ai.Portals.NETHER_FLAG),
                     "a clone that has never been to the Nether goes through the portal (" + pt.debug + " options " + c.controller().optionLog + ")");
             h.assertTrue(pt.homeTrips >= 1 && c.level().dimension() == net.minecraft.world.level.Level.OVERWORLD,
-                    "and comes back on its own (" + c.level().dimension().location() + " " + pt.debug + ")");
+                    "and comes back on its own (" + c.level().dimension().location() + " " + pt.debug + " events" + pt.events + " start@" + start[0] + ")");
             finish(h, c);
             clearBases(h);
         });

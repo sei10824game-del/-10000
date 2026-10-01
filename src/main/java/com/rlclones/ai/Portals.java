@@ -511,7 +511,13 @@ public final class Portals {
         return best;
     }
 
+    /** What happened on the trips (diagnostics). */
+    public final StringBuilder events = new StringBuilder();
+
     public void onArrived(ResourceKey<Level> from, long now) {
+        if (events.length() < 600) {
+            events.append(" arrived:").append(level().dimension().location().getPath()).append('@').append(now);
+        }
         BlockPos near = portalNear(self.blockPosition(), 3);
         arrivedAt = near != null ? near : self.blockPosition();
         steppingOut = true;
@@ -539,6 +545,9 @@ public final class Portals {
     public boolean travelTick(long now, boolean threatened) {
         if (steppingOut) {
             if (arrivedAt == null || !isPortal(self.blockPosition()) && !isPortal(self.blockPosition().above())) {
+                if (events.length() < 600) {
+                    events.append(" out@").append(now);
+                }
                 steppingOut = false; // out of the purple: no bouncing straight back
                 return false;
             }
@@ -565,6 +574,9 @@ public final class Portals {
         }
         if (level().dimension() == Level.NETHER && arrivedAt != null
                 && (returning || now > stayUntil || threatened || self.getHealth() < self.getMaxHealth() * 0.5f)) {
+            if (!returning && events.length() < 600) {
+                events.append(" home@").append(now);
+            }
             returning = true;
             Status st = enter(arrivedAt);
             debug = "home via " + arrivedAt.toShortString() + " portal=" + isPortal(arrivedAt) + " st=" + st + " at=" + self.blockPosition().toShortString()
