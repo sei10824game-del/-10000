@@ -460,7 +460,16 @@ public final class CloneGameTests {
         Vec3 high = h.absoluteVec(new Vec3(7.5, 12, 7.5));
         boolean[] dropped = {false};
         float[] lowest = {20f};
-        h.onEachTick(() -> lowest[0] = Math.min(lowest[0], c.getHealth()));
+        StringBuilder trace = new StringBuilder();
+        int[] tick = {0};
+        h.onEachTick(() -> {
+            tick[0]++;
+            if (c.getHealth() < lowest[0] || dropped[0] && trace.length() < 600 && tick[0] % 3 == 0) {
+                trace.append(' ').append(tick[0]).append(':').append(String.format("%.2f", c.getY() - high.y)).append('/')
+                        .append(c.getHealth()).append('/').append(String.format("%.1f", c.fallDistance));
+            }
+            lowest[0] = Math.min(lowest[0], c.getHealth());
+        });
         // wait out the 3 s spawn protection every freshly joined player has
         h.runAfterDelay(70, () -> {
             c.teleportTo(h.getLevel(), high.x, high.y, high.z, 0f, 0f);
@@ -469,7 +478,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(dropped[0] && c.onGround() && c.getY() < high.y - 5, "landed");
             // 10 blocks -> 7 damage for an unarmoured player
-            h.assertTrue(lowest[0] <= 14f && lowest[0] >= 12f, "fall damage should match a player's, lowest health=" + lowest[0]);
+            h.assertTrue(lowest[0] <= 14f && lowest[0] >= 12f, "fall damage should match a player's, lowest health=" + lowest[0] + " trace" + trace);
             finish(h, c);
         });
     }
@@ -1530,14 +1539,21 @@ public final class CloneGameTests {
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
         Vec3 far = h.absoluteVec(new Vec3(13.5, 8, 7.5));
         double[] lowest = {top.y};
+        StringBuilder trace = new StringBuilder();
+        int[] tick = {0};
         h.onEachTick(() -> {
+            tick[0]++;
             c.controller().motor().moveToward(far);
             c.controller().motor().tick();
+            if (c.getY() < lowest[0] - 0.01 || tick[0] % 10 == 0) {
+                trace.append(' ').append(tick[0]).append(':').append(c.position().subtract(top).toString().replace(" ", ""))
+                        .append(c.isShiftKeyDown() ? "S" : "").append(c.onGround() ? "G" : "");
+            }
             lowest[0] = Math.min(lowest[0], c.getY());
         });
         h.runAfterDelay(120, () -> {
             h.assertTrue(c.controller().motor().edgeSneaks >= 1, "clone should crouch on its own at the 6-block drop");
-            h.assertTrue(lowest[0] > top.y - 0.5, "and not slip off the edge (lowest y " + lowest[0] + ")");
+            h.assertTrue(lowest[0] > top.y - 0.5, "and not slip off the edge (lowest y " + lowest[0] + ") trace" + trace);
             finish(h, c);
             h.succeed();
         });
