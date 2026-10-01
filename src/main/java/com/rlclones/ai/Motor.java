@@ -322,11 +322,13 @@ public final class Motor {
             resetMining();
             breakingPos = pos.immutable();
         }
-        lookAt(Vec3.atCenterOf(pos));
         Vec3 eye = self.getEyePosition();
         if (eye.distanceTo(Vec3.atCenterOf(pos)) > BLOCK_REACH) {
+            lookAt(Vec3.atCenterOf(pos));
             return false;
         }
+        // aim at a part of the block we can actually see (a floor block seen at a flat angle shows only its top)
+        lookAt(visiblePoint(level, eye, pos));
         BlockHitResult hit = level.clip(new ClipContext(eye, eye.add(self.getViewVector(1.0F).scale(BLOCK_REACH)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
         if (hit.getType() != HitResult.Type.BLOCK || !hit.getBlockPos().equals(pos)) {
             return false;
@@ -351,6 +353,23 @@ public final class Motor {
             return level.getBlockState(pos).isAir() || !level.getBlockState(pos).is(state.getBlock());
         }
         return false;
+    }
+
+    private static final double[][] FACE_POINTS = {{0, 0, 0}, {0, 0.45, 0}, {0.45, 0, 0}, {-0.45, 0, 0}, {0, 0, 0.45}, {0, 0, -0.45}, {0, -0.45, 0}};
+
+    private Vec3 visiblePoint(ServerLevel level, Vec3 eye, BlockPos pos) {
+        Vec3 c = Vec3.atCenterOf(pos);
+        for (double[] o : FACE_POINTS) {
+            Vec3 p = c.add(o[0], o[1], o[2]);
+            if (eye.distanceTo(p) > BLOCK_REACH) {
+                continue;
+            }
+            BlockHitResult hit = level.clip(new ClipContext(eye, p, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+            if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos)) {
+                return p;
+            }
+        }
+        return c;
     }
 
     public void resetMining() {
