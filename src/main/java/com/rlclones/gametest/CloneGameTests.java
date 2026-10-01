@@ -998,7 +998,10 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 8));
         boolean[] work = {false};
         h.onEachTick(() -> {
-            work[0] |= c.controller().farming().hasWork(); // (once the glowstone light has spread)
+            if (!work[0]) {
+                work[0] = c.controller().farming().hasWork(); // (asked once the glowstone light has spread)
+                return;
+            }
             c.controller().farming().tick();
             c.controller().motor().tick();
         });
