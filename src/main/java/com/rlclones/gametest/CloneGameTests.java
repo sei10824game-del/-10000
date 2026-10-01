@@ -1099,7 +1099,9 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.getInventory().countItem(Items.HAY_BLOCK) >= 1, "clone should mine the unknown hay bale and pick it up");
+            h.assertTrue(c.getInventory().countItem(Items.HAY_BLOCK) >= 1, "clone should mine the unknown hay bale and pick it up: started="
+                    + started[0] + " done=" + done[0] + " " + c.controller().discovery().debug() + " hay="
+                    + h.getLevel().getBlockState(h.absolutePos(new BlockPos(7, 2, 10))) + " pos=" + c.position());
             String facts = c.getCloneBrain().facts("minecraft:hay_block");
             h.assertTrue(facts.contains("craft=minecraft:wheat") && facts.contains("minecraft:bread"),
                     "it should understand that the hay bale gives wheat and from that bread (" + facts + ")");
@@ -1205,7 +1207,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "a clone that swims a lot should craft a boat");
+            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "a clone that swims a lot should craft a boat: " + c.controller().crafting().debug());
             finish(h, c);
         });
     }

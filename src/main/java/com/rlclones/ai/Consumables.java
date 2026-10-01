@@ -129,7 +129,7 @@ public final class Consumables {
         float hp = self.getHealth();
         ItemStack off = self.getOffhandItem();
         Inventory inv = self.getInventory();
-        if (hp <= Math.max(6f, self.getMaxHealth() * 0.3f) && !off.is(Items.TOTEM_OF_UNDYING) && !self.getMainHandItem().is(Items.TOTEM_OF_UNDYING)) {
+        if (hp <= Math.max(6f, self.getMaxHealth() * 0.3f) && !off.is(Items.TOTEM_OF_UNDYING)) {
             int t = slotOf(s -> s.is(Items.TOTEM_OF_UNDYING));
             if (t >= 0) {
                 // close to death: the totem goes into the left hand
@@ -374,7 +374,7 @@ public final class Consumables {
             BlockPos water = visibleWaterSource();
             if (water != null) {
                 Equipment.select(self, empty);
-                lookAtNow(Vec3.atCenterOf(water).add(0, 0.4, 0));
+                lookAtNow(Vec3.atCenterOf(water).add(0, 0.2, 0));
                 if (motor.useHeldItem(InteractionHand.MAIN_HAND)) {
                     bucketsFilled++;
                 }
@@ -410,7 +410,8 @@ public final class Consumables {
             if (eye.distanceTo(top) > Motor.BLOCK_REACH - 0.3) {
                 continue;
             }
-            BlockHitResult hit = level.clip(new ClipContext(eye, top, ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
+            // aim into the water (the surface is a little below the block top)
+            BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
             if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
                 return p.immutable();
             }
@@ -477,7 +478,8 @@ public final class Consumables {
         float bestPitch = 0;
         for (int y = 0; y < 8; y++) {
             float yaw = y * 45f;
-            for (float pitch = -85f; pitch <= -25f; pitch += 10f) {
+            // nearly straight up for a short hop over the rim, flatter for longer throws
+            for (float pitch = -89f; pitch <= -25f; pitch += pitch < -80f ? 1f : 5f) {
                 Vec3 land = simulate(yaw, pitch);
                 if (land == null || Motor.horizontalDistance(land, start) < 1.8 || land.y < start.y - 0.5 || !standable(land)) {
                     continue;

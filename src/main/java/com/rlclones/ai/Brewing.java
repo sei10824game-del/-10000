@@ -322,7 +322,7 @@ public final class Brewing {
             if (d >= bestD) {
                 continue;
             }
-            BlockHitResult hit = level.clip(new ClipContext(eye, top, ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
+            BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
             if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
                 bestD = d;
                 best = p.immutable();
@@ -340,7 +340,7 @@ public final class Brewing {
         if (water == null) {
             return Status.FAILED;
         }
-        Vec3 top = Vec3.atCenterOf(water).add(0, 0.4, 0);
+        Vec3 top = Vec3.atCenterOf(water).add(0, 0.2, 0);
         if (self.getEyePosition().distanceTo(top) > Motor.BLOCK_REACH - 0.5) {
             motor.navigate(Vec3.atBottomCenterOf(water.above()), 2.0, false);
             return motor.stuckCount() > 6 ? Status.FAILED : Status.WORKING;

@@ -537,6 +537,18 @@ public final class Crafting {
 
     // ================================================================== execution
 
+    /** State for diagnostics. */
+    public String debug() {
+        StringBuilder inv = new StringBuilder();
+        for (ItemStack s : self.getInventory().items) {
+            if (!s.isEmpty()) {
+                inv.append(s.getCount()).append(' ').append(s.getItem()).append(',');
+            }
+        }
+        return "stage=" + stage + " recipe=" + (recipe == null ? null : recipe.getId()) + " crafted=" + crafted + " timer=" + timer
+                + " actions=" + actions + " station=" + station + " inv=" + inv;
+    }
+
     public void reset() {
         placeOnly = false;
         placeItem = null;

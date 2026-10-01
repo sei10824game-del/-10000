@@ -255,6 +255,7 @@ public final class CloneController {
         }
         if ((now + self.getId()) % 40 == 0 && !self.isUsingItem() && option != Option.GATHER_WOOD && option != Option.MINE
                 && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
+                && option != Option.QUARRY && option != Option.DISCOVER && option != Option.BREW
                 && cleanTarget == null && !consumables.busy() && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
@@ -1858,6 +1859,9 @@ public final class CloneController {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget)));
         }
         blockTicks++;
+        if ((blockTicks & 7) == 1) {
+            Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget))); // the right tool for the job
+        }
         if (blockTicks > 240) {
             perception.forgetBlock(blockTarget);
             blockTarget = null;

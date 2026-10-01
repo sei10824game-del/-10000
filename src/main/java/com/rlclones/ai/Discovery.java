@@ -469,6 +469,13 @@ public final class Discovery {
         return best;
     }
 
+    /** State for diagnostics. */
+    public String debug() {
+        return "target=" + target + " id=" + targetId + " ticks=" + ticks + " collect=" + collect + " examined=" + blocksExamined
+                + " unknownSeen=" + perception.blocks().entrySet().stream().filter(e -> e.getValue() == Perception.BlockKind.UNKNOWN)
+                .map(e -> e.getKey().toShortString()).toList();
+    }
+
     public boolean canDiscover() {
         return nearestUnknown() != null;
     }
