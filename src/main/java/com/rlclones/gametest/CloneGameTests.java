@@ -56,6 +56,11 @@ public final class CloneGameTests {
     }
 
     private static ClonePlayer clone(GameTestHelper h, double x, double z, float yaw, boolean ai) {
+        // the arenas are dark: without this, zombies would spawn in them and wander into unrelated tests
+        var spawning = h.getLevel().getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING);
+        if (spawning.get()) {
+            spawning.set(false, h.getLevel().getServer());
+        }
         Vec3 pos = h.absoluteVec(new Vec3(x, 2, z));
         ClonePlayer c = manager(h).summon(null, h.getLevel(), pos, yaw);
         if (c == null) {
