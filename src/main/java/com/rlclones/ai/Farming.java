@@ -53,7 +53,7 @@ public final class Farming {
 
     /** State for diagnostics. */
     public String debug() {
-        return "job=" + job + " target=" + target + " tries=" + tries + " ticks=" + ticks + " tilled=" + tilled + " planted=" + planted
+        return "job=" + job + " target=" + target + " tries=" + tries + " ticks=" + ticks + " tilled=" + tilled + " planted=" + planted + " failed=" + failed.size()
                 + " hand=" + self.getMainHandItem() + " last=" + last
                 + (target == null ? "" : " at=" + self.level().getBlockState(target) + " above=" + self.level().getBlockState(target.above())
                 + " light=" + self.level().getRawBrightness(target.above(), 0) + " sky=" + self.level().canSeeSky(target.above())
@@ -242,7 +242,10 @@ public final class Farming {
         if (self.getEyePosition().distanceTo(top) > Motor.BLOCK_REACH - 0.7) {
             motor.navigate(top, 1.5, false);
             if (motor.stuckCount() > 6) {
+                failed.put(target, level.getGameTime()); // cannot get there: try other spots first
+                last = "stuck going to " + target.toShortString();
                 target = null;
+                motor.resetStuck();
                 return Status.FAILED;
             }
             return Status.WORKING;
