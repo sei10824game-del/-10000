@@ -97,6 +97,7 @@ public final class BoatTrap {
             Equipment.select(self, Boating.boatSlot(self));
             if (self.getMainHandItem().getItem() instanceof BoatItem && motor.useHeldItem(InteractionHand.MAIN_HAND)) {
                 trapsSet++;
+                touched = false;
                 boat = nearestBoat(spot, 2.0);
                 stage = boat == null ? null : Stage.WATCH;
                 ticks = 0;
@@ -114,10 +115,15 @@ public final class BoatTrap {
         return best;
     }
 
+    private boolean touched;
+
     private void watch() {
         if (boat == null || !boat.isAlive()) {
             stage = null;
             return;
+        }
+        if (foe.isAlive() && foe.distanceTo(boat) < foe.getBbWidth() / 2 + 0.9) {
+            touched = true; // it came right up to the boat
         }
         if (foe.getVehicle() == boat) {
             trapsSprung++; // sitting in it now: it cannot walk at us any more
@@ -125,9 +131,9 @@ public final class BoatTrap {
             Equipment.manage(self, true);
             return;
         }
-        if (ticks > 30 || !foe.isAlive()) {
-            if (foe.isAlive() && self.getCloneBrain() != null) {
-                self.getCloneBrain().setFlag(key(foe)); // that kind does not get into boats
+        if (ticks > 60 || !foe.isAlive()) {
+            if (foe.isAlive() && touched && self.getCloneBrain() != null) {
+                self.getCloneBrain().setFlag(key(foe)); // it bumped into the boat and still did not sit down: that kind does not
             }
             stage = Stage.BREAK;
             ticks = 0;
@@ -160,7 +166,7 @@ public final class BoatTrap {
         for (ItemEntity it : self.level().getEntitiesOfClass(ItemEntity.class, self.getBoundingBox().inflate(6), e -> e.getItem().getItem() instanceof BoatItem)) {
             item = it;
         }
-        if (item == null || ticks > 80) {
+        if (item == null || ticks > 200) {
             if (item == null && Boating.boatSlot(self) >= 0) {
                 boatsRecovered++;
             }

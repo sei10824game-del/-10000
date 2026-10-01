@@ -2137,7 +2137,8 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + " "
                     + c.controller().shootDebug + " options " + c.controller().optionLog + ")");
-            h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + ")");
+            h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + " by " + (friend.getLastDamageSource() == null ? "?"
+                    : friend.getLastDamageSource().getMsgId()) + " " + c.controller().shootDebug + ")");
             h.assertTrue(hit[0], "and the arrows come down on the enemy");
             finish(h, c, friend);
         });
@@ -2166,11 +2167,13 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "corner")
     public static void fightsWhenCorneredInsteadOfHoppingAtWalls(GameTestHelper h) {
-        for (int z = 0; z <= 4; z++) {
+        for (int z = 0; z <= 6; z++) {
             for (int y = 2; y <= 4; y++) {
-                h.setBlock(new BlockPos(6, y, z), Blocks.STONE);
-                h.setBlock(new BlockPos(8, y, z), Blocks.STONE);
-                h.setBlock(new BlockPos(7, y, 0), Blocks.STONE); // a dead end
+                // obsidian: nothing to dig through or discover, a closed 1-wide corridor with the husk in it
+                h.setBlock(new BlockPos(6, y, z), Blocks.OBSIDIAN);
+                h.setBlock(new BlockPos(8, y, z), Blocks.OBSIDIAN);
+                h.setBlock(new BlockPos(7, y, 0), Blocks.OBSIDIAN);
+                h.setBlock(new BlockPos(7, y, 6), Blocks.OBSIDIAN);
             }
         }
         ClonePlayer c = clone(h, 7.5, 1.5, 0f, true);
@@ -2213,6 +2216,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.ATTACK;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         dummy(h, 9.3, 7.5);
         dummy(h, 9.3, 8.4);
         dummy(h, 9.3, 6.6);
@@ -2381,7 +2385,8 @@ public final class CloneGameTests {
         spider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         h.succeedWhen(() -> {
             h.assertTrue(c.getCloneBrain().hasFlag("noboat:minecraft:spider"), "the spider did not get in: learned (" + c.controller().boatTrap().debug + ")");
-            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "and the boat is broken and taken back");
+            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "and the boat is broken and taken back (" + c.controller().boatTrap().debug
+                    + " recovered " + c.controller().boatTrap().boatsRecovered + ")");
             finish(h, c);
         });
     }
@@ -2512,9 +2517,10 @@ public final class CloneGameTests {
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
-        dummy(h, 6.5, 4.5);
+        Husk husk = dummy(h, 6.5, 4.5);
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().portals().portalEscapes >= 1, "running away with a portal close by: into it (" + c.controller().optionLog + ")");
+            h.assertTrue(c.controller().portals().portalEscapes >= 1, "running away with a portal close by: into it (" + c.controller().optionLog + " "
+                    + c.controller().perception().explain(husk) + ")");
             finish(h, c);
             clearBases(h);
         });

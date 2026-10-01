@@ -260,6 +260,7 @@ public final class Travel {
 
     private boolean parkourTick() {
         if (++ticks > 200) {
+            trace += " timeout stage=" + stage;
             return endParkour(false);
         }
         Vec3 edgeCenter = Vec3.atBottomCenterOf(edge);
@@ -292,6 +293,8 @@ public final class Travel {
                     takeoff = ticks;
                     trace = "how=" + how + " off=" + String.format("%.2f", along) + " v=" + String.format("%.2f", speed) + " sprint=" + self.isSprinting();
                 } else if (along > 0.7) {
+                    trace = "nojump along=" + String.format("%.2f", along) + " ground=" + self.onGround() + " v=" + String.format("%.2f", speed)
+                            + " sneak=" + self.isShiftKeyDown() + " sprint=" + self.isSprinting();
                     stage = 2; // off the edge without a jump
                     airTicks = 0;
                     takeoff = ticks;

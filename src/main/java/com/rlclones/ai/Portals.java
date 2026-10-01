@@ -542,21 +542,23 @@ public final class Portals {
                 steppingOut = false; // out of the purple: no bouncing straight back
                 return false;
             }
+            if (++stuckOut > 160) {
+                steppingOut = false; // could not get out: let the rest of the brain find a way
+                return false;
+            }
+            int turn = stuckOut / 40; // no luck one way for two seconds: try the next direction first
             for (int dist = 1; dist <= 2; dist++) {
-                for (Direction d : Direction.Plane.HORIZONTAL) {
+                for (int k = 0; k < 4; k++) {
+                    Direction d = Direction.from2DDataValue((k + turn) % 4);
                     BlockPos out = self.blockPosition().relative(d, dist);
                     if (level().getBlockState(out).getCollisionShape(level(), out).isEmpty() && level().getBlockState(out.above()).getCollisionShape(level(), out.above()).isEmpty()
                             && !isPortal(out) && level().getFluidState(out).isEmpty()
                             && level().getBlockState(out.below()).isFaceSturdy(level(), out.below(), Direction.UP)) {
                         motor.moveToward(Vec3.atBottomCenterOf(out));
-                        debug = "stepping out to " + out.toShortString();
+                        debug = "stepping out to " + out.toShortString() + " from " + self.position() + " v=" + self.getDeltaMovement() + " t=" + stuckOut;
                         return true;
                     }
                 }
-            }
-            if (++stuckOut > 100) {
-                steppingOut = false; // nowhere to step: let the rest of the brain find a way
-                return false;
             }
             motor.moveDirection(self.getLookAngle());
             return true;
