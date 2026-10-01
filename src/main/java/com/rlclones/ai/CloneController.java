@@ -705,18 +705,36 @@ public final class CloneController {
             cleanTarget = best;
             cleanTicks = 0;
             motor.resetStuck();
+            cleanLog("start" + best.toShortString());
         }
+    }
+
+    private final StringBuilder cleanLog = new StringBuilder();
+
+    private void cleanLog(String event) {
+        if (cleanLog.length() < 600) {
+            cleanLog.append(now()).append(':').append(event).append(' ');
+        }
+    }
+
+    /** Diagnostics of the harmful-block clean-up (for tests). */
+    public String hazardDebug() {
+        return "clean=" + cleanTarget + " ticks=" + cleanTicks + " escaping=" + escaping + " option=" + option + " log=" + cleanLog
+                + " seen=" + perception.blocks().entrySet().stream().filter(e -> e.getValue() == Perception.BlockKind.HARMFUL)
+                .map(e -> e.getKey().toShortString()).toList() + " pos=" + self.position() + " pitch=" + self.getXRot();
     }
 
     private void cleanUp() {
         ServerLevel level = self.serverLevel();
         BlockState st = level.getBlockState(cleanTarget);
         if (st.isAir() || !brain().isHarmful(Perception.blockId(st))) {
+            cleanLog("gone");
             perception.forgetBlock(cleanTarget);
             cleanTarget = null;
             return;
         }
         if (++cleanTicks > 400 || hostileWithin(6, now())) {
+            cleanLog(cleanTicks > 400 ? "timeout" : "hostile");
             perception.forgetBlock(cleanTarget);
             cleanTarget = null;
             motor.resetMining();
@@ -726,6 +744,7 @@ public final class CloneController {
         if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 0.5) {
             motor.navigate(c, 2.5, false);
             if (motor.stuckCount() > 6) {
+                cleanLog("stuck");
                 perception.forgetBlock(cleanTarget);
                 cleanTarget = null;
             }
