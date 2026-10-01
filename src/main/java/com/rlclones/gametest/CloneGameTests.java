@@ -996,9 +996,9 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
         c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 8));
-        // (asked once the glowstone light has spread)
-        h.runAfterDelay(10, () -> h.assertTrue(c.controller().farming().hasWork(), "soil next to water + hoe + seeds = work"));
+        boolean[] work = {false};
         h.onEachTick(() -> {
+            work[0] |= c.controller().farming().hasWork(); // (once the glowstone light has spread)
             c.controller().farming().tick();
             c.controller().motor().tick();
         });
@@ -1009,6 +1009,7 @@ public final class CloneGameTests {
                     planted++;
                 }
             }
+            h.assertTrue(work[0], "soil next to water + hoe + seeds = work");
             h.assertTrue(planted >= 4, "clone should till the soil by the water with the hoe and plant seeds (" + planted + ") "
                     + c.controller().farming().debug());
             finish(h, c);

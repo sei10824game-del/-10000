@@ -137,8 +137,10 @@ public final class Farming {
         if (eye.distanceTo(top) > 24) {
             return false;
         }
-        // grass and crops in between do not hide it (VISUAL ignores shapes without collision)
-        BlockHitResult hit = level.clip(new ClipContext(eye, top, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, self));
+        // something to break must be the first thing the line hits (OUTLINE); soil to work on top of may sit behind
+        // grass and crops (VISUAL ignores shapes without collision)
+        BlockHitResult hit = level.clip(new ClipContext(eye, top, cropOnTop ? ClipContext.Block.OUTLINE : ClipContext.Block.VISUAL,
+                ClipContext.Fluid.NONE, self));
         return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(pos);
     }
 
