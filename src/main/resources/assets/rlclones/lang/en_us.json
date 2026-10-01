@@ -86,5 +86,10 @@
   "rlclones.tool.shovel": "shovel",
   "rlclones.tool.hoe": "hoe",
   "rlclones.chat.rally_hunt": "[Hunt] Meet at X:%s Y:%s Z:%s! We go to defeat %s (X:%s Z:%s). %s more needed.",
-  "rlclones.chat.hunt_end": "Hunt over at X:%s Z:%s - thanks, everyone is free again!"
+  "rlclones.chat.hunt_end": "Hunt over at X:%s Z:%s - thanks, everyone is free again!",
+  "key.rlclones.battle_royale": "Battle royale (everyone vs everyone)",
+  "rlclones.msg.br_on": "BATTLE ROYALE! Every clone (%s) and every player is now everyone's enemy",
+  "rlclones.msg.br_off": "Battle royale is over: teams as usual",
+  "rlclones.cmd.summoned_team": "Summoned %s clone(s) for team %s (enemies of the other teams)",
+  "rlclones.chat.portal": "I built a Nether portal at X:%s Y:%s Z:%s - who wants to see the Nether?"
 }

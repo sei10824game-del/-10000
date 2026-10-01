@@ -77,6 +77,21 @@ public final class CloneManager {
         return instance;
     }
 
+    /** G key: every clone and player against everybody else. */
+    private boolean battleRoyale;
+
+    public static boolean battleRoyaleOn() {
+        return instance != null && instance.battleRoyale;
+    }
+
+    public boolean isBattleRoyale() {
+        return battleRoyale;
+    }
+
+    public void setBattleRoyale(boolean on) {
+        battleRoyale = on;
+    }
+
     public static void shutdown() {
         instance = null;
         AgentEvents.clear();
@@ -219,6 +234,11 @@ public final class CloneManager {
 
     @Nullable
     public ClonePlayer summon(@Nullable ServerPlayer summoner, ServerLevel level, Vec3 pos, float yaw) {
+        return summon(summoner, level, pos, yaw, ClonePlayer.DEFAULT_TEAM);
+    }
+
+    /** Summon a clone for {@code team}: clones of other teams are its enemies. */
+    public ClonePlayer summon(@Nullable ServerPlayer summoner, ServerLevel level, Vec3 pos, float yaw, String team) {
         restore();
         if (clones.size() >= Config.cloneLimit()) {
             return null;
@@ -243,6 +263,10 @@ public final class CloneManager {
         r.profiles.put(profile.getId(), NbtUtils.writeGameProfile(new CompoundTag(), profile));
         if (summoner != null) {
             r.summoners.put(profile.getId(), summoner.getUUID());
+        }
+        clone.setCloneTeam(team);
+        if (!ClonePlayer.DEFAULT_TEAM.equals(clone.cloneTeam())) {
+            r.teams.put(profile.getId(), clone.cloneTeam());
         }
         r.setDirty();
         return clone;
@@ -337,6 +361,7 @@ public final class CloneManager {
             }
             try {
                 ClonePlayer clone = new ClonePlayer(server, server.overworld(), profile, brainFor(profile.getId()));
+                clone.setCloneTeam(r.teams.get(profile.getId()));
                 login(clone);
                 if (clone.isDeadOrDying()) {
                     onCloneDied(clone);
@@ -413,6 +438,12 @@ public final class CloneManager {
                         : Component.translatable("rlclones.msg.respawn_off").withStyle(ChatFormatting.GRAY));
             }
             case TEACH_HARMFUL -> teachHarmful(sender);
+            case BATTLE_ROYALE -> {
+                setBattleRoyale(!isBattleRoyale());
+                broadcast(isBattleRoyale()
+                        ? Component.translatable("rlclones.msg.br_on", clones.size()).withStyle(ChatFormatting.RED)
+                        : Component.translatable("rlclones.msg.br_off").withStyle(ChatFormatting.GRAY));
+            }
         }
     }
 
@@ -482,6 +513,7 @@ public final class CloneManager {
         }
         fresh.connection.player = fresh;
         fresh.restoreFrom(old, false);
+        fresh.setCloneTeam(old.cloneTeam());
         fresh.setId(old.getId());
         fresh.setMainArm(old.getMainArm());
         for (String tag : old.getTags()) {

@@ -56,9 +56,18 @@ public final class CloneCommand {
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         d.register(Commands.literal("rlclone")
                 .then(Commands.literal("summon").requires(CloneCommand::mayControl)
-                        .executes(ctx -> summon(ctx, 1))
+                        .executes(ctx -> summon(ctx, 1, ClonePlayer.DEFAULT_TEAM))
+                        .then(Commands.literal("team").then(Commands.argument("team", StringArgumentType.word())
+                                .executes(ctx -> summon(ctx, 1, StringArgumentType.getString(ctx, "team")))))
                         .then(Commands.argument("count", IntegerArgumentType.integer(1, 64))
-                                .executes(ctx -> summon(ctx, IntegerArgumentType.getInteger(ctx, "count")))))
+                                .executes(ctx -> summon(ctx, IntegerArgumentType.getInteger(ctx, "count"), ClonePlayer.DEFAULT_TEAM))
+                                .then(Commands.literal("team").then(Commands.argument("team", StringArgumentType.word())
+                                        .executes(ctx -> summon(ctx, IntegerArgumentType.getInteger(ctx, "count"),
+                                                StringArgumentType.getString(ctx, "team")))))))
+                .then(Commands.literal("battleroyale").requires(CloneCommand::mayControl)
+                        .executes(ctx -> setBattleRoyale(ctx, !manager(ctx).isBattleRoyale()))
+                        .then(Commands.literal("on").executes(ctx -> setBattleRoyale(ctx, true)))
+                        .then(Commands.literal("off").executes(ctx -> setBattleRoyale(ctx, false))))
                 .then(Commands.literal("list").executes(CloneCommand::list))
                 .then(Commands.literal("remove").requires(CloneCommand::mayControl)
                         .then(Commands.literal("all").executes(ctx -> {
@@ -111,7 +120,14 @@ public final class CloneCommand {
         return 1;
     }
 
-    private static int summon(CommandContext<CommandSourceStack> ctx, int count) {
+    private static int setBattleRoyale(CommandContext<CommandSourceStack> ctx, boolean on) {
+        manager(ctx).setBattleRoyale(on);
+        ctx.getSource().sendSuccess(() -> on ? Component.translatable("rlclones.msg.br_on", manager(ctx).clones().size())
+                : Component.translatable("rlclones.msg.br_off"), true);
+        return 1;
+    }
+
+    private static int summon(CommandContext<CommandSourceStack> ctx, int count, String team) {
         CommandSourceStack src = ctx.getSource();
         ServerPlayer player = src.getPlayer();
         CloneManager m = manager(ctx);
@@ -120,7 +136,7 @@ public final class CloneCommand {
         for (int i = 0; i < count; i++) {
             double angle = i * (Math.PI * 2 / Math.max(1, count));
             Vec3 pos = count == 1 ? base : base.add(Math.cos(angle) * 2, 0, Math.sin(angle) * 2);
-            ClonePlayer c = m.summon(player, src.getLevel(), pos, src.getRotation().y + 180f);
+            ClonePlayer c = m.summon(ClonePlayer.DEFAULT_TEAM.equals(team) ? player : null, src.getLevel(), pos, src.getRotation().y + 180f, team);
             if (c == null) {
                 break;
             }
@@ -130,7 +146,8 @@ public final class CloneCommand {
         if (total == 0) {
             src.sendFailure(Component.translatable("rlclones.msg.limit", Config.cloneLimitLabel()));
         } else {
-            src.sendSuccess(() -> Component.translatable("rlclones.cmd.summoned", total), true);
+            src.sendSuccess(() -> ClonePlayer.DEFAULT_TEAM.equals(team) ? Component.translatable("rlclones.cmd.summoned", total)
+                    : Component.translatable("rlclones.cmd.summoned_team", total, team), true);
         }
         return total;
     }

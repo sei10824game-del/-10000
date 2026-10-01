@@ -23,6 +23,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -69,6 +70,20 @@ public final class CloneController {
     private final Fishing fishing;
     private final Explosives explosives;
     private final Travel travel;
+    private final Perch perch;
+    private final BoatTrap boatTrap;
+    private final Lighting lighting;
+    private final Portals portals;
+    private final CreativeHelper creative;
+    /** What can be done riding a horse (anything else: get off first). */
+    private static final java.util.Set<Option> ON_HORSEBACK = java.util.EnumSet.of(Option.EXPLORE, Option.EXPEDITION, Option.JOIN, Option.FOLLOW,
+            Option.FLEE, Option.HELP, Option.REST, Option.FIGHT, Option.HUNT, Option.ANIMALS);
+
+    /** Test hook: always pick this option when it is possible. */
+    public Option forcedOption;
+    /** Cornered while fleeing: fight it out until then. */
+    private long forceFightUntil = Long.MIN_VALUE;
+    public int corneredFights;
     /** Recent time spent swimming (decays); lots of it makes a boat worth crafting. */
     private int swimTicks;
     private long lastThreatSeen = -100000;
@@ -146,6 +161,11 @@ public final class CloneController {
         this.fishing = new Fishing(self, motor);
         this.explosives = new Explosives(self, motor, perception);
         this.travel = new Travel(self, motor, consumables);
+        this.perch = new Perch(self, motor, perception);
+        this.boatTrap = new BoatTrap(self, motor);
+        this.lighting = new Lighting(self, motor);
+        this.portals = new Portals(self, motor);
+        this.creative = new CreativeHelper(self, motor, perception);
         expedition.foesNear = p -> {
             long t = now();
             for (Perception.Seen s : perception.remembered()) {
@@ -227,6 +247,37 @@ public final class CloneController {
 
     public Explosives explosives() {
         return explosives;
+    }
+
+    public Perch perch() {
+        return perch;
+    }
+
+    public BoatTrap boatTrap() {
+        return boatTrap;
+    }
+
+    public Lighting lighting() {
+        return lighting;
+    }
+
+    public Portals portals() {
+        return portals;
+    }
+
+    public CreativeHelper creative() {
+        return creative;
+    }
+
+    /** Just went through a portal (called by the clone itself). */
+    public void onDimensionChanged(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> from) {
+        if (option != null) {
+            finishOption(false);
+        }
+        target = null;
+        motor.resetStuck();
+        motor.clearPath();
+        portals.onArrived(from, now());
     }
 
     public Travel travel() {
@@ -329,10 +380,23 @@ public final class CloneController {
             observeWorld(now);
             watcher.update(now);
         }
+        if (self.isCreative()) {
+            // creative: nothing to play for any more - only helping the others
+            if (option != null) {
+                finishOption(false);
+            }
+            creative.tick(now);
+            motor.tick();
+            return;
+        }
+        if (self.getVehicle() instanceof net.minecraft.world.entity.animal.horse.AbstractHorse && option != null && !ON_HORSEBACK.contains(option)) {
+            self.stopRiding(); // this needs both feet on the ground
+        }
         if ((now + self.getId()) % 40 == 0 && !self.isUsingItem() && option != Option.GATHER_WOOD && option != Option.MINE
                 && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
                 && option != Option.QUARRY && option != Option.DISCOVER && option != Option.BREW
-                && option != Option.ANIMALS && option != Option.FISH && option != Option.SALVAGE && !explosives.busy() && !travel.busy()
+                && option != Option.ANIMALS && option != Option.FISH && option != Option.SALVAGE && option != Option.PORTAL
+                && !explosives.busy() && !travel.busy() && !perch.busy() && !boatTrap.busy() && !portals.busy()
                 && cleanTarget == null && !consumables.busy() && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
@@ -359,8 +423,20 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now);
         }
+        if (!itemBusy && option == Option.FIGHT && (target != null || boatTrap.busy())) {
+            itemBusy = boatTrap.tick(target, now); // a boat at its feet: most mobs sit down in it
+        }
+        if (!itemBusy && perch.busy()) {
+            itemBusy = perch.tick(now); // up on a little pillar out of the chasers' reach
+        }
+        if (!itemBusy) {
+            itemBusy = portals.travelTick(now, threatened); // out of the portal we came through / home from the Nether
+        }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
             itemBusy = travel.tick(now); // bridging a gap / pearling across
+        }
+        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE && ((now + self.getId()) % 20) == 7 && !self.isUsingItem()) {
+            itemBusy = lighting.tick(); // a torch where monsters could spawn
         }
         // look once a second, but only while standing (a hop out of a stuck walk must not hide the hole we are in)
         boolean trapCheck = !escaping && !itemBusy && now - lastTrapCheck >= 20 && self.onGround();
@@ -621,7 +697,7 @@ public final class CloneController {
             // friends already standing next to us count
             int allies = 0;
             for (Perception.Seen s : perception.visible()) {
-                if (s.entity != self && Senses.isAgent(s.entity) && s.entity.distanceTo(self) < 12) {
+                if (s.entity != self && Senses.isAllyOf(s.entity, self) && s.entity.distanceTo(self) < 12) {
                     allies++;
                 }
             }
@@ -678,8 +754,8 @@ public final class CloneController {
 
     /** Read a chat line (from a clone or a real player). */
     public void onChat(net.minecraft.server.level.ServerPlayer sender, String text) {
-        if (sender.getUUID().equals(self.getUUID())) {
-            return;
+        if (sender.getUUID().equals(self.getUUID()) || Senses.rivals(sender, self)) {
+            return; // the other side's calls and news are not for us
         }
         long now = now();
         String t = text.trim();
@@ -1080,6 +1156,9 @@ public final class CloneController {
         if (needWood() && Senses.nearestBlock(perception, self, Perception.BlockKind.WOOD, 24) != null) {
             mask |= Option.SALVAGE.bit();
         }
+        if (self.onGround() && portals.hasWork()) {
+            mask |= Option.PORTAL.bit();
+        }
         return mask;
     }
 
@@ -1349,6 +1428,9 @@ public final class CloneController {
         resolve(true);
         expedition.abandon();
         storage.reset();
+        perch.reset();
+        boatTrap.reset();
+        portals.reset();
         cleanTarget = null;
         brain().deaths++;
         motor.resetMining();
@@ -1386,6 +1468,7 @@ public final class CloneController {
             case ANIMALS -> animals.tick() != Animals.Status.WORKING;
             case FISH -> fishing.tick() != Fishing.Status.WORKING;
             case SALVAGE -> runHarvest(Perception.BlockKind.WOOD) || !needWood() && blocksDone >= 2;
+            case PORTAL -> portals.tick() != Portals.Status.WORKING;
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -1399,7 +1482,11 @@ public final class CloneController {
         int mask = Senses.strategyMask(perception, self, self, now);
         int o;
         Option committed = expedition.isLeading() ? Option.EXPEDITION : expedition.joinedOffer() != null ? Option.JOIN : null;
-        if (committed != null && (mask & committed.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
+        if (forcedOption != null && (mask & forcedOption.bit()) != 0) {
+            o = forcedOption.ordinal();
+        } else if (now < forceFightUntil && (mask & Option.FIGHT.bit()) != 0) {
+            o = Option.FIGHT.ordinal(); // no way out: fight
+        } else if (committed != null && (mask & committed.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
             o = committed.ordinal(); // a promise: keep going with the group until the trip is over
         } else {
             o = brain().chooseStrategy(s, mask);
@@ -1423,6 +1510,11 @@ public final class CloneController {
         optionTicks = 0;
         optionReward = 0;
         goal = null;
+        fleeStuck = 0;
+        lastFleeStuck = 0;
+        fleeTurn = 0;
+        cakeAt = null;
+        cakeTicks = 0;
         goalTimer = 0;
         calmTicks = 0;
         blockTarget = null;
@@ -1439,6 +1531,7 @@ public final class CloneController {
             case BREW -> brewing.begin();
             case ANIMALS -> animals.begin();
             case FISH -> fishing.begin();
+            case PORTAL -> portals.begin();
             case EXPEDITION -> {
                 if (!expedition.isLeading()) {
                     Object[] hunt = huntTarget(now);
@@ -1526,6 +1619,22 @@ public final class CloneController {
     }
 
     // ------------------------------------------------------------------ fighting (per enemy type Q-table)
+
+    /** Jump attacks done with an axe / sweeps done with a sword (diagnostics, tests). */
+    public int axeCrits;
+    public int swordSweeps;
+
+    /** Hostiles (the target included) standing within {@code radius} of the target. */
+    private int enemiesAround(Entity t, double radius) {
+        int n = 0;
+        long now = now();
+        for (Perception.Seen s : perception.remembered()) {
+            if (now - s.lastSeen <= 40 && s.alive() && Senses.isHostileTo(s.entity, self) && s.entity.distanceTo(t) <= radius) {
+                n++;
+            }
+        }
+        return n;
+    }
 
     private boolean validTarget(Entity e, boolean hunt, long now) {
         if (e == null || !e.isAlive() || e.isRemoved() || e.level() != self.level() || e.distanceTo(self) > 32) {
@@ -1654,6 +1763,22 @@ public final class CloneController {
             Equipment.manage(self, true);
         }
         switch (action) {
+            case CRIT_ATTACK -> {
+                // a jump attack lands hardest with an axe
+                int axe = Equipment.bestOfKind(self, net.minecraft.world.item.AxeItem.class);
+                if (axe >= 0) {
+                    Equipment.select(self, axe);
+                }
+            }
+            case ATTACK -> {
+                // several enemies side by side: the sword's sweep hits them all
+                if (target != null && enemiesAround(target, 2.5) >= 2) {
+                    int sword = Equipment.bestOfKind(self, net.minecraft.world.item.SwordItem.class);
+                    if (sword >= 0) {
+                        Equipment.select(self, sword);
+                    }
+                }
+            }
             case PILLAR -> {
                 pillarBase = self.blockPosition();
                 pillarPlaced = false;
@@ -1685,6 +1810,10 @@ public final class CloneController {
             case ATTACK -> {
                 motor.lookAt(t);
                 if (motor.canHit(t)) {
+                    if (self.getMainHandItem().getItem() instanceof net.minecraft.world.item.SwordItem && self.onGround() && !self.isSprinting()
+                            && enemiesAround(t, 2.5) >= 2) {
+                        swordSweeps++;
+                    }
                     motor.attack(t);
                     actionDone = true;
                 } else if (!motor.withinReach(t)) {
@@ -1700,6 +1829,9 @@ public final class CloneController {
                     motor.moveToward(t.position());
                 }
                 if (!self.onGround() && self.getDeltaMovement().y < 0 && motor.canHit(t)) {
+                    if (self.getMainHandItem().getItem() instanceof net.minecraft.world.item.AxeItem) {
+                        axeCrits++;
+                    }
                     motor.attack(t);
                     actionDone = true;
                 } else if (actionTicks > 3 && self.onGround()) {
@@ -1760,7 +1892,34 @@ public final class CloneController {
             Equipment.select(self, slot);
             held = self.getMainHandItem();
         }
-        aimProjectile(t, Equipment.projectileSpeed(held));
+        Entity friend = allyInLine(t);
+        if (friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.CROSSBOW) {
+            // a crossbow bolt flies straight into the friend: take the bow, which can lob over him
+            int bow = Equipment.bowSlot(self);
+            if (bow < 0) {
+                actionDone = true;
+                motor.strafe(self.getRandom().nextBoolean() ? 1f : -1f); // step aside for a clear line instead
+                return;
+            }
+            if (self.isUsingItem()) {
+                self.stopUsingItem();
+            }
+            Equipment.select(self, bow);
+            held = self.getMainHandItem();
+            bowSwitches++;
+        }
+        if (friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.THROWN) {
+            actionDone = true; // no throwing past a friend's head
+            return;
+        }
+        if (actionTicks == 0 || !self.isUsingItem()) {
+            lobDraw = friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.BOW ? lobDrawTicks(t) : 0;
+        }
+        if (lobDraw > 0) {
+            aimLob(t, lobDraw);
+        } else {
+            aimProjectile(t, Equipment.projectileSpeed(held));
+        }
         boolean canSee = perception.canSee(t);
         switch (Equipment.rangedKind(held)) {
             case CROSSBOW -> {
@@ -1800,14 +1959,24 @@ public final class CloneController {
             }
             default -> {
                 if (!self.isUsingItem()) {
-                    if (actionTicks < 3) {
-                        motor.useHeldItem(InteractionHand.MAIN_HAND);
+                    // a lob: start drawing only once the bow points up the arc (a short draw leaves no time to turn)
+                    boolean ready = lobDraw == 0 || Math.abs(self.getXRot() - lobPitch) < 4;
+                    if (actionTicks < (lobDraw > 0 ? 12 : 3)) {
+                        if (ready) {
+                            motor.useHeldItem(InteractionHand.MAIN_HAND);
+                        }
                     } else {
                         actionDone = true;
                     }
                     return;
                 }
-                if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
+                if (lobDraw > 0) {
+                    if (self.getTicksUsingItem() >= lobDraw) {
+                        self.releaseUsingItem(); // a high arc over the friend's head
+                        arcShots++;
+                        actionDone = true;
+                    }
+                } else if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
                     self.releaseUsingItem();
                     actionDone = true;
                 }
@@ -1844,6 +2013,67 @@ public final class CloneController {
             actionDone = true;
         }
     }
+
+    /** Arrows lobbed over a friend / bows taken instead of a crossbow because of one (diagnostics, tests). */
+    public int arcShots;
+    public int bowSwitches;
+    private int lobDraw;
+
+    /** A player / clone of ours standing in the straight line of fire. */
+    private Entity allyInLine(Entity t) {
+        Vec3 eye = self.getEyePosition();
+        Vec3 aim = t.getBoundingBox().getCenter();
+        double dist = eye.distanceTo(aim);
+        long now = now();
+        for (Perception.Seen s : perception.remembered()) {
+            if (now - s.lastSeen > 40 || s.entity == self || s.entity == t || !Senses.isAllyOf(s.entity, self)) {
+                continue;
+            }
+            if (s.entity.distanceTo(self) < dist && s.entity.getBoundingBox().inflate(0.6).clip(eye, aim).isPresent()) {
+                return s.entity;
+            }
+        }
+        return null;
+    }
+
+    private static final double LOB_ANGLE = Math.toRadians(55);
+
+    /** How long to draw the bow so that a steep shot comes down on {@code t} (a weaker draw = a shorter, higher arc). */
+    private int lobDrawTicks(Entity t) {
+        Vec3 eye = self.getEyePosition();
+        Vec3 aim = t.getBoundingBox().getCenter();
+        double x = Math.sqrt((aim.x - eye.x) * (aim.x - eye.x) + (aim.z - eye.z) * (aim.z - eye.z));
+        double dy = aim.y - eye.y;
+        double denom = 2 * Math.cos(LOB_ANGLE) * Math.cos(LOB_ANGLE) * (x * Math.tan(LOB_ANGLE) - dy);
+        if (denom <= 0) {
+            return 20;
+        }
+        double v = Math.sqrt(0.05 * x * x / denom) * 1.04; // a little extra for the air drag
+        double power = Mth.clamp(v / 3.0, 0.12, 1.0);
+        double f = -1 + Math.sqrt(1 + 3 * power);
+        return Mth.clamp((int) Math.ceil(f * 20), 3, 20);
+    }
+
+    /** Aim the steep (high) solution for the arrow speed a draw of {@code draw} ticks gives. */
+    private void aimLob(Entity t, int draw) {
+        float f = Math.min(1f, draw / 20f);
+        double v = Math.min(1.0, (f * f + f * 2) / 3) * 3.0;
+        Vec3 eye = self.getEyePosition();
+        Vec3 aim = t.getBoundingBox().getCenter();
+        double dx = aim.x - eye.x;
+        double dz = aim.z - eye.z;
+        double x = Math.sqrt(dx * dx + dz * dz);
+        double dy = aim.y - eye.y;
+        double g = 0.05;
+        double v2 = v * v;
+        double root = v2 * v2 - g * (g * x * x + 2 * dy * v2);
+        double angle = root < 0 ? Math.PI / 4 : Math.atan((v2 + Math.sqrt(root)) / (g * Math.max(0.1, x)));
+        float yaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
+        lobPitch = (float) -Math.toDegrees(angle);
+        motor.lookAngles(yaw, lobPitch);
+    }
+
+    private float lobPitch;
 
     private void aimProjectile(Entity t, double speed) {
         Vec3 eye = self.getEyePosition();
@@ -1899,6 +2129,9 @@ public final class CloneController {
         } else {
             calmTicks = 0;
         }
+        if (!threats.isEmpty() && portals.escape()) {
+            return false; // a portal close by: through it, away from all of them
+        }
         if (goal == null || --goalTimer <= 0) {
             Vec3 away = Vec3.ZERO;
             for (Perception.Seen s : threats) {
@@ -1911,6 +2144,9 @@ public final class CloneController {
                 away = self.getLookAngle().scale(-1);
             }
             away = new Vec3(away.x, 0, away.z).normalize();
+            if (fleeTurn != 0) {
+                away = new Vec3(-away.z * fleeTurn, 0, away.x * fleeTurn); // that way was a wall: try sideways
+            }
             if (ally != null && ally.pos.distanceTo(self.position()) > 6) {
                 Vec3 toAlly = ally.pos.subtract(self.position());
                 away = away.add(new Vec3(toAlly.x, 0, toAlly.z).normalize().scale(0.7)).normalize();
@@ -1922,7 +2158,88 @@ public final class CloneController {
                 consumables.pearlAway(away); // only if the 5 damage of the pearl leaves us alive
             }
         }
+        boolean close = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
+        if (close && perch.canStart(now) && (fleeStuck > 0 || self.getHealth() < self.getMaxHealth() * 0.5f || self.getRandom().nextInt(40) == 0)) {
+            perch.start(); // two blocks up, out of reach
+            return true;
+        }
+        if (motor.stuckCount() == 0) {
+            lastFleeStuck = 0;
+        } else {
+            motor.holdJumps(); // hopping at the wall again will not get us out
+            if (motor.stuckCount() != lastFleeStuck) {
+                lastFleeStuck = motor.stuckCount();
+                fleeStuck++;
+                fleeTurn = self.getRandom().nextBoolean() ? 1 : -1;
+                goalTimer = 0; // try another way first
+            }
+        }
+        if (fleeStuck >= 2 && close) {
+            // nowhere left to run: turn round and fight
+            corneredFights++;
+            forceFightUntil = now + 200;
+            fleeStuck = 0;
+            return true;
+        }
         motor.navigate(goal, 1.5, true);
+        return false;
+    }
+
+    private int fleeStuck;
+    private int lastFleeStuck;
+    private int fleeTurn;
+
+    public int cakeBites;
+    private BlockPos cakeAt;
+    private int cakeTicks;
+
+    /** No ordinary food: a cake - put it down (or use one standing nearby) and eat slices off it. */
+    private boolean eatCake() {
+        ServerLevel level = self.serverLevel();
+        if (!self.getFoodData().needsFood() || ++cakeTicks > 300) {
+            return true;
+        }
+        if (cakeAt == null || !(level.getBlockState(cakeAt).getBlock() instanceof net.minecraft.world.level.block.CakeBlock)) {
+            cakeAt = Senses.cakeNearby(self, 5);
+        }
+        if (cakeAt == null) {
+            int slot = -1;
+            for (int i = 0; i < self.getInventory().items.size(); i++) {
+                if (self.getInventory().items.get(i).is(Items.CAKE)) {
+                    slot = i;
+                }
+            }
+            if (slot < 0) {
+                return true;
+            }
+            BlockPos feet = self.blockPosition();
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+                BlockPos spot = feet.relative(d);
+                if (level.getBlockState(spot).canBeReplaced() && level.getBlockState(spot.below()).isFaceSturdy(level, spot.below(), net.minecraft.core.Direction.UP)) {
+                    Equipment.select(self, slot);
+                    if (motor.placeBlockAt(spot)) {
+                        cakeAt = spot;
+                        break;
+                    }
+                }
+            }
+            return false;
+        }
+        Vec3 top = Vec3.atBottomCenterOf(cakeAt).add(0, 0.5, 0);
+        if (self.getEyePosition().distanceTo(top) > Motor.BLOCK_REACH - 0.5) {
+            motor.navigate(top, 1.5, false);
+            return motor.stuckCount() > 4;
+        }
+        motor.stop();
+        motor.lookAt(top);
+        if (cakeTicks % 4 == 0) {
+            int food = self.getFoodData().getFoodLevel();
+            self.gameMode.useItemOn(self, level, self.getMainHandItem(), InteractionHand.MAIN_HAND,
+                    new net.minecraft.world.phys.BlockHitResult(top, net.minecraft.core.Direction.UP, cakeAt, false));
+            if (self.getFoodData().getFoodLevel() > food) {
+                cakeBites++;
+            }
+        }
         return false;
     }
 
@@ -1930,7 +2247,7 @@ public final class CloneController {
         if (!eatStarted) {
             int slot = Equipment.bestFoodSlot(self);
             if (slot < 0) {
-                return true;
+                return eatCake();
             }
             Equipment.select(self, slot);
             eatStarted = motor.useHeldItem(InteractionHand.MAIN_HAND) && self.isUsingItem();

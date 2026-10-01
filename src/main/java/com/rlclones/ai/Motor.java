@@ -88,6 +88,20 @@ public final class Motor {
         return boating;
     }
 
+    /** No hopping at walls this tick (fleeing into a dead end: jumping at it again helps nothing). */
+    private boolean noHop;
+
+    public void holdJumps() {
+        noHop = true;
+    }
+
+    /** This tick we go over the edge on purpose (a parkour jump): no careful crouching. */
+    private boolean daring;
+
+    public void dare() {
+        daring = true;
+    }
+
     public void dive() {
         dive = true;
     }
@@ -332,7 +346,7 @@ public final class Motor {
         if (++progressTimer >= 20) {
             if (self.position().distanceTo(progressAnchor) < 0.5) {
                 stuckCount++;
-                if (!atEdge) {
+                if (!atEdge && !noHop) {
                     jump(); // never hop forward at a deadly edge
                 }
                 path = null;
@@ -675,7 +689,7 @@ public final class Motor {
             zza *= 0.2f;
             xxa *= 0.2f;
         }
-        if (!sneak && self.onGround() && !self.isInWater() && (Math.abs(zza) > 0.05f || Math.abs(xxa) > 0.05f)
+        if (!sneak && !daring && self.onGround() && !self.isInWater() && (Math.abs(zza) > 0.05f || Math.abs(xxa) > 0.05f)
                 && deadlyDropAhead(newYaw, zza, xxa)) {
             // a deadly drop right in front: crouch like a careful player, so the feet cannot slip over the edge
             sneak = true;
@@ -730,6 +744,8 @@ public final class Motor {
         sprint = false;
         sneak = false;
         dive = false;
+        noHop = false;
+        daring = false;
         if (!moving) {
             progressAnchor = null;
         }

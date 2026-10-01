@@ -284,6 +284,12 @@ public final class Crafting {
         if (count(p, Items.GUNPOWDER) >= 5 && countTag(p, ItemTags.SAND) >= 4) {
             out.add(Items.TNT);
         }
+        if (count(p, Items.TORCH) < 16 && count(p, Items.COAL) + count(p, Items.CHARCOAL) >= 2 && sticksAndPlanks >= 1) {
+            out.add(Items.TORCH); // light for caves and around the base
+        }
+        if (!hasItem(p, Items.FLINT_AND_STEEL) && hasItem(p, Items.IRON_INGOT) && hasItem(p, Items.FLINT) && count(p, Items.OBSIDIAN) >= 10) {
+            out.add(Items.FLINT_AND_STEEL); // to light the portal frame
+        }
         if (count(p, Items.IRON_INGOT) >= 3 && !hasItem(p, Items.BUCKET) && !hasItem(p, Items.WATER_BUCKET)) {
             out.add(Items.BUCKET);
         }

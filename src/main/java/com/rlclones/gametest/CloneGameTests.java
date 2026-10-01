@@ -883,6 +883,7 @@ public final class CloneGameTests {
         com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         b.bases.clear();
         b.pens.clear();
+        b.portals.clear();
         b.setDirty();
     }
 
@@ -2056,6 +2057,459 @@ public final class CloneGameTests {
             h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(ln + ": EXPEDITION_END") && l.contains("kind=HUNT")),
                     "and the hunt is declared over once the enemy is gone");
             finish(h, leader, member);
+        });
+    }
+
+    // ================================================================== AC round 7
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "torch")
+    public static void craftsTorchesFromCoal(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.COAL, 2));
+        c.getInventory().add(new ItemStack(Items.STICK, 2));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        craftLoop(h, c);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.TORCH) >= 4, "coal and sticks make torches: " + c.controller().crafting().debug());
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "torch2")
+    public static void lightsUpWhereMonstersCouldSpawn(GameTestHelper h) {
+        clearBases(h);
+        com.rlclones.clone.Bases.get(h.getLevel().getServer()).add(h.getLevel().dimension(), h.absolutePos(new BlockPos(3, 2, 3)), "someone");
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.TORCH, 8));
+        BlockPos feet = c.blockPosition();
+        h.assertTrue(c.controller().lighting().darkSpot(), "pitch dark here at first");
+        h.onEachTick(() -> {
+            if (h.getLevel().getGameTime() % 20 == 0) {
+                c.controller().lighting().tick();
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().lighting().torchesPlaced >= 1 && h.getLevel().getBlockState(feet).is(Blocks.TORCH),
+                    "the clone puts a torch down where monsters could spawn");
+            h.assertTrue(!c.controller().lighting().darkSpot(), "and it is lit now");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "tunnel")
+    public static void digsThroughAWallInTheWay(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int y = 2; y <= 5; y++) {
+                h.setBlock(new BlockPos(x, y, 7), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 11.5));
+        travelLoop(h, c, goal);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().travel().blocksTunneled >= 1, "a wall in the way: the clone digs through (" + c.controller().travel().debug + ")");
+            h.assertTrue(c.position().distanceTo(goal) < 2.0, "and goes on");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "arc")
+    public static void lobsArrowsOverAFriend(GameTestHelper h) {
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.BOW));
+        c.getInventory().add(new ItemStack(Items.ARROW, 64));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        ClonePlayer friend = clone(h, 6.5, 7.5, 90f, false);
+        Husk husk = dummy(h, 11.5, 7.5);
+        float[] lowest = {20f};
+        boolean[] hit = {false};
+        h.onEachTick(() -> {
+            lowest[0] = Math.min(lowest[0], friend.getHealth());
+            hit[0] |= husk.getLastHurtByMob() == c;
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + ")");
+            h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + ")");
+            h.assertTrue(hit[0], "and the arrows come down on the enemy");
+            finish(h, c, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "arc2")
+    public static void takesTheBowWhenAFriendBlocksTheCrossbow(GameTestHelper h) {
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.CROSSBOW));
+        c.getInventory().add(new ItemStack(Items.BOW));
+        c.getInventory().add(new ItemStack(Items.ARROW, 64));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        ClonePlayer friend = clone(h, 6.5, 7.5, 90f, false);
+        dummy(h, 11.5, 7.5);
+        float[] lowest = {20f};
+        h.onEachTick(() -> lowest[0] = Math.min(lowest[0], friend.getHealth()));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().bowSwitches >= 1 && c.getMainHandItem().is(Items.BOW), "the crossbow is swapped for the bow");
+            h.assertTrue(c.controller().arcShots >= 1, "which lobs over the friend");
+            h.assertTrue(lowest[0] >= 20f, "the friend stays unhurt (lowest " + lowest[0] + ")");
+            finish(h, c, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "corner")
+    public static void fightsWhenCorneredInsteadOfHoppingAtWalls(GameTestHelper h) {
+        for (int z = 1; z <= 3; z++) {
+            for (int y = 2; y <= 4; y++) {
+                h.setBlock(new BlockPos(6, y, z), Blocks.STONE);
+                h.setBlock(new BlockPos(8, y, z), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 2.5, 0f, true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
+        dummy(h, 7.5, 5.5);
+        boolean[] fought = {false};
+        h.onEachTick(() -> {
+            if (c.controller().corneredFights > 0) {
+                c.controller().forcedOption = null;
+                fought[0] |= c.controller().option() == com.rlclones.ai.strategy.Option.FIGHT;
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().corneredFights >= 1, "a dead end while fleeing: no more running (options " + c.controller().optionLog + ")");
+            h.assertTrue(fought[0], "it turns round and fights (options " + c.controller().optionLog + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "weapons")
+    public static void jumpAttacksWithAnAxe(GameTestHelper h) {
+        ClonePlayer c = clone(h, 6.0, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
+        c.getInventory().add(new ItemStack(Items.IRON_AXE));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.CRIT_ATTACK;
+        dummy(h, 8.0, 7.5);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().axeCrits >= 1, "jump attacks are done with the axe");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "weapons2")
+    public static void sweepsACrowdWithTheSword(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.IRON_AXE));
+        c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.ATTACK;
+        dummy(h, 9.3, 7.5);
+        dummy(h, 9.3, 8.4);
+        dummy(h, 9.3, 6.6);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().swordSweeps >= 1, "against several side by side the sword sweeps");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "teams")
+    public static void summonsATeamByCommand(GameTestHelper h) {
+        var server = h.getLevel().getServer();
+        int before = manager(h).clones().size();
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withPosition(h.absoluteVec(new Vec3(3.5, 2, 3.5)))
+                .withLevel(h.getLevel()).withPermission(4), "rlclone summon team red");
+        ClonePlayer red = null;
+        for (ClonePlayer x : manager(h).clones()) {
+            if ("red".equals(x.cloneTeam())) {
+                red = x;
+            }
+        }
+        h.assertTrue(manager(h).clones().size() == before + 1 && red != null, "the command summons a clone for team red");
+        ClonePlayer ours = clone(h, 10.5, 10.5, 0f, false);
+        ClonePlayer ours2 = clone(h, 11.5, 10.5, 0f, false);
+        h.assertTrue(com.rlclones.ai.Senses.rivals(red, ours) && com.rlclones.ai.Senses.isHostileTo(red, ours), "other teams are enemies");
+        h.assertFalse(com.rlclones.ai.Senses.rivals(ours, ours2), "the same team is not");
+        h.assertTrue(com.rlclones.clone.ClonePlayer.DEFAULT_TEAM.equals(ours.cloneTeam()), "no team given: the default one");
+        finish(h, red, ours, ours2);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "teams2")
+    public static void clonesOfOtherTeamsFight(GameTestHelper h) {
+        ClonePlayer red = clone(h, 4.5, 7.5, -90f, true);
+        red.setCloneTeam("red");
+        ClonePlayer blue = clone(h, 10.5, 7.5, 90f, true);
+        blue.setCloneTeam("blue");
+        red.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        blue.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        red.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        blue.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        h.succeedWhen(() -> {
+            h.assertTrue(red.getLastHurtByMob() == blue || blue.getLastHurtByMob() == red, "red and blue clones attack each other: red "
+                    + red.controller().optionLog + " blue " + blue.controller().optionLog);
+            finish(h, red, blue);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "br")
+    public static void gKeyStartsABattleRoyale(GameTestHelper h) {
+        ClonePlayer a = clone(h, 4.5, 7.5, 0f, false);
+        ClonePlayer b = clone(h, 10.5, 7.5, 0f, false);
+        h.assertFalse(com.rlclones.ai.Senses.rivals(a, b), "same team: friends");
+        manager(h).handleAction(a, ClientAction.BATTLE_ROYALE);
+        boolean br = com.rlclones.ai.Senses.rivals(a, b) && com.rlclones.ai.Senses.isHostileTo(b, a);
+        manager(h).handleAction(a, ClientAction.BATTLE_ROYALE);
+        h.assertTrue(br, "G: battle royale - everyone is everyone's enemy");
+        h.assertFalse(com.rlclones.ai.Senses.rivals(a, b), "G again: back to teams");
+        finish(h, a, b);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "creative")
+    public static void creativeCloneHelpsTheOthers(GameTestHelper h) {
+        ClonePlayer helper = clone(h, 4.5, 7.5, -90f, true);
+        helper.setGameMode(GameType.CREATIVE);
+        ClonePlayer friend = clone(h, 7.5, 7.5, 90f, false);
+        friend.getFoodData().setFoodLevel(4);
+        h.succeedWhen(() -> {
+            boolean food = false;
+            for (ItemStack s : friend.getInventory().items) {
+                food |= s.isEdible();
+            }
+            h.assertTrue(helper.controller().creative().takenFromMenu >= 1, "the creative clone takes things from the creative menu ("
+                    + helper.controller().creative().debug + ")");
+            h.assertTrue(food && helper.controller().creative().gifts >= 1, "and brings the hungry survival clone food");
+            finish(h, helper, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "cake")
+    public static void eatsCake(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.CAKE));
+        c.getFoodData().setFoodLevel(6);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.EAT;
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().cakeBites >= 1 && c.getFoodData().getFoodLevel() > 6, "a hungry clone puts its cake down and eats it");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3600, batch = "horse")
+    public static void tamesSaddlesAndRidesAHorse(GameTestHelper h) {
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.SADDLE));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        var horse = h.spawn(EntityType.HORSE, new Vec3(9.5, 2, 7.5));
+        animalLoop(h, c);
+        h.succeedWhen(() -> {
+            h.assertTrue(horse.isTamed() && horse.isSaddled() && c.getVehicle() == horse, "with a saddle the clone tames the horse, saddles it and rides (tries "
+                    + c.controller().animals().mountAttempts + ", tamed " + horse.isTamed() + ", saddled " + horse.isSaddled() + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "parkour")
+    public static void learnsToSprintJumpAGap(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = -3; y <= 1; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.AIR);
+                }
+                h.setBlock(new BlockPos(x, -4, z), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        Vec3 start = h.absoluteVec(new Vec3(7.5, 2, 3.5));
+        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 12.5));
+        int[] falls = {0};
+        h.onEachTick(() -> {
+            if (c.getY() < start.y - 1.5 && c.onGround()) {
+                falls[0]++; // fell in: back to the start (a player would climb out)
+                c.teleportTo(h.getLevel(), start.x, start.y, start.z, 0f, 0f);
+                c.fallDistance = 0;
+                c.setDeltaMovement(Vec3.ZERO);
+            }
+        });
+        travelLoop(h, c, goal);
+        h.succeedWhen(() -> {
+            var b = c.getCloneBrain();
+            h.assertTrue(c.controller().travel().parkourSuccesses >= 1 && c.getZ() > h.absoluteVec(new Vec3(0, 0, 9.5)).z,
+                    "the clone gets over the 3-wide gap by jumping (" + c.controller().travel().debug + ", falls " + falls[0] + ")");
+            h.assertTrue(b.parkourValue(3, 1) > b.parkourValue(3, 0), "and has learned that a sprinting run-up works better than walking up to it ("
+                    + b.parkourValue(3, 0) + " / " + b.parkourValue(3, 1) + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "boattrap")
+    public static void trapsAMonsterInABoat(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.0, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.OAK_BOAT));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        Husk husk = dummy(h, 10.5, 7.5);
+        h.succeedWhen(() -> {
+            h.assertTrue(husk.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat && c.controller().boatTrap().trapsSprung >= 1,
+                    "a boat put at its feet: the husk sits in it (" + c.controller().boatTrap().debug + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "boattrap2")
+    public static void learnsThatSpidersDoNotSitInBoats(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.0, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.OAK_BOAT));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        var spider = h.spawn(EntityType.SPIDER, new Vec3(10.5, 2, 7.5));
+        spider.setNoAi(true);
+        spider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getCloneBrain().hasFlag("noboat:minecraft:spider"), "the spider did not get in: learned (" + c.controller().boatTrap().debug + ")");
+            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "and the boat is broken and taken back");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "perch")
+    public static void perchesOnTwoBlocksWhenChased(GameTestHelper h) {
+        ClonePlayer c = clone(h, 4.5, 7.5, 90f, true);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 16));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.setHealth(8f);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(7.5, 2, 7.5));
+        husk.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        double floor = h.absoluteVec(new Vec3(0, 2, 0)).y;
+        h.onEachTick(() -> {
+            var p = c.controller().perch();
+            if (husk.isAlive() && p.busy() && c.getY() >= floor + 1.9) {
+                husk.kill(); // the danger is gone (killed by someone else)
+            }
+        });
+        h.succeedWhen(() -> {
+            var p = c.controller().perch();
+            h.assertTrue(p.perches >= 1 && p.highest >= floor + 1.9, "chased, the clone jumps two blocks up (" + p.debug + " options "
+                    + c.controller().optionLog + ")");
+            h.assertTrue(!husk.isAlive() && !p.busy() && p.blocksRecovered >= 2 && c.getY() < floor + 0.5, "once it is safe it comes down again ("
+                    + p.debug + ")");
+            h.assertTrue(c.getInventory().countItem(Items.COBBLESTONE) >= 15, "taking the blocks back");
+            finish(h, c);
+        });
+    }
+
+    private static void portalLoop(GameTestHelper h, ClonePlayer c) {
+        boolean[] active = {false};
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            ctl.perception().update(h.getLevel().getGameTime());
+            if (!active[0] && ctl.portals().hasWork()) {
+                ctl.portals().begin();
+                active[0] = true;
+            }
+            if (active[0] && ctl.portals().tick() != com.rlclones.ai.Portals.Status.WORKING) {
+                active[0] = false;
+            }
+            ctl.motor().tick();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1500, batch = "obsidian")
+    public static void makesObsidianWithWaterAndLava(GameTestHelper h) {
+        clearBases(h);
+        h.setBlock(new BlockPos(7, 0, 10), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 1, 10), Blocks.LAVA);
+        ClonePlayer c = clone(h, 7.5, 6.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        portalLoop(h, c);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.OBSIDIAN) >= 1, "water on the lava source makes obsidian, mined with the diamond pickaxe ("
+                    + c.controller().portals().debug + " mine=" + c.controller().motor().mineDebug + ")");
+            h.assertTrue(c.getInventory().countItem(Items.WATER_BUCKET) >= 1, "and the water is scooped back up");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "portal")
+    public static void buildsAndLightsANetherPortal(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 4.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OBSIDIAN, 10));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
+        c.getInventory().add(new ItemStack(Items.FLINT_AND_STEEL));
+        String name = c.getGameProfile().getName();
+        portalLoop(h, c);
+        h.succeedWhen(() -> {
+            boolean portal = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 8, 13)))) {
+                portal |= h.getLevel().getBlockState(p).is(Blocks.NETHER_PORTAL);
+            }
+            h.assertTrue(portal, "the clone builds an obsidian frame and lights it (" + c.controller().portals().debug + ")");
+            h.assertTrue(said(name, "PORTAL ") && !com.rlclones.clone.Bases.get(h.getLevel().getServer()).portals.isEmpty(),
+                    "and tells the others where the portal is");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** An obsidian frame (opening at x 6..7, y 3..5, z 10), lit, and known to the clones. */
+    private static BlockPos litPortal(GameTestHelper h) {
+        for (int x = 5; x <= 8; x++) {
+            for (int y = 2; y <= 6; y++) {
+                boolean edge = x == 5 || x == 8 || y == 2 || y == 6;
+                h.setBlock(new BlockPos(x, y, 10), edge ? Blocks.OBSIDIAN : Blocks.AIR);
+            }
+        }
+        h.setBlock(new BlockPos(6, 3, 10), Blocks.FIRE);
+        BlockPos inside = h.absolutePos(new BlockPos(6, 3, 10));
+        com.rlclones.clone.Bases.get(h.getLevel().getServer()).addPortal(h.getLevel().dimension(), inside);
+        return inside;
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3600, batch = "nether")
+    public static void visitsTheNetherAndComesBack(GameTestHelper h) {
+        clearBases(h);
+        BlockPos inside = litPortal(h);
+        h.assertTrue(h.getLevel().getBlockState(inside).is(Blocks.NETHER_PORTAL), "the test portal is lit");
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.PORTAL;
+        h.succeedWhen(() -> {
+            var pt = c.controller().portals();
+            h.assertTrue(pt.netherTrips >= 1 && c.getCloneBrain().hasFlag(com.rlclones.ai.Portals.NETHER_FLAG),
+                    "a clone that has never been to the Nether goes through the portal (" + pt.debug + " options " + c.controller().optionLog + ")");
+            h.assertTrue(pt.homeTrips >= 1 && c.level().dimension() == net.minecraft.world.level.Level.OVERWORLD,
+                    "and comes back on its own (" + c.level().dimension().location() + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "portal2")
+    public static void fleesIntoAPortal(GameTestHelper h) {
+        clearBases(h);
+        litPortal(h);
+        ClonePlayer c = clone(h, 6.5, 7.0, 0f, true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
+        dummy(h, 6.5, 4.5);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().portals().portalEscapes >= 1, "running away with a portal close by: into it (" + c.controller().optionLog + ")");
+            finish(h, c);
+            clearBases(h);
         });
     }
 }

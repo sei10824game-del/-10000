@@ -59,6 +59,42 @@ public class Bases extends SavedData {
 
     public final List<Pen> pens = new ArrayList<>();
 
+    /** Nether portals the clones know about ({@code pos}: a portal block at the bottom of the opening). */
+    public record Portal(ResourceKey<Level> dimension, BlockPos pos) {
+    }
+
+    public final List<Portal> portals = new ArrayList<>();
+
+    public void addPortal(ResourceKey<Level> dim, BlockPos pos) {
+        for (Portal p : portals) {
+            if (p.dimension() == dim && p.pos().distSqr(pos) < 16) {
+                return; // already known
+            }
+        }
+        portals.add(new Portal(dim, pos.immutable()));
+        setDirty();
+    }
+
+    @Nullable
+    public Portal nearestPortal(ResourceKey<Level> dim, Vec3 pos, double radius) {
+        Portal best = null;
+        double bestD = radius;
+        for (Portal p : portals) {
+            double d = Vec3.atCenterOf(p.pos()).distanceTo(pos);
+            if (p.dimension() == dim && d < bestD) {
+                bestD = d;
+                best = p;
+            }
+        }
+        return best;
+    }
+
+    public void forgetPortal(Portal p) {
+        if (portals.remove(p)) {
+            setDirty();
+        }
+    }
+
     public void addPen(ResourceKey<Level> dim, BlockPos origin) {
         pens.add(new Pen(dim, origin.immutable()));
         setDirty();
@@ -175,6 +211,11 @@ public class Bases extends SavedData {
             CompoundTag pt = pens.getCompound(i);
             r.pens.add(new Pen(ResourceKey.create(Registries.DIMENSION, new ResourceLocation(pt.getString("dim"))), NbtUtils.readBlockPos(pt.getCompound("origin"))));
         }
+        ListTag portalList = tag.getList("portals", Tag.TAG_COMPOUND);
+        for (int i = 0; i < portalList.size(); i++) {
+            CompoundTag pt = portalList.getCompound(i);
+            r.portals.add(new Portal(ResourceKey.create(Registries.DIMENSION, new ResourceLocation(pt.getString("dim"))), NbtUtils.readBlockPos(pt.getCompound("pos"))));
+        }
         CompoundTag c = tag.getCompound("contents");
         for (String k : c.getAllKeys()) {
             CompoundTag items = c.getCompound(k);
@@ -211,6 +252,14 @@ public class Bases extends SavedData {
             penList.add(pt);
         }
         tag.put("pens", penList);
+        ListTag portalList = new ListTag();
+        for (Portal p : portals) {
+            CompoundTag pt = new CompoundTag();
+            pt.putString("dim", p.dimension().location().toString());
+            pt.put("pos", NbtUtils.writeBlockPos(p.pos()));
+            portalList.add(pt);
+        }
+        tag.put("portals", portalList);
         CompoundTag c = new CompoundTag();
         contents.forEach((k, items) -> {
             CompoundTag t = new CompoundTag();

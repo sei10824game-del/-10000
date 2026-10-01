@@ -65,6 +65,21 @@ public final class Equipment {
         return best;
     }
 
+    /** Best weapon of one kind (e.g. {@code AxeItem} for jump crits, {@code SwordItem} for sweeps); -1 if none. */
+    public static int bestOfKind(Player p, Class<?> kind) {
+        Inventory inv = p.getInventory();
+        int best = -1;
+        double bestScore = 0;
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (!s.isEmpty() && kind.isInstance(s.getItem()) && attackDamage(s) > bestScore) {
+                bestScore = attackDamage(s);
+                best = i;
+            }
+        }
+        return best;
+    }
+
     public static boolean isArmed(Player p) {
         return attackDamage(p.getMainHandItem()) >= 4.0;
     }
@@ -137,6 +152,18 @@ public final class Equipment {
     }
 
     /** Best usable ranged weapon: a loaded crossbow first, then crossbow, bow, throwables. -1 if none. */
+    /** A bow we can shoot right now (arrows at hand); -1 if none. */
+    public static int bowSlot(Player p) {
+        Inventory inv = p.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (rangedKind(s) == RangedKind.BOW && canFire(p, s)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     public static int rangedSlot(Player p) {
         Inventory inv = p.getInventory();
         int best = -1;

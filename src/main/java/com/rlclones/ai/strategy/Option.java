@@ -40,7 +40,9 @@ public enum Option {
     /** Fish with a rod at open water. */
     FISH(2400),
     /** No trees anywhere: take planks / logs from things built (never from a base). */
-    SALVAGE(400);
+    SALVAGE(400),
+    /** Obsidian from lava + water, a Nether portal, and a first trip through it. */
+    PORTAL(3000);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

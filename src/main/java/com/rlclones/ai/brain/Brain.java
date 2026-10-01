@@ -64,6 +64,49 @@ public final class Brain {
     private final Map<String, String> itemFacts = new HashMap<>();
     /** Block ids the clone has examined (mined / obtained / been told about). */
     private final Set<String> knownBlocks = new java.util.HashSet<>();
+    /** Things learned once and for all: "visited:<dimension>", "noboat:<entity type>"... */
+    private final Set<String> flags = new java.util.HashSet<>();
+
+    public boolean hasFlag(String f) {
+        return flags.contains(f);
+    }
+
+    public void setFlag(String f) {
+        flags.add(f);
+    }
+
+    /** Parkour: value of jumping a gap of 1..4 blocks by walking up to it (0) or with a sprinting run-up (1). */
+    public static final int PARKOUR_GAPS = 5;
+    private final float[][] parkQ = new float[PARKOUR_GAPS][2];
+    private final int[][] parkN = new int[PARKOUR_GAPS][2];
+
+    public float parkourValue(int gap, int how) {
+        return parkQ[Math.min(gap, PARKOUR_GAPS - 1)][how];
+    }
+
+    public int parkourTries(int gap, int how) {
+        return parkN[Math.min(gap, PARKOUR_GAPS - 1)][how];
+    }
+
+    /** Untried first, then mostly the better one (10 % of the time the other, to keep learning). */
+    public int chooseParkour(int gap, net.minecraft.util.RandomSource rnd) {
+        int g = Math.min(gap, PARKOUR_GAPS - 1);
+        for (int a = 0; a < 2; a++) {
+            if (parkN[g][a] == 0) {
+                return a;
+            }
+        }
+        if (rnd.nextInt(10) == 0) {
+            return rnd.nextInt(2);
+        }
+        return parkQ[g][1] > parkQ[g][0] ? 1 : 0;
+    }
+
+    public void learnParkour(int gap, int how, float reward) {
+        int g = Math.min(gap, PARKOUR_GAPS - 1);
+        parkN[g][how]++;
+        parkQ[g][how] += (reward - parkQ[g][how]) / Math.min(parkN[g][how], 10);
+    }
 
     public boolean knowsItem(String key) {
         return knownItems.containsKey(key);
@@ -332,6 +375,19 @@ public final class Brain {
         net.minecraft.nbt.ListTag kb = new net.minecraft.nbt.ListTag();
         knownBlocks.forEach(b -> kb.add(net.minecraft.nbt.StringTag.valueOf(b)));
         tag.put("knownBlocks", kb);
+        net.minecraft.nbt.ListTag fl = new net.minecraft.nbt.ListTag();
+        flags.forEach(f -> fl.add(net.minecraft.nbt.StringTag.valueOf(f)));
+        tag.put("flags", fl);
+        int[] pq = new int[PARKOUR_GAPS * 2];
+        int[] pn = new int[PARKOUR_GAPS * 2];
+        for (int g = 0; g < PARKOUR_GAPS; g++) {
+            for (int a = 0; a < 2; a++) {
+                pq[g * 2 + a] = Float.floatToIntBits(parkQ[g][a]);
+                pn[g * 2 + a] = parkN[g][a];
+            }
+        }
+        tag.putIntArray("parkQ", pq);
+        tag.putIntArray("parkN", pn);
         int[] lq = new int[LOOK_CONTEXTS * LOOK_SPEEDS.length];
         int[] ln = new int[lq.length];
         for (int ctx = 0; ctx < LOOK_CONTEXTS; ctx++) {
@@ -380,6 +436,20 @@ public final class Brain {
         net.minecraft.nbt.ListTag kb = tag.getList("knownBlocks", net.minecraft.nbt.Tag.TAG_STRING);
         for (int i = 0; i < kb.size(); i++) {
             b.knownBlocks.add(kb.getString(i));
+        }
+        net.minecraft.nbt.ListTag fl = tag.getList("flags", net.minecraft.nbt.Tag.TAG_STRING);
+        for (int i = 0; i < fl.size(); i++) {
+            b.flags.add(fl.getString(i));
+        }
+        int[] pq = tag.getIntArray("parkQ");
+        int[] pn = tag.getIntArray("parkN");
+        if (pq.length == PARKOUR_GAPS * 2 && pn.length == pq.length) {
+            for (int g = 0; g < PARKOUR_GAPS; g++) {
+                for (int a = 0; a < 2; a++) {
+                    b.parkQ[g][a] = Float.intBitsToFloat(pq[g * 2 + a]);
+                    b.parkN[g][a] = pn[g * 2 + a];
+                }
+            }
         }
         int[] lq = tag.getIntArray("lookQ");
         int[] ln = tag.getIntArray("lookN");
@@ -431,6 +501,16 @@ public final class Brain {
         b.knownItems.object2IntEntrySet().forEach(e -> knownItems.mergeInt(e.getKey(), e.getIntValue(), Math::min));
         b.itemFacts.forEach(itemFacts::putIfAbsent);
         knownBlocks.addAll(b.knownBlocks);
+        flags.addAll(b.flags);
+        for (int g = 0; g < PARKOUR_GAPS; g++) {
+            for (int a = 0; a < 2; a++) {
+                int n = parkN[g][a] + b.parkN[g][a];
+                if (n > 0) {
+                    parkQ[g][a] = (parkQ[g][a] * parkN[g][a] + b.parkQ[g][a] * b.parkN[g][a]) / n;
+                }
+                parkN[g][a] = n;
+            }
+        }
         for (int c = 0; c < LOOK_CONTEXTS; c++) {
             for (int a = 0; a < LOOK_SPEEDS.length; a++) {
                 int n = lookN[c][a] + b.lookN[c][a];

@@ -49,6 +49,8 @@ public final class ClientKeys {
             ModNetwork.sendToServer(ClientAction.TOGGLE_RESPAWN);
         } else if (matches(ClientSetup.TEACH, key)) {
             ModNetwork.sendToServer(ClientAction.TEACH_HARMFUL);
+        } else if (matches(ClientSetup.BATTLE_ROYALE, key)) {
+            ModNetwork.sendToServer(ClientAction.BATTLE_ROYALE);
         }
     }
 
@@ -64,10 +66,10 @@ public final class ClientKeys {
         smokeReported = true;
         List<KeyMapping> all = Arrays.asList(mc.options.keyMappings);
         boolean registered = all.contains(ClientSetup.SUMMON) && all.contains(ClientSetup.LINK) && all.contains(ClientSetup.RESPAWN)
-                && all.contains(ClientSetup.TEACH);
-        RLClones.LOGGER.info("RLCLONES_CLIENT_READY registered={} keys={},{},{},{} screen={}", registered,
+                && all.contains(ClientSetup.TEACH) && all.contains(ClientSetup.BATTLE_ROYALE);
+        RLClones.LOGGER.info("RLCLONES_CLIENT_READY registered={} keys={},{},{},{},{} screen={}", registered,
                 ClientSetup.SUMMON.getKey().getName(), ClientSetup.LINK.getKey().getName(), ClientSetup.RESPAWN.getKey().getName(),
-                ClientSetup.TEACH.getKey().getName(), mc.screen.getClass().getSimpleName());
+                ClientSetup.TEACH.getKey().getName(), ClientSetup.BATTLE_ROYALE.getKey().getName(), mc.screen.getClass().getSimpleName());
         mc.stop();
     }
 

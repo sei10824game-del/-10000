@@ -24,12 +24,23 @@ public class ClonePlayer extends ServerPlayer {
     private Brain brain;
     private final CloneController controller;
     private boolean aiEnabled = true;
+    /** Clones of different teams fight each other; players count as {@link #DEFAULT_TEAM}. */
+    public static final String DEFAULT_TEAM = "default";
+    private String cloneTeam = DEFAULT_TEAM;
 
     public ClonePlayer(MinecraftServer server, ServerLevel level, GameProfile profile, Brain brain) {
         super(server, level, profile);
         this.brain = brain;
         this.controller = new CloneController(this);
         this.setMaxUpStep(0.6F);
+    }
+
+    public String cloneTeam() {
+        return cloneTeam;
+    }
+
+    public void setCloneTeam(String team) {
+        this.cloneTeam = team == null || team.isBlank() ? DEFAULT_TEAM : team;
     }
 
     public Brain getCloneBrain() {
@@ -105,6 +116,27 @@ public class ClonePlayer extends ServerPlayer {
     @Override
     protected void checkFallDamage(double dy, boolean onGround, BlockState state, BlockPos pos) {
         this.doCheckFallDamage(this.getDeltaMovement().x, dy, this.getDeltaMovement().z, onGround);
+    }
+
+    /**
+     * Through a portal. A human's client confirms the arrival (which ends the "changing dimension" state); a clone
+     * has no client, so it confirms right away and then finds its feet in the new world.
+     */
+    @Override
+    public net.minecraft.world.entity.Entity changeDimension(ServerLevel destination, net.minecraftforge.common.util.ITeleporter teleporter) {
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> from = this.level().dimension();
+        net.minecraft.world.entity.Entity e = super.changeDimension(destination, teleporter);
+        if (this.isChangingDimension()) {
+            this.hasChangedDimension();
+        }
+        if (this.level().dimension() != from) {
+            try {
+                controller.onDimensionChanged(from);
+            } catch (RuntimeException ex) {
+                CloneManager.reportError(this, ex);
+            }
+        }
+        return e;
     }
 
     @Override

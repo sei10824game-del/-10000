@@ -5,5 +5,6 @@ public enum ClientAction {
     SUMMON,
     TOGGLE_LINK,
     TOGGLE_RESPAWN,
-    TEACH_HARMFUL
+    TEACH_HARMFUL,
+    BATTLE_ROYALE
 }

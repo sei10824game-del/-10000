@@ -79,5 +79,6 @@ public final class StrategyState {
         q[Option.ANIMALS.ordinal()] = threat == 0 ? 0.55f : -0.4f;
         q[Option.FISH.ordinal()] = threat == 0 ? (food <= 1 && !hasFood ? 0.7f : 0.25f) : -0.4f;
         q[Option.SALVAGE.ordinal()] = threat == 0 ? 0.5f : -0.3f;
+        q[Option.PORTAL.ordinal()] = threat == 0 ? 0.6f : -0.4f;
     }
 }

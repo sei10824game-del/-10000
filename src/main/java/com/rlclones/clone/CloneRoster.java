@@ -15,6 +15,7 @@ public class CloneRoster extends SavedData {
 
     public final Map<UUID, CompoundTag> profiles = new LinkedHashMap<>();
     public final Map<UUID, UUID> summoners = new LinkedHashMap<>();
+    public final Map<UUID, String> teams = new LinkedHashMap<>();
     public boolean linked;
     public boolean respawn;
     public int nextIndex = 1;
@@ -35,6 +36,9 @@ public class CloneRoster extends SavedData {
             if (c.hasUUID("summoner")) {
                 r.summoners.put(id, c.getUUID("summoner"));
             }
+            if (c.contains("team")) {
+                r.teams.put(id, c.getString("team"));
+            }
         }
         return r;
     }
@@ -52,6 +56,10 @@ public class CloneRoster extends SavedData {
             UUID summoner = summoners.get(id);
             if (summoner != null) {
                 c.putUUID("summoner", summoner);
+            }
+            String team = teams.get(id);
+            if (team != null) {
+                c.putString("team", team);
             }
             list.add(c);
         });

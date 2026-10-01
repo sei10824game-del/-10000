@@ -36,7 +36,7 @@ import java.util.function.Predicate;
 public final class Animals {
     public enum Status {WORKING, DONE, FAILED}
 
-    private enum Job {TAME, BREED, PEN, EGGS}
+    private enum Job {TAME, BREED, PEN, EGGS, RIDE}
 
     public static final int PEN_FENCES = 15;
 
@@ -62,6 +62,10 @@ public final class Animals {
     public int pensBuilt;
     public int eggsThrown;
     public int fencesPlaced;
+    public int mountAttempts;
+    public int horsesRidden;
+    @Nullable
+    private net.minecraft.world.entity.animal.horse.AbstractHorse horse;
 
     public Animals(ClonePlayer self, Motor motor, Perception perception) {
         this.self = self;
@@ -193,7 +197,98 @@ public final class Animals {
             cooldown--;
             return false;
         }
-        return tameCandidate() != null || breedPair() != null || canBuildPen() || eggsForPen();
+        return tameCandidate() != null || breedPair() != null || canBuildPen() || eggsForPen() || rideCandidate() != null;
+    }
+
+    /** A horse / donkey / mule to ride: a wild one (we carry a saddle) or our own saddled one standing about. */
+    @Nullable
+    private net.minecraft.world.entity.animal.horse.AbstractHorse rideCandidate() {
+        if (self.isPassenger()) {
+            return null;
+        }
+        boolean saddle = slotOf(s -> s.is(Items.SADDLE)) >= 0;
+        net.minecraft.world.entity.animal.horse.AbstractHorse best = null;
+        for (Perception.Seen s : perception.remembered()) {
+            if (!(s.entity instanceof net.minecraft.world.entity.animal.horse.AbstractHorse h) || !h.isAlive() || h.isBaby() || h.isVehicle()
+                    || h.distanceTo(self) > 24 || !(h instanceof net.minecraft.world.entity.animal.horse.Horse
+                    || h instanceof net.minecraft.world.entity.animal.horse.Donkey || h instanceof net.minecraft.world.entity.animal.horse.Mule)) {
+                continue;
+            }
+            boolean ours = h.isTamed() && self.getUUID().equals(h.getOwnerUUID());
+            if (h.isTamed() && !ours) {
+                continue; // somebody else's horse
+            }
+            if ((saddle || ours && h.isSaddled()) && (best == null || h.distanceTo(self) < best.distanceTo(self))) {
+                best = h;
+            }
+        }
+        return best;
+    }
+
+    /** Nothing in the main hand (a wild horse only lets an empty hand climb on). */
+    private void emptyHand() {
+        Inventory inv = self.getInventory();
+        if (inv.getSelected().isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < Inventory.getSelectionSize(); i++) {
+            if (inv.items.get(i).isEmpty()) {
+                inv.selected = i;
+                return;
+            }
+        }
+        for (int i = Inventory.getSelectionSize(); i < inv.items.size(); i++) {
+            if (inv.items.get(i).isEmpty()) {
+                inv.items.set(i, inv.getSelected());
+                inv.items.set(inv.selected, ItemStack.EMPTY);
+                return;
+            }
+        }
+    }
+
+    /** Climb on (again and again while it throws us off, until it is tamed), saddle it, ride it. */
+    private Status rideTick() {
+        var h = horse;
+        if (h == null || !h.isAlive()) {
+            return Status.FAILED;
+        }
+        if (self.getVehicle() == h) {
+            if (h.isTamed()) {
+                if (h.isSaddled()) {
+                    horsesRidden++;
+                    return Status.DONE; // our horse now
+                }
+                self.stopRiding(); // off for a moment to put the saddle on
+                return Status.WORKING;
+            }
+            motor.stop(); // holding on while it bucks
+            return Status.WORKING;
+        }
+        if (self.isPassenger()) {
+            return Status.FAILED;
+        }
+        if (h.distanceTo(self) > 2.5) {
+            motor.navigate(h.position(), 1.5, false);
+            return motor.stuckCount() > 10 ? Status.FAILED : Status.WORKING;
+        }
+        motor.stop();
+        motor.lookAt(h);
+        if (ticks % 10 != 0) {
+            return Status.WORKING;
+        }
+        if (h.isTamed() && !h.isSaddled()) {
+            int sad = slotOf(s -> s.is(Items.SADDLE));
+            if (sad < 0) {
+                return Status.FAILED;
+            }
+            Equipment.select(self, sad);
+            self.interactOn(h, InteractionHand.MAIN_HAND);
+            return Status.WORKING;
+        }
+        emptyHand();
+        self.interactOn(h, InteractionHand.MAIN_HAND);
+        mountAttempts++;
+        return Status.WORKING;
     }
 
     /** Keep at least two chickens (or whatever is penned) in every pen: those are not to be eaten. */
@@ -221,7 +316,11 @@ public final class Animals {
         motor.resetStuck();
         Animal[] pair = breedPair();
         Animal t = tameCandidate();
-        if (t != null) {
+        var steed = rideCandidate();
+        if (steed != null) {
+            job = Job.RIDE;
+            horse = steed;
+        } else if (t != null) {
             job = Job.TAME;
             target = t;
         } else if (pair != null) {
@@ -246,6 +345,7 @@ public final class Animals {
             case BREED -> breedTick();
             case PEN -> penTick();
             case EGGS -> eggsTick();
+            case RIDE -> rideTick();
         };
     }
 

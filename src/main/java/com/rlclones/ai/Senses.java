@@ -43,8 +43,34 @@ public final class Senses {
         return e instanceof ServerPlayer p && !p.isSpectator() && p.isAlive();
     }
 
+    /** A player or clone on our side (same team, and no battle royale going on). */
+    public static boolean isAllyOf(Entity e, Entity agent) {
+        return isAgent(e) && !rivals(e, agent);
+    }
+
+    public static String teamOf(Entity p) {
+        return p instanceof com.rlclones.clone.ClonePlayer c ? c.cloneTeam() : com.rlclones.clone.ClonePlayer.DEFAULT_TEAM;
+    }
+
+    /** Two players / clones that fight each other: different clone teams, or everybody during a battle royale. */
+    public static boolean rivals(Entity a, Entity b) {
+        if (!(a instanceof Player pa) || !(b instanceof Player pb) || a == b || !pa.isAlive() || pa.isSpectator() || pb.isSpectator()) {
+            return false;
+        }
+        if (pa.isCreative() || pb.isCreative()) {
+            return false; // creative players / helpers are not part of the fight
+        }
+        if (com.rlclones.clone.CloneManager.battleRoyaleOn()) {
+            return true;
+        }
+        return !teamOf(pa).equals(teamOf(pb));
+    }
+
     /** Hostile = monster that is not neutral, or any mob currently targeting a player/clone or that hurt the agent. */
     public static boolean isHostileTo(Entity e, LivingEntity agent) {
+        if (e instanceof Player) {
+            return agent != null && rivals(e, agent);
+        }
         if (!(e instanceof Mob m) || !m.isAlive() || m.isRemoved()) {
             return false;
         }
@@ -185,11 +211,22 @@ public final class Senses {
 
     private static boolean hasFood(Player agent) {
         for (ItemStack s : agent.getInventory().items) {
-            if (Equipment.foodScore(agent, s) > 0) {
+            if (Equipment.foodScore(agent, s) > 0 || s.is(net.minecraft.world.item.Items.CAKE)) {
                 return true;
             }
         }
-        return false;
+        return cakeNearby(agent, 5) != null;
+    }
+
+    /** A cake standing within {@code r} blocks. */
+    public static net.minecraft.core.BlockPos cakeNearby(Player agent, int r) {
+        net.minecraft.core.BlockPos feet = agent.blockPosition();
+        for (net.minecraft.core.BlockPos p : net.minecraft.core.BlockPos.betweenClosed(feet.offset(-r, -1, -r), feet.offset(r, 1, r))) {
+            if (agent.level().getBlockState(p).getBlock() instanceof net.minecraft.world.level.block.CakeBlock) {
+                return p.immutable();
+            }
+        }
+        return null;
     }
 
     /** Nearest thing to pick up: dropped items, and thrown tridents / arrows that can be collected. */
@@ -214,7 +251,7 @@ public final class Senses {
         Perception.Seen best = null;
         double bestD = radius;
         for (Perception.Seen s : observer.remembered()) {
-            if (s.entity == agent || !isAgent(s.entity) || now - s.lastSeen > 100) {
+            if (s.entity == agent || !isAllyOf(s.entity, agent) || now - s.lastSeen > 100) {
                 continue;
             }
             double d = s.pos.distanceTo(agent.position());
