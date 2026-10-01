@@ -370,6 +370,8 @@ public final class CloneController {
     }
 
     public long heardSounds;
+    public int quarried;
+    public final java.util.List<String> optionLog = new java.util.ArrayList<>();
 
     /** The walls around the feet cannot be dug through quickly (obsidian, bedrock, no fitting tool...). */
     private boolean wallsHard() {
@@ -1260,6 +1262,10 @@ public final class CloneController {
             return;
         }
         option = Option.VALUES[o];
+        optionLog.add(option.name());
+        if (optionLog.size() > 30) {
+            optionLog.remove(0);
+        }
         optionState = s;
         optionTicks = 0;
         optionReward = 0;
@@ -1878,6 +1884,9 @@ public final class CloneController {
         }
         if (motor.mine(blockTarget)) {
             blocksDone++;
+            if (kind == Perception.BlockKind.STONE) {
+                quarried++;
+            }
             BlockPos done = blockTarget;
             perception.forgetBlock(done);
             blockTarget = null;

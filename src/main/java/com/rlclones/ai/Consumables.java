@@ -467,11 +467,15 @@ public final class Consumables {
         throwTicks = 20; // wait for the landing
     }
 
+    public String pearlDebug = "";
+
     /** Stuck in a pit without blocks to pillar with: throw a pearl over the edge. */
     public boolean pearlOutOfPit() {
         if (!hasPearl() || self.level().getGameTime() - lastPearl < 40) {
+            pearlDebug = "noPearl/cooldown";
             return false;
         }
+        StringBuilder dbg = new StringBuilder();
         Vec3 start = self.position();
         Vec3 best = null;
         float bestYaw = 0;
@@ -481,6 +485,9 @@ public final class Consumables {
             // nearly straight up for a short hop over the rim, flatter for longer throws
             for (float pitch = -89f; pitch <= -25f; pitch += pitch < -80f ? 1f : 5f) {
                 Vec3 land = simulate(yaw, pitch);
+                if (y == 0 && dbg.length() < 400) {
+                    dbg.append(pitch).append("->").append(land == null ? "null" : String.format(java.util.Locale.ROOT, "%.1f,%.1f,%.1f", land.x - start.x, land.y - start.y, land.z - start.z)).append(' ');
+                }
                 if (land == null || Motor.horizontalDistance(land, start) < 1.8 || land.y < start.y - 0.5 || !standable(land)) {
                     continue;
                 }
@@ -491,6 +498,7 @@ public final class Consumables {
                 }
             }
         }
+        pearlDebug = (best == null ? "none " : "throw ") + dbg;
         if (best == null) {
             return false;
         }

@@ -1103,7 +1103,7 @@ public final class CloneGameTests {
                     + started[0] + " done=" + done[0] + " " + c.controller().discovery().debug() + " hay="
                     + h.getLevel().getBlockState(h.absolutePos(new BlockPos(7, 2, 10))) + " pos=" + c.position());
             String facts = c.getCloneBrain().facts("minecraft:hay_block");
-            h.assertTrue(facts.contains("craft=minecraft:wheat") && facts.contains("minecraft:bread"),
+            h.assertTrue(facts.contains("craft=") && facts.contains("minecraft:wheat") && facts.contains("then=") && facts.contains("minecraft:bread"),
                     "it should understand that the hay bale gives wheat and from that bread (" + facts + ")");
             h.assertTrue(said(name, "DISCOVER minecraft:hay_block"), "the discovery is announced in chat");
             h.assertTrue(friend.getCloneBrain().knowsItem("minecraft:hay_block"), "a clone nearby that did not know it is told");
@@ -1244,7 +1244,10 @@ public final class CloneGameTests {
             for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 0, 1)), h.absolutePos(new BlockPos(13, 4, 13)))) {
                 furnace |= h.getLevel().getBlockState(p).is(Blocks.FURNACE);
             }
-            h.assertTrue(c.getCloneBrain().obtained("minecraft:cobblestone"), "clone should mine stone and get cobblestone");
+            h.assertTrue(c.getCloneBrain().obtained("minecraft:cobblestone"), "clone should mine stone and get cobblestone: quarried="
+                    + c.controller().quarried + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog
+                    + " stoneSeen=" + c.controller().perception().blocks().values().stream().filter(k -> k == com.rlclones.ai.Perception.BlockKind.STONE).count()
+                    + " " + c.controller().crafting().debug());
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
                     + ", option " + c.controller().option() + ")");
             finish(h, c);
@@ -1380,7 +1383,8 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.ENDER_PEARL, 4));
         BlockPos pit = h.absolutePos(new BlockPos(7, 2, 7));
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().consumables().pearlsThrown >= 1, "with nothing to build with, the clone throws an ender pearl");
+            h.assertTrue(c.controller().consumables().pearlsThrown >= 1, "with nothing to build with, the clone throws an ender pearl: "
+                    + c.controller().consumables().pearlDebug + " escaping=" + c.controller().isEscaping() + " trapped=" + c.controller().escape().isTrapped());
             h.assertTrue(c.getY() >= pit.getY() + 2.5 || !(c.blockPosition().getX() == pit.getX() && c.blockPosition().getZ() == pit.getZ()),
                     "and is out of the pit");
             finish(h, c);
