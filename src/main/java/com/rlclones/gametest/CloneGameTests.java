@@ -64,7 +64,36 @@ public final class CloneGameTests {
         c.setAiEnabled(ai);
         c.teleportTo(h.getLevel(), pos.x, pos.y, pos.z, yaw, 0f);
         c.setYHeadRot(yaw);
+        cleanUpOnFailure(h, c);
         return c;
+    }
+
+    /**
+     * A failed test leaves its arena standing: take its clones (which would keep thinking, talking and calling others)
+     * and its mobs away so they cannot disturb the tests that run later.
+     */
+    private static void cleanUpOnFailure(GameTestHelper h, ClonePlayer c) {
+        try {
+            java.lang.reflect.Field f = GameTestHelper.class.getDeclaredField("testInfo");
+            f.setAccessible(true);
+            ((net.minecraft.gametest.framework.GameTestInfo) f.get(h)).addListener(new net.minecraft.gametest.framework.GameTestListener() {
+                public void testStructureLoaded(net.minecraft.gametest.framework.GameTestInfo info) {
+                }
+
+                public void testPassed(net.minecraft.gametest.framework.GameTestInfo info) {
+                }
+
+                public void testFailed(net.minecraft.gametest.framework.GameTestInfo info) {
+                    ClonePlayer live = manager(h).byName(c.getGameProfile().getName());
+                    if (live != null) {
+                        manager(h).remove(live, true, Component.literal("test failed"));
+                    }
+                    h.killAllEntities();
+                }
+            });
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            RLClones.LOGGER.warn("could not watch the test for clean-up", e);
+        }
     }
 
     private static void finish(GameTestHelper h, ClonePlayer... clones) {
