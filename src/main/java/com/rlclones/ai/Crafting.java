@@ -430,6 +430,30 @@ public final class Crafting {
         List<Item> wanted = wanted(p);
         boolean haveTable = count(p, Items.CRAFTING_TABLE) > 0;
         boolean tableAccess = haveTable || tableNearby(p);
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
+            // a boat first: keep the wood for it (5 planks + a table) instead of spending it on other things
+            for (Item boat : BOATS) {
+                for (CraftingRecipe r : recipesFor(p, s -> s.is(boat))) {
+                    if (tableAccess && canCraft(p, r)) {
+                        return r;
+                    }
+                }
+            }
+            int planks = countTag(p, ItemTags.PLANKS);
+            int logs = countTag(p, ItemTags.LOGS);
+            if (!tableAccess && planks >= 4 && planks + logs * 4 >= 9) {
+                CraftingRecipe r = craftable(p, s -> s.is(Items.CRAFTING_TABLE));
+                if (r != null) {
+                    return r;
+                }
+            }
+            if (logs > 0 && planks < (tableAccess ? 5 : 9)) {
+                CraftingRecipe r = craftable(p, s -> s.is(ItemTags.PLANKS));
+                if (r != null) {
+                    return r;
+                }
+            }
+        }
         for (Item item : wanted) {
             for (CraftingRecipe r : recipesFor(p, s -> s.is(item))) {
                 if ((tableAccess || r.canCraftInDimensions(2, 2)) && canCraft(p, r)) {
