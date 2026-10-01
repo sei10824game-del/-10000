@@ -635,7 +635,9 @@ public final class CloneController {
         if (alarm == null || now - lastAlarm < 100) {
             return;
         }
-        if (now - alarmTimes.getOrDefault(alarm, -100000L) < 600) {
+        // the same call again only after a while - unless it got worse (more enemies turned up: ask for more)
+        boolean worse = alarm == lastAlarmSent && openAlarm != null && need > lastNeed;
+        if (now - alarmTimes.getOrDefault(alarm, -100000L) < 600 && !worse) {
             return;
         }
         alarmTimes.put(alarm, now);
