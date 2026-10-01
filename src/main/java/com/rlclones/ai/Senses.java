@@ -311,8 +311,9 @@ public final class Senses {
         if (nearestAnimal(observer, agent, now, 24) != null) {
             mask |= Option.HUNT.bit();
         }
-        boolean craft = agent instanceof com.rlclones.clone.ClonePlayer c ? c.controller().crafting().hasWork()
-                : agent instanceof ServerPlayer sp && Crafting.plan(sp) != null;
+        // never while swimming: a crafting table cannot be put on water
+        boolean craft = agent.onGround() && !agent.isInWater() && (agent instanceof com.rlclones.clone.ClonePlayer c ? c.controller().crafting().hasWork()
+                : agent instanceof ServerPlayer sp && Crafting.plan(sp) != null);
         if (craft) {
             mask |= Option.CRAFT.bit();
         }

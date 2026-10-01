@@ -22,6 +22,7 @@ public final class ClientSetup {
     public static final KeyMapping SUMMON = new KeyMapping("key.rlclones.summon", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, CATEGORY);
     public static final KeyMapping LINK = new KeyMapping("key.rlclones.link", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_X, CATEGORY);
     public static final KeyMapping RESPAWN = new KeyMapping("key.rlclones.respawn", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_P, CATEGORY);
+    public static final KeyMapping TEACH = new KeyMapping("key.rlclones.teach_harmful", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_L, CATEGORY);
 
     private ClientSetup() {
     }
@@ -31,6 +32,7 @@ public final class ClientSetup {
         event.register(SUMMON);
         event.register(LINK);
         event.register(RESPAWN);
+        event.register(TEACH);
     }
 
     @SubscribeEvent

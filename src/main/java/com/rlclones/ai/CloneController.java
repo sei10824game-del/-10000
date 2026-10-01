@@ -61,6 +61,18 @@ public final class CloneController {
     private final Storage storage;
     private final Farming farming;
     private final Expedition expedition;
+    private final Discovery discovery;
+    private final Consumables consumables;
+    private final Brewing brewing;
+    /** Recent time spent swimming (decays); lots of it makes a boat worth crafting. */
+    private int swimTicks;
+    private long lastThreatSeen = -100000;
+    // looking around: the clone picks its own turning speed per situation and learns which works best
+    private int lookArm = -1;
+    private int lookCtx;
+    private long lookStart;
+    private int lookBase;
+    public final java.util.List<Float> lookHistory = new java.util.ArrayList<>();
     // harmful blocks (magma, infection blocks from mods...): learned from damage, removed, shared
     private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> suspects = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
     private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> safeGround = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
@@ -122,6 +134,10 @@ public final class CloneController {
         this.storage = new Storage(self, motor, perception, crafting);
         this.farming = new Farming(self, motor);
         this.expedition = new Expedition(self, motor);
+        this.discovery = new Discovery(self, motor, perception);
+        this.consumables = new Consumables(self, motor, perception);
+        this.brewing = new Brewing(self, motor, perception);
+        perception.setUnknown(discovery::isUnknownObtainable);
         perception.setHarmful(id -> {
             Brain b = self.getCloneBrain();
             return b != null && b.isHarmful(id);
@@ -168,6 +184,27 @@ public final class CloneController {
 
     public Expedition expedition() {
         return expedition;
+    }
+
+    public Discovery discovery() {
+        return discovery;
+    }
+
+    public Consumables consumables() {
+        return consumables;
+    }
+
+    public Brewing brewing() {
+        return brewing;
+    }
+
+    public boolean swamALot() {
+        return swimTicks > 200;
+    }
+
+    /** Test hook: pretend the clone has been swimming for a while. */
+    public void noteSwimming(int ticks) {
+        swimTicks = Math.min(3000, swimTicks + ticks);
     }
 
     public java.util.Set<java.util.UUID> responders(String requester) {
@@ -218,29 +255,52 @@ public final class CloneController {
         }
         if ((now + self.getId()) % 40 == 0 && !self.isUsingItem() && option != Option.GATHER_WOOD && option != Option.MINE
                 && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
-                && cleanTarget == null && self.containerMenu == self.inventoryMenu && !motor.isFlying()
+                && cleanTarget == null && !consumables.busy() && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
         }
         if (((now + self.getId()) % 10) == 0) {
             checkAlarms(now);
         }
-        if (!escaping && ((now + self.getId()) % 20) == 0 && now - escapeFailedAt > 600 && !motor.isFlying()
+        if (self.isInWater() && !self.isPassenger()) {
+            swimTicks = Math.min(3000, swimTicks + 1);
+        } else if (swimTicks > 0 && (now & 7) == 0) {
+            swimTicks--;
+        }
+        if (((now + self.getId()) % 20) == 0) {
+            discovery.watchInventory();
+        }
+        if (((now + self.getId()) % 100) == 50) {
+            discovery.share(now);
+        }
+        boolean threatened = !Senses.threats(perception, self, now, 12).isEmpty();
+        if (threatened) {
+            lastThreatSeen = now;
+        }
+        boolean itemBusy = consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        if (!escaping && !itemBusy && ((now + self.getId()) % 20) == 0 && now - escapeFailedAt > 600 && !motor.isFlying()
                 && !hostileWithin(3.5, now) && escape.isTrapped()) {
             // reflex, like a player who notices he fell into a hole: get out before doing anything else
             if (option != null) {
                 finishOption(false);
             }
-            escaping = true;
-            escape.start(motor.recentGoal());
+            if (Equipment.pillarBlockSlot(self) < 0 && wallsHard() && consumables.pearlOutOfPit()) {
+                // nothing to build with and walls we cannot dig through: an ender pearl over the edge
+            } else {
+                escaping = true;
+                escape.start(motor.recentGoal());
+            }
         }
         hazardTick(now);
-        if (escaping) {
+        if (itemBusy) {
+            // drinking / scooping water / waiting for a pearl: nothing else this tick
+        } else if (escaping) {
             Escape.Status st = escape.tick();
             if (st != Escape.Status.WORKING) {
                 escaping = false;
                 if (st == Escape.Status.FAILED) {
                     escapeFailedAt = now;
+                    consumables.pearlOutOfPit();
                 }
             }
         } else if (cleanTarget != null) {
@@ -309,6 +369,60 @@ public final class CloneController {
     }
 
     public long heardSounds;
+
+    /** The walls around the feet cannot be dug through quickly (obsidian, bedrock, no fitting tool...). */
+    private boolean wallsHard() {
+        ServerLevel level = self.serverLevel();
+        BlockPos head = self.blockPosition().above();
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            BlockPos p = head.relative(d);
+            BlockState st = level.getBlockState(p);
+            if (st.getCollisionShape(level, p).isEmpty()) {
+                continue;
+            }
+            float hardness = st.getDestroySpeed(level, p);
+            if (hardness >= 0 && hardness < 20 && (!st.requiresCorrectToolForDrops() || Equipment.canHarvest(self, st))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ looking around
+
+    private void beginLook() {
+        long now = now();
+        lookCtx = (Senses.isDark(self) ? 1 : 0) + (now - lastThreatSeen < 200 ? 2 : 0);
+        lookArm = brain().chooseLook(lookCtx, Config.get(Config.EXPLORATION, 0.35));
+        lookStart = now;
+        lookBase = perception.discoveries;
+        lookHistory.add(Brain.LOOK_SPEEDS[lookArm]);
+        if (lookHistory.size() > 50) {
+            lookHistory.remove(0);
+        }
+    }
+
+    /** Turn at the speed chosen for this look-around, glancing up and down a little. */
+    private void lookTick() {
+        if (lookArm < 0) {
+            beginLook();
+        }
+        float speed = Brain.LOOK_SPEEDS[lookArm];
+        float pitch = (float) (Math.sin((now() - lookStart) * 0.08) * 25.0);
+        motor.lookAngles(self.getYRot() + speed, pitch);
+    }
+
+    /** Score the look-around by how much was newly noticed per second, and learn from it. */
+    private void endLook() {
+        if (lookArm < 0) {
+            return;
+        }
+        long ticks = now() - lookStart;
+        if (ticks >= 10) {
+            brain().learnLook(lookCtx, lookArm, (perception.discoveries - lookBase) * 20f / ticks);
+        }
+        lookArm = -1;
+    }
 
     // ------------------------------------------------------------------ chat: emergencies and calls for help
 
@@ -469,6 +583,9 @@ public final class CloneController {
             return;
         }
         if (expedition.onChat(sender, t, now)) {
+            return;
+        }
+        if (discovery.onChat(t) || t.startsWith("DISCOVER ")) {
             return;
         }
         if (t.startsWith("DEPOSIT ") || t.startsWith("WITHDRAW ") || t.startsWith("LOOT ") || t.startsWith("BASE ") || t.startsWith("HAZARD_LEARNED")) {
@@ -743,9 +860,7 @@ public final class CloneController {
         Vec3 c = Vec3.atCenterOf(cleanTarget);
         if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 0.5) {
             // walk to where one can stand next to / on it (a path into the solid block itself does not exist)
-            BlockPos stand = cleanTarget.above();
-            Vec3 goal = level.getBlockState(stand).getCollisionShape(level, stand).isEmpty() ? Vec3.atBottomCenterOf(stand) : c;
-            motor.navigate(goal, 1.5, false);
+            motor.navigate(motor.approachPoint(cleanTarget), 1.5, false);
             if (motor.stuckCount() > 6) {
                 cleanLog("stuck");
                 perception.forgetBlock(cleanTarget);
@@ -826,6 +941,16 @@ public final class CloneController {
         }
         if (expedition.joinedOffer() != null || expedition.canJoin(now)) {
             mask |= Option.JOIN.bit();
+        }
+        if (Config.get(Config.ALLOW_BLOCK_BREAKING, true) && Crafting.stoneNeeded(self) > 0
+                && Senses.nearestBlock(perception, self, Perception.BlockKind.STONE, 16) != null) {
+            mask |= Option.QUARRY.bit();
+        }
+        if (discovery.canDiscover()) {
+            mask |= Option.DISCOVER.bit();
+        }
+        if (self.containerMenu == self.inventoryMenu && brewing.hasWork(now)) {
+            mask |= Option.BREW.bit();
         }
         return mask;
     }
@@ -1047,6 +1172,7 @@ public final class CloneController {
     }
 
     public void onBlockBroken(BlockState state) {
+        brain().learnBlock(Perception.blockId(state));
         Perception.BlockKind kind = Perception.classify(state);
         if (kind == Perception.BlockKind.LOG) {
             optionReward += 0.5f;
@@ -1108,6 +1234,9 @@ public final class CloneController {
             case FARM -> runFarm();
             case EXPEDITION -> expedition.leadTick() != Expedition.Status.WORKING;
             case JOIN -> expedition.followTick() != Expedition.Status.WORKING;
+            case QUARRY -> runHarvest(Perception.BlockKind.STONE) || Crafting.stoneNeeded(self) == 0;
+            case DISCOVER -> discovery.tick();
+            case BREW -> brewing.tick(now) != Brewing.Status.WORKING;
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -1146,6 +1275,8 @@ public final class CloneController {
             case FETCH -> storage.begin(Storage.Mode.FETCH);
             case LOOT -> storage.begin(Storage.Mode.LOOT);
             case FARM -> farming.reset();
+            case DISCOVER -> discovery.begin();
+            case BREW -> brewing.begin();
             case EXPEDITION -> {
                 if (!expedition.isLeading()) {
                     BlockPos t = expedition.pickTarget(visitedChunks::contains);
@@ -1192,6 +1323,10 @@ public final class CloneController {
         if (option == Option.FARM) {
             farming.reset();
         }
+        if (option == Option.BREW) {
+            brewing.reset();
+        }
+        endLook();
         if (self.isUsingItem() && !died) {
             self.stopUsingItem();
         }
@@ -1611,6 +1746,10 @@ public final class CloneController {
             }
             goal = self.position().add(away.scale(14));
             goalTimer = 20;
+            boolean cornered = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
+            if (cornered && self.getHealth() <= self.getMaxHealth() * 0.35f) {
+                consumables.pearlAway(away);
+            }
         }
         motor.navigate(goal, 1.5, true);
         return false;
@@ -1671,8 +1810,9 @@ public final class CloneController {
         boolean arrived = motor.navigate(goal, 1.5, false);
         int phase = optionTicks % 50;
         if (phase >= 35) {
-            float sweep = (phase - 42) * 12f;
-            motor.lookAngles(self.getYRot() + sweep * 0.3f, 0f);
+            lookTick(); // stop now and then and look around
+        } else if (lookArm >= 0) {
+            endLook();
         }
         return arrived || motor.stuckCount() > 3;
     }
@@ -1700,7 +1840,7 @@ public final class CloneController {
 
     private boolean runHarvest(Perception.BlockKind kind) {
         ServerLevel level = self.serverLevel();
-        if (blockTarget != null && Perception.classify(level.getBlockState(blockTarget)) != kind) {
+        if (blockTarget != null && perception.kindAt(blockTarget) != kind) {
             perception.forgetBlock(blockTarget);
             blockTarget = null;
         }
@@ -1710,7 +1850,7 @@ public final class CloneController {
             if (blockTarget == null) {
                 return true;
             }
-            if (Perception.classify(level.getBlockState(blockTarget)) != kind) {
+            if (perception.kindAt(blockTarget) != kind) {
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
                 return false;
@@ -1725,7 +1865,7 @@ public final class CloneController {
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3) {
-            motor.navigate(center, 2.5, false);
+            motor.navigate(kind == Perception.BlockKind.LOG ? center : motor.approachPoint(blockTarget), kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
             if (motor.stuckCount() > 3) {
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
@@ -1749,7 +1889,7 @@ public final class CloneController {
 
     private boolean runRest() {
         motor.stop();
-        motor.lookAngles(self.getYRot() + 8f, 0f);
+        lookTick();
         return optionTicks >= 60;
     }
 

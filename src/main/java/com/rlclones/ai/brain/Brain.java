@@ -56,6 +56,94 @@ public final class Brain {
         return Collections.unmodifiableSet(harmfulBlocks.keySet());
     }
 
+    // ---------------------------------------------------------------- items, blocks and what they are good for
+
+    /** Item key (item id, potions with "#potion") -> 1 = obtained itself, 2 = only heard about it. */
+    private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> knownItems = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
+    /** Item key -> facts learned about it (";" separated tokens, see Discovery). */
+    private final Map<String, String> itemFacts = new HashMap<>();
+    /** Block ids the clone has examined (mined / obtained / been told about). */
+    private final Set<String> knownBlocks = new java.util.HashSet<>();
+
+    public boolean knowsItem(String key) {
+        return knownItems.containsKey(key);
+    }
+
+    public boolean obtained(String key) {
+        return knownItems.getInt(key) == 1;
+    }
+
+    public void learnItem(String key, String facts, boolean obtained) {
+        int prev = knownItems.getInt(key);
+        knownItems.put(key, obtained || prev == 1 ? 1 : 2);
+        if (facts != null && !facts.isEmpty()) {
+            itemFacts.put(key, facts);
+        }
+    }
+
+    public String facts(String key) {
+        return itemFacts.getOrDefault(key, "");
+    }
+
+    public Set<String> knownItems() {
+        return Collections.unmodifiableSet(knownItems.keySet());
+    }
+
+    public boolean knowsBlock(String id) {
+        return knownBlocks.contains(id);
+    }
+
+    public void learnBlock(String id) {
+        knownBlocks.add(id);
+    }
+
+    public int knownBlockCount() {
+        return knownBlocks.size();
+    }
+
+    // ---------------------------------------------------------------- look-around speed (a small bandit per situation)
+
+    /** Turning speeds (degrees per tick) a clone can choose from when it stops to look around. */
+    public static final float[] LOOK_SPEEDS = {3f, 6f, 12f, 20f, 32f};
+    public static final int LOOK_CONTEXTS = 4;
+    private final float[][] lookQ = new float[LOOK_CONTEXTS][LOOK_SPEEDS.length];
+    private final int[][] lookN = new int[LOOK_CONTEXTS][LOOK_SPEEDS.length];
+    public long lookUpdates;
+
+    /** Pick a look-around speed for this situation: mostly the best so far, sometimes another one to try. */
+    public int chooseLook(int ctx, double exploration) {
+        ctx = Math.floorMod(ctx, LOOK_CONTEXTS);
+        if (random.nextDouble() < Math.max(0.15, exploration)) {
+            return random.nextInt(LOOK_SPEEDS.length);
+        }
+        int best = 0;
+        double bestV = -Double.MAX_VALUE;
+        for (int a = 0; a < LOOK_SPEEDS.length; a++) {
+            double v = lookQ[ctx][a] + 1.0 / (1 + lookN[ctx][a]); // untried speeds look attractive
+            if (v > bestV) {
+                bestV = v;
+                best = a;
+            }
+        }
+        return best;
+    }
+
+    /** Reward = things newly noticed per second while looking around at that speed. */
+    public void learnLook(int ctx, int arm, float reward) {
+        ctx = Math.floorMod(ctx, LOOK_CONTEXTS);
+        int n = ++lookN[ctx][arm];
+        lookQ[ctx][arm] += (reward - lookQ[ctx][arm]) / Math.min(n, 20);
+        lookUpdates++;
+    }
+
+    public float lookValue(int ctx, int arm) {
+        return lookQ[Math.floorMod(ctx, LOOK_CONTEXTS)][arm];
+    }
+
+    public int lookVisits(int ctx, int arm) {
+        return lookN[Math.floorMod(ctx, LOOK_CONTEXTS)][arm];
+    }
+
     public EnemyKnowledge knowledge(String type) {
         return knowledge.computeIfAbsent(type, EnemyKnowledge::new);
     }
@@ -235,6 +323,26 @@ public final class Brain {
         CompoundTag hb = new CompoundTag();
         harmfulBlocks.object2IntEntrySet().forEach(e -> hb.putInt(e.getKey(), e.getIntValue()));
         tag.put("harmfulBlocks", hb);
+        CompoundTag ki = new CompoundTag();
+        knownItems.object2IntEntrySet().forEach(e -> ki.putInt(e.getKey(), e.getIntValue()));
+        tag.put("knownItems", ki);
+        CompoundTag fa = new CompoundTag();
+        itemFacts.forEach(fa::putString);
+        tag.put("itemFacts", fa);
+        net.minecraft.nbt.ListTag kb = new net.minecraft.nbt.ListTag();
+        knownBlocks.forEach(b -> kb.add(net.minecraft.nbt.StringTag.valueOf(b)));
+        tag.put("knownBlocks", kb);
+        int[] lq = new int[LOOK_CONTEXTS * LOOK_SPEEDS.length];
+        int[] ln = new int[lq.length];
+        for (int c = 0; c < LOOK_CONTEXTS; c++) {
+            for (int a = 0; a < LOOK_SPEEDS.length; a++) {
+                lq[c * LOOK_SPEEDS.length + a] = Float.floatToIntBits(lookQ[c][a]);
+                ln[c * LOOK_SPEEDS.length + a] = lookN[c][a];
+            }
+        }
+        tag.putIntArray("lookQ", lq);
+        tag.putIntArray("lookN", ln);
+        tag.putLong("lookUpdates", lookUpdates);
         return tag;
     }
 
@@ -261,6 +369,29 @@ public final class Brain {
         for (String k : hb.getAllKeys()) {
             b.harmfulBlocks.put(k, hb.getInt(k));
         }
+        CompoundTag ki = tag.getCompound("knownItems");
+        for (String k : ki.getAllKeys()) {
+            b.knownItems.put(k, ki.getInt(k));
+        }
+        CompoundTag fa = tag.getCompound("itemFacts");
+        for (String k : fa.getAllKeys()) {
+            b.itemFacts.put(k, fa.getString(k));
+        }
+        net.minecraft.nbt.ListTag kb = tag.getList("knownBlocks", net.minecraft.nbt.Tag.TAG_STRING);
+        for (int i = 0; i < kb.size(); i++) {
+            b.knownBlocks.add(kb.getString(i));
+        }
+        int[] lq = tag.getIntArray("lookQ");
+        int[] ln = tag.getIntArray("lookN");
+        if (lq.length == LOOK_CONTEXTS * LOOK_SPEEDS.length && ln.length == lq.length) {
+            for (int c = 0; c < LOOK_CONTEXTS; c++) {
+                for (int a = 0; a < LOOK_SPEEDS.length; a++) {
+                    b.lookQ[c][a] = Float.intBitsToFloat(lq[c * LOOK_SPEEDS.length + a]);
+                    b.lookN[c][a] = ln[c * LOOK_SPEEDS.length + a];
+                }
+            }
+        }
+        b.lookUpdates = tag.getLong("lookUpdates");
         return b;
     }
 
@@ -297,6 +428,19 @@ public final class Brain {
         deaths += b.deaths;
         members += b.members;
         b.harmfulBlocks.object2IntEntrySet().forEach(e -> harmfulBlocks.mergeInt(e.getKey(), e.getIntValue(), Integer::sum));
+        b.knownItems.object2IntEntrySet().forEach(e -> knownItems.mergeInt(e.getKey(), e.getIntValue(), Math::min));
+        b.itemFacts.forEach(itemFacts::putIfAbsent);
+        knownBlocks.addAll(b.knownBlocks);
+        for (int c = 0; c < LOOK_CONTEXTS; c++) {
+            for (int a = 0; a < LOOK_SPEEDS.length; a++) {
+                int n = lookN[c][a] + b.lookN[c][a];
+                if (n > 0) {
+                    lookQ[c][a] = (lookQ[c][a] * lookN[c][a] + b.lookQ[c][a] * b.lookN[c][a]) / n;
+                }
+                lookN[c][a] = n;
+            }
+        }
+        lookUpdates += b.lookUpdates;
     }
 
     // ---------------------------------------------------------------- introspection

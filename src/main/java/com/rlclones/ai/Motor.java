@@ -69,8 +69,22 @@ public final class Motor {
     private float breakProgress;
     private int breakStage = -1;
 
+    private final Boating boating;
+
     public Motor(ServerPlayer self) {
         this.self = self;
+        this.boating = new Boating(self, this);
+    }
+
+    public Boating boating() {
+        return boating;
+    }
+
+    /** Where to walk to work on a block: on top of it when one can stand there, else next to it. */
+    public Vec3 approachPoint(BlockPos target) {
+        BlockPos above = target.above();
+        return self.level().getBlockState(above).getCollisionShape(self.level(), above).isEmpty()
+                ? Vec3.atBottomCenterOf(above) : Vec3.atCenterOf(target);
     }
 
     // ------------------------------------------------------------------ intentions
@@ -160,6 +174,9 @@ public final class Motor {
         }
         lastGoal = goal;
         lastGoalTick = self.level().getGameTime();
+        if (boating.handle(goal, arrive)) {
+            return false;
+        }
         if (self.isFallFlying() || takeoffTicks > 0) {
             flightGoal = goal;
             return false;

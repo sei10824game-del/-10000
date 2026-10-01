@@ -412,7 +412,29 @@ public final class CloneManager {
                         ? Component.translatable("rlclones.msg.respawn_on").withStyle(ChatFormatting.GREEN)
                         : Component.translatable("rlclones.msg.respawn_off").withStyle(ChatFormatting.GRAY));
             }
+            case TEACH_HARMFUL -> teachHarmful(sender);
         }
+    }
+
+    /** L key: every clone learns that the block in the player's hand is harmful. Returns how many brains learned it. */
+    public int teachHarmful(ServerPlayer sender) {
+        if (!(sender.getMainHandItem().getItem() instanceof net.minecraft.world.item.BlockItem bi)) {
+            sender.displayClientMessage(Component.translatable("rlclones.msg.teach_need_block").withStyle(ChatFormatting.RED), true);
+            return 0;
+        }
+        String id = com.rlclones.ai.Perception.blockId(bi.getBlock().defaultBlockState());
+        java.util.Set<com.rlclones.ai.brain.Brain> taught = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (ClonePlayer c : clones.values()) {
+            com.rlclones.ai.brain.Brain b = c.getCloneBrain();
+            if (b != null && taught.add(b)) {
+                for (int i = 0; i < 3; i++) {
+                    b.learnHarmful(id); // a player's word counts like several painful experiences
+                }
+            }
+        }
+        broadcast(Component.translatable("rlclones.msg.taught_harmful", sender.getDisplayName(), bi.getBlock().getName(), clones.size())
+                .withStyle(ChatFormatting.GOLD));
+        return taught.size();
     }
 
     private void broadcast(Component msg) {

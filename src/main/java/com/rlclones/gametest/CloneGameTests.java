@@ -1051,4 +1051,395 @@ public final class CloneGameTests {
             finish(h, leader, m1, m2, extra);
         });
     }
+
+    // ------------------------------------------------------------------ AC round 5: L key teaches a harmful block
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "teach")
+    public static void lKeyTeachesHeldBlockAsHarmful(GameTestHelper h) {
+        ClonePlayer a = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer b = clone(h, 10.5, 10.5, 0f, false);
+        a.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.SPONGE));
+        manager(h).handleAction(a, ClientAction.TEACH_HARMFUL);
+        h.assertTrue(a.getCloneBrain().isHarmful("minecraft:sponge") && b.getCloneBrain().isHarmful("minecraft:sponge"),
+                "every clone learns that the held block is harmful");
+        b.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STICK));
+        h.assertTrue(manager(h).teachHarmful(b) == 0, "holding something that is not a block teaches nothing");
+        finish(h, a, b);
+        h.succeed();
+    }
+
+    // ------------------------------------------------------------------ AC round 5: curiosity and item knowledge
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "discover")
+    public static void minesUnknownBlockLearnsWhatItIsAndTellsOthers(GameTestHelper h) {
+        clearBases(h);
+        h.setBlock(new BlockPos(7, 2, 10), Blocks.HAY_BLOCK);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer friend = clone(h, 9.5, 9.5, 135f, false);
+        String name = c.getGameProfile().getName();
+        boolean[] started = {false};
+        boolean[] done = {false};
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            long now = h.getLevel().getGameTime();
+            ctl.perception().update(now);
+            if (!started[0] && ctl.discovery().canDiscover()) {
+                ctl.discovery().begin();
+                started[0] = true;
+            }
+            if (started[0] && !done[0]) {
+                done[0] = ctl.discovery().tick();
+            }
+            ctl.motor().tick();
+            if (now % 20 == 0) {
+                ctl.discovery().watchInventory();
+            }
+            if (now % 40 == 0) {
+                ctl.discovery().share(now);
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.HAY_BLOCK) >= 1, "clone should mine the unknown hay bale and pick it up");
+            String facts = c.getCloneBrain().facts("minecraft:hay_block");
+            h.assertTrue(facts.contains("craft=minecraft:wheat") && facts.contains("minecraft:bread"),
+                    "it should understand that the hay bale gives wheat and from that bread (" + facts + ")");
+            h.assertTrue(said(name, "DISCOVER minecraft:hay_block"), "the discovery is announced in chat");
+            h.assertTrue(friend.getCloneBrain().knowsItem("minecraft:hay_block"), "a clone nearby that did not know it is told");
+            finish(h, c, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "facts")
+    public static void understandsBlocksAndItems(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        String stone = com.rlclones.ai.Discovery.facts(c, new ItemStack(Items.COBBLESTONE));
+        h.assertTrue(stone.contains("spawn") && !stone.contains("nospawn"), "a full block lets monsters spawn on it (" + stone + ")");
+        String glass = com.rlclones.ai.Discovery.facts(c, new ItemStack(Items.GLASS));
+        h.assertTrue(glass.contains("nospawn"), "monsters cannot spawn on glass (" + glass + ")");
+        String coal = com.rlclones.ai.Discovery.facts(c, new ItemStack(Items.COAL));
+        h.assertTrue(coal.contains("fuel="), "coal is fuel (" + coal + ")");
+        String iron = com.rlclones.ai.Discovery.facts(c, new ItemStack(Items.RAW_IRON));
+        h.assertTrue(iron.contains("smelt=minecraft:iron_ingot"), "raw iron smelts into an ingot (" + iron + ")");
+        String bread = com.rlclones.ai.Discovery.facts(c, new ItemStack(Items.BREAD));
+        h.assertTrue(bread.contains("food=5"), "bread is food (" + bread + ")");
+        finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "curious")
+    public static void craftsItemsItNeverHad(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.WOODEN_AXE));
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.STICK, 4));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        c.controller().discovery().watchInventory();
+        java.util.Set<String> before = new java.util.HashSet<>(c.getCloneBrain().knownItems());
+        h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            java.util.Set<String> now = new java.util.HashSet<>(c.getCloneBrain().knownItems());
+            now.removeAll(before);
+            h.assertTrue(!now.isEmpty() && c.controller().crafting().crafted >= 1, "clone should craft something it never had and learn it");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: look-around speed is the clone's choice
+
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "look")
+    public static void learnsItsOwnLookAroundSpeed(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        pig(h, 3.5, 11.5);
+        pig(h, 11.5, 3.5);
+        h.succeedWhen(() -> {
+            long distinct = c.controller().lookHistory.stream().distinct().count();
+            h.assertTrue(c.getCloneBrain().lookUpdates >= 3, "look-arounds should be scored and learned (" + c.getCloneBrain().lookUpdates + ")");
+            h.assertTrue(distinct >= 2, "the clone tries different look-around speeds " + c.controller().lookHistory);
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: boats, no crafting at sea
+
+    private static void pool(GameTestHelper h, int z0, int z1) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = z0; z <= z1; z++) {
+                h.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+                h.setBlock(new BlockPos(x, 1, z), Blocks.WATER);
+            }
+        }
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "boat")
+    public static void crossesWaterByBoat(GameTestHelper h) {
+        pool(h, 4, 10);
+        ClonePlayer c = clone(h, 7.5, 2.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_BOAT));
+        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 12.5));
+        h.onEachTick(() -> {
+            c.controller().motor().navigate(goal, 1.0, false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().motor().boating().rodeBoat, "clone should put its boat on the water and ride it");
+            h.assertTrue(c.position().distanceTo(goal) < 2.0 && !c.isPassenger(), "and get out on the other side");
+            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "the boat is broken back into an item and taken along");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "boat2")
+    public static void craftsBoatAfterSwimmingALot(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 3));
+        c.controller().noteSwimming(400);
+        h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "a clone that swims a lot should craft a boat");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "boat3")
+    public static void doesNotTryToCraftWhileSwimming(GameTestHelper h) {
+        pool(h, 4, 10);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.teleportTo(h.getLevel(), c.getX(), c.getY() - 0.9, c.getZ(), 0f, 0f);
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 4));
+        h.runAfterDelay(10, () -> {
+            long now = h.getLevel().getGameTime();
+            h.assertTrue(c.isInWater(), "clone is in the water");
+            h.assertTrue(c.controller().crafting().hasWork(), "there would be something to craft");
+            int mask = com.rlclones.ai.Senses.strategyMask(c.controller().perception(), c, c, now);
+            h.assertTrue((mask & com.rlclones.ai.strategy.Option.CRAFT.bit()) == 0, "but no crafting (or placing a table) while in the water");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: stone age
+
+    @GameTest(template = ARENA, timeoutTicks = 4800, batch = "stone")
+    public static void minesStoneAndBuildsAFurnace(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        c.getInventory().add(new ItemStack(Items.WOODEN_AXE));
+        c.getInventory().add(new ItemStack(Items.STICK, 8));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        h.succeedWhen(() -> {
+            boolean furnace = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 0, 1)), h.absolutePos(new BlockPos(13, 4, 13)))) {
+                furnace |= h.getLevel().getBlockState(p).is(Blocks.FURNACE);
+            }
+            h.assertTrue(c.getCloneBrain().obtained("minecraft:cobblestone"), "clone should mine stone and get cobblestone");
+            h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
+                    + ", option " + c.controller().option() + ")");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: brewing and potions
+
+    private static ItemStack potion(net.minecraft.world.item.Item item, net.minecraft.world.item.alchemy.Potion p) {
+        return net.minecraft.world.item.alchemy.PotionUtils.setPotion(new ItemStack(item), p);
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "brew")
+    public static void craftsAndPlacesBrewingStand(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.BLAZE_ROD));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            boolean stand = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 3, 13)))) {
+                stand |= h.getLevel().getBlockState(p).is(Blocks.BREWING_STAND);
+            }
+            h.assertTrue(stand, "clone should craft a brewing stand (blaze rod + cobblestone) and place it");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "brew2")
+    public static void usesExistingBrewingStand(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 2, 9), Blocks.BREWING_STAND);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.BLAZE_ROD));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        long start = h.getLevel().getGameTime();
+        h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
+            if (h.getLevel().getGameTime() - start > 40) { // look around first, like arriving somewhere
+                c.controller().crafting().tick();
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.BLAZE_POWDER) >= 1, "with a stand nearby the rod becomes fuel (blaze powder)");
+            h.assertTrue(c.getInventory().countItem(Items.BREWING_STAND) == 0, "and no second stand is crafted");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "brew3")
+    public static void brewsAPotionItNeverHad(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 2, 10), Blocks.BREWING_STAND);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        for (int i = 0; i < 3; i++) {
+            c.getInventory().add(potion(Items.POTION, net.minecraft.world.item.alchemy.Potions.WATER));
+        }
+        c.getInventory().add(new ItemStack(Items.NETHER_WART));
+        c.getInventory().add(new ItemStack(Items.BLAZE_POWDER));
+        String name = c.getGameProfile().getName();
+        boolean[] active = {false};
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            long now = h.getLevel().getGameTime();
+            ctl.perception().update(now);
+            if (now % 20 == 0) {
+                ctl.discovery().watchInventory();
+            }
+            if (!active[0] && ctl.brewing().hasWork(now)) {
+                ctl.brewing().begin();
+                active[0] = true;
+            }
+            if (active[0] && ctl.brewing().tick(now) != com.rlclones.ai.Brewing.Status.WORKING) {
+                active[0] = false;
+            }
+            ctl.motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getCloneBrain().obtained("minecraft:potion#minecraft:awkward"), "clone should brew the awkward potion it never had");
+            h.assertTrue(said(name, "DISCOVER minecraft:potion#minecraft:awkward"), "and announce what it got");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "potion")
+    public static void drinksHealingPotionWhenLow(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(potion(Items.POTION, net.minecraft.world.item.alchemy.Potions.HEALING));
+        c.setHealth(5f);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().consumables().potionsUsed >= 1 && c.getInventory().countItem(Items.GLASS_BOTTLE) >= 1,
+                    "a clone low on health should drink its (learned) healing potion");
+            h.assertTrue(c.getHealth() > 5f, "and get healed");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: totem
+
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "totem")
+    public static void holdsTotemInOffhandWhenNearDeath(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
+        c.getInventory().add(new ItemStack(Items.TOTEM_OF_UNDYING));
+        boolean[] hit = {false};
+        h.runAfterDelay(80, () -> c.setHealth(4f));
+        h.onEachTick(() -> {
+            if (!hit[0] && c.getOffhandItem().is(Items.TOTEM_OF_UNDYING)) {
+                hit[0] = true;
+                c.hurt(h.getLevel().damageSources().generic(), 100f);
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(hit[0], "near death the totem goes into the off hand");
+            h.assertTrue(c.isAlive() && c.controller().consumables().totemSwaps >= 1, "and saves the clone from a deadly hit");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: ender pearls
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "pearl")
+    public static void pearlsOutOfAnObsidianPit(GameTestHelper h) {
+        walls(h, 7, 7, 4, Blocks.OBSIDIAN);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.ENDER_PEARL, 4));
+        BlockPos pit = h.absolutePos(new BlockPos(7, 2, 7));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().consumables().pearlsThrown >= 1, "with nothing to build with, the clone throws an ender pearl");
+            h.assertTrue(c.getY() >= pit.getY() + 2.5 || !(c.blockPosition().getX() == pit.getX() && c.blockPosition().getZ() == pit.getZ()),
+                    "and is out of the pit");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ AC round 5: buckets
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "bucket")
+    public static void waterBucketBreaksALongFall(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        Vec3 high = h.absoluteVec(new Vec3(7.5, 24, 7.5));
+        float[] lowest = {20f};
+        boolean[] dropped = {false};
+        h.onEachTick(() -> lowest[0] = Math.min(lowest[0], c.getHealth()));
+        h.runAfterDelay(70, () -> {
+            c.teleportTo(h.getLevel(), high.x, high.y, high.z, 0f, 0f);
+            dropped[0] = true;
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(dropped[0] && c.getY() < high.y - 15 && (c.onGround() || c.isInWater()), "landed");
+            h.assertTrue(lowest[0] >= 19f, "placing water before landing should prevent the fall damage (lowest " + lowest[0] + ")");
+            h.assertTrue(c.getInventory().countItem(Items.WATER_BUCKET) == 1, "and the water is scooped up again");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "bucket")
+    public static void waterBucketPutsOutFire(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        h.runAfterDelay(70, () -> c.setSecondsOnFire(10));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().consumables().waterPlaced >= 1 && !c.isOnFire(), "a burning clone pours water on itself");
+            h.assertTrue(c.getInventory().countItem(Items.WATER_BUCKET) == 1, "and scoops it back up");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "bucket")
+    public static void milkCuresPoison(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.MILK_BUCKET));
+        c.addEffect(new MobEffectInstance(MobEffects.POISON, 600, 0));
+        h.succeedWhen(() -> {
+            h.assertFalse(c.hasEffect(MobEffects.POISON), "drinking milk removes the poison");
+            h.assertTrue(c.getInventory().countItem(Items.BUCKET) == 1, "the empty bucket is kept");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "bucket")
+    public static void fillsEmptyBucketWithWater(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 0, 10), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 1, 10), Blocks.WATER);
+        ClonePlayer c = clone(h, 7.5, 8.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.BUCKET));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.WATER_BUCKET) == 1, "an empty bucket gets filled at water in reach");
+            finish(h, c);
+        });
+    }
 }

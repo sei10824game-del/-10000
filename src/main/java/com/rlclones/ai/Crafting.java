@@ -91,7 +91,63 @@ public final class Crafting {
 
     /** Is there anything worth doing at a crafting table / furnace right now? */
     public boolean hasWork() {
-        return plan(self) != null || smeltWork() || furnaceReady();
+        return plan(self) != null || smeltWork() || furnaceReady() || stationToPlace() != null;
+    }
+
+    /** A furnace / brewing stand in the bag and none around: put it down so it can be used. */
+    @Nullable
+    private Item stationToPlace() {
+        if (!self.onGround() || self.isInWater()) {
+            return null;
+        }
+        if (count(self, Items.FURNACE) > 0 && nearest(Perception.BlockKind.FURNACE, 24) == null) {
+            return Items.FURNACE;
+        }
+        if (count(self, Items.BREWING_STAND) > 0 && nearest(Perception.BlockKind.BREWING, 24) == null) {
+            return Items.BREWING_STAND;
+        }
+        return null;
+    }
+
+    private boolean placeOnly;
+    @Nullable
+    private Item placeItem;
+
+    private static int cobble(Player p) {
+        return countTag(p, ItemTags.STONE_CRAFTING_MATERIALS);
+    }
+
+    private static boolean hasItem(Player p, Item item) {
+        return count(p, item) > 0;
+    }
+
+    private static boolean brewingStandNearby(Player p) {
+        return p instanceof com.rlclones.clone.ClonePlayer c
+                && Senses.nearestBlock(c.controller().perception(), p, Perception.BlockKind.BREWING, 24) != null;
+    }
+
+    /** How much more cobblestone the clone needs for stone tools, a furnace and a brewing stand (0 = enough). */
+    public static int stoneNeeded(Player p) {
+        if (tierOf(p, PickaxeItem.class) < 0) {
+            return 0; // cannot mine stone yet
+        }
+        int need = 0;
+        if (tierOf(p, PickaxeItem.class) < 1) {
+            need += 3;
+        }
+        if (bestWeapon(p) < Equipment.attackDamage(new ItemStack(Items.STONE_SWORD)) - 0.01) {
+            need += 2;
+        }
+        if (tierOf(p, AxeItem.class) < 1) {
+            need += 3;
+        }
+        if (count(p, Items.FURNACE) == 0 && !furnaceNearby(p)) {
+            need += 8;
+        }
+        if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BREWING_STAND) && !brewingStandNearby(p)) {
+            need += 3;
+        }
+        return Math.max(0, need - cobble(p));
     }
 
     private boolean furnaceReady() {
@@ -161,10 +217,16 @@ public final class Crafting {
     }
 
     /** Items that would improve the clone, most important first. */
+    private static final Item[] BOATS = {Items.OAK_BOAT, Items.SPRUCE_BOAT, Items.BIRCH_BOAT, Items.JUNGLE_BOAT, Items.ACACIA_BOAT,
+            Items.DARK_OAK_BOAT, Items.MANGROVE_BOAT, Items.CHERRY_BOAT, Items.BAMBOO_RAFT};
+
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null) {
             out.add(c.controller().crafting().forcedTarget);
+        }
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
+            out.addAll(List.of(BOATS)); // lots of swimming lately: a boat would help
         }
         double weapon = bestWeapon(p);
         for (Item sword : SWORDS) {
@@ -195,7 +257,105 @@ public final class Crafting {
         if (tierOf(p, HoeItem.class) < 0 && Farming.seedSlot(p) >= 0) {
             out.add(Items.WOODEN_HOE); // seeds but nothing to till with
         }
+        if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BREWING_STAND) && !brewingStandNearby(p)) {
+            out.add(Items.BREWING_STAND);
+        }
+        if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BLAZE_POWDER) && (hasItem(p, Items.BREWING_STAND) || brewingStandNearby(p))) {
+            out.add(Items.BLAZE_POWDER);
+        }
+        if (count(p, Items.GLASS) >= 3 && !hasItem(p, Items.GLASS_BOTTLE) && (hasItem(p, Items.BREWING_STAND) || brewingStandNearby(p))) {
+            out.add(Items.GLASS_BOTTLE);
+        }
+        if (count(p, Items.IRON_INGOT) >= 3 && !hasItem(p, Items.BUCKET) && !hasItem(p, Items.WATER_BUCKET)) {
+            out.add(Items.BUCKET);
+        }
         return out;
+    }
+
+    private static final java.util.Set<Item> PRECIOUS = java.util.Set.of(Items.DIAMOND, Items.EMERALD, Items.NETHERITE_INGOT, Items.NETHER_STAR,
+            Items.TOTEM_OF_UNDYING, Items.ENDER_PEARL, Items.BLAZE_ROD, Items.ELYTRA, Items.DIAMOND_BLOCK, Items.EMERALD_BLOCK);
+    private long curiosityAt = -1000;
+    @Nullable
+    private CraftingRecipe curiosityRecipe;
+
+    /** A craftable recipe whose result this clone has never had (refreshed every 5 s; skips precious ingredients). */
+    @Nullable
+    CraftingRecipe curiosity(boolean tableAccess) {
+        long now = self.level().getGameTime();
+        if (now - curiosityAt < 100) {
+            return curiosityRecipe != null && canCraft(self, curiosityRecipe) && (tableAccess || curiosityRecipe.canCraftInDimensions(2, 2))
+                    && !knows(curiosityRecipe) ? curiosityRecipe : null;
+        }
+        curiosityAt = now;
+        curiosityRecipe = null;
+        com.rlclones.ai.brain.Brain b = ((com.rlclones.clone.ClonePlayer) self).getCloneBrain();
+        if (b == null) {
+            return null;
+        }
+        List<ItemStack> have = new ArrayList<>();
+        for (ItemStack s : self.getInventory().items) {
+            if (!s.isEmpty()) {
+                have.add(s);
+            }
+        }
+        if (have.isEmpty()) {
+            return null;
+        }
+        StackedContents contents = new StackedContents();
+        self.getInventory().fillStackedContents(contents);
+        for (Entry e : index(self)) {
+            ItemStack r = e.result();
+            if (r.isEmpty() || r.is(Tags.Items.STORAGE_BLOCKS) || b.knowsItem(Discovery.keyOf(r))) {
+                continue;
+            }
+            if (!tableAccess && !e.recipe().canCraftInDimensions(2, 2)) {
+                continue;
+            }
+            boolean ok = true;
+            for (var ing : e.recipe().getIngredients()) {
+                if (ing.isEmpty()) {
+                    continue;
+                }
+                boolean found = false;
+                for (ItemStack h : have) {
+                    if (ing.test(h)) {
+                        found = !PRECIOUS.contains(h.getItem()) && !essential(h);
+                        break;
+                    }
+                }
+                if (!found) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok && contents.canCraft(e.recipe(), null)) {
+                curiosityRecipe = e.recipe();
+                return curiosityRecipe;
+            }
+        }
+        return null;
+    }
+
+    /** Materials still needed for tools / stations: not to be spent on curiosities. */
+    private boolean essential(ItemStack h) {
+        if (h.is(Items.STICK)) {
+            return count(self, Items.STICK) < 10;
+        }
+        if (h.is(ItemTags.STONE_CRAFTING_MATERIALS)) {
+            return stoneNeeded(self) > 0 || cobble(self) < 16;
+        }
+        if (h.is(ItemTags.PLANKS)) {
+            return countTag(self, ItemTags.PLANKS) < 6 && countTag(self, ItemTags.LOGS) == 0;
+        }
+        if (h.is(Items.IRON_INGOT) || h.is(Items.GOLD_INGOT)) {
+            return h.getCount() < 6;
+        }
+        return false;
+    }
+
+    private boolean knows(CraftingRecipe r) {
+        com.rlclones.ai.brain.Brain b = ((com.rlclones.clone.ClonePlayer) self).getCloneBrain();
+        return b != null && b.knowsItem(Discovery.keyOf(r.getResultItem(self.serverLevel().registryAccess())));
     }
 
     private static boolean canCraft(Player p, CraftingRecipe r) {
@@ -223,6 +383,25 @@ public final class Crafting {
             cacheOwner = manager;
         }
         return cache;
+    }
+
+    /** Distinct items that can be crafted with {@code stack} as one of the ingredients (vanilla + modded recipes). */
+    public static List<ItemStack> usesOf(ServerPlayer p, ItemStack stack) {
+        List<ItemStack> out = new ArrayList<>();
+        java.util.Set<Item> seen = new java.util.HashSet<>();
+        for (Entry e : index(p)) {
+            if (e.result().isEmpty() || seen.contains(e.result().getItem()) || e.result().is(stack.getItem())) {
+                continue;
+            }
+            for (var ing : e.recipe().getIngredients()) {
+                if (!ing.isEmpty() && ing.test(stack)) {
+                    seen.add(e.result().getItem());
+                    out.add(e.result());
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     private static List<CraftingRecipe> recipesFor(ServerPlayer p, java.util.function.Predicate<ItemStack> result) {
@@ -280,9 +459,15 @@ public final class Crafting {
                 return r;
             }
         }
-        if (count(p, Items.FURNACE) == 0 && count(p, Items.COBBLESTONE) + count(p, Items.COBBLED_DEEPSLATE) >= 8
-                && !smeltables(p).isEmpty() && !furnaceNearby(p)) {
-            return craftable(p, s -> s.is(Items.FURNACE));
+        if (count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && !furnaceNearby(p)) {
+            CraftingRecipe r = craftable(p, s -> s.is(Items.FURNACE));
+            if (r != null) {
+                return r;
+            }
+        }
+        // curiosity: make something never made before (cheap materials only)
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null) {
+            return c.controller().crafting().curiosity(tableAccess);
         }
         return null;
     }
@@ -335,6 +520,13 @@ public final class Crafting {
                 best = i;
             }
         }
+        if (best < 0) {
+            for (int i = 0; i < inv.items.size(); i++) {
+                if (inv.items.get(i).is(Items.LAVA_BUCKET)) {
+                    return i; // a bucket of lava smelts 100 items
+                }
+            }
+        }
         return best;
     }
 
@@ -346,6 +538,8 @@ public final class Crafting {
     // ================================================================== execution
 
     public void reset() {
+        placeOnly = false;
+        placeItem = null;
         closeUi();
         stage = 0;
         timer = 0;
@@ -393,6 +587,13 @@ public final class Crafting {
             stage = 2;
             return Status.WORKING;
         }
+        Item toPlace = stationToPlace();
+        if (toPlace != null) {
+            placeItem = toPlace;
+            placeOnly = true;
+            stage = 1;
+            return Status.WORKING;
+        }
         recipe = plan(self);
         if (recipe != null) {
             smelting = false;
@@ -420,7 +621,7 @@ public final class Crafting {
 
     /** Put a crafting table / furnace on the ground next to us, like a player would. */
     private void placeStation() {
-        Item item = smelting ? Items.FURNACE : Items.CRAFTING_TABLE;
+        Item item = placeItem != null ? placeItem : smelting ? Items.FURNACE : Items.CRAFTING_TABLE;
         int slot = -1;
         Inventory inv = self.getInventory();
         for (int i = 0; i < inv.items.size(); i++) {
@@ -445,6 +646,12 @@ public final class Crafting {
                     perception.noteBlock(spot);
                     station = spot;
                     stage = 2;
+                    if (placeOnly) {
+                        placeOnly = false;
+                        placeItem = null;
+                        stage = 0;
+                        return;
+                    }
                     Equipment.manage(self, true);
                     return;
                 }
@@ -512,6 +719,9 @@ public final class Crafting {
         if (!result.isEmpty()) {
             menu.clicked(0, 0, ClickType.QUICK_MOVE, self);
             crafted++;
+            if (self instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null) {
+                c.controller().discovery().watchInventory(); // study what was just made
+            }
         }
         if (menu instanceof InventoryMenu) {
             clearInventoryGrid();

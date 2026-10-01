@@ -85,7 +85,7 @@ jobs:
           fi
           timeout 180 tail --pid=$GRADLE_PID -f /dev/null || pkill -f BootstrapLauncher || true
           grep -h "RLCLONES_CLIENT_READY" run/logs/latest.log
-          grep -q "RLCLONES_CLIENT_READY registered=true keys=key.keyboard.z,key.keyboard.x,key.keyboard.p" run/logs/latest.log
+          grep -q "RLCLONES_CLIENT_READY registered=true keys=key.keyboard.z,key.keyboard.x,key.keyboard.p,key.keyboard.l" run/logs/latest.log
           if ls run/crash-reports/*.txt >/dev/null 2>&1; then cat run/crash-reports/*.txt; exit 1; fi
 
       - name: Upload client logs

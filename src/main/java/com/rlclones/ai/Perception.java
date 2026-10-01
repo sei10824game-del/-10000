@@ -36,7 +36,7 @@ import java.util.Map;
  * Seen things are remembered for a while so the clone has object permanence.
  */
 public final class Perception {
-    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL}
+    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL, STONE, BREWING, UNKNOWN}
 
     public static final class Seen {
         public final Entity entity;
@@ -97,6 +97,10 @@ public final class Perception {
     private long lastUpdate = Long.MIN_VALUE;
     /** Block ids this clone has learned hurt (magma, infection blocks...). */
     private java.util.function.Predicate<String> harmful = id -> false;
+    /** Blocks the clone has never examined but could obtain (see Discovery). */
+    private java.util.function.BiPredicate<BlockState, BlockPos> unknown = (st, pos) -> false;
+    /** Things newly noticed (entities coming into view, interesting blocks); used to judge how well looking around works. */
+    public int discoveries;
 
     public Perception(ServerPlayer self) {
         this.self = self;
@@ -138,7 +142,11 @@ public final class Perception {
             if (s == null || s.entity != e) {
                 s = new Seen(e, now);
                 memory.put(e.getId(), s);
+                discoveries++;
             } else {
+                if (!s.visible && now - s.lastSeen > 20) {
+                    discoveries++; // lost sight of it a while ago and found it again
+                }
                 s.prevPos = s.pos;
                 s.prevSeen = s.lastSeen;
                 s.pos = e.position();
@@ -268,8 +276,13 @@ public final class Perception {
             }
             BlockPos pos = hit.getBlockPos().immutable();
             BlockKind kind = kindOf(pos);
+            if (kind != null && !blocks.containsKey(pos) && (kind == BlockKind.STONE || kind == BlockKind.UNKNOWN) && count(kind) >= (kind == BlockKind.STONE ? 8 : 12)) {
+                continue; // plenty of those remembered already
+            }
             if (kind != null) {
-                blocks.put(pos, kind);
+                if (blocks.put(pos, kind) == null) {
+                    discoveries++;
+                }
             }
         }
     }
@@ -310,6 +323,12 @@ public final class Perception {
                 || state.getBlock() instanceof net.minecraft.world.level.block.BarrelBlock) {
             return BlockKind.CHEST;
         }
+        if (state.getBlock() instanceof net.minecraft.world.level.block.BrewingStandBlock) {
+            return BlockKind.BREWING;
+        }
+        if (state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(Tags.Blocks.COBBLESTONE)) {
+            return BlockKind.STONE;
+        }
         return null;
     }
 
@@ -346,12 +365,35 @@ public final class Perception {
         return String.valueOf(net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()));
     }
 
+    public void setUnknown(java.util.function.BiPredicate<BlockState, BlockPos> unknown) {
+        this.unknown = unknown;
+    }
+
+    private int count(BlockKind kind) {
+        int n = 0;
+        for (BlockKind k : blocks.values()) {
+            if (k == kind) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** What this clone makes of the block at {@code pos} (its own harmful / unknown knowledge included). */
+    public BlockKind kindAt(BlockPos pos) {
+        return kindOf(pos);
+    }
+
     private BlockKind kindOf(BlockPos pos) {
         BlockState state = self.level().getBlockState(pos);
         if (!state.isAir() && harmful.test(blockId(state))) {
             return BlockKind.HARMFUL;
         }
-        return classify(self.level(), pos);
+        BlockKind k = classify(self.level(), pos);
+        if (k == null && !state.isAir() && unknown.test(state, pos)) {
+            return BlockKind.UNKNOWN;
+        }
+        return k;
     }
 
     /** Remember a block the clone is looking at directly (e.g. the block it just mined next to). */

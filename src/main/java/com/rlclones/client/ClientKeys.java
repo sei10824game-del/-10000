@@ -19,7 +19,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Z = summon a clone, X = link / unlink the reinforcement learning of all clones, P = toggle clone respawn.
+ * Z = summon a clone, X = link / unlink the reinforcement learning of all clones, P = toggle clone respawn,
+ * L = teach every clone that the block in hand is harmful.
  * Keys are read straight from the input event so they work even if a vanilla binding shares the key.
  */
 @Mod.EventBusSubscriber(modid = RLClones.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
@@ -46,6 +47,8 @@ public final class ClientKeys {
             ModNetwork.sendToServer(ClientAction.TOGGLE_LINK);
         } else if (matches(ClientSetup.RESPAWN, key)) {
             ModNetwork.sendToServer(ClientAction.TOGGLE_RESPAWN);
+        } else if (matches(ClientSetup.TEACH, key)) {
+            ModNetwork.sendToServer(ClientAction.TEACH_HARMFUL);
         }
     }
 
@@ -60,10 +63,11 @@ public final class ClientKeys {
         }
         smokeReported = true;
         List<KeyMapping> all = Arrays.asList(mc.options.keyMappings);
-        boolean registered = all.contains(ClientSetup.SUMMON) && all.contains(ClientSetup.LINK) && all.contains(ClientSetup.RESPAWN);
-        RLClones.LOGGER.info("RLCLONES_CLIENT_READY registered={} keys={},{},{} screen={}", registered,
+        boolean registered = all.contains(ClientSetup.SUMMON) && all.contains(ClientSetup.LINK) && all.contains(ClientSetup.RESPAWN)
+                && all.contains(ClientSetup.TEACH);
+        RLClones.LOGGER.info("RLCLONES_CLIENT_READY registered={} keys={},{},{},{} screen={}", registered,
                 ClientSetup.SUMMON.getKey().getName(), ClientSetup.LINK.getKey().getName(), ClientSetup.RESPAWN.getKey().getName(),
-                mc.screen.getClass().getSimpleName());
+                ClientSetup.TEACH.getKey().getName(), mc.screen.getClass().getSimpleName());
         mc.stop();
     }
 

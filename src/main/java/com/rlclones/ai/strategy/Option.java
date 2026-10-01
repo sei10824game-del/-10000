@@ -28,7 +28,13 @@ public enum Option {
     /** Lead a trip into unexplored land: call companions to a rally point, then go. */
     EXPEDITION(12000),
     /** Answer a rally call and follow its leader until the trip is over. */
-    JOIN(14000);
+    JOIN(14000),
+    /** Mine stone for cobblestone (stone tools, furnace, brewing stand). */
+    QUARRY(400),
+    /** Go and get a block never examined before. */
+    DISCOVER(600),
+    /** Brew potions never had before (or collect a finished brew). */
+    BREW(2400);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;
