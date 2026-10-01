@@ -278,6 +278,9 @@ public final class Perception {
             }
             BlockPos pos = hit.getBlockPos().immutable();
             BlockKind kind = kindOf(pos);
+            if (kind == BlockKind.STONE && !blocks.containsKey(pos) && !diggable.test(pos)) {
+                continue;
+            }
             if (kind != null && !blocks.containsKey(pos) && (kind == BlockKind.STONE || kind == BlockKind.UNKNOWN || kind == BlockKind.WOOD)
                     && count(kind) >= (kind == BlockKind.UNKNOWN ? 12 : 8)) {
                 continue; // plenty of those remembered already
@@ -373,6 +376,13 @@ public final class Perception {
 
     public void setUnknown(java.util.function.BiPredicate<BlockState, BlockPos> unknown) {
         this.unknown = unknown;
+    }
+
+    /** Stone worth remembering: only where it can safely be dug (not the thin floor over a drop). */
+    private java.util.function.Predicate<BlockPos> diggable = pos -> true;
+
+    public void setDiggable(java.util.function.Predicate<BlockPos> diggable) {
+        this.diggable = diggable;
     }
 
     private int count(BlockKind kind) {

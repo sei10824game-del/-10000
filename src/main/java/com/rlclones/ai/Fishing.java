@@ -192,6 +192,13 @@ public final class Fishing {
             catches++;
             return before >= 0 && catches >= 1 ? Status.DONE : Status.WORKING;
         }
+        net.minecraft.world.entity.Entity snag = self.fishing.getHookedIn();
+        if (snag != null) {
+            // snagged something that is not a fish: pull it in and cast again
+            debug = "snagged " + net.minecraft.world.entity.EntityType.getKey(snag.getType()) + " at " + snag.position().subtract(Vec3.atBottomCenterOf(water));
+            motor.useHeldItem(InteractionHand.MAIN_HAND);
+            return Status.WORKING;
+        }
         BlockPos hook = self.fishing.blockPosition();
         boolean wet = self.fishing.isInWater() || self.serverLevel().getFluidState(hook).is(FluidTags.WATER)
                 || self.serverLevel().getFluidState(hook.below()).is(FluidTags.WATER);
@@ -204,7 +211,8 @@ public final class Fishing {
                 aimBias = Mth.clamp(aimBias + (castDist - landed) * 0.8, -6.0, 6.0);
             }
             debug = "pitch=" + castPitchUsed + " want=" + String.format("%.2f", castDist) + " landed=" + String.format("%.2f", landed)
-                    + " wet=" + wet + " bias=" + String.format("%.2f", aimBias) + " y=" + String.format("%.2f", self.fishing.getY() - water.getY());
+                    + " wet=" + wet + " bias=" + String.format("%.2f", aimBias) + " hookRel=" + self.fishing.position().subtract(Vec3.atBottomCenterOf(water))
+                    + " selfRel=" + self.position().subtract(Vec3.atBottomCenterOf(water)) + " ground=" + self.fishing.onGround();
         }
         if (sinceCast > 1800 || dryTicks > 40 && sinceCast > 60) {
             motor.useHeldItem(InteractionHand.MAIN_HAND); // nothing / landed badly: pull in and cast again

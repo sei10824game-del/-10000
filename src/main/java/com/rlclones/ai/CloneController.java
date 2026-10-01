@@ -156,6 +156,7 @@ public final class CloneController {
             return false;
         };
         perception.setUnknown(discovery::isUnknownObtainable);
+        perception.setDiggable(this::safeToDig);
         perception.setHarmful(id -> {
             Brain b = self.getCloneBrain();
             return b != null && b.isHarmful(id);
@@ -998,8 +999,10 @@ public final class CloneController {
             return;
         }
         java.util.Map<String, List<String>> lacking = new java.util.LinkedHashMap<>();
-        for (Perception.Seen s : perception.visible()) {
-            if (!(s.entity instanceof ClonePlayer other) || other == self || !other.isAlive() || other.distanceTo(self) > 16
+        long now = self.level().getGameTime();
+        for (Perception.Seen s : perception.remembered()) {
+            // seen in the last few seconds: still around even if we just looked away
+            if (now - s.lastSeen > 200 || !(s.entity instanceof ClonePlayer other) || other == self || !other.isAlive() || other.distanceTo(self) > 16
                     || other.getCloneBrain() == null || other.getCloneBrain() == mine) {
                 continue;
             }
