@@ -35,6 +35,13 @@ public final class Fishing {
     private int dryTicks;
     public String debug = "";
     public int heard;
+    /** Learned correction (blocks) for how far the casts really go. */
+    private double aimBias;
+    private Vec3 castFrom = Vec3.ZERO;
+    private Vec3 castDir = Vec3.ZERO;
+    private double castDist;
+    private float castPitchUsed;
+    private boolean judged = true;
 
     public int casts;
     public int catches;
@@ -154,7 +161,8 @@ public final class Fishing {
         Vec3 eye = self.getEyePosition();
         float yaw = (float) Math.toDegrees(Mth.atan2(aim.z - eye.z, aim.x - eye.x)) - 90.0F;
         double dist = Math.sqrt((aim.x - eye.x) * (aim.x - eye.x) + (aim.z - eye.z) * (aim.z - eye.z));
-        float pitch = castPitch(dist - 0.3, eye.y - (water.getY() + 0.9)); // the line starts a little in front of us
+        // the line starts a little in front of us; aimBias is what earlier casts taught about our own throw
+        float pitch = castPitch(dist - 0.3 + aimBias, eye.y - (water.getY() + 0.9));
         if (self.fishing == null) {
             if (++castTicks < 5) {
                 return Status.WORKING;
@@ -163,6 +171,11 @@ public final class Fishing {
             self.setYHeadRot(yaw);
             self.setXRot(pitch);
             motor.useHeldItem(InteractionHand.MAIN_HAND); // cast
+            castFrom = eye;
+            castDir = new Vec3(aim.x - eye.x, 0, aim.z - eye.z).normalize();
+            castDist = dist - 0.3;
+            castPitchUsed = pitch;
+            judged = false;
             casts++;
             castTicks = 0;
             sinceCast = 0;
@@ -183,7 +196,16 @@ public final class Fishing {
         boolean wet = self.fishing.isInWater() || self.serverLevel().getFluidState(hook).is(FluidTags.WATER)
                 || self.serverLevel().getFluidState(hook.below()).is(FluidTags.WATER);
         dryTicks = wet ? 0 : dryTicks + 1;
-        debug = "since=" + sinceCast + " dry=" + dryTicks + " hook=" + hook.toShortString();
+        if (!judged && (wet || self.fishing.onGround() || dryTicks > 20)) {
+            // where did it come down? too short / too long teaches how to throw next time
+            judged = true;
+            double landed = self.fishing.position().subtract(castFrom).dot(castDir);
+            if (!wet) {
+                aimBias = Mth.clamp(aimBias + (castDist - landed) * 0.8, -6.0, 6.0);
+            }
+            debug = "pitch=" + castPitchUsed + " want=" + String.format("%.2f", castDist) + " landed=" + String.format("%.2f", landed)
+                    + " wet=" + wet + " bias=" + String.format("%.2f", aimBias) + " y=" + String.format("%.2f", self.fishing.getY() - water.getY());
+        }
         if (sinceCast > 1800 || dryTicks > 40 && sinceCast > 60) {
             motor.useHeldItem(InteractionHand.MAIN_HAND); // nothing / landed badly: pull in and cast again
         }

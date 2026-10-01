@@ -75,6 +75,8 @@ public final class CloneGameTests {
             }
         }
         h.assertTrue(CloneManager.errors() == 0, "clone AI threw " + CloneManager.errors() + " errors (see log)");
+        // finished arenas stay in the world (behind see-through barriers): leave no mobs there to distract later tests
+        h.killAllEntities();
     }
 
     private static Pig pig(GameTestHelper h, double x, double z) {
@@ -518,7 +520,7 @@ public final class CloneGameTests {
         h.onEachTick(() -> thrown[0] |= !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.ThrownTrident.class,
                 c.getBoundingBox().inflate(20), a -> a.getOwner() == c).isEmpty());
         h.succeedWhen(() -> {
-            h.assertTrue(thrown[0], "clone should throw the trident");
+            h.assertTrue(thrown[0], "clone should throw the trident (options " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
@@ -1078,7 +1080,7 @@ public final class CloneGameTests {
         clearBases(h);
         h.setBlock(new BlockPos(7, 2, 10), Blocks.HAY_BLOCK);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        ClonePlayer friend = clone(h, 7.5, 12.5, 180f, false);
+        ClonePlayer friend = clone(h, 4.5, 11.5, 180f, false); // off to the side: it must not pick up the bale itself
         String name = c.getGameProfile().getName();
         boolean[] started = {false};
         boolean[] done = {false};
@@ -1594,7 +1596,7 @@ public final class CloneGameTests {
         dummy(h, 11.5, 7.5);
         h.succeedWhen(() -> {
             var cons = c.controller().consumables();
-            h.assertTrue(cons.lavaUsed >= 1, "clone should pour lava under the enemy (" + cons.lavaDebug + ")");
+            h.assertTrue(cons.lavaUsed >= 1, "clone should pour lava under the enemy (" + cons.lavaDebug + " options " + c.controller().optionLog + ")");
             h.assertTrue(cons.lavaRecovered >= 1 && c.getInventory().countItem(Items.LAVA_BUCKET) == 1, "and scoop it back up");
             finish(h, c);
         });
@@ -1788,7 +1790,7 @@ public final class CloneGameTests {
         dummy(h, 11.5, 11.5);
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().explosives().tntUsed >= 1, "outnumbered, with nobody of ours around, the clone sets off TNT ("
-                    + c.controller().explosives().debug + ")");
+                    + c.controller().explosives().debug + " options " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
