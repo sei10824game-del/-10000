@@ -61,6 +61,7 @@ public final class Portals {
     public int portalEscapes;
     private boolean inPortal;
     public String debug = "";
+    private String note = "";
 
     public Portals(ClonePlayer self, Motor motor) {
         this.self = self;
@@ -137,10 +138,13 @@ public final class Portals {
     /** Where to pour the water so that it reaches the lava source: a free spot beside it with ground under it. */
     @Nullable
     private BlockPos waterSpot(BlockPos lava) {
-        for (Direction d : Direction.Plane.HORIZONTAL) {
-            BlockPos w = lava.relative(d);
-            if (level().getBlockState(w).isAir() && level().getBlockState(w.below()).isFaceSturdy(level(), w.below(), Direction.UP)) {
-                return w.immutable();
+        for (int up = 0; up <= 1; up++) {
+            // beside it, or (a pool in the ground) on the ground next to it: the water flows over the source
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                BlockPos w = lava.relative(d).above(up);
+                if (level().getBlockState(w).isAir() && level().getBlockState(w.below()).isFaceSturdy(level(), w.below(), Direction.UP)) {
+                    return w.immutable();
+                }
             }
         }
         return null;
@@ -189,7 +193,7 @@ public final class Portals {
         if (job == null || ++ticks > 3000) {
             return Status.DONE;
         }
-        debug = job + " stage=" + stage + " t=" + ticks;
+        debug = job + " stage=" + stage + " t=" + ticks + " " + note;
         return switch (job) {
             case OBSIDIAN -> obsidianTick();
             case BUILD -> buildTick();
@@ -231,7 +235,7 @@ public final class Portals {
                 Vec3 pour = new Vec3(waterAt.getX() + 0.5, waterAt.getY(), waterAt.getZ() + 0.5);
                 double d = self.getEyePosition().distanceTo(pour);
                 if (d > 3.8 || Motor.horizontalDistance(self.position(), Vec3.atCenterOf(lava)) < 1.8) {
-                    Vec3 away = Vec3.atBottomCenterOf(waterAt).subtract(Vec3.atBottomCenterOf(lava)).normalize();
+                    Vec3 away = new Vec3(waterAt.getX() - lava.getX(), 0, waterAt.getZ() - lava.getZ()).normalize();
                     Vec3 stand = Vec3.atBottomCenterOf(waterAt).add(away.scale(1.5));
                     motor.navigate(stand, 0.6, false);
                     if (Motor.horizontalDistance(self.position(), stand) < 1.2) {
@@ -433,7 +437,9 @@ public final class Portals {
                     return Status.FAILED;
                 }
                 Equipment.select(self, fs);
-                motor.useOnTopFace(floor);
+                boolean used = motor.useOnTopFace(floor);
+                note = "light used=" + used + " above=" + level().getBlockState(floor.above()) + " floor=" + level().getBlockState(floor)
+                        + " hand=" + self.getMainHandItem() + " yaw=" + (int) self.getYRot() + " rel=" + self.blockPosition().subtract(origin).toShortString();
                 if (isPortal(floor.above())) {
                     portalsBuilt++;
                     BlockPos inside = floor.above().immutable();
@@ -482,8 +488,26 @@ public final class Portals {
     }
 
     /** Called right after the clone went through a portal. */
+    /** The portal block closest to {@code at} (we come out next to / inside one). */
+    @Nullable
+    private BlockPos portalNear(BlockPos at, int r) {
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(at.offset(-r, -r, -r), at.offset(r, r, r))) {
+            if (isPortal(p) && !isPortal(p.below())) {
+                double d = p.distSqr(at);
+                if (d < bestD) {
+                    bestD = d;
+                    best = p.immutable();
+                }
+            }
+        }
+        return best;
+    }
+
     public void onArrived(ResourceKey<Level> from, long now) {
-        arrivedAt = self.blockPosition();
+        BlockPos near = portalNear(self.blockPosition(), 3);
+        arrivedAt = near != null ? near : self.blockPosition();
         steppingOut = true;
         returning = false;
         if (level().dimension() == Level.NETHER) {
@@ -527,7 +551,10 @@ public final class Portals {
             returning = true;
             Status st = enter(arrivedAt);
             if (st == Status.FAILED) {
-                BlockPos other = knownPortal(64);
+                BlockPos other = portalNear(arrivedAt, 6);
+                if (other == null) {
+                    other = knownPortal(64);
+                }
                 if (other == null) {
                     returning = false;
                     return false;

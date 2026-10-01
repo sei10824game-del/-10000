@@ -106,28 +106,35 @@ public final class Perch {
         return stage != null;
     }
 
+    private BlockPos hopFrom;
+
     private void climb() {
-        if (placed.size() >= 2) {
-            stage = Stage.TOP;
+        double up = self.getY() - base.getY();
+        if (self.onGround() && up >= 1.95) {
+            stage = Stage.TOP; // two blocks up
             ticks = 0;
             return;
         }
-        if (ticks > 80) {
+        if (ticks > 120 || blocks() == 0) {
             stage = placed.isEmpty() ? null : Stage.DESCEND; // could not build: get down again
             return;
         }
-        BlockPos next = base.above(placed.size());
         motor.lookAngles(self.getYRot(), 90f);
-        if (self.onGround() && self.getY() < next.getY() + 0.1) {
-            motor.jump();
+        motor.stop();
+        if (self.onGround()) {
+            motor.jump(); // hop...
+            hopFrom = self.blockPosition();
+            return;
         }
-        if (self.getY() >= next.getY() + 1.0 && free(next)) {
+        // ...and as soon as the feet are a block above where we jumped from, a block goes in under them
+        if (hopFrom != null && self.getY() >= hopFrom.getY() + 1.0 && free(hopFrom)) {
             if (!Equipment.isPillarBlock(self.getMainHandItem())) {
                 Equipment.select(self, Equipment.pillarBlockSlot(self));
             }
-            if (motor.useOnTopFace(next.below())) {
-                placed.add(next.immutable());
+            if (motor.useOnTopFace(hopFrom.below())) {
+                placed.add(hopFrom.immutable());
             }
+            hopFrom = null;
         }
     }
 

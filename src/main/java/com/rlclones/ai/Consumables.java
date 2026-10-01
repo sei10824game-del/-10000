@@ -687,6 +687,9 @@ public final class Consumables {
         return true;
     }
 
+    private Entity backoffFor;
+    private int backoff;
+
     private boolean lavaAttack(Entity enemy, long now) {
         if (placedLava != null || !(enemy instanceof net.minecraft.world.entity.LivingEntity le) || le.fireImmune()) {
             return false;
@@ -696,6 +699,17 @@ public final class Consumables {
             return false;
         }
         double d = enemy.distanceTo(self);
+        if (backoffFor != enemy) {
+            backoffFor = enemy;
+            backoff = 0;
+        }
+        if (d < 3 && backoff < 20) {
+            // too close for lava: a few steps back first
+            backoff++;
+            motor.lookAt(enemy);
+            motor.moveAwayFrom(enemy.position());
+            return true;
+        }
         if (d < 3 || d > 5) {
             return false;
         }

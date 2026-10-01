@@ -2103,12 +2103,12 @@ public final class CloneGameTests {
     public static void digsThroughAWallInTheWay(GameTestHelper h) {
         for (int x = 1; x <= 13; x++) {
             for (int y = 2; y <= 5; y++) {
-                h.setBlock(new BlockPos(x, y, 7), Blocks.STONE);
+                h.setBlock(new BlockPos(x, y, 4), Blocks.STONE);
             }
         }
-        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false);
+        ClonePlayer c = clone(h, 7.5, 1.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
-        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 11.5));
+        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 12.5));
         travelLoop(h, c, goal);
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().travel().blocksTunneled >= 1, "a wall in the way: the clone digs through (" + c.controller().travel().debug + ")");
@@ -2124,6 +2124,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.ARROW, 64));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         ClonePlayer friend = clone(h, 6.5, 7.5, 90f, false);
         Husk husk = dummy(h, 11.5, 7.5);
         float[] lowest = {20f};
@@ -2148,6 +2149,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.ARROW, 64));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         ClonePlayer friend = clone(h, 6.5, 7.5, 90f, false);
         dummy(h, 11.5, 7.5);
         float[] lowest = {20f};
@@ -2162,10 +2164,11 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "corner")
     public static void fightsWhenCorneredInsteadOfHoppingAtWalls(GameTestHelper h) {
-        for (int z = 1; z <= 3; z++) {
+        for (int z = 0; z <= 3; z++) {
             for (int y = 2; y <= 4; y++) {
                 h.setBlock(new BlockPos(6, y, z), Blocks.STONE);
                 h.setBlock(new BlockPos(8, y, z), Blocks.STONE);
+                h.setBlock(new BlockPos(7, y, 0), Blocks.STONE); // a dead end
             }
         }
         ClonePlayer c = clone(h, 7.5, 2.5, 0f, true);
@@ -2241,6 +2244,7 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "teams2")
     public static void clonesOfOtherTeamsFight(GameTestHelper h) {
+        h.getLevel().getServer().setPvpAllowed(true); // as on a normal server (pvp=true)
         ClonePlayer red = clone(h, 4.5, 7.5, -90f, true);
         red.setCloneTeam("red");
         ClonePlayer blue = clone(h, 10.5, 7.5, 90f, true);

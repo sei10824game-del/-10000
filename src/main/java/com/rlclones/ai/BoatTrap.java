@@ -46,7 +46,9 @@ public final class BoatTrap {
     }
 
     private boolean worthIt(Entity t, long now) {
-        if (!(t instanceof Mob m) || !m.isAlive() || m.isPassenger() || !m.onGround() || now - lastTry < 200 || Boating.boatSlot(self) < 0
+        BlockPos under = t.blockPosition().below();
+        boolean grounded = !t.level().getBlockState(under).getCollisionShape(t.level(), under).isEmpty() && t.getY() - t.blockPosition().getY() < 0.2;
+        if (!(t instanceof Mob m) || !m.isAlive() || m.isPassenger() || !grounded || now - lastTry < 200 || Boating.boatSlot(self) < 0
                 || self.getCloneBrain() == null || self.getCloneBrain().hasFlag(key(t))) {
             return false;
         }

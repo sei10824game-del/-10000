@@ -287,6 +287,9 @@ public final class Equipment {
         double bestScore = p.getFoodData().getFoodLevel() <= 6 ? -100 : 0;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
+            if (!s.isEdible()) {
+                continue;
+            }
             double score = foodScore(p, s);
             if (score > bestScore && (p.canEat(false) || foodCanAlwaysEat(p, s))) {
                 bestScore = score;
