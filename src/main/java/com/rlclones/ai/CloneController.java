@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Random;
 
@@ -64,6 +65,10 @@ public final class CloneController {
     private final Discovery discovery;
     private final Consumables consumables;
     private final Brewing brewing;
+    private final Animals animals;
+    private final Fishing fishing;
+    private final Explosives explosives;
+    private final Travel travel;
     /** Recent time spent swimming (decays); lots of it makes a boat worth crafting. */
     private int swimTicks;
     private long lastThreatSeen = -100000;
@@ -137,6 +142,19 @@ public final class CloneController {
         this.discovery = new Discovery(self, motor, perception);
         this.consumables = new Consumables(self, motor, perception);
         this.brewing = new Brewing(self, motor, perception);
+        this.animals = new Animals(self, motor, perception);
+        this.fishing = new Fishing(self, motor);
+        this.explosives = new Explosives(self, motor, perception);
+        this.travel = new Travel(self, motor, consumables);
+        expedition.foesNear = p -> {
+            long t = now();
+            for (Perception.Seen s : perception.remembered()) {
+                if (s.alive() && t - s.lastSeen < 200 && Senses.isHostileTo(s.entity, self) && s.pos.distanceTo(Vec3.atCenterOf(p)) < 24) {
+                    return true;
+                }
+            }
+            return false;
+        };
         perception.setUnknown(discovery::isUnknownObtainable);
         perception.setHarmful(id -> {
             Brain b = self.getCloneBrain();
@@ -198,6 +216,63 @@ public final class CloneController {
         return brewing;
     }
 
+    public Animals animals() {
+        return animals;
+    }
+
+    public Fishing fishing() {
+        return fishing;
+    }
+
+    public Explosives explosives() {
+        return explosives;
+    }
+
+    public Travel travel() {
+        return travel;
+    }
+
+    /**
+     * A distant enemy worth a hunting party: a boss-like monster (60+ health) or a crowd of 5+ monsters, seen far away.
+     * Returns {entity, need} or null.
+     */
+    @Nullable
+    public Object[] huntTarget(long now) {
+        Perception.Seen boss = null;
+        java.util.List<Perception.Seen> foes = new java.util.ArrayList<>();
+        for (Perception.Seen s : perception.remembered()) {
+            if (!s.alive() || now - s.lastSeen > 400 || !Senses.isHostileTo(s.entity, self) || !(s.entity instanceof LivingEntity)) {
+                continue;
+            }
+            foes.add(s);
+            if (((LivingEntity) s.entity).getMaxHealth() >= 60 && s.pos.distanceTo(self.position()) >= 12 && boss == null) {
+                boss = s;
+            }
+        }
+        Perception.Seen pick = boss;
+        if (pick == null) {
+            for (Perception.Seen s : foes) {
+                long crowd = foes.stream().filter(o -> o.pos.distanceTo(s.pos) < 8).count();
+                if (crowd >= 5 && s.pos.distanceTo(self.position()) >= 16) {
+                    pick = s;
+                    break;
+                }
+            }
+        }
+        if (pick == null) {
+            return null;
+        }
+        double total = 0;
+        for (Perception.Seen s : foes) {
+            if (s.pos.distanceTo(pick.pos) < 12) {
+                total += ((LivingEntity) s.entity).getHealth();
+            }
+        }
+        double mine = self.getMaxHealth() + Equipment.attackDamage(self.getMainHandItem()) * 5;
+        int need = Mth.clamp((int) Math.ceil(total / Math.max(1, mine)), 1, 6);
+        return new Object[]{pick.entity, need};
+    }
+
     public boolean swamALot() {
         return swimTicks > 200;
     }
@@ -256,6 +331,7 @@ public final class CloneController {
         if ((now + self.getId()) % 40 == 0 && !self.isUsingItem() && option != Option.GATHER_WOOD && option != Option.MINE
                 && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
                 && option != Option.QUARRY && option != Option.DISCOVER && option != Option.BREW
+                && option != Option.ANIMALS && option != Option.FISH && option != Option.SALVAGE && !explosives.busy() && !travel.busy()
                 && cleanTarget == null && !consumables.busy() && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
             Equipment.manage(self, true);
@@ -279,6 +355,12 @@ public final class CloneController {
             lastThreatSeen = now;
         }
         boolean itemBusy = consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        if (!itemBusy && !escaping && option != Option.ANIMALS) {
+            itemBusy = explosives.tick(now);
+        }
+        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
+            itemBusy = travel.tick(now); // bridging a gap / pearling across
+        }
         if (!escaping && !itemBusy && ((now + self.getId()) % 20) == 0 && now - escapeFailedAt > 600 && !motor.isFlying()
                 && !hostileWithin(3.5, now) && escape.isTrapped()) {
             // reflex, like a player who notices he fell into a hole: get out before doing anything else
@@ -326,6 +408,7 @@ public final class CloneController {
     public void hear(SoundEvent sound, double x, double y, double z, int entityId) {
         ServerLevel level = self.serverLevel();
         String path = sound.getLocation().getPath();
+        fishing.onSound(path, x, y, z);
         Entity source;
         Vec3 pos;
         if (entityId >= 0) {
@@ -955,7 +1038,27 @@ public final class CloneController {
         if (self.containerMenu == self.inventoryMenu && brewing.hasWork(now)) {
             mask |= Option.BREW.bit();
         }
+        if (self.onGround() && animals.hasWork()) {
+            mask |= Option.ANIMALS.bit();
+        }
+        if (fishing.canFish()) {
+            mask |= Option.FISH.bit();
+        }
+        if (needWood() && Senses.nearestBlock(perception, self, Perception.BlockKind.WOOD, 24) != null) {
+            mask |= Option.SALVAGE.bit();
+        }
         return mask;
+    }
+
+    /** No wood at all, and no tree in sight. */
+    private boolean needWood() {
+        int wood = 0;
+        for (ItemStack s : self.getInventory().items) {
+            if (s.is(net.minecraft.tags.ItemTags.PLANKS) || s.is(net.minecraft.tags.ItemTags.LOGS)) {
+                wood += s.getCount();
+            }
+        }
+        return wood == 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && Senses.nearestBlock(perception, self, Perception.BlockKind.LOG, 32) == null;
     }
 
     private boolean runStorage() {
@@ -1174,7 +1277,8 @@ public final class CloneController {
         optionReward += Math.min(count, 5) * 0.2f;
     }
 
-    public void onBlockBroken(BlockState state) {
+    public void onBlockBroken(BlockState state, BlockPos pos) {
+        discovery.onBroken(state, pos);
         brain().learnBlock(Perception.blockId(state));
         Perception.BlockKind kind = Perception.classify(state);
         if (kind == Perception.BlockKind.LOG) {
@@ -1240,6 +1344,9 @@ public final class CloneController {
             case QUARRY -> runHarvest(Perception.BlockKind.STONE) || Crafting.stoneNeeded(self) == 0;
             case DISCOVER -> discovery.tick();
             case BREW -> brewing.tick(now) != Brewing.Status.WORKING;
+            case ANIMALS -> animals.tick() != Animals.Status.WORKING;
+            case FISH -> fishing.tick() != Fishing.Status.WORKING;
+            case SALVAGE -> runHarvest(Perception.BlockKind.WOOD) || !needWood() && blocksDone >= 2;
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -1284,11 +1391,19 @@ public final class CloneController {
             case FARM -> farming.reset();
             case DISCOVER -> discovery.begin();
             case BREW -> brewing.begin();
+            case ANIMALS -> animals.begin();
+            case FISH -> fishing.begin();
             case EXPEDITION -> {
                 if (!expedition.isLeading()) {
-                    BlockPos t = expedition.pickTarget(visitedChunks::contains);
-                    if (t != null) {
-                        expedition.lead(t, expedition.companionsNeeded(t, brain()));
+                    Object[] hunt = huntTarget(now);
+                    if (hunt != null) {
+                        Entity foe = (Entity) hunt[0];
+                        expedition.leadHunt(foe.blockPosition(), (Integer) hunt[1], net.minecraft.world.entity.EntityType.getKey(foe.getType()).toString());
+                    } else {
+                        BlockPos t = expedition.pickTarget(visitedChunks::contains);
+                        if (t != null) {
+                            expedition.lead(t, expedition.companionsNeeded(t, brain()));
+                        }
                     }
                 }
             }
@@ -1332,6 +1447,9 @@ public final class CloneController {
         }
         if (option == Option.BREW) {
             brewing.reset();
+        }
+        if (option == Option.FISH) {
+            fishing.reset();
         }
         endLook();
         if (self.isUsingItem() && !died) {
@@ -1754,8 +1872,8 @@ public final class CloneController {
             goal = self.position().add(away.scale(14));
             goalTimer = 20;
             boolean cornered = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
-            if (cornered && self.getHealth() <= self.getMaxHealth() * 0.35f) {
-                consumables.pearlAway(away);
+            if (cornered && self.getHealth() <= self.getMaxHealth() * 0.6f) {
+                consumables.pearlAway(away); // only if the 5 damage of the pearl leaves us alive
             }
         }
         motor.navigate(goal, 1.5, true);
@@ -1856,6 +1974,12 @@ public final class CloneController {
             blockTicks = 0;
             if (blockTarget == null) {
                 return true;
+            }
+            if (kind == Perception.BlockKind.WOOD
+                    && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(blockTarget), 12) != null) {
+                perception.forgetBlock(blockTarget); // never take a base apart
+                blockTarget = null;
+                return false;
             }
             if (perception.kindAt(blockTarget) != kind) {
                 perception.forgetBlock(blockTarget);

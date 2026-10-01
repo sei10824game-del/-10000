@@ -75,5 +75,16 @@
   "rlclones.fact.armor": "armor %s",
   "rlclones.fact.effect": "%s for %ss",
   "rlclones.fact.effect_instant": "%s (instant)",
-  "rlclones.fact.none": "nothing special"
+  "rlclones.fact.none": "nothing special",
+  "rlclones.chat.discover_break": "[Discovery] Broke %s and learned: %s",
+  "rlclones.fact.drops": "drops %s",
+  "rlclones.fact.drops_none": "drops nothing",
+  "rlclones.fact.tool": "fastest with a %s",
+  "rlclones.fact.needstool": "drops nothing without the right tool",
+  "rlclones.tool.pickaxe": "pickaxe",
+  "rlclones.tool.axe": "axe",
+  "rlclones.tool.shovel": "shovel",
+  "rlclones.tool.hoe": "hoe",
+  "rlclones.chat.rally_hunt": "[Hunt] Meet at X:%s Y:%s Z:%s! We go to defeat %s (X:%s Z:%s). %s more needed.",
+  "rlclones.chat.hunt_end": "Hunt over at X:%s Z:%s - thanks, everyone is free again!"
 }

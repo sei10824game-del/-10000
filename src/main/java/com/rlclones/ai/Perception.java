@@ -36,7 +36,7 @@ import java.util.Map;
  * Seen things are remembered for a while so the clone has object permanence.
  */
 public final class Perception {
-    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL, STONE, BREWING, UNKNOWN}
+    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL, STONE, BREWING, UNKNOWN, WOOD}
 
     public static final class Seen {
         public final Entity entity;
@@ -278,7 +278,8 @@ public final class Perception {
             }
             BlockPos pos = hit.getBlockPos().immutable();
             BlockKind kind = kindOf(pos);
-            if (kind != null && !blocks.containsKey(pos) && (kind == BlockKind.STONE || kind == BlockKind.UNKNOWN) && count(kind) >= (kind == BlockKind.STONE ? 8 : 12)) {
+            if (kind != null && !blocks.containsKey(pos) && (kind == BlockKind.STONE || kind == BlockKind.UNKNOWN || kind == BlockKind.WOOD)
+                    && count(kind) >= (kind == BlockKind.UNKNOWN ? 12 : 8)) {
                 continue; // plenty of those remembered already
             }
             if (kind != null) {
@@ -293,7 +294,7 @@ public final class Perception {
     public static BlockKind classify(Level level, BlockPos pos) {
         BlockKind kind = classify(level.getBlockState(pos));
         if (kind == BlockKind.LOG && !isTreeLog(level, pos)) {
-            return null;
+            return BlockKind.WOOD; // a log that is part of something built
         }
         return kind;
     }
@@ -330,6 +331,9 @@ public final class Perception {
         }
         if (state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(Tags.Blocks.COBBLESTONE)) {
             return BlockKind.STONE;
+        }
+        if (state.is(BlockTags.PLANKS)) {
+            return BlockKind.WOOD;
         }
         return null;
     }

@@ -56,6 +56,13 @@ public final class Expedition {
     private boolean leading;
     private BlockPos rally;
     private BlockPos target;
+    /** What the trip is for: explore unknown land, or hunt down a strong enemy / a crowd of enemies. */
+    private String kind = "EXPLORE";
+    private String foe = "";
+    private int calmTicks;
+    /** Is something hostile still around this spot? (given by the controller: what the clone itself perceives) */
+    public java.util.function.Predicate<BlockPos> foesNear = p -> false;
+    public int hunts;
     private int need;
     private int phase;
     private int phaseTicks;
@@ -218,7 +225,22 @@ public final class Expedition {
 
     // ================================================================== leading
 
+    public String kind() {
+        return kind;
+    }
+
+    /** Lead a hunting party against {@code foe} (entity type id) at {@code target}. */
+    public void leadHunt(BlockPos target, int need, String foe) {
+        lead(target, need);
+        this.kind = "HUNT";
+        this.foe = foe;
+        hunts++;
+    }
+
     public void lead(BlockPos target, int need) {
+        this.kind = "EXPLORE";
+        this.foe = "";
+        this.calmTicks = 0;
         this.leading = true;
         this.rally = self.blockPosition();
         this.target = target.immutable();
@@ -253,8 +275,15 @@ public final class Expedition {
         }
         switch (phase) {
             case 0 -> {
-                Chat.say(self, Component.translatable("rlclones.chat.rally", rally.getX(), rally.getY(), rally.getZ(), target.getX(), target.getZ(), need),
-                        "RALLY " + rally.getX() + " " + rally.getY() + " " + rally.getZ() + " TO " + target.getX() + " " + target.getY() + " " + target.getZ() + " need=" + need);
+                String plain = "RALLY " + rally.getX() + " " + rally.getY() + " " + rally.getZ() + " TO " + target.getX() + " " + target.getY() + " " + target.getZ() + " need=" + need;
+                if (kind.equals("HUNT")) {
+                    net.minecraft.world.entity.EntityType<?> type = net.minecraft.world.entity.EntityType.byString(foe).orElse(null);
+                    Component foeName = type == null ? Component.literal(foe) : type.getDescription();
+                    Chat.say(self, Component.translatable("rlclones.chat.rally_hunt", rally.getX(), rally.getY(), rally.getZ(), foeName, target.getX(), target.getZ(), need),
+                            plain + " kind=HUNT foe=" + foe);
+                } else {
+                    Chat.say(self, Component.translatable("rlclones.chat.rally", rally.getX(), rally.getY(), rally.getZ(), target.getX(), target.getZ(), need), plain);
+                }
                 phase = 1;
                 phaseTicks = 0;
             }
@@ -303,6 +332,21 @@ public final class Expedition {
                 motor.navigate(goal, 6, false);
             }
             default -> {
+                if (kind.equals("HUNT")) {
+                    // at the hunting ground: fighting is done by the normal combat layer; we stay until it is quiet
+                    if (foesNear.test(target)) {
+                        calmTicks = 0;
+                    } else if (++calmTicks > 200 || phaseTicks > 6000) {
+                        completed++;
+                        finished = true;
+                        end();
+                        return Status.DONE;
+                    }
+                    if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(target)) > 6) {
+                        motor.navigate(Vec3.atBottomCenterOf(target), 4, false);
+                    }
+                    return Status.WORKING;
+                }
                 // look around the new land together
                 if (wander == null || Motor.horizontalDistance(self.position(), wander) < 2 || phaseTicks % 120 == 0) {
                     double a = random.nextDouble() * Math.PI * 2;
@@ -337,7 +381,8 @@ public final class Expedition {
         }
         leading = false;
         BlockPos p = self.blockPosition();
-        Chat.say(self, Component.translatable("rlclones.chat.expedition_end", p.getX(), p.getZ()), "EXPEDITION_END " + p.getX() + " " + p.getY() + " " + p.getZ());
+        Chat.say(self, Component.translatable(kind.equals("HUNT") ? "rlclones.chat.hunt_end" : "rlclones.chat.expedition_end", p.getX(), p.getZ()),
+                "EXPEDITION_END " + p.getX() + " " + p.getY() + " " + p.getZ() + (kind.equals("HUNT") ? " kind=HUNT" : ""));
         joiners.remove(self.getGameProfile().getName());
     }
 

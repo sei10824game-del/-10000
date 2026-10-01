@@ -49,6 +49,11 @@ public final class Motor {
     private boolean jump;
     private boolean sprint;
     private boolean sneak;
+    /** Wants to go down in water (towards a goal or prey below) instead of floating up. */
+    private boolean dive;
+    /** Times the clone crouched on its own at a dangerous edge. */
+    public int edgeSneaks;
+    public int dives;
 
     // path following
     private PathProxyEntity proxy;
@@ -78,6 +83,54 @@ public final class Motor {
 
     public Boating boating() {
         return boating;
+    }
+
+    public void dive() {
+        dive = true;
+    }
+
+    /** How far one would fall stepping off at (x, z) from the current feet level; 64 = no ground / deadly below. */
+    public int dropAt(double x, double z) {
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = BlockPos.containing(x, self.getY() + 0.01, z);
+        if (!level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()) {
+            return 0; // a wall / step, not a drop
+        }
+        for (int d = 1; d <= 24; d++) {
+            BlockPos p = feet.below(d);
+            BlockState st = level.getBlockState(p);
+            if (!level.getFluidState(p).isEmpty()) {
+                return level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) ? 64 : 0; // water breaks the fall
+            }
+            if (!st.getCollisionShape(level, p).isEmpty()) {
+                boolean hurts = st.getBlock() instanceof net.minecraft.world.level.block.MagmaBlock
+                        || st.getBlock() instanceof net.minecraft.world.level.block.CactusBlock || st.is(BlockTags.FIRE) || st.is(BlockTags.CAMPFIRES);
+                return hurts && d >= 2 ? 64 : d - 1;
+            }
+        }
+        return 64;
+    }
+
+    private boolean deadlyDropAhead(float yaw, float zza, float xxa) {
+        double rad = Math.toRadians(yaw);
+        double fx = -Math.sin(rad);
+        double fz = Math.cos(rad);
+        double lx = Math.cos(rad);
+        double lz = Math.sin(rad);
+        double mx = fx * zza + lx * xxa;
+        double mz = fz * zza + lz * xxa;
+        double len = Math.sqrt(mx * mx + mz * mz);
+        if (len < 1e-4) {
+            return false;
+        }
+        mx /= len;
+        mz /= len;
+        for (double ahead : new double[]{0.5, 0.9}) {
+            if (dropAt(self.getX() + mx * ahead, self.getZ() + mz * ahead) >= 4 + (self.getHealth() > 10 ? 1 : 0)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Where to walk to work on a block: on top of it when one can stand there, else next to it. */
@@ -176,6 +229,9 @@ public final class Motor {
         lastGoalTick = self.level().getGameTime();
         if (boating.handle(goal, arrive)) {
             return false;
+        }
+        if (self.isInWater() && goal.y < self.getY() - 0.8) {
+            dive = true; // the goal (or prey) is below: swim down instead of bobbing at the surface
         }
         if (self.isFallFlying() || takeoffTicks > 0) {
             flightGoal = goal;
@@ -606,6 +662,12 @@ public final class Motor {
             zza *= 0.2f;
             xxa *= 0.2f;
         }
+        if (!sneak && self.onGround() && !self.isInWater() && (Math.abs(zza) > 0.05f || Math.abs(xxa) > 0.05f)
+                && deadlyDropAhead(newYaw, zza, xxa)) {
+            // a deadly drop right in front: crouch like a careful player, so the feet cannot slip over the edge
+            sneak = true;
+            edgeSneaks++;
+        }
         if (sneak) {
             zza *= 0.3f;
             xxa *= 0.3f;
@@ -623,9 +685,18 @@ public final class Motor {
             openDoorAhead();
             jump = true;
         }
-        if (self.isInWater() || self.isInLava()) {
-            // swim: keep the head above the surface; with forward input this also climbs out onto a ledge
+        if (self.isInLava()) {
             jump = true;
+        } else if (self.isInWater()) {
+            if (dive && self.getAirSupply() > self.getMaxAirSupply() * 0.3) {
+                // sink on purpose (what holding the sneak key does for a player in water)
+                jump = false;
+                self.setDeltaMovement(self.getDeltaMovement().add(0, -0.04, 0));
+                dives++;
+            } else {
+                // swim: keep the head above the surface; with forward input this also climbs out onto a ledge
+                jump = true;
+            }
         }
         self.zza = zza;
         self.xxa = xxa;
@@ -640,6 +711,7 @@ public final class Motor {
         jump = false;
         sprint = false;
         sneak = false;
+        dive = false;
         if (!moving) {
             progressAnchor = null;
         }

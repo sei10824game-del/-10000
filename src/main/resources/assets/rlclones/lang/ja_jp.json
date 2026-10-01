@@ -75,5 +75,16 @@
   "rlclones.fact.armor": "防御力%s",
   "rlclones.fact.effect": "%s（%s秒）",
   "rlclones.fact.effect_instant": "%s（即時）",
-  "rlclones.fact.none": "特に用途はない"
+  "rlclones.fact.none": "特に用途はない",
+  "rlclones.chat.discover_break": "【発見】%sを壊して分かった: %s",
+  "rlclones.fact.drops": "壊すと%sが手に入る",
+  "rlclones.fact.drops_none": "壊しても何も手に入らない",
+  "rlclones.fact.tool": "%sで掘るのが速い",
+  "rlclones.fact.needstool": "適した道具でないと何も落とさない",
+  "rlclones.tool.pickaxe": "ツルハシ",
+  "rlclones.tool.axe": "斧",
+  "rlclones.tool.shovel": "シャベル",
+  "rlclones.tool.hoe": "クワ",
+  "rlclones.chat.rally_hunt": "【討伐】X:%s Y:%s Z:%s に集合！%s を倒しに行く（X:%s Z:%s）。%s人来てほしい",
+  "rlclones.chat.hunt_end": "討伐完了（X:%s Z:%s）。ありがとう、解散！"
 }

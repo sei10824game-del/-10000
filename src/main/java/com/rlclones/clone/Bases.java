@@ -44,6 +44,49 @@ public class Bases extends SavedData {
     }
 
     public final List<Base> bases = new ArrayList<>();
+
+    /** A fenced 5x5 animal pen (origin = north-west corner, gate in the middle of the north side). */
+    public record Pen(ResourceKey<Level> dimension, BlockPos origin) {
+        public boolean contains(Vec3 p) {
+            return p.x >= origin.getX() + 1 && p.x <= origin.getX() + 4 && p.z >= origin.getZ() + 1 && p.z <= origin.getZ() + 4
+                    && Math.abs(p.y - origin.getY()) < 3;
+        }
+
+        public BlockPos center() {
+            return origin.offset(2, 0, 2);
+        }
+    }
+
+    public final List<Pen> pens = new ArrayList<>();
+
+    public void addPen(ResourceKey<Level> dim, BlockPos origin) {
+        pens.add(new Pen(dim, origin.immutable()));
+        setDirty();
+    }
+
+    @Nullable
+    public Pen penAt(ResourceKey<Level> dim, Vec3 pos) {
+        for (Pen p : pens) {
+            if (p.dimension() == dim && p.contains(pos)) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    public Pen nearestPen(ResourceKey<Level> dim, Vec3 pos, double radius) {
+        Pen best = null;
+        double bestD = radius;
+        for (Pen p : pens) {
+            double d = Vec3.atCenterOf(p.center()).distanceTo(pos);
+            if (p.dimension() == dim && d < bestD) {
+                bestD = d;
+                best = p;
+            }
+        }
+        return best;
+    }
     private final Map<String, Map<String, Integer>> contents = new HashMap<>();
 
     public static Bases get(MinecraftServer server) {
@@ -127,6 +170,11 @@ public class Bases extends SavedData {
             }
             r.bases.add(base);
         }
+        ListTag pens = tag.getList("pens", Tag.TAG_COMPOUND);
+        for (int i = 0; i < pens.size(); i++) {
+            CompoundTag pt = pens.getCompound(i);
+            r.pens.add(new Pen(ResourceKey.create(Registries.DIMENSION, new ResourceLocation(pt.getString("dim"))), NbtUtils.readBlockPos(pt.getCompound("origin"))));
+        }
         CompoundTag c = tag.getCompound("contents");
         for (String k : c.getAllKeys()) {
             CompoundTag items = c.getCompound(k);
@@ -155,6 +203,14 @@ public class Bases extends SavedData {
             list.add(b);
         }
         tag.put("bases", list);
+        ListTag penList = new ListTag();
+        for (Pen p : pens) {
+            CompoundTag pt = new CompoundTag();
+            pt.putString("dim", p.dimension().location().toString());
+            pt.put("origin", NbtUtils.writeBlockPos(p.origin()));
+            penList.add(pt);
+        }
+        tag.put("pens", penList);
         CompoundTag c = new CompoundTag();
         contents.forEach((k, items) -> {
             CompoundTag t = new CompoundTag();

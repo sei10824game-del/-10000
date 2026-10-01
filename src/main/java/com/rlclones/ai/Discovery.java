@@ -198,7 +198,8 @@ public final class Discovery {
     public static boolean special(String facts) {
         for (String tok : facts.split(";")) {
             String k = tok.split("=", 2)[0];
-            if (!k.isEmpty() && !k.equals("spawn") && !k.equals("damage") && !k.equals("armor")) {
+            if (!k.isEmpty() && !k.equals("spawn") && !k.equals("damage") && !k.equals("armor") && !k.equals("tool")
+                    && !k.equals("needstool") && !k.equals("drops")) {
                 return true;
             }
         }
@@ -248,6 +249,9 @@ public final class Discovery {
                 case "damage" -> Component.translatable("rlclones.fact.damage", v);
                 case "armor" -> Component.translatable("rlclones.fact.armor", v);
                 case "effect" -> effect(v);
+                case "drops" -> v.equals("none") ? Component.translatable("rlclones.fact.drops_none") : Component.translatable("rlclones.fact.drops", names(v));
+                case "tool" -> Component.translatable("rlclones.fact.tool", Component.translatable("rlclones.tool." + v));
+                case "needstool" -> Component.translatable("rlclones.fact.needstool");
                 default -> null;
             };
             if (c == null) {
@@ -294,6 +298,48 @@ public final class Discovery {
 
     // ================================================================== learning from the inventory
 
+    /**
+     * The clone broke a block: even if nothing (or something else) dropped, it now knows what the block is - what it
+     * drops, which tool suits it, plus everything known about it as an item.
+     */
+    public void onBroken(BlockState state, BlockPos pos) {
+        Brain b = brain();
+        if (b == null || state.isAir()) {
+            return;
+        }
+        Item item = state.getBlock().asItem();
+        String key = item == Items.AIR ? "block:" + Perception.blockId(state) : keyOf(new ItemStack(item));
+        if (b.facts(key).contains("drops=")) {
+            return;
+        }
+        List<String> f = new ArrayList<>();
+        if (item != Items.AIR) {
+            String base = facts(self, new ItemStack(item));
+            if (!base.isEmpty()) {
+                f.add(base);
+            }
+        }
+        List<ItemStack> drops = Block.getDrops(state, self.serverLevel(), pos, null, self, self.getMainHandItem());
+        f.add("drops=" + (drops.isEmpty() ? "none" : ids(drops, 3)));
+        if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_PICKAXE)) {
+            f.add("tool=pickaxe");
+        } else if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_AXE)) {
+            f.add("tool=axe");
+        } else if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_SHOVEL)) {
+            f.add("tool=shovel");
+        } else if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_HOE)) {
+            f.add("tool=hoe");
+        }
+        if (state.requiresCorrectToolForDrops()) {
+            f.add("needstool");
+        }
+        String facts = String.join(";", f);
+        b.learnItem(key, facts, b.obtained(key));
+        b.learnBlock(Perception.blockId(state));
+        discovered++;
+        Chat.say(self, Component.translatable("rlclones.chat.discover_break", state.getBlock().getName(), describe(facts)), "DISCOVER " + key + " facts=" + facts);
+    }
+
     /** Study items that are new to this clone (called every second). */
     public void watchInventory() {
         Brain b = brain();
@@ -320,8 +366,12 @@ public final class Discovery {
                 continue;
             }
             ItemStack s = e.getValue();
-            String f = facts(self, s);
+            boolean known = b.knowsItem(e.getKey());
+            String f = b.facts(e.getKey()).contains("drops=") ? b.facts(e.getKey()) : facts(self, s);
             b.learnItem(e.getKey(), f, true);
+            if (known) {
+                continue; // already studied when breaking it / told by others: just remember we have it now
+            }
             if (s.getItem() instanceof BlockItem bi) {
                 b.learnBlock(Perception.blockId(bi.getBlock().defaultBlockState()));
             }

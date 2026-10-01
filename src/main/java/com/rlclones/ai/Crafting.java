@@ -228,6 +228,9 @@ public final class Crafting {
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
             out.addAll(List.of(BOATS)); // lots of swimming lately: a boat would help
         }
+        if (tierOf(p, HoeItem.class) < 0 && Farming.seedSlot(p) >= 0) {
+            out.add(Items.WOODEN_HOE); // seeds but nothing to till with: the hoe comes before other tools
+        }
         double weapon = bestWeapon(p);
         for (Item sword : SWORDS) {
             if (Equipment.attackDamage(new ItemStack(sword)) > weapon + 0.01) {
@@ -254,9 +257,7 @@ public final class Crafting {
                 out.add(it);
             }
         }
-        if (tierOf(p, HoeItem.class) < 0 && Farming.seedSlot(p) >= 0) {
-            out.add(Items.WOODEN_HOE); // seeds but nothing to till with
-        }
+
         if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BREWING_STAND) && !brewingStandNearby(p)) {
             out.add(Items.BREWING_STAND);
         }
@@ -265,6 +266,23 @@ public final class Crafting {
         }
         if (count(p, Items.GLASS) >= 3 && !hasItem(p, Items.GLASS_BOTTLE) && (hasItem(p, Items.BREWING_STAND) || brewingStandNearby(p))) {
             out.add(Items.GLASS_BOTTLE);
+        }
+        int sticksAndPlanks = count(p, Items.STICK) + countTag(p, ItemTags.PLANKS) * 2 + countTag(p, ItemTags.LOGS) * 8;
+        boolean launcher = false;
+        for (ItemStack s : p.getInventory().items) {
+            launcher |= Equipment.isLauncher(s);
+        }
+        if (!launcher && count(p, Items.STRING) >= 3 && sticksAndPlanks >= 3) {
+            out.add(Items.BOW);
+        }
+        if (launcher && count(p, Items.ARROW) < 16 && hasItem(p, Items.FLINT) && hasItem(p, Items.FEATHER) && sticksAndPlanks >= 1) {
+            out.add(Items.ARROW);
+        }
+        if (Fishing.rodSlot(p) < 0 && count(p, Items.STRING) >= 2 && sticksAndPlanks >= 3) {
+            out.add(Items.FISHING_ROD);
+        }
+        if (count(p, Items.GUNPOWDER) >= 5 && countTag(p, ItemTags.SAND) >= 4) {
+            out.add(Items.TNT);
         }
         if (count(p, Items.IRON_INGOT) >= 3 && !hasItem(p, Items.BUCKET) && !hasItem(p, Items.WATER_BUCKET)) {
             out.add(Items.BUCKET);
@@ -487,6 +505,40 @@ public final class Crafting {
             CraftingRecipe r = craftable(p, s -> s.is(Items.FURNACE));
             if (r != null) {
                 return r;
+            }
+        }
+        // one button for every TNT, to set it off with
+        if (count(p, Items.TNT) > countTag(p, ItemTags.BUTTONS)) {
+            CraftingRecipe r = craftable(p, s -> s.is(ItemTags.BUTTONS));
+            if (r != null) {
+                return r;
+            }
+        }
+        // fences and a gate for a chicken pen when there is wood to spare
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && tableAccess) {
+            if (c.controller().animals().needsFences()) {
+                CraftingRecipe r = craftable(p, s -> s.is(ItemTags.WOODEN_FENCES));
+                if (r != null) {
+                    return r;
+                }
+                if (count(p, Items.STICK) < 2) {
+                    r = craftable(p, s -> s.is(Items.STICK));
+                    if (r != null) {
+                        return r;
+                    }
+                }
+            }
+            if (c.controller().animals().needsGate()) {
+                CraftingRecipe r = craftable(p, s -> s.is(ItemTags.FENCE_GATES));
+                if (r != null) {
+                    return r;
+                }
+                if (count(p, Items.STICK) < 4) {
+                    r = craftable(p, s -> s.is(Items.STICK));
+                    if (r != null) {
+                        return r;
+                    }
+                }
             }
         }
         // curiosity: make something never made before (cheap materials only)

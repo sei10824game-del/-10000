@@ -1449,4 +1449,531 @@ public final class CloneGameTests {
             finish(h, c);
         });
     }
+
+    // ------------------------------------------------------------------ AC round 6
+
+    private static void craftLoop(GameTestHelper h, ClonePlayer c) {
+        h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+    }
+
+    private static void lavaTrench(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 5; z <= 7; z++) {
+                h.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+                h.setBlock(new BlockPos(x, 1, z), Blocks.LAVA);
+            }
+        }
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "sneak")
+    public static void crouchesAtADeadlyEdge(GameTestHelper h) {
+        for (int x = 6; x <= 8; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 7, z), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, -90f, false);
+        Vec3 top = h.absoluteVec(new Vec3(7.5, 8, 7.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
+        Vec3 far = h.absoluteVec(new Vec3(13.5, 8, 7.5));
+        double[] lowest = {top.y};
+        h.onEachTick(() -> {
+            c.controller().motor().moveToward(far);
+            c.controller().motor().tick();
+            lowest[0] = Math.min(lowest[0], c.getY());
+        });
+        h.runAfterDelay(120, () -> {
+            h.assertTrue(c.controller().motor().edgeSneaks >= 1, "clone should crouch on its own at the 6-block drop");
+            h.assertTrue(lowest[0] > top.y - 0.5, "and not slip off the edge (lowest y " + lowest[0] + ")");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "hoe")
+    public static void craftsAHoeWhenItHasSeeds(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
+        c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 4));
+        craftLoop(h, c);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.WOODEN_HOE) >= 1, "with seeds and wood the clone makes a hoe: " + c.controller().crafting().debug());
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "breakinfo")
+    public static void learnsABlockJustByBreakingIt(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 2, 9), Blocks.GLASS);
+        h.setBlock(new BlockPos(8, 2, 9), Blocks.STONE);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.gameMode.destroyBlock(h.absolutePos(new BlockPos(7, 2, 9)));
+        c.gameMode.destroyBlock(h.absolutePos(new BlockPos(8, 2, 9)));
+        String glass = c.getCloneBrain().facts("minecraft:glass");
+        h.assertTrue(glass.contains("drops=none") && glass.contains("nospawn"), "glass: breaks into nothing, no monsters on it (" + glass + ")");
+        String stone = c.getCloneBrain().facts("minecraft:stone");
+        h.assertTrue(stone.contains("tool=pickaxe") && stone.contains("needstool"), "stone: needs a pickaxe (" + stone + ")");
+        h.assertTrue(c.getCloneBrain().knowsBlock("minecraft:glass"), "the block is known now");
+        h.assertTrue(said(c.getGameProfile().getName(), "DISCOVER minecraft:glass"), "and the clone says what it learned");
+        finish(h, c);
+        h.succeed();
+    }
+
+    private static void animalLoop(GameTestHelper h, ClonePlayer c) {
+        boolean[] active = {false};
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            ctl.perception().update(h.getLevel().getGameTime());
+            if (!active[0] && ctl.animals().hasWork()) {
+                ctl.animals().begin();
+                active[0] = true;
+            }
+            if (active[0] && ctl.animals().tick() != com.rlclones.ai.Animals.Status.WORKING) {
+                active[0] = false;
+            }
+            ctl.motor().tick();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "tame")
+    public static void tamesAWolfWithBones(GameTestHelper h) {
+        var wolf = h.spawn(EntityType.WOLF, new Vec3(7.5, 2, 10.5));
+        wolf.setNoAi(true);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.BONE, 32));
+        animalLoop(h, c);
+        h.succeedWhen(() -> {
+            h.assertTrue(wolf.isTame() && wolf.isOwnedBy(c), "clone should tame the wolf with its bones");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "breed")
+    public static void breedsItsTamedWolves(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var w1 = h.spawn(EntityType.WOLF, new Vec3(6.5, 2, 9.5));
+        var w2 = h.spawn(EntityType.WOLF, new Vec3(8.5, 2, 9.5));
+        for (var w : List.of(w1, w2)) {
+            w.setNoAi(true);
+            w.tame(c);
+        }
+        c.getInventory().add(new ItemStack(Items.BEEF, 4));
+        animalLoop(h, c);
+        h.succeedWhen(() -> {
+            boolean baby = !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.animal.Wolf.class, w1.getBoundingBox().inflate(6), net.minecraft.world.entity.animal.Wolf::isBaby).isEmpty();
+            h.assertTrue(baby || (w1.isInLove() && w2.isInLove()), "both tamed wolves should be fed to breed");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "lava")
+    public static void usesLavaBucketInAFightAndTakesItBack(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.LAVA_BUCKET));
+        c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        dummy(h, 11.5, 7.5);
+        h.succeedWhen(() -> {
+            var cons = c.controller().consumables();
+            h.assertTrue(cons.lavaUsed >= 1, "clone should pour lava under the enemy (" + cons.lavaDebug + ")");
+            h.assertTrue(cons.lavaRecovered >= 1 && c.getInventory().countItem(Items.LAVA_BUCKET) == 1, "and scoop it back up");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 260, batch = "lava2")
+    public static void noLavaWhenAFriendIsClose(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, true);
+        ClonePlayer friend = clone(h, 11.5, 9.5, 180f, false);
+        c.getInventory().add(new ItemStack(Items.LAVA_BUCKET));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        friend.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        dummy(h, 11.5, 7.5);
+        h.runAfterDelay(240, () -> {
+            h.assertTrue(c.controller().consumables().lavaUsed == 0, "no lava next to another clone");
+            finish(h, c, friend);
+            h.succeed();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "fallhay")
+    public static void predictsTheLandingAndPutsHayThere(GameTestHelper h) {
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.HAY_BLOCK, 4));
+        Vec3 high = h.absoluteVec(new Vec3(4.5, 24, 7.5));
+        float[] lowest = {20f};
+        boolean[] dropped = {false};
+        h.onEachTick(() -> lowest[0] = Math.min(lowest[0], c.getHealth()));
+        h.runAfterDelay(70, () -> {
+            c.teleportTo(h.getLevel(), high.x, high.y, high.z, -90f, 0f);
+            c.setDeltaMovement(0.25, 0, 0); // drifting sideways: the landing spot has to be predicted
+            dropped[0] = true;
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(dropped[0] && c.getY() < high.y - 15 && c.onGround(), "landed");
+            h.assertTrue(c.controller().consumables().cushionsPlaced >= 1, "a hay bale is put where the clone will land");
+            h.assertTrue(lowest[0] >= 13f, "which takes most of the fall damage (lowest " + lowest[0] + ")");
+            finish(h, c);
+        });
+    }
+
+    private static void travelLoop(GameTestHelper h, ClonePlayer c, Vec3 goal) {
+        h.onEachTick(() -> {
+            long now = h.getLevel().getGameTime();
+            var ctl = c.controller();
+            if (!ctl.travel().tick(now)) {
+                ctl.motor().navigate(goal, 1.0, false);
+            }
+            ctl.motor().tick();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "bridge")
+    public static void bridgesAGapWithSpareBlocks(GameTestHelper h) {
+        lavaTrench(h);
+        ClonePlayer c = clone(h, 7.5, 2.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.DIRT, 16));
+        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 11.5));
+        travelLoop(h, c, goal);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().travel().blocksBridged >= 3, "clone should bridge the lava with its dirt (" + c.controller().travel().debug + ")");
+            h.assertTrue(c.position().distanceTo(goal) < 2.0, "and walk across");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "pearlx")
+    public static void pearlsAcrossWhenItCannotBridge(GameTestHelper h) {
+        lavaTrench(h);
+        ClonePlayer c = clone(h, 7.5, 2.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.ENDER_PEARL, 4));
+        Vec3 goal = h.absoluteVec(new Vec3(7.5, 2, 11.5));
+        travelLoop(h, c, goal);
+        BlockPos far = h.absolutePos(new BlockPos(7, 2, 8));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().consumables().travelPearls >= 1, "with nothing to bridge with, the clone throws a pearl across");
+            h.assertTrue(c.getZ() >= far.getZ() && c.isAlive(), "and gets across alive");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "dive")
+    public static void divesDownInWater(GameTestHelper h) {
+        for (int x = 2; x <= 12; x++) {
+            for (int z = 2; z <= 12; z++) {
+                for (int y = -3; y <= 1; y++) {
+                    boolean wall = x == 2 || z == 2 || x == 12 || z == 12 || y == -3;
+                    h.setBlock(new BlockPos(x, y, z), wall ? (y == 1 ? Blocks.STONE : Blocks.STONE) : Blocks.WATER);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        Vec3 surface = h.absoluteVec(new Vec3(7.5, 1.6, 7.5));
+        c.teleportTo(h.getLevel(), surface.x, surface.y, surface.z, 0f, 0f);
+        Vec3 bottom = h.absoluteVec(new Vec3(7.5, -2, 7.5));
+        double[] lowest = {surface.y};
+        h.onEachTick(() -> {
+            c.controller().motor().navigate(bottom, 0.5, false);
+            c.controller().motor().tick();
+            lowest[0] = Math.min(lowest[0], c.getY());
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(lowest[0] <= bottom.y + 0.8, "clone should swim down to the bottom (lowest " + (lowest[0] - bottom.y) + " above it)");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "fish")
+    public static void fishesWithARod(GameTestHelper h) {
+        for (int x = 5; x <= 9; x++) {
+            for (int z = 9; z <= 12; z++) {
+                h.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+                h.setBlock(new BlockPos(x, 1, z), Blocks.WATER);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 6.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.FISHING_ROD));
+        int before = c.getInventory().items.stream().mapToInt(ItemStack::getCount).sum();
+        boolean[] active = {false};
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            if (!active[0] && ctl.fishing().canFish()) {
+                ctl.fishing().begin();
+                active[0] = true;
+            }
+            if (active[0] && ctl.fishing().tick() != com.rlclones.ai.Fishing.Status.WORKING) {
+                active[0] = false;
+            }
+            ctl.motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int now = c.getInventory().items.stream().mapToInt(ItemStack::getCount).sum();
+            h.assertTrue(c.controller().fishing().catches >= 1 && now > before, "clone should cast, hear the bite and reel something in (casts "
+                    + c.controller().fishing().casts + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "bow")
+    public static void craftsABowAndArrows(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.STONE_AXE));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.STICK, 8));
+        c.getInventory().add(new ItemStack(Items.STRING, 3));
+        c.getInventory().add(new ItemStack(Items.FLINT, 2));
+        c.getInventory().add(new ItemStack(Items.FEATHER, 2));
+        craftLoop(h, c);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.BOW) >= 1 && c.getInventory().countItem(Items.ARROW) >= 4,
+                    "clone should make a bow and arrows: " + c.controller().crafting().debug());
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "tntcraft")
+    public static void craftsTntAndAButtonForIt(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.GUNPOWDER, 5));
+        c.getInventory().add(new ItemStack(Items.SAND, 4));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 2));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        craftLoop(h, c);
+        h.succeedWhen(() -> {
+            int buttons = 0;
+            for (ItemStack s : c.getInventory().items) {
+                if (s.is(net.minecraft.tags.ItemTags.BUTTONS)) {
+                    buttons += s.getCount();
+                }
+            }
+            h.assertTrue(c.getInventory().countItem(Items.TNT) >= 1 && buttons >= 1, "clone should craft TNT and a button to set it off: "
+                    + c.controller().crafting().debug());
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "tnt")
+    public static void blowsUpACrowdWithTnt(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 3.5, -45f, true);
+        c.getInventory().add(new ItemStack(Items.TNT));
+        c.getInventory().add(new ItemStack(Items.OAK_BUTTON));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        dummy(h, 10.5, 10.5);
+        dummy(h, 11.5, 10.5);
+        dummy(h, 10.5, 11.5);
+        dummy(h, 11.5, 11.5);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().explosives().tntUsed >= 1, "outnumbered, with nobody of ours around, the clone sets off TNT ("
+                    + c.controller().explosives().debug + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "tnt2")
+    public static void tntNeverNearFriends(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 2.5, 2.5, 0f, false);
+        ClonePlayer friend = clone(h, 12.5, 12.5, 0f, false);
+        h.assertFalse(c.controller().explosives().safeAt(friend.position().add(2, 0, 0)), "no TNT within reach of another clone");
+        h.assertTrue(c.controller().explosives().safeAt(h.absoluteVec(new Vec3(2.5, 2, 2.5)).add(0, 0, -1)), "far away it is fine");
+        finish(h, c, friend);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "salvage")
+    public static void takesPlanksFromBuildingsButNotFromBases(GameTestHelper h) {
+        clearBases(h);
+        for (int z = 6; z <= 8; z++) {
+            h.setBlock(new BlockPos(11, 2, z), Blocks.OAK_PLANKS);
+        }
+        h.setBlock(new BlockPos(2, 2, 12), Blocks.OAK_PLANKS);
+        BlockPos baseWood = h.absolutePos(new BlockPos(2, 2, 12));
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        bases.add(h.getLevel().dimension(), baseWood, "someone");
+        ClonePlayer c = clone(h, 7.5, 7.5, -90f, true);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.OAK_PLANKS) >= 1, "with no tree around, the clone takes planks from what was built: options "
+                    + c.controller().optionLog);
+            h.assertTrue(h.getLevel().getBlockState(baseWood).is(Blocks.OAK_PLANKS), "but never from a base");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "grass")
+    public static void cutsGrassForSeedsThenFarms(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 10; z <= 13; z++) {
+                h.setBlock(new BlockPos(x, 1, z), Blocks.GRASS_BLOCK);
+                h.setBlock(new BlockPos(x, 2, z), Blocks.GRASS);
+            }
+        }
+        h.setBlock(new BlockPos(7, 0, 9), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 1, 9), Blocks.WATER);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
+        boolean[] active = {false};
+        h.onEachTick(() -> {
+            var f = c.controller().farming();
+            if (!active[0] && f.hasWork()) {
+                f.reset();
+                active[0] = true;
+            }
+            if (active[0] && f.tick() != com.rlclones.ai.Farming.Status.WORKING) {
+                active[0] = false;
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int planted = 0;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 1, 8)), h.absolutePos(new BlockPos(13, 1, 13)))) {
+                if (h.getLevel().getBlockState(p).is(Blocks.FARMLAND) && h.getLevel().getBlockState(p.above()).is(Blocks.WHEAT)) {
+                    planted++;
+                }
+            }
+            h.assertTrue(c.controller().farming().grassCut >= 1, "clone should cut grass to get seeds");
+            h.assertTrue(planted >= 1, "and then till by the water and plant them");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "pen")
+    public static void buildsAChickenPenAndThrowsEggsIn(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.STONE_AXE));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        c.getInventory().add(new ItemStack(Items.STICK, 16));
+        c.getInventory().add(new ItemStack(Items.EGG, 4));
+        boolean[] active = {false};
+        h.onEachTick(() -> {
+            var ctl = c.controller();
+            ctl.perception().update(h.getLevel().getGameTime());
+            if (!active[0] && ctl.animals().hasWork()) {
+                ctl.animals().begin();
+                active[0] = true;
+            }
+            if (active[0]) {
+                if (ctl.animals().tick() != com.rlclones.ai.Animals.Status.WORKING) {
+                    active[0] = false;
+                }
+            } else {
+                ctl.crafting().tick();
+            }
+            ctl.motor().tick();
+        });
+        h.succeedWhen(() -> {
+            var a = c.controller().animals();
+            int fences = 0;
+            boolean gate = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 2, 13)))) {
+                fences += h.getLevel().getBlockState(p).is(net.minecraft.tags.BlockTags.WOODEN_FENCES) ? 1 : 0;
+                gate |= h.getLevel().getBlockState(p).is(net.minecraft.tags.BlockTags.FENCE_GATES);
+            }
+            h.assertTrue(a.pensBuilt >= 1 && fences >= 14 && gate, "clone should craft fences and a gate and build a pen (fences "
+                    + fences + ", gate " + gate + ") " + c.controller().crafting().debug());
+            h.assertTrue(a.eggsThrown >= 4, "and throw its eggs into it");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "pen2")
+    public static void alwaysKeepsTwoChickens(GameTestHelper h) {
+        clearBases(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(4, 2, 4)));
+        var c1 = h.spawn(EntityType.CHICKEN, new Vec3(6.5, 2, 6.5));
+        var c2 = h.spawn(EntityType.CHICKEN, new Vec3(7.5, 2, 7.5));
+        c1.setNoAi(true);
+        c2.setNoAi(true);
+        h.assertTrue(com.rlclones.ai.Animals.protectedAnimal(c1), "with only two chickens in the pen, they are not eaten");
+        var c3 = h.spawn(EntityType.CHICKEN, new Vec3(6.5, 2, 7.5));
+        c3.setNoAi(true);
+        h.assertFalse(com.rlclones.ai.Animals.protectedAnimal(c1), "a third one may be eaten when hungry");
+        h.assertFalse(com.rlclones.ai.Senses.isFoodAnimal(c1) == false, "and counts as food again");
+        clearBases(h);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "pen3")
+    public static void breedsPennedChickensWithSeeds(GameTestHelper h) {
+        clearBases(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)));
+        var c1 = h.spawn(EntityType.CHICKEN, new Vec3(6.5, 2, 8.5));
+        var c2 = h.spawn(EntityType.CHICKEN, new Vec3(8.5, 2, 8.5));
+        c1.setNoAi(true);
+        c2.setNoAi(true);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 4));
+        animalLoop(h, c);
+        h.succeedWhen(() -> {
+            boolean baby = !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.animal.Chicken.class, c1.getBoundingBox().inflate(6),
+                    net.minecraft.world.entity.animal.Chicken::isBaby).isEmpty();
+            h.assertTrue(baby || (c1.isInLove() && c2.isInLove()), "penned chickens get seeds to breed");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "huntexp")
+    public static void callsAHuntingPartyForABoss(GameTestHelper h) {
+        var ravager = h.spawn(EntityType.RAVAGER, new Vec3(12.5, 2, 12.5));
+        ravager.setNoAi(true);
+        ClonePlayer leader = clone(h, 2.5, 2.5, -45f, false);
+        ClonePlayer member = clone(h, 2.5, 5.5, -45f, false);
+        String ln = leader.getGameProfile().getName();
+        Object[][] hunt = {null};
+        boolean[] killed = {false};
+        h.onEachTick(() -> {
+            long now = h.getLevel().getGameTime();
+            var lc = leader.controller();
+            lc.perception().update(now);
+            if (hunt[0] == null) {
+                hunt[0] = lc.huntTarget(now);
+                if (hunt[0] != null) {
+                    lc.expedition().leadHunt(((net.minecraft.world.entity.Entity) hunt[0][0]).blockPosition(), 1, "minecraft:ravager");
+                }
+            } else {
+                lc.expedition().leadTick();
+            }
+            var mx = member.controller().expedition();
+            if (mx.joinedOffer() == null && mx.completed == 0 && mx.canJoin(now)) {
+                mx.join();
+            }
+            if (mx.joinedOffer() != null) {
+                mx.followTick();
+            }
+            if (!killed[0] && said(ln, "DEPART ")) {
+                killed[0] = true;
+                ravager.kill(); // the party wins the fight
+            }
+            lc.motor().tick();
+            member.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(hunt[0] != null && hunt[0][0] == ravager && (Integer) hunt[0][1] >= 2,
+                    "a 100-health ravager far away is a hunting target needing several clones");
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(ln + ": RALLY ") && l.contains("kind=HUNT foe=minecraft:ravager")),
+                    "the leader calls a hunting party in chat");
+            h.assertTrue(said(member.getGameProfile().getName(), "JOIN " + ln), "a clone joins");
+            h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(l -> l.startsWith(ln + ": EXPEDITION_END") && l.contains("kind=HUNT")),
+                    "and the hunt is declared over once the enemy is gone");
+            finish(h, leader, member);
+        });
+    }
 }

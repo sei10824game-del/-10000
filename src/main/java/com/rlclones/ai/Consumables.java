@@ -84,7 +84,8 @@ public final class Consumables {
 
     /** Drinking / scooping water back up etc.: the rest of the mind waits. */
     public boolean busy() {
-        return (self.isUsingItem() && drinkOrThrow(self.getUseItem())) || mlgTicks > 0 || placedWater != null || throwTicks > 0;
+        return (self.isUsingItem() && drinkOrThrow(self.getUseItem())) || mlgTicks > 0 || placedWater != null || throwTicks > 0
+                || placedCushion != null || placedLava != null;
     }
 
     /**
@@ -104,7 +105,7 @@ public final class Consumables {
         if (fallReflex()) {
             return true;
         }
-        if (scoopWater()) {
+        if (scoopWater() || recoverCushion() || recoverLava(now)) {
             return true;
         }
         if (extinguish()) {
@@ -113,7 +114,7 @@ public final class Consumables {
         if (drinkForSituation(enemy)) {
             return true;
         }
-        if (enemy != null && throwAtEnemy(enemy)) {
+        if (enemy != null && (throwAtEnemy(enemy) || lavaAttack(enemy, now))) {
             return true;
         }
         if (!threatened && now - lastChore > 40) {
@@ -161,6 +162,32 @@ public final class Consumables {
         return feet.y - hit.getLocation().y;
     }
 
+    /** Predict where the current fall ends, simulating the player's own air physics (it can be wrong). */
+    @Nullable
+    private BlockHitResult predictLanding() {
+        ServerLevel level = self.serverLevel();
+        Vec3 pos = self.position();
+        Vec3 v = self.getDeltaMovement();
+        for (int i = 0; i < 80; i++) {
+            Vec3 next = pos.add(v);
+            BlockHitResult hit = level.clip(new ClipContext(pos, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, self));
+            if (hit.getType() == HitResult.Type.BLOCK) {
+                return hit;
+            }
+            pos = next;
+            v = new Vec3(v.x * 0.91, (v.y - 0.08) * 0.98, v.z * 0.91);
+        }
+        return null;
+    }
+
+    /** Things that soften a landing, best first. */
+    private static final net.minecraft.world.item.Item[] CUSHIONS = {Items.WATER_BUCKET, Items.SLIME_BLOCK, Items.HAY_BLOCK,
+            Items.POWDER_SNOW_BUCKET, Items.COBWEB};
+    @Nullable
+    private BlockPos placedCushion;
+    private int recoverTicks;
+    public int cushionsPlaced;
+
     private boolean fallReflex() {
         if (mlgTicks > 0) {
             mlgTicks--;
@@ -169,29 +196,81 @@ public final class Consumables {
                 || self.fallDistance < 3.5f || self.getDeltaMovement().y > -0.3 || self.hasEffect(MobEffects.SLOW_FALLING)) {
             return false;
         }
-        int bucket = slotOf(s -> s.is(Items.WATER_BUCKET));
-        if (bucket < 0) {
+        int slot = -1;
+        net.minecraft.world.item.Item cushion = null;
+        for (net.minecraft.world.item.Item c : CUSHIONS) {
+            if (c == Items.WATER_BUCKET && self.level().dimensionType().ultraWarm()) {
+                continue; // water just evaporates there
+            }
+            int sl = slotOf(st -> st.is(c));
+            if (sl >= 0) {
+                slot = sl;
+                cushion = c;
+                break;
+            }
+        }
+        if (slot < 0) {
             return false;
         }
-        BlockPos[] ground = new BlockPos[1];
-        double d = groundBelow(ground);
-        if (d < 0 || !self.level().getFluidState(ground[0]).isEmpty()) {
+        BlockHitResult land = predictLanding();
+        if (land == null || land.getDirection() != net.minecraft.core.Direction.UP) {
+            return false; // would hit a wall first: nothing to put down
+        }
+        BlockPos ground = land.getBlockPos();
+        if (!self.level().getFluidState(ground).isEmpty()) {
             return false; // landing in water anyway
         }
-        double expected = self.fallDistance + d;
+        double expected = self.fallDistance + (self.getY() - land.getLocation().y);
         if (expected < 4.5) {
             return false; // would not even hurt
         }
-        Equipment.select(self, bucket);
-        self.setXRot(90f); // look straight down
+        Equipment.select(self, slot);
+        Vec3 aim = land.getLocation();
+        lookAtNow(aim); // look where we are going to land
         mlgTicks = 3;
-        if (d <= 2.6 && d > 0.1) {
-            if (motor.useHeldItem(InteractionHand.MAIN_HAND) || self.level().getFluidState(ground[0].above()).is(FluidTags.WATER)) {
-                placedWater = ground[0].above();
-                pickupTicks = 80;
-                waterPlaced++;
+        BlockPos spot = ground.above();
+        if (self.getEyePosition().distanceTo(aim) <= 4.4 && self.level().getBlockState(spot).canBeReplaced()) {
+            boolean bucket = cushion == Items.WATER_BUCKET || cushion == Items.POWDER_SNOW_BUCKET;
+            if (bucket) {
+                motor.useHeldItem(InteractionHand.MAIN_HAND);
+            } else {
+                self.gameMode.useItemOn(self, self.serverLevel(), self.getMainHandItem(), InteractionHand.MAIN_HAND,
+                        new BlockHitResult(aim, net.minecraft.core.Direction.UP, ground, false));
+            }
+            if (!self.level().getBlockState(spot).canBeReplaced() || self.level().getFluidState(spot).is(FluidTags.WATER)) {
+                cushionsPlaced++;
+                if (cushion == Items.WATER_BUCKET) {
+                    placedWater = spot;
+                    pickupTicks = 80;
+                    waterPlaced++;
+                } else if (cushion != Items.COBWEB && cushion != Items.POWDER_SNOW_BUCKET) {
+                    placedCushion = spot;
+                    recoverTicks = 120;
+                }
             }
         }
+        return true;
+    }
+
+    /** Take a hay bale / slime block we landed on back. */
+    private boolean recoverCushion() {
+        if (placedCushion == null) {
+            return false;
+        }
+        if (--recoverTicks <= 0 || self.level().getBlockState(placedCushion).canBeReplaced()) {
+            placedCushion = null;
+            motor.resetMining();
+            return false;
+        }
+        if (!self.onGround()) {
+            return true;
+        }
+        if (self.getEyePosition().distanceTo(Vec3.atCenterOf(placedCushion)) > Motor.BLOCK_REACH - 0.5) {
+            placedCushion = null;
+            return false;
+        }
+        motor.stop();
+        motor.mine(placedCushion);
         return true;
     }
 
@@ -471,7 +550,7 @@ public final class Consumables {
 
     /** Stuck in a pit without blocks to pillar with: throw a pearl over the edge. */
     public boolean pearlOutOfPit() {
-        if (!hasPearl() || self.level().getGameTime() - lastPearl < 40) {
+        if (!hasPearl() || !canAffordPearl() || self.level().getGameTime() - lastPearl < 40) {
             pearlDebug = "noPearl/cooldown";
             return false;
         }
@@ -507,15 +586,20 @@ public final class Consumables {
         return true;
     }
 
+    /** A pearl costs 5 health: only when we would surely survive it. */
+    private boolean canAffordPearl() {
+        return self.getHealth() > 7f;
+    }
+
     /** Fleeing in bad shape: pearl away from the danger, along {@code away} (horizontal direction). */
     public boolean pearlAway(Vec3 away) {
-        if (!hasPearl() || self.level().getGameTime() - lastPearl < 60) {
+        if (!hasPearl() || !canAffordPearl() || self.level().getGameTime() - lastPearl < 60) {
             return false;
         }
         float baseYaw = (float) Math.toDegrees(Mth.atan2(away.z, away.x)) - 90.0F;
         Vec3 start = self.position();
         for (float dy : new float[]{0f, 15f, -15f, 30f, -30f}) {
-            for (float pitch = -30f; pitch <= -5f; pitch += 5f) {
+            for (float pitch = -30f; pitch <= 25f; pitch += 5f) {
                 float yaw = baseYaw + dy;
                 Vec3 land = simulate(yaw, pitch);
                 if (land != null && Motor.horizontalDistance(land, start) >= 8 && Math.abs(land.y - start.y) < 6 && standable(land)) {
@@ -525,6 +609,157 @@ public final class Consumables {
             }
         }
         return false;
+    }
+
+    /** Far to go and no way to bridge: pearl towards {@code goal} if a landing gets clearly closer. */
+    public boolean pearlToward(Vec3 goal) {
+        if (!hasPearl() || !canAffordPearl() || self.level().getGameTime() - lastPearl < 60) {
+            return false;
+        }
+        Vec3 start = self.position();
+        double before = Motor.horizontalDistance(start, goal);
+        float baseYaw = (float) Math.toDegrees(Mth.atan2(goal.z - start.z, goal.x - start.x)) - 90.0F;
+        Vec3 best = null;
+        float bestYaw = 0;
+        float bestPitch = 0;
+        for (float dy : new float[]{0f, 8f, -8f, 16f, -16f}) {
+            for (float pitch = -35f; pitch <= 30f; pitch += 5f) {
+                float yaw = baseYaw + dy;
+                Vec3 land = simulate(yaw, pitch);
+                if (land == null || land.y < start.y - 3 || land.y > start.y + 4 || !standable(land)) {
+                    continue;
+                }
+                double after = Motor.horizontalDistance(land, goal);
+                if (before - after >= 4 && (best == null || after < Motor.horizontalDistance(best, goal))) {
+                    best = land;
+                    bestYaw = yaw;
+                    bestPitch = pitch;
+                }
+            }
+        }
+        if (best == null) {
+            return false;
+        }
+        throwPearl(bestYaw, bestPitch);
+        travelPearls++;
+        return true;
+    }
+
+    public int travelPearls;
+
+    // ------------------------------------------------------------------ lava bucket in a fight
+
+    @Nullable
+    private BlockPos placedLava;
+    private long lavaAt;
+    public int lavaUsed;
+    public int lavaRecovered;
+    public String lavaDebug = "";
+
+    /** Is pouring lava at {@code spot} safe for everyone but the enemy (allies, pets, bases, flammable surroundings)? */
+    public boolean lavaSafe(BlockPos spot) {
+        ServerLevel level = self.serverLevel();
+        if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(spot)) < 3.0) {
+            lavaDebug = "too close to self";
+            return false;
+        }
+        net.minecraft.world.phys.AABB around = new net.minecraft.world.phys.AABB(spot).inflate(5);
+        boolean friends = !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, around, e -> e != self && e.isAlive()
+                && (e instanceof net.minecraft.world.entity.player.Player || (e instanceof net.minecraft.world.entity.TamableAnimal t && t.isTame())
+                || e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem)).isEmpty();
+        if (friends) {
+            lavaDebug = "friend near";
+            return false;
+        }
+        if (com.rlclones.clone.Bases.get(self.getServer()).nearest(level.dimension(), Vec3.atCenterOf(spot), 20) != null) {
+            lavaDebug = "base near";
+            return false;
+        }
+        for (BlockPos p : BlockPos.betweenClosed(spot.offset(-2, -1, -2), spot.offset(2, 2, 2))) {
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+                if (level.getBlockState(p).isFlammable(level, p, d)) {
+                    lavaDebug = "flammable";
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean lavaAttack(Entity enemy, long now) {
+        if (placedLava != null || !(enemy instanceof net.minecraft.world.entity.LivingEntity le) || le.fireImmune()) {
+            return false;
+        }
+        int lava = slotOf(s -> s.is(Items.LAVA_BUCKET));
+        if (lava < 0) {
+            return false;
+        }
+        double d = enemy.distanceTo(self);
+        if (d < 3 || d > 5) {
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        BlockPos spot = enemy.blockPosition();
+        BlockPos ground = spot.below();
+        if (level.getBlockState(ground).getCollisionShape(level, ground).isEmpty() || !level.getBlockState(spot).canBeReplaced()
+                || !level.getFluidState(spot).isEmpty() || !lavaSafe(spot)) {
+            return false;
+        }
+        Vec3 aim = new Vec3(ground.getX() + 0.5, ground.getY() + 1.0, ground.getZ() + 0.5);
+        if (self.getEyePosition().distanceTo(aim) > 4.4) {
+            return false;
+        }
+        BlockHitResult los = level.clip(new ClipContext(self.getEyePosition(), aim.subtract(0, 0.05, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
+        if (los.getType() == HitResult.Type.BLOCK && !los.getBlockPos().equals(ground)) {
+            return false;
+        }
+        Equipment.select(self, lava);
+        lookAtNow(aim);
+        motor.useHeldItem(InteractionHand.MAIN_HAND);
+        if (level.getFluidState(spot).is(FluidTags.LAVA)) {
+            placedLava = spot;
+            lavaAt = now;
+            lavaUsed++;
+            return true;
+        }
+        return false;
+    }
+
+    /** Let the lava burn for a moment, then scoop it back up so it does not spread or hurt anyone else. */
+    private boolean recoverLava(long now) {
+        if (placedLava == null) {
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        if (!level.getFluidState(placedLava).isSource()) {
+            placedLava = null;
+            return false;
+        }
+        if (now - lavaAt < 30) {
+            return false; // keep fighting (from a distance) while it burns
+        }
+        int bucket = slotOf(s -> s.is(Items.BUCKET));
+        if (bucket < 0) {
+            if (now - lavaAt > 600) {
+                placedLava = null;
+            }
+            return false;
+        }
+        Vec3 c = Vec3.atCenterOf(placedLava);
+        if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 0.3) {
+            Vec3 toward = Consumables.horizontal(c.subtract(self.position()));
+            motor.navigate(c.subtract(toward.scale(3.0)), 0.8, false);
+            return true;
+        }
+        Equipment.select(self, bucket);
+        lookAtNow(c);
+        motor.stop();
+        motor.useHeldItem(InteractionHand.MAIN_HAND);
+        if (!level.getFluidState(placedLava).isSource()) {
+            placedLava = null;
+            lavaRecovered++;
+        }
+        return true;
     }
 
     /** Facing direction helper for callers. */

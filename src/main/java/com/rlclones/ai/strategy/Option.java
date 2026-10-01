@@ -34,7 +34,13 @@ public enum Option {
     /** Go and get a block never examined before. */
     DISCOVER(600),
     /** Brew potions never had before (or collect a finished brew). */
-    BREW(2400);
+    BREW(2400),
+    /** Tame / breed animals, build a chicken pen, throw eggs into it. */
+    ANIMALS(2400),
+    /** Fish with a rod at open water. */
+    FISH(2400),
+    /** No trees anywhere: take planks / logs from things built (never from a base). */
+    SALVAGE(400);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

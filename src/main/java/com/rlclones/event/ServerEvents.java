@@ -407,7 +407,7 @@ public final class ServerEvents {
         AgentEvents.record(p.getUUID(), p.level().getGameTime(), k, 1, -1, 0);
         CloneController c = controllerOf(p);
         if (c != null) {
-            c.onBlockBroken(event.getState());
+            c.onBlockBroken(event.getState(), event.getPos());
         }
     }
 

@@ -34,7 +34,7 @@ public final class Senses {
     /** Box gap at which a player's 3-block reach still connects (eye is 0.3 inside the own box). */
     public static final double REACH_GAP = 2.6;
     private static final Set<EntityType<?>> FOOD_ANIMALS = Set.of(EntityType.COW, EntityType.PIG, EntityType.CHICKEN,
-            EntityType.SHEEP, EntityType.RABBIT, EntityType.MOOSHROOM);
+            EntityType.SHEEP, EntityType.RABBIT, EntityType.MOOSHROOM, EntityType.COD, EntityType.SALMON);
 
     private Senses() {
     }
@@ -62,7 +62,9 @@ public final class Senses {
 
     public static boolean isFoodAnimal(Entity e) {
         // never hunt someone's named or leashed animals
-        return e instanceof Mob m && m.isAlive() && !m.isBaby() && !m.hasCustomName() && !m.isLeashed() && FOOD_ANIMALS.contains(e.getType());
+        return e instanceof Mob m && m.isAlive() && !m.isBaby() && !m.hasCustomName() && !m.isLeashed() && FOOD_ANIMALS.contains(e.getType())
+                && !(e instanceof net.minecraft.world.entity.TamableAnimal t && t.isTame())
+                && !Animals.protectedAnimal(e); // the last two of a pen stay alive
     }
 
     public static double gap(Entity a, Entity b) {

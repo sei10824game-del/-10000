@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
 public final class Farming {
     public enum Status {WORKING, DONE, FAILED}
 
-    private enum Job {HARVEST, PLANT, TILL}
+    private enum Job {HARVEST, PLANT, TILL, SEEDS}
 
     private static final int RADIUS = 6;
 
@@ -75,6 +75,22 @@ public final class Farming {
         }
         return -1;
     }
+
+    private static boolean isGrass(BlockState st) {
+        return st.is(Blocks.GRASS) || st.is(Blocks.TALL_GRASS) || st.is(Blocks.FERN) || st.is(Blocks.LARGE_FERN);
+    }
+
+    private int seedCount() {
+        int n = 0;
+        for (net.minecraft.world.item.ItemStack s : self.getInventory().items) {
+            if (Storage.isSeed(s)) {
+                n += s.getCount();
+            }
+        }
+        return n;
+    }
+
+    public int grassCut;
 
     public static int hoeSlot(Player p) {
         Inventory inv = p.getInventory();
@@ -138,6 +154,8 @@ public final class Farming {
                 j = Job.PLANT;
             } else if (seeds && hoe && tillable(level, p)) {
                 j = Job.TILL;
+            } else if (breaking && seedCount() < 4 && isGrass(st)) {
+                j = Job.SEEDS; // cut grass: wheat seeds drop from it
             }
             if (j == null) {
                 continue;
@@ -148,7 +166,7 @@ public final class Farming {
             }
             // harvest first, then plant, then till; nearest within a job
             double score = j.ordinal() * 1000 + p.distSqr(feet);
-            if (score < bestScore && visible(level, p, j == Job.HARVEST)) {
+            if (score < bestScore && visible(level, p, j == Job.HARVEST || j == Job.SEEDS)) {
                 bestScore = score;
                 best = p.immutable();
                 out[0] = j;
@@ -206,6 +224,7 @@ public final class Farming {
             case HARVEST -> ripe(st);
             case PLANT -> st.getBlock() instanceof FarmBlock && level.getBlockState(target.above()).isAir() && seedSlot(self) >= 0;
             case TILL -> tillable(level, target) && hoeSlot(self) >= 0 && seedSlot(self) >= 0;
+            case SEEDS -> isGrass(st);
         };
         if (!stillValid) {
             target = null;
@@ -227,6 +246,13 @@ public final class Farming {
             return Status.WORKING;
         }
         switch (job) {
+            case SEEDS -> {
+                Equipment.select(self, -1);
+                if (motor.mine(target)) {
+                    grassCut++;
+                    collect = 15;
+                }
+            }
             case HARVEST -> {
                 Equipment.select(self, -1);
                 if (motor.mine(target)) {
