@@ -559,6 +559,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.TRIDENT));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SHOOT;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         dummy(h, 11.5, 7.5);
         boolean[] thrown = {false};
         h.onEachTick(() -> thrown[0] |= !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.ThrownTrident.class,
@@ -1920,7 +1921,7 @@ public final class CloneGameTests {
             }
             h.assertTrue(c.controller().farming().grassCut >= 1, "clone should cut grass to get seeds");
             h.assertTrue(planted >= 1, "and then till by the water and plant them: seeds=" + c.getInventory().countItem(Items.WHEAT_SEEDS)
-                    + " cut=" + c.controller().farming().grassCut + " " + c.controller().farming().debug());
+                    + " cut=" + c.controller().farming().grassCut + " " + c.controller().farming().debug() + " " + c.controller().farming().diag());
             finish(h, c);
         });
     }
@@ -2134,7 +2135,8 @@ public final class CloneGameTests {
             hit[0] |= husk.getLastHurtByMob() == c;
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + ")");
+            h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + " "
+                    + c.controller().shootDebug + " options " + c.controller().optionLog + ")");
             h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + ")");
             h.assertTrue(hit[0], "and the arrows come down on the enemy");
             finish(h, c, friend);
@@ -2359,7 +2361,8 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
-        Husk husk = dummy(h, 10.5, 7.5);
+        Husk husk = h.spawn(EntityType.HUSK, new Vec3(11.5, 2, 7.5)); // coming for us
+        husk.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         h.succeedWhen(() -> {
             h.assertTrue(husk.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat && c.controller().boatTrap().trapsSprung >= 1,
                     "a boat put at its feet: the husk sits in it (" + c.controller().boatTrap().debug + ")");
@@ -2374,8 +2377,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
-        var spider = h.spawn(EntityType.SPIDER, new Vec3(10.5, 2, 7.5));
-        spider.setNoAi(true);
+        var spider = h.spawn(EntityType.SPIDER, new Vec3(11.5, 2, 7.5));
         spider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         h.succeedWhen(() -> {
             h.assertTrue(c.getCloneBrain().hasFlag("noboat:minecraft:spider"), "the spider did not get in: learned (" + c.controller().boatTrap().debug + ")");
@@ -2388,6 +2390,7 @@ public final class CloneGameTests {
     public static void perchesOnTwoBlocksWhenChased(GameTestHelper h) {
         ClonePlayer c = clone(h, 4.5, 7.5, 90f, true);
         c.getInventory().add(new ItemStack(Items.COBBLESTONE, 16));
+        c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.setHealth(8f);
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
@@ -2495,7 +2498,7 @@ public final class CloneGameTests {
             h.assertTrue(pt.netherTrips >= 1 && c.getCloneBrain().hasFlag(com.rlclones.ai.Portals.NETHER_FLAG),
                     "a clone that has never been to the Nether goes through the portal (" + pt.debug + " options " + c.controller().optionLog + ")");
             h.assertTrue(pt.homeTrips >= 1 && c.level().dimension() == net.minecraft.world.level.Level.OVERWORLD,
-                    "and comes back on its own (" + c.level().dimension().location() + ")");
+                    "and comes back on its own (" + c.level().dimension().location() + " " + pt.debug + ")");
             finish(h, c);
             clearBases(h);
         });
@@ -2505,7 +2508,7 @@ public final class CloneGameTests {
     public static void fleesIntoAPortal(GameTestHelper h) {
         clearBases(h);
         litPortal(h);
-        ClonePlayer c = clone(h, 6.5, 7.0, 0f, true);
+        ClonePlayer c = clone(h, 6.5, 7.0, 180f, true); // looking at the husk; the portal is behind
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;

@@ -231,6 +231,7 @@ public final class Portals {
                 stage = 1;
             }
             case 1 -> {
+                note = "pour at " + waterAt.toShortString() + " lava " + lava.toShortString() + " tries " + tries;
                 // close enough to pour, but not standing next to the lava
                 Vec3 pour = new Vec3(waterAt.getX() + 0.5, waterAt.getY(), waterAt.getZ() + 0.5);
                 double d = self.getEyePosition().distanceTo(pour);
@@ -259,6 +260,7 @@ public final class Portals {
             case 2 -> {
                 // the water turned the lava source to obsidian: take the water back
                 motor.stop();
+                note = "poured: lava now " + level().getBlockState(lava) + " water " + level().getFluidState(waterAt).isSource();
                 if (level().getBlockState(lava).is(Blocks.OBSIDIAN)) {
                     obsidianAt = lava;
                 }
@@ -550,6 +552,8 @@ public final class Portals {
                 && (returning || now > stayUntil || threatened || self.getHealth() < self.getMaxHealth() * 0.5f)) {
             returning = true;
             Status st = enter(arrivedAt);
+            debug = "home via " + arrivedAt.toShortString() + " portal=" + isPortal(arrivedAt) + " st=" + st + " at=" + self.blockPosition().toShortString()
+                    + " stuck=" + motor.stuckCount();
             if (st == Status.FAILED) {
                 BlockPos other = portalNear(arrivedAt, 6);
                 if (other == null) {

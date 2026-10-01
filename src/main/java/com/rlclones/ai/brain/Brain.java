@@ -96,8 +96,8 @@ public final class Brain {
                 return a;
             }
         }
-        if (rnd.nextInt(10) == 0) {
-            return rnd.nextInt(2);
+        if (rnd.nextInt(5) == 0 || parkQ[g][1] == parkQ[g][0]) {
+            return rnd.nextInt(2); // keep trying both now and then
         }
         return parkQ[g][1] > parkQ[g][0] ? 1 : 0;
     }

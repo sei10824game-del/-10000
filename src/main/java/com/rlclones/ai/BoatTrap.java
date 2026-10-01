@@ -53,7 +53,7 @@ public final class BoatTrap {
             return false;
         }
         double d = t.distanceTo(self);
-        return d > 2.0 && d < 5.0 && self.onGround();
+        return d > 2.6 && d < 5.0 && self.onGround();
     }
 
     /** During a fight: returns true while it has the clone's hands (placing, watching, breaking, collecting). */
@@ -83,8 +83,11 @@ public final class BoatTrap {
             stage = null;
             return;
         }
-        BlockPos under = foe.blockPosition().below();
-        Vec3 spot = new Vec3(foe.getX(), under.getY() + 1.0, foe.getZ()); // the ground right under its feet
+        // a boat cannot be put down on top of a mob: right in front of it, in its way to us, so it walks into it
+        Vec3 toUs = new Vec3(self.getX() - foe.getX(), 0, self.getZ() - foe.getZ()).normalize();
+        Vec3 front = foe.position().add(toUs.scale(1.3));
+        BlockPos under = BlockPos.containing(front.x, foe.getY() - 0.5, front.z);
+        Vec3 spot = new Vec3(front.x, under.getY() + 1.0, front.z);
         Vec3 eye = self.getEyePosition();
         float yaw = (float) Math.toDegrees(Mth.atan2(spot.z - eye.z, spot.x - eye.x)) - 90.0F;
         float pitch = (float) -Math.toDegrees(Mth.atan2(spot.y - eye.y, Math.sqrt((spot.x - eye.x) * (spot.x - eye.x) + (spot.z - eye.z) * (spot.z - eye.z))));

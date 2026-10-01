@@ -102,6 +102,9 @@ public final class Travel {
     }
 
     /** Called every tick while walking somewhere: returns true when it took over the movement. */
+    /** Set by the controller each tick: monsters close by (no time to dig a tunnel). */
+    public boolean threatened;
+
     public boolean tick(long now) {
         if (bridging) {
             return bridgeTick();
@@ -125,7 +128,7 @@ public final class Travel {
         int g = gapAhead(d);
         debug = "gap=" + g + " dir=" + d;
         if (g == 0) {
-            return startTunnel(d);
+            return !threatened && startTunnel(d);
         }
         boolean blocks = Config.get(Config.ALLOW_BLOCK_PLACING, true) && bridgeBlocks() >= g;
         boolean lava = g > 0 && lavaBelow(d, g);
@@ -137,17 +140,15 @@ public final class Travel {
             if (lava) {
                 how = brain().parkourValue(g, 1) >= brain().parkourValue(g, 0) ? 1 : 0;
             }
-            if (how == 1 || brain().parkourValue(g, 0) > -0.5f || brain().parkourTries(g, 0) == 0) {
-                parkour = true;
-                dir = d;
-                gap = g;
-                ticks = 0;
-                stage = how == 1 ? 0 : 1;
-                edge = edgeBlock(d);
-                startY = self.getY();
-                parkourJumps++;
-                return parkourTick();
-            }
+            parkour = true;
+            dir = d;
+            gap = g;
+            ticks = 0;
+            stage = how == 1 ? 0 : 1;
+            edge = edgeBlock(d);
+            startY = self.getY();
+            parkourJumps++;
+            return parkourTick();
         }
         if (g > 0 && blocks) {
             bridging = true;
@@ -218,6 +219,7 @@ public final class Travel {
     private BlockPos edge;
     private double startY;
     private boolean jumped;
+    private String trace = "";
     public int parkourJumps;
     public int parkourSuccesses;
     public int lastHow = -1;
@@ -283,6 +285,7 @@ public final class Travel {
                     motor.jump();
                     jumped = true;
                     stage = 2;
+                    trace = "how=" + how + " off=" + String.format("%.2f", along) + " v=" + String.format("%.2f", speed) + " sprint=" + self.isSprinting();
                 } else if (along > 0.7) {
                     stage = 2; // off the edge without a jump
                 }
@@ -294,6 +297,7 @@ public final class Travel {
                 if (self.onGround() && ticks > 3) {
                     double along = self.position().subtract(edgeCenter).dot(fwd);
                     boolean across = along > gap + 0.2 && self.getY() >= startY - 0.5;
+                    trace += " land=" + String.format("%.2f", along) + " dy=" + String.format("%.2f", self.getY() - startY);
                     return endParkour(across);
                 }
                 if (self.getY() < startY - 2.5) {
@@ -312,7 +316,8 @@ public final class Travel {
             parkourSuccesses++;
         }
         lastHow = how;
-        debug = "parkour gap=" + gap + " how=" + how + " ok=" + success;
+        debug = "parkour gap=" + gap + " how=" + how + " ok=" + success + " [" + trace + "]";
+        trace = "";
         parkour = false;
         jumped = false;
         return finish();

@@ -23,7 +23,12 @@ jobs:
         run: ./gradlew build --no-daemon --stacktrace
 
       - name: Run GameTests (headless server)
-        run: ./gradlew runGameTestServer --no-daemon
+        # a fixed world seed: the test arenas sit underground, and random terrain around them (falling gravel,
+        # caves, water) would make the results differ from run to run
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          ./gradlew runGameTestServer --no-daemon
 
       - name: Upload mod jar
         if: always()

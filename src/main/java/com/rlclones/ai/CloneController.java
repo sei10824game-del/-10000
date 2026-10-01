@@ -433,6 +433,7 @@ public final class CloneController {
             itemBusy = portals.travelTick(now, threatened); // out of the portal we came through / home from the Nether
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
+            travel.threatened = threatened;
             itemBusy = travel.tick(now); // bridging a gap / pearling across
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE && ((now + self.getId()) % 20) == 7 && !self.isUsingItem()) {
@@ -1915,6 +1916,8 @@ public final class CloneController {
         if (actionTicks == 0 || !self.isUsingItem()) {
             lobDraw = friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.BOW ? lobDrawTicks(t) : 0;
         }
+        shootDebug = "friend=" + (friend != null) + " kind=" + Equipment.rangedKind(held) + " lob=" + lobDraw + " pitch=" + (int) self.getXRot()
+                + "/" + (int) lobPitch + " using=" + self.isUsingItem() + " t=" + actionTicks;
         if (lobDraw > 0) {
             aimLob(t, lobDraw);
         } else {
@@ -2017,6 +2020,7 @@ public final class CloneController {
     /** Arrows lobbed over a friend / bows taken instead of a crossbow because of one (diagnostics, tests). */
     public int arcShots;
     public int bowSwitches;
+    public String shootDebug = "";
     private int lobDraw;
 
     /** A player / clone of ours standing in the straight line of fire. */

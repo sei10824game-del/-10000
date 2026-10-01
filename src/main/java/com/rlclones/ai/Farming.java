@@ -52,6 +52,36 @@ public final class Farming {
     private String last = "";
 
     /** State for diagnostics. */
+    /** How many spots pass each test on the way to "tillable and visible" (diagnostics). */
+    public String diag() {
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        int soil = 0, open = 0, wet = 0, lit = 0, seen = 0;
+        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-RADIUS, -2, -RADIUS), feet.offset(RADIUS, 1, RADIUS))) {
+            BlockState st = level.getBlockState(p);
+            if (!(st.is(Blocks.GRASS_BLOCK) || st.is(Blocks.DIRT))) {
+                continue;
+            }
+            soil++;
+            if (!level.getBlockState(p.above()).isAir()) {
+                continue;
+            }
+            open++;
+            if (!nearWater(level, p)) {
+                continue;
+            }
+            wet++;
+            if (!bright(level, p.above())) {
+                continue;
+            }
+            lit++;
+            if (visible(level, p, false)) {
+                seen++;
+            }
+        }
+        return "soil=" + soil + " open=" + open + " wet=" + wet + " lit=" + lit + " seen=" + seen;
+    }
+
     public String debug() {
         return "job=" + job + " target=" + target + " tries=" + tries + " ticks=" + ticks + " tilled=" + tilled + " planted=" + planted + " failed=" + failed.size()
                 + " hand=" + self.getMainHandItem() + " last=" + last
