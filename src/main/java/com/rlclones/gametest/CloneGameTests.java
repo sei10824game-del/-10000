@@ -1304,7 +1304,7 @@ public final class CloneGameTests {
             h.assertTrue(c.getCloneBrain().obtained("minecraft:cobblestone"), "clone should mine stone and get cobblestone: quarried="
                     + c.controller().quarried + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog
                     + " stoneSeen=" + c.controller().perception().blocks().values().stream().filter(k -> k == com.rlclones.ai.Perception.BlockKind.STONE).count()
-                    + " " + c.controller().crafting().debug());
+                    + " " + c.controller().crafting().debug() + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath);
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
                     + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced
                     + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog + " " + c.controller().crafting().debug()
@@ -1969,13 +1969,18 @@ public final class CloneGameTests {
         var c2 = h.spawn(EntityType.CHICKEN, new Vec3(7.5, 2, 7.5));
         c1.setNoAi(true);
         c2.setNoAi(true);
-        h.assertTrue(com.rlclones.ai.Animals.protectedAnimal(c1), "with only two chickens in the pen, they are not eaten");
-        var c3 = h.spawn(EntityType.CHICKEN, new Vec3(6.5, 2, 7.5));
-        c3.setNoAi(true);
-        h.assertFalse(com.rlclones.ai.Animals.protectedAnimal(c1), "a third one may be eaten when hungry");
-        h.assertFalse(com.rlclones.ai.Senses.isFoodAnimal(c1) == false, "and counts as food again");
-        clearBases(h);
-        h.succeed();
+        // (looked at a few ticks later, once the new arena's entities are all in the world)
+        h.runAfterDelay(5, () -> {
+            h.assertTrue(com.rlclones.ai.Animals.protectedAnimal(c1), "with only two chickens in the pen, they are not eaten");
+            var c3 = h.spawn(EntityType.CHICKEN, new Vec3(6.5, 2, 7.5));
+            c3.setNoAi(true);
+        });
+        h.runAfterDelay(10, () -> {
+            h.assertFalse(com.rlclones.ai.Animals.protectedAnimal(c1), "a third one may be eaten when hungry");
+            h.assertFalse(com.rlclones.ai.Senses.isFoodAnimal(c1) == false, "and counts as food again");
+            clearBases(h);
+            h.succeed();
+        });
     }
 
     @GameTest(template = ARENA, timeoutTicks = 400, batch = "pen3")

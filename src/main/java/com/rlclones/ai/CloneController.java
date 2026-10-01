@@ -1408,7 +1408,14 @@ public final class CloneController {
             return;
         }
         option = Option.VALUES[o];
-        optionLog.add(option.name());
+        String why = "";
+        if (option == Option.FIGHT || option == Option.FLEE) {
+            List<Perception.Seen> th = Senses.threats(perception, self, now, 16);
+            if (!th.isEmpty()) {
+                why = ":" + th.get(0).typeId + "@" + (int) th.get(0).pos.distanceTo(self.position());
+            }
+        }
+        optionLog.add(option.name() + why);
         if (optionLog.size() > 30) {
             optionLog.remove(0);
         }
