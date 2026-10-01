@@ -31,6 +31,7 @@ public final class BoatTrap {
     public int trapsSprung;
     public int boatsRecovered;
     public String debug = "";
+    private String note = "";
 
     public BoatTrap(ClonePlayer self, Motor motor) {
         this.self = self;
@@ -68,7 +69,9 @@ public final class BoatTrap {
             lastTry = now;
         }
         ticks++;
-        debug = stage + " " + ticks;
+        if (stage != Stage.WATCH) {
+            debug = stage + " " + ticks + " " + note;
+        }
         switch (stage) {
             case AIM -> aim();
             case WATCH -> watch();
@@ -131,10 +134,12 @@ public final class BoatTrap {
             Equipment.manage(self, true);
             return;
         }
+        debug = "WATCH " + ticks + " d=" + String.format("%.2f", foe.distanceTo(boat)) + " touched=" + touched;
         if (ticks > 60 || !foe.isAlive()) {
             if (foe.isAlive() && touched && self.getCloneBrain() != null) {
                 self.getCloneBrain().setFlag(key(foe)); // it bumped into the boat and still did not sit down: that kind does not
             }
+            note = debug;
             stage = Stage.BREAK;
             ticks = 0;
         }

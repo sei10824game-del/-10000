@@ -249,6 +249,9 @@ public final class Travel {
     /** The last block before the gap, straight ahead. */
     private BlockPos edgeBlock(Direction d) {
         BlockPos feet = self.blockPosition();
+        if (!solid(feet.below()) && solid(feet.relative(d.getOpposite()).below())) {
+            return feet.relative(d.getOpposite()); // crouching over the rim: the edge is the block behind us
+        }
         for (int i = 0; i < 3; i++) {
             BlockPos c = feet.relative(d, i);
             if (!solid(c.relative(d).below())) {
