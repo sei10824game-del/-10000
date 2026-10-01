@@ -255,6 +255,9 @@ public final class Senses {
             }
             BlockPos p = e.getKey();
             double d = p.distToCenterSqr(agent.position());
+            if (kind == Perception.BlockKind.STONE && p.getY() < agent.getBlockY()) {
+                d += 64; // rock at eye level before digging into the ground under us
+            }
             if (d >= bestD) {
                 continue;
             }

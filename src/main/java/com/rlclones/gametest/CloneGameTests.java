@@ -251,7 +251,8 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(h.getBlockState(log).isAir(), "log should be mined");
+            h.assertTrue(h.getBlockState(log).isAir(), "log should be mined (" + c.controller().motor().mineDebug + " pos="
+                    + c.position().subtract(h.absoluteVec(Vec3.ZERO)) + " alive=" + c.isAlive() + ")");
             h.assertTrue(c.getInventory().countItem(Items.OAK_LOG) >= 1, "clone should pick up the dropped log");
             finish(h, c);
         });
@@ -1309,7 +1310,9 @@ public final class CloneGameTests {
             h.assertTrue(c.getCloneBrain().obtained("minecraft:cobblestone"), "clone should mine stone and get cobblestone: quarried="
                     + c.controller().quarried + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog
                     + " stoneSeen=" + c.controller().perception().blocks().values().stream().filter(k -> k == com.rlclones.ai.Perception.BlockKind.STONE).count()
-                    + " " + c.controller().crafting().debug() + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath);
+                    + " " + c.controller().crafting().debug() + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath
+                    + " harvest=" + c.controller().harvestDebug + " mine=" + c.controller().motor().mineDebug + " pos="
+                    + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
                     + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced
                     + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog + " " + c.controller().crafting().debug()

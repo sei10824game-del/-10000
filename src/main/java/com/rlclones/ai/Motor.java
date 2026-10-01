@@ -389,6 +389,9 @@ public final class Motor {
      *
      * @return true when the block is gone
      */
+    /** Why the last mining tick did not get on (for diagnostics). */
+    public String mineDebug = "";
+
     public boolean mine(BlockPos pos) {
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);
@@ -403,17 +406,22 @@ public final class Motor {
         Vec3 eye = self.getEyePosition();
         if (eye.distanceTo(Vec3.atCenterOf(pos)) > BLOCK_REACH) {
             lookAt(Vec3.atCenterOf(pos));
+            mineDebug = "far " + String.format("%.2f", eye.distanceTo(Vec3.atCenterOf(pos)));
             return false;
         }
         // aim at a part of the block we can actually see (a floor block seen at a flat angle shows only its top)
         lookAt(visiblePoint(level, eye, pos));
         BlockHitResult hit = level.clip(new ClipContext(eye, eye.add(self.getViewVector(1.0F).scale(BLOCK_REACH)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
         if (hit.getType() != HitResult.Type.BLOCK || !hit.getBlockPos().equals(pos)) {
+            mineDebug = "aim " + hit.getType() + " " + (hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos().subtract(pos).toShortString() : "")
+                    + " yaw=" + (int) self.getYRot() + " pitch=" + (int) self.getXRot();
             return false;
         }
         if (!self.mayInteract(level, pos) || self.blockActionRestricted(level, pos, self.gameMode.getGameModeForPlayer())) {
+            mineDebug = "not allowed";
             return false;
         }
+        mineDebug = "progress " + String.format("%.2f", breakProgress);
         self.resetLastActionTime();
         breakProgress += state.getDestroyProgress(self, level, pos);
         if (self.tickCount % 4 == 0) {
