@@ -53,6 +53,9 @@ public final class Motor {
     private boolean dive;
     /** Times the clone crouched on its own at a dangerous edge. */
     public int edgeSneaks;
+    /** Crouched at a deadly edge recently. */
+    private boolean atEdge;
+    private int atEdgeTicks;
     public int dives;
 
     // path following
@@ -329,7 +332,9 @@ public final class Motor {
         if (++progressTimer >= 20) {
             if (self.position().distanceTo(progressAnchor) < 0.5) {
                 stuckCount++;
-                jump();
+                if (!atEdge) {
+                    jump(); // never hop forward at a deadly edge
+                }
                 path = null;
                 repathTimer = 0;
             } else {
@@ -667,6 +672,11 @@ public final class Motor {
             // a deadly drop right in front: crouch like a careful player, so the feet cannot slip over the edge
             sneak = true;
             edgeSneaks++;
+            atEdgeTicks = 30;
+        }
+        atEdge = atEdgeTicks > 0;
+        if (atEdgeTicks > 0) {
+            atEdgeTicks--;
         }
         if (sneak) {
             zza *= 0.3f;

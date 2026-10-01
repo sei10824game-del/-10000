@@ -491,8 +491,9 @@ public final class Consumables {
             }
             // aim into the water (the surface is a little below the block top)
             BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
-            if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
-                return p.immutable();
+            if (hit.getType() == HitResult.Type.BLOCK && level.getFluidState(hit.getBlockPos()).is(FluidTags.WATER)
+                    && level.getFluidState(hit.getBlockPos()).isSource() && self.getEyePosition().distanceTo(Vec3.atCenterOf(hit.getBlockPos())) <= Motor.BLOCK_REACH - 0.3) {
+                return hit.getBlockPos().immutable();
             }
         }
         return null;

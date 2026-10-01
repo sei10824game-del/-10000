@@ -836,6 +836,7 @@ public final class CloneGameTests {
     private static void clearBases(GameTestHelper h) {
         com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         b.bases.clear();
+        b.pens.clear();
         b.setDirty();
     }
 
@@ -1803,7 +1804,8 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, -90f, true);
         h.succeedWhen(() -> {
             h.assertTrue(c.getInventory().countItem(Items.OAK_PLANKS) >= 1, "with no tree around, the clone takes planks from what was built: options "
-                    + c.controller().optionLog);
+                    + c.controller().optionLog + " harvest=" + c.controller().harvestDebug + " wood=" + c.controller().perception().blocks().entrySet().stream()
+                    .filter(e -> e.getValue() == com.rlclones.ai.Perception.BlockKind.WOOD).map(e -> e.getKey().toShortString()).toList());
             h.assertTrue(h.getLevel().getBlockState(baseWood).is(Blocks.OAK_PLANKS), "but never from a base");
             finish(h, c);
             clearBases(h);
@@ -1820,6 +1822,8 @@ public final class CloneGameTests {
         }
         h.setBlock(new BlockPos(7, 0, 9), Blocks.STONE);
         h.setBlock(new BlockPos(7, 1, 9), Blocks.WATER);
+        h.setBlock(new BlockPos(1, 2, 9), Blocks.GLOWSTONE); // crops need light (>= 8) to be planted
+        h.setBlock(new BlockPos(13, 2, 9), Blocks.GLOWSTONE);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
         boolean[] active = {false};

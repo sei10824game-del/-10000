@@ -323,9 +323,9 @@ public final class Brewing {
                 continue;
             }
             BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
-            if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
+            if (hit.getType() == HitResult.Type.BLOCK && level.getFluidState(hit.getBlockPos()).is(FluidTags.WATER) && level.getFluidState(hit.getBlockPos()).isSource()) {
                 bestD = d;
-                best = p.immutable();
+                best = hit.getBlockPos().immutable();
             }
         }
         return best;

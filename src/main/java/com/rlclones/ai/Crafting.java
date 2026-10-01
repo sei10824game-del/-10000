@@ -479,6 +479,13 @@ public final class Crafting {
                 }
             }
         }
+        // one button for every TNT, to set it off with
+        if (count(p, Items.TNT) > countTag(p, ItemTags.BUTTONS)) {
+            CraftingRecipe r = craftable(p, s -> s.is(ItemTags.BUTTONS));
+            if (r != null) {
+                return r;
+            }
+        }
         boolean wantsTools = !wanted.isEmpty();
         int planks = countTag(p, ItemTags.PLANKS);
         int logs = countTag(p, ItemTags.LOGS);
@@ -503,13 +510,6 @@ public final class Crafting {
         }
         if (count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && !furnaceNearby(p)) {
             CraftingRecipe r = craftable(p, s -> s.is(Items.FURNACE));
-            if (r != null) {
-                return r;
-            }
-        }
-        // one button for every TNT, to set it off with
-        if (count(p, Items.TNT) > countTag(p, ItemTags.BUTTONS)) {
-            CraftingRecipe r = craftable(p, s -> s.is(ItemTags.BUTTONS));
             if (r != null) {
                 return r;
             }

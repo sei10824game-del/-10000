@@ -52,6 +52,7 @@ public final class Animals {
     private int ticks;
     private int stage;
     private int cooldown;
+    private int tries;
     @Nullable
     private BlockPos penOrigin;
     private final List<BlockPos> penPlan = new ArrayList<>();
@@ -390,8 +391,10 @@ public final class Animals {
                 Equipment.select(self, slot);
                 if (motor.placeBlockAt(next)) {
                     fencesPlaced++;
-                } else {
-                    penPlan.remove(next);
+                    tries = 0;
+                } else if (++tries > 15) {
+                    penPlan.remove(next); // something in the way: leave that spot
+                    tries = 0;
                 }
             }
             case 2 -> {
@@ -432,13 +435,18 @@ public final class Animals {
     private Status leaveAndClose(boolean newPen) {
         ServerLevel level = self.serverLevel();
         BlockPos gate = penOrigin.offset(2, 0, 0);
-        Vec3 outside = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, -2));
+        Vec3 outside = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, -1)); // right in front of the gateway
         if (Motor.horizontalDistance(self.position(), outside) > 0.7) {
             motor.navigate(outside, 0.4, false);
-            if (Motor.horizontalDistance(self.position(), outside) < 2.0) {
+            if (Motor.horizontalDistance(self.position(), outside) < 3.0) {
                 motor.moveToward(outside);
             }
-            return motor.stuckCount() > 8 ? Status.FAILED : Status.WORKING;
+            if (motor.stuckCount() > 8 && Motor.horizontalDistance(self.position(), outside) > 1.5) {
+                return Status.FAILED;
+            }
+            if (motor.stuckCount() <= 8) {
+                return Status.WORKING;
+            }
         }
         motor.stop();
         BlockState st = level.getBlockState(gate);

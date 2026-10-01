@@ -67,9 +67,11 @@ public final class Fishing {
                 continue;
             }
             BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.COLLIDER, ClipContext.Fluid.SOURCE_ONLY, self));
-            if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
+            // whatever water the line of sight reaches first is water we can see
+            if (hit.getType() == HitResult.Type.BLOCK && level.getFluidState(hit.getBlockPos()).is(FluidTags.WATER)
+                    && level.getFluidState(hit.getBlockPos()).isSource() && hit.getBlockPos().distSqr(feet) > 4) {
                 bestD = d;
-                best = p.immutable();
+                best = hit.getBlockPos().immutable();
             }
         }
         return best;

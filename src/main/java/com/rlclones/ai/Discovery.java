@@ -568,6 +568,11 @@ public final class Discovery {
             }
             return false;
         }
+        if (self.controller() != null && !self.controller().safeToDig(target)) {
+            perception.forgetBlock(target);
+            target = null;
+            return false;
+        }
         motor.stop();
         Equipment.select(self, Equipment.bestToolSlot(self, st));
         if (motor.mine(target)) {

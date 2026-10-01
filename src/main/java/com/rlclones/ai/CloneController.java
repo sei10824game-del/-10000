@@ -454,6 +454,30 @@ public final class CloneController {
 
     public long heardSounds;
     public int quarried;
+    public String harvestDebug = "";
+
+    /**
+     * Safe to dig out like a careful player: never the block right under our own feet with a drop below it, nothing
+     * deeper than one below the feet, and nothing touching lava (or opening into a drop).
+     */
+    public boolean safeToDig(BlockPos p) {
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        if (p.getY() < feet.getY() - 1) {
+            return false;
+        }
+        boolean underUs = p.getY() < feet.getY() && Math.abs(p.getX() + 0.5 - self.getX()) < 0.9 && Math.abs(p.getZ() + 0.5 - self.getZ()) < 0.9;
+        BlockPos below = p.below();
+        if (underUs && level.getBlockState(below).getCollisionShape(level, below).isEmpty()) {
+            return false;
+        }
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+            if (level.getFluidState(p.relative(d)).is(net.minecraft.tags.FluidTags.LAVA)) {
+                return false;
+            }
+        }
+        return true;
+    }
     public final java.util.List<String> optionLog = new java.util.ArrayList<>();
 
     /** The walls around the feet cannot be dug through quickly (obsidian, bedrock, no fitting tool...). */
@@ -1977,10 +2001,18 @@ public final class CloneController {
             }
             if (kind == Perception.BlockKind.WOOD
                     && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(blockTarget), 12) != null) {
+                harvestDebug = "base " + blockTarget.toShortString();
                 perception.forgetBlock(blockTarget); // never take a base apart
                 blockTarget = null;
                 return false;
             }
+            if (kind != Perception.BlockKind.LOG && !safeToDig(blockTarget)) {
+                harvestDebug = "unsafe " + blockTarget.toShortString();
+                perception.forgetBlock(blockTarget);
+                blockTarget = null;
+                return false;
+            }
+            harvestDebug = "target " + blockTarget.toShortString();
             if (perception.kindAt(blockTarget) != kind) {
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
