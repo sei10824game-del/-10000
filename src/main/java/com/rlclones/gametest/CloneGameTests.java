@@ -994,7 +994,8 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
         c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 8));
-        h.assertTrue(c.controller().farming().hasWork(), "soil next to water + hoe + seeds = work");
+        // (asked once the glowstone light has spread)
+        h.runAfterDelay(10, () -> h.assertTrue(c.controller().farming().hasWork(), "soil next to water + hoe + seeds = work"));
         h.onEachTick(() -> {
             c.controller().farming().tick();
             c.controller().motor().tick();
@@ -1103,7 +1104,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(c.getInventory().countItem(Items.HAY_BLOCK) >= 1, "clone should mine the unknown hay bale and pick it up: started="
                     + started[0] + " done=" + done[0] + " " + c.controller().discovery().debug() + " hay="
-                    + h.getLevel().getBlockState(h.absolutePos(new BlockPos(7, 2, 10))) + " pos=" + c.position());
+                    + h.getLevel().getBlockState(h.absolutePos(new BlockPos(7, 2, 10))) + " pos=" + c.position() + " friendHay=" + friend.getInventory().countItem(Items.HAY_BLOCK));
             String facts = c.getCloneBrain().facts("minecraft:hay_block");
             h.assertTrue(facts.contains("craft=") && facts.contains("minecraft:wheat") && facts.contains("then=") && facts.contains("minecraft:bread"),
                     "it should understand that the hay bale gives wheat and from that bread (" + facts + ")");
@@ -1237,6 +1238,14 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 4800, batch = "stone")
     public static void minesStoneAndBuildsAFurnace(GameTestHelper h) {
+        // a rock to quarry (the arena floor is a thin slab over nothing: a careful clone does not dig holes in it)
+        for (int x = 10; x <= 12; x++) {
+            for (int z = 9; z <= 11; z++) {
+                for (int y = 2; y <= 3; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));

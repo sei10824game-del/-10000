@@ -544,9 +544,24 @@ public final class Discovery {
             return true;
         }
         if (collect > 0) {
+            // walk over what dropped (it may have bounced off a little)
             collect--;
-            motor.navigate(Vec3.atBottomCenterOf(target), 0.3, false);
-            return collect == 0;
+            var drops = self.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    new net.minecraft.world.phys.AABB(target).inflate(4), e -> e.isAlive());
+            Vec3 to = Vec3.atBottomCenterOf(target);
+            double best = Double.MAX_VALUE;
+            for (var it : drops) {
+                double d = it.distanceToSqr(self);
+                if (d < best) {
+                    best = d;
+                    to = it.position();
+                }
+            }
+            motor.navigate(to, 0.2, false);
+            if (Motor.horizontalDistance(self.position(), to) < 1.5) {
+                motor.moveToward(to);
+            }
+            return collect == 0 || drops.isEmpty() && collect < 50;
         }
         if (target == null) {
             target = nearestUnknown();
@@ -583,7 +598,7 @@ public final class Discovery {
             }
             blocksExamined++;
             perception.forgetBlock(target);
-            collect = 30;
+            collect = 60;
         }
         return false;
     }

@@ -110,6 +110,39 @@ public final class Fishing {
         }
     }
 
+    /**
+     * The pitch that lands the bobber {@code dist} blocks away, {@code drop} below the eyes: the cast is played out in
+     * the head (same flight as a thrown bobber: fast start, drag 0.92, gravity 0.03) for each angle.
+     */
+    static float castPitch(double dist, double drop) {
+        float best = 20f;
+        double bestErr = Double.MAX_VALUE;
+        for (int p = -40; p <= 75; p++) {
+            double rad = Math.toRadians(p);
+            double vy0 = Mth.clamp(-Math.tan(rad), -5.0, 5.0);
+            double k = 0.6 / Math.sqrt(1 + vy0 * vy0) + 0.5;
+            double vx = k;
+            double vy = vy0 * k;
+            double x = 0;
+            double y = 0;
+            for (int t = 0; t < 200; t++) {
+                x += vx;
+                y += vy;
+                if (y <= -drop) {
+                    break;
+                }
+                vx *= 0.92;
+                vy = vy * 0.92 - 0.03;
+            }
+            double err = Math.abs(x - dist);
+            if (err < bestErr) {
+                bestErr = err;
+                best = p;
+            }
+        }
+        return best;
+    }
+
     public Status tick() {
         if (water == null || rodSlot(self) < 0 || ++ticks > 2400) {
             reset();
@@ -120,7 +153,8 @@ public final class Fishing {
         Vec3 aim = Vec3.atCenterOf(water).add(0, 1.5, 0);
         Vec3 eye = self.getEyePosition();
         float yaw = (float) Math.toDegrees(Mth.atan2(aim.z - eye.z, aim.x - eye.x)) - 90.0F;
-        float pitch = (float) -Math.toDegrees(Mth.atan2(aim.y - eye.y, Math.sqrt((aim.x - eye.x) * (aim.x - eye.x) + (aim.z - eye.z) * (aim.z - eye.z))));
+        double dist = Math.sqrt((aim.x - eye.x) * (aim.x - eye.x) + (aim.z - eye.z) * (aim.z - eye.z));
+        float pitch = castPitch(dist - 0.3, eye.y - (water.getY() + 0.9)); // the line starts a little in front of us
         if (self.fishing == null) {
             if (++castTicks < 5) {
                 return Status.WORKING;
