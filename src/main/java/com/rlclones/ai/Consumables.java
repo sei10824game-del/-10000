@@ -488,7 +488,8 @@ public final class Consumables {
                 if (y == 0 && dbg.length() < 400) {
                     dbg.append(pitch).append("->").append(land == null ? "null" : String.format(java.util.Locale.ROOT, "%.1f,%.1f,%.1f", land.x - start.x, land.y - start.y, land.z - start.z)).append(' ');
                 }
-                if (land == null || Motor.horizontalDistance(land, start) < 1.8 || land.y < start.y - 0.5 || !standable(land)) {
+                // anywhere out of the pit, at most a few blocks lower (the pearl resets the fall)
+                if (land == null || Motor.horizontalDistance(land, start) < 1.8 || land.y < start.y - 3.0 || !standable(land)) {
                     continue;
                 }
                 if (best == null || land.y > best.y || (land.y == best.y && Motor.horizontalDistance(land, start) < Motor.horizontalDistance(best, start))) {

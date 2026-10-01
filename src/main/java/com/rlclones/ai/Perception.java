@@ -214,11 +214,13 @@ public final class Perception {
         Vec3 c = bb.getCenter();
         double dist = eye.distanceTo(c);
         double radius = Math.max(bb.getXsize(), bb.getYsize()) * 0.5;
+        BlockHitResult hit = self.level().clip(new ClipContext(eye, c, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, self));
+        String blocker = hit.getType() == HitResult.Type.MISS ? "none" : hit.getBlockPos().toShortString() + "=" + self.level().getBlockState(hit.getBlockPos());
         return String.format(java.util.Locale.ROOT,
-                "eye=(%.2f,%.2f,%.2f) yaw=%.1f head=%.1f pitch=%.1f target=(%.2f,%.2f,%.2f) dist=%.2f range=%.1f light=%.2f invisible=%s fov=%s los=%s/%s/%s",
+                "eye=(%.2f,%.2f,%.2f) yaw=%.1f head=%.1f pitch=%.1f target=(%.2f,%.2f,%.2f) dist=%.2f range=%.1f light=%.2f invisible=%s fov=%s los=%s/%s/%s blocker=%s",
                 eye.x, eye.y, eye.z, self.getYRot(), self.getYHeadRot(), self.getXRot(), c.x, c.y, c.z, dist, maxRange(), lightFactor(e),
                 e.isInvisibleTo(self), inFov(eye, c, radius, dist), clearLine(eye, e.getEyePosition()), clearLine(eye, c),
-                clearLine(eye, new Vec3(c.x, bb.minY + 0.1, c.z)));
+                clearLine(eye, new Vec3(c.x, bb.minY + 0.1, c.z)), blocker);
     }
 
     private static boolean wearsSomething(LivingEntity le) {

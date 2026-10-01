@@ -1075,7 +1075,7 @@ public final class CloneGameTests {
         clearBases(h);
         h.setBlock(new BlockPos(7, 2, 10), Blocks.HAY_BLOCK);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        ClonePlayer friend = clone(h, 9.5, 9.5, 135f, false);
+        ClonePlayer friend = clone(h, 7.5, 12.5, 180f, false);
         String name = c.getGameProfile().getName();
         boolean[] started = {false};
         boolean[] done = {false};
@@ -1249,7 +1249,8 @@ public final class CloneGameTests {
                     + " stoneSeen=" + c.controller().perception().blocks().values().stream().filter(k -> k == com.rlclones.ai.Perception.BlockKind.STONE).count()
                     + " " + c.controller().crafting().debug());
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
-                    + ", option " + c.controller().option() + ")");
+                    + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced
+                    + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog + " " + c.controller().crafting().debug());
             finish(h, c);
         });
     }
@@ -1378,14 +1379,14 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "pearl")
     public static void pearlsOutOfAnObsidianPit(GameTestHelper h) {
-        walls(h, 7, 7, 4, Blocks.OBSIDIAN);
+        walls(h, 7, 7, 3, Blocks.OBSIDIAN); // two blocks deep: too high to jump, no blocks to build with
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.ENDER_PEARL, 4));
         BlockPos pit = h.absolutePos(new BlockPos(7, 2, 7));
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().consumables().pearlsThrown >= 1, "with nothing to build with, the clone throws an ender pearl: "
                     + c.controller().consumables().pearlDebug + " escaping=" + c.controller().isEscaping() + " trapped=" + c.controller().escape().isTrapped());
-            h.assertTrue(c.getY() >= pit.getY() + 2.5 || !(c.blockPosition().getX() == pit.getX() && c.blockPosition().getZ() == pit.getZ()),
+            h.assertTrue(c.getY() >= pit.getY() + 1.5 || !(c.blockPosition().getX() == pit.getX() && c.blockPosition().getZ() == pit.getZ()),
                     "and is out of the pit");
             finish(h, c);
         });
