@@ -17,7 +17,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.PotionItem;
 import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -230,7 +229,7 @@ public final class Brewing {
     }
 
     private Status openAndWork(long now) {
-        if (stand == null || !(self.level().getBlockEntity(stand) instanceof BlockEntity be) || !(be instanceof Container)) {
+        if (stand == null || !(self.level().getBlockEntity(stand) instanceof Container)) {
             perception.forgetBlock(stand);
             stand = null;
             readyAt = -1;

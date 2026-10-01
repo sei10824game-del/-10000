@@ -334,10 +334,10 @@ public final class Brain {
         tag.put("knownBlocks", kb);
         int[] lq = new int[LOOK_CONTEXTS * LOOK_SPEEDS.length];
         int[] ln = new int[lq.length];
-        for (int c = 0; c < LOOK_CONTEXTS; c++) {
+        for (int ctx = 0; ctx < LOOK_CONTEXTS; ctx++) {
             for (int a = 0; a < LOOK_SPEEDS.length; a++) {
-                lq[c * LOOK_SPEEDS.length + a] = Float.floatToIntBits(lookQ[c][a]);
-                ln[c * LOOK_SPEEDS.length + a] = lookN[c][a];
+                lq[ctx * LOOK_SPEEDS.length + a] = Float.floatToIntBits(lookQ[ctx][a]);
+                ln[ctx * LOOK_SPEEDS.length + a] = lookN[ctx][a];
             }
         }
         tag.putIntArray("lookQ", lq);
@@ -384,10 +384,10 @@ public final class Brain {
         int[] lq = tag.getIntArray("lookQ");
         int[] ln = tag.getIntArray("lookN");
         if (lq.length == LOOK_CONTEXTS * LOOK_SPEEDS.length && ln.length == lq.length) {
-            for (int c = 0; c < LOOK_CONTEXTS; c++) {
+            for (int ctx = 0; ctx < LOOK_CONTEXTS; ctx++) {
                 for (int a = 0; a < LOOK_SPEEDS.length; a++) {
-                    b.lookQ[c][a] = Float.intBitsToFloat(lq[c * LOOK_SPEEDS.length + a]);
-                    b.lookN[c][a] = ln[c * LOOK_SPEEDS.length + a];
+                    b.lookQ[ctx][a] = Float.intBitsToFloat(lq[ctx * LOOK_SPEEDS.length + a]);
+                    b.lookN[ctx][a] = ln[ctx * LOOK_SPEEDS.length + a];
                 }
             }
         }
