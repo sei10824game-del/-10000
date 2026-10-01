@@ -2120,7 +2120,8 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "arc")
     public static void lobsArrowsOverAFriend(GameTestHelper h) {
-        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
+        h.runAfterDelay(10, () -> c.setAiEnabled(true)); // once it has had a look at who is where
         c.getInventory().add(new ItemStack(Items.BOW));
         c.getInventory().add(new ItemStack(Items.ARROW, 64));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
@@ -2151,7 +2152,8 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "arc2")
     public static void takesTheBowWhenAFriendBlocksTheCrossbow(GameTestHelper h) {
-        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
+        h.runAfterDelay(10, () -> c.setAiEnabled(true)); // once it has had a look at who is where
         c.getInventory().add(new ItemStack(Items.CROSSBOW));
         c.getInventory().add(new ItemStack(Items.BOW));
         c.getInventory().add(new ItemStack(Items.ARROW, 64));

@@ -81,22 +81,26 @@ public final class BoatTrap {
         return stage != null && stage != Stage.WATCH;
     }
 
+    private Vec3 spot;
+
     private void aim() {
         if (!foe.isAlive() || ticks > 30) {
             stage = null;
             return;
         }
-        // a boat cannot be put down on top of a mob: right in front of it, in its way to us, so it walks into it
-        Vec3 toUs = new Vec3(self.getX() - foe.getX(), 0, self.getZ() - foe.getZ()).normalize();
-        Vec3 front = foe.position().add(toUs.scale(foe.getBbWidth() / 2 + 0.9)); // a boat is 1.375 wide
-        BlockPos under = BlockPos.containing(front.x, foe.getY() - 0.5, front.z);
-        Vec3 spot = new Vec3(front.x, under.getY() + 1.0, front.z);
+        if (ticks == 1 || spot == null) {
+            // a boat cannot be put down on top of a mob: right in front of it, in its way to us, so it walks into it
+            Vec3 toUs = new Vec3(self.getX() - foe.getX(), 0, self.getZ() - foe.getZ()).normalize();
+            Vec3 front = foe.position().add(toUs.scale(foe.getBbWidth() / 2 + 0.9)); // a boat is 1.375 wide
+            BlockPos under = BlockPos.containing(front.x, foe.getY() - 0.5, front.z);
+            spot = new Vec3(front.x, under.getY() + 1.0, front.z);
+        }
         Vec3 eye = self.getEyePosition();
         float yaw = (float) Math.toDegrees(Mth.atan2(spot.z - eye.z, spot.x - eye.x)) - 90.0F;
         float pitch = (float) -Math.toDegrees(Mth.atan2(spot.y - eye.y, Math.sqrt((spot.x - eye.x) * (spot.x - eye.x) + (spot.z - eye.z) * (spot.z - eye.z))));
         motor.stop();
         motor.lookAngles(yaw, pitch);
-        if (Math.abs(Mth.wrapDegrees(self.getYRot() - yaw)) < 5f && Math.abs(self.getXRot() - pitch) < 5f) {
+        if (Math.abs(Mth.wrapDegrees(self.getYRot() - yaw)) < 2f && Math.abs(self.getXRot() - pitch) < 2f) {
             Equipment.select(self, Boating.boatSlot(self));
             if (self.getMainHandItem().getItem() instanceof BoatItem && motor.useHeldItem(InteractionHand.MAIN_HAND)) {
                 trapsSet++;

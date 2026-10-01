@@ -176,7 +176,7 @@ public final class CloneController {
             return false;
         };
         perception.setUnknown(discovery::isUnknownObtainable);
-        perception.setDiggable(this::safeToDig);
+        perception.setDiggable(p -> p.getY() <= self.getBlockY() + 3 && safeToDig(p)); // not up a cliff out of reach
         perception.setHarmful(id -> {
             Brain b = self.getCloneBrain();
             return b != null && b.isHarmful(id);
@@ -2162,7 +2162,9 @@ public final class CloneController {
                 consumables.pearlAway(away); // only if the 5 damage of the pearl leaves us alive
             }
         }
-        boolean close = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
+        // (running away we look ahead, not back: what was right behind us a few seconds ago still is)
+        boolean close = perception.remembered().stream().anyMatch(t -> now - t.lastSeen < 200 && t.alive() && Senses.isHostileTo(t.entity, self)
+                && Senses.gap(self, t.entity) < 4);
         if (close && perch.canStart(now) && (fleeStuck > 0 || self.getHealth() < self.getMaxHealth() * 0.5f || self.getRandom().nextInt(40) == 0)) {
             perch.start(); // two blocks up, out of reach
             return true;
@@ -2349,7 +2351,7 @@ public final class CloneController {
                 blockTarget = null;
                 return false;
             }
-            if (kind != Perception.BlockKind.LOG && !safeToDig(blockTarget)) {
+            if (kind != Perception.BlockKind.LOG && (!safeToDig(blockTarget) || kind == Perception.BlockKind.STONE && blockTarget.getY() > self.getBlockY() + 3)) {
                 harvestDebug = "unsafe " + blockTarget.toShortString();
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
