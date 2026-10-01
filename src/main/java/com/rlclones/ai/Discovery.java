@@ -511,6 +511,9 @@ public final class Discovery {
             if (e.getValue() != Perception.BlockKind.UNKNOWN) {
                 continue;
             }
+            if (e.getKey().getY() > self.getBlockY() + 3) {
+                continue; // up a cliff / over a wall: out of reach without climbing
+            }
             double d = e.getKey().distToCenterSqr(self.position());
             if (d < bestD && isUnknownObtainable(self.level().getBlockState(e.getKey()), e.getKey())) {
                 bestD = d;
@@ -569,6 +572,15 @@ public final class Discovery {
                 return true;
             }
             targetId = Perception.blockId(self.level().getBlockState(target));
+        }
+        if (ticks % 20 == 0) {
+            // something new and closer turned up on the way: that first
+            BlockPos nearer = nearestUnknown();
+            if (nearer != null && nearer.distToCenterSqr(self.position()) + 4 < target.distToCenterSqr(self.position())) {
+                target = nearer;
+                targetId = Perception.blockId(self.level().getBlockState(target));
+                motor.resetStuck();
+            }
         }
         BlockState st = self.level().getBlockState(target);
         if (!isUnknownObtainable(st, target)) {

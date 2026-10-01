@@ -362,8 +362,12 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
             itemBusy = travel.tick(now); // bridging a gap / pearling across
         }
-        if (!escaping && !itemBusy && ((now + self.getId()) % 20) == 0 && now - escapeFailedAt > 600 && !motor.isFlying()
-                && !hostileWithin(3.5, now) && escape.isTrapped()) {
+        // look once a second, but only while standing (a hop out of a stuck walk must not hide the hole we are in)
+        boolean trapCheck = !escaping && !itemBusy && now - lastTrapCheck >= 20 && self.onGround();
+        if (trapCheck) {
+            lastTrapCheck = now;
+        }
+        if (trapCheck && now - escapeFailedAt > 600 && !motor.isFlying() && !hostileWithin(3.5, now) && escape.isTrapped()) {
             // reflex, like a player who notices he fell into a hole: get out before doing anything else
             if (option != null) {
                 finishOption(false);
@@ -1331,6 +1335,8 @@ public final class CloneController {
     public void onShieldBlock(float blocked) {
         stepReward += blocked * 0.5f;
     }
+
+    private long lastTrapCheck = Long.MIN_VALUE / 2;
 
     /** How the clone last died (for diagnostics). */
     public String lastDeath = "";
