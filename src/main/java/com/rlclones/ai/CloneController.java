@@ -742,7 +742,10 @@ public final class CloneController {
         }
         Vec3 c = Vec3.atCenterOf(cleanTarget);
         if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 0.5) {
-            motor.navigate(c, 2.5, false);
+            // walk to where one can stand next to / on it (a path into the solid block itself does not exist)
+            BlockPos stand = cleanTarget.above();
+            Vec3 goal = level.getBlockState(stand).getCollisionShape(level, stand).isEmpty() ? Vec3.atBottomCenterOf(stand) : c;
+            motor.navigate(goal, 2.5, false);
             if (motor.stuckCount() > 6) {
                 cleanLog("stuck");
                 perception.forgetBlock(cleanTarget);
