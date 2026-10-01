@@ -51,6 +51,7 @@ public final class Portals {
     private boolean steppingOut;
     private long stayUntil = Long.MIN_VALUE;
     private boolean returning;
+    private int stuckOut;
     @Nullable
     private BlockPos homePortal;
 
@@ -268,6 +269,9 @@ public final class Portals {
                 if (!level().getFluidState(waterAt).is(FluidTags.WATER) || !level().getFluidState(waterAt).isSource()) {
                     stage = 3;
                     return Status.WORKING;
+                }
+                if (obsidianAt == null && tries++ < 40) {
+                    return Status.WORKING; // the water needs a moment to run over the lava
                 }
                 aimAt(water);
                 if (aimed(water) && slotOf(Items.BUCKET) >= 0) {
@@ -511,6 +515,7 @@ public final class Portals {
         BlockPos near = portalNear(self.blockPosition(), 3);
         arrivedAt = near != null ? near : self.blockPosition();
         steppingOut = true;
+        stuckOut = 0;
         returning = false;
         if (level().dimension() == Level.NETHER) {
             netherTrips++;
@@ -537,13 +542,21 @@ public final class Portals {
                 steppingOut = false; // out of the purple: no bouncing straight back
                 return false;
             }
-            for (Direction d : Direction.Plane.HORIZONTAL) {
-                BlockPos out = self.blockPosition().relative(d, 2);
-                if (level().getBlockState(out).isAir() && level().getBlockState(out.above()).isAir() && !isPortal(out)
-                        && level().getBlockState(out.below()).isFaceSturdy(level(), out.below(), Direction.UP)) {
-                    motor.moveToward(Vec3.atBottomCenterOf(out));
-                    return true;
+            for (int dist = 1; dist <= 2; dist++) {
+                for (Direction d : Direction.Plane.HORIZONTAL) {
+                    BlockPos out = self.blockPosition().relative(d, dist);
+                    if (level().getBlockState(out).getCollisionShape(level(), out).isEmpty() && level().getBlockState(out.above()).getCollisionShape(level(), out.above()).isEmpty()
+                            && !isPortal(out) && level().getFluidState(out).isEmpty()
+                            && level().getBlockState(out.below()).isFaceSturdy(level(), out.below(), Direction.UP)) {
+                        motor.moveToward(Vec3.atBottomCenterOf(out));
+                        debug = "stepping out to " + out.toShortString();
+                        return true;
+                    }
                 }
+            }
+            if (++stuckOut > 100) {
+                steppingOut = false; // nowhere to step: let the rest of the brain find a way
+                return false;
             }
             motor.moveDirection(self.getLookAngle());
             return true;

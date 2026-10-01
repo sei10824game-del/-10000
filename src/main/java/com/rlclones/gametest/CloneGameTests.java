@@ -2166,18 +2166,18 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "corner")
     public static void fightsWhenCorneredInsteadOfHoppingAtWalls(GameTestHelper h) {
-        for (int z = 0; z <= 3; z++) {
+        for (int z = 0; z <= 4; z++) {
             for (int y = 2; y <= 4; y++) {
                 h.setBlock(new BlockPos(6, y, z), Blocks.STONE);
                 h.setBlock(new BlockPos(8, y, z), Blocks.STONE);
                 h.setBlock(new BlockPos(7, y, 0), Blocks.STONE); // a dead end
             }
         }
-        ClonePlayer c = clone(h, 7.5, 2.5, 0f, true);
+        ClonePlayer c = clone(h, 7.5, 1.5, 0f, true);
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
-        dummy(h, 7.5, 5.5);
+        dummy(h, 7.5, 4.5); // standing in the only way out
         boolean[] fought = {false};
         h.onEachTick(() -> {
             if (c.controller().corneredFights > 0) {
@@ -2347,7 +2347,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var b = c.getCloneBrain();
             h.assertTrue(c.controller().travel().parkourSuccesses >= 1 && c.getZ() > h.absoluteVec(new Vec3(0, 0, 9.5)).z,
-                    "the clone gets over the 3-wide gap by jumping (" + c.controller().travel().debug + ", falls " + falls[0] + ")");
+                    "the clone gets over the 3-wide gap by jumping (" + c.controller().travel().lastParkour + ", falls " + falls[0] + ")");
             h.assertTrue(b.parkourValue(3, 1) > b.parkourValue(3, 0), "and has learned that a sprinting run-up works better than walking up to it ("
                     + b.parkourValue(3, 0) + " / " + b.parkourValue(3, 1) + ")");
             finish(h, c);

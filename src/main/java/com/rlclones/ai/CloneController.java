@@ -2030,7 +2030,7 @@ public final class CloneController {
         double dist = eye.distanceTo(aim);
         long now = now();
         for (Perception.Seen s : perception.remembered()) {
-            if (now - s.lastSeen > 40 || s.entity == self || s.entity == t || !Senses.isAllyOf(s.entity, self)) {
+            if (now - s.lastSeen > 300 || s.entity == self || s.entity == t || !s.entity.isAlive() || !Senses.isAllyOf(s.entity, self)) {
                 continue;
             }
             if (s.entity.distanceTo(self) < dist && s.entity.getBoundingBox().inflate(0.6).clip(eye, aim).isPresent()) {

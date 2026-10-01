@@ -220,6 +220,9 @@ public final class Travel {
     private double startY;
     private boolean jumped;
     private String trace = "";
+    private int airTicks;
+    private int takeoff;
+    public String lastParkour = "";
     public int parkourJumps;
     public int parkourSuccesses;
     public int lastHow = -1;
@@ -285,16 +288,23 @@ public final class Travel {
                     motor.jump();
                     jumped = true;
                     stage = 2;
+                    airTicks = 0;
+                    takeoff = ticks;
                     trace = "how=" + how + " off=" + String.format("%.2f", along) + " v=" + String.format("%.2f", speed) + " sprint=" + self.isSprinting();
                 } else if (along > 0.7) {
                     stage = 2; // off the edge without a jump
+                    airTicks = 0;
+                    takeoff = ticks;
                 }
             }
             default -> {
                 motor.lookAngles(dir.toYRot(), 0f);
                 motor.moveDirection(fwd);
                 motor.sprint(how == 1);
-                if (self.onGround() && ticks > 3) {
+                if (!self.onGround()) {
+                    airTicks++;
+                }
+                if (self.onGround() && (airTicks > 2 || ticks - takeoff > 25)) {
                     double along = self.position().subtract(edgeCenter).dot(fwd);
                     boolean across = along > gap + 0.2 && self.getY() >= startY - 0.5;
                     trace += " land=" + String.format("%.2f", along) + " dy=" + String.format("%.2f", self.getY() - startY);
@@ -317,6 +327,7 @@ public final class Travel {
         }
         lastHow = how;
         debug = "parkour gap=" + gap + " how=" + how + " ok=" + success + " [" + trace + "]";
+        lastParkour = debug;
         trace = "";
         parkour = false;
         jumped = false;

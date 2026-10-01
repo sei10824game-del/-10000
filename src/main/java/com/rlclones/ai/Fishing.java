@@ -155,6 +155,13 @@ public final class Fishing {
             reset();
             return water == null ? Status.FAILED : Status.DONE;
         }
+        if (!self.serverLevel().getFluidState(water).is(FluidTags.WATER)) {
+            water = fishingSpot(); // that water is gone (something fell in?): another spot
+            if (water == null) {
+                reset();
+                return Status.FAILED;
+            }
+        }
         Equipment.select(self, rodSlot(self));
         motor.stop();
         Vec3 aim = Vec3.atCenterOf(water).add(0, 1.5, 0);
@@ -212,7 +219,8 @@ public final class Fishing {
             }
             debug = "pitch=" + castPitchUsed + " want=" + String.format("%.2f", castDist) + " landed=" + String.format("%.2f", landed)
                     + " wet=" + wet + " bias=" + String.format("%.2f", aimBias) + " hookRel=" + self.fishing.position().subtract(Vec3.atBottomCenterOf(water))
-                    + " selfRel=" + self.position().subtract(Vec3.atBottomCenterOf(water)) + " ground=" + self.fishing.onGround();
+                    + " selfRel=" + self.position().subtract(Vec3.atBottomCenterOf(water)) + " ground=" + self.fishing.onGround()
+                    + " spot=" + self.serverLevel().getBlockState(water) + " under=" + self.serverLevel().getBlockState(BlockPos.containing(self.fishing.position()).below());
         }
         if (sinceCast > 1800 || dryTicks > 40 && sinceCast > 60) {
             motor.useHeldItem(InteractionHand.MAIN_HAND); // nothing / landed badly: pull in and cast again
