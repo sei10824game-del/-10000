@@ -31,6 +31,10 @@ public final class Fishing {
     private int castTicks;
     private boolean bite;
     private int sinceCast;
+    /** Ticks the bobber has been out of the water (it bobs up and down, so one dry tick means nothing). */
+    private int dryTicks;
+    public String debug = "";
+    public int heard;
 
     public int casts;
     public int catches;
@@ -91,6 +95,9 @@ public final class Fishing {
 
     /** The bobber splashed (a fish bites): reel in now. Called from hearing. */
     public void onSound(String path, double x, double y, double z) {
+        if (path.contains("fishing_bobber")) {
+            heard++;
+        }
         if (path.contains("fishing_bobber.splash") && self.fishing != null && self.fishing.position().distanceTo(new Vec3(x, y, z)) < 2.5) {
             bite = true;
         }
@@ -125,6 +132,7 @@ public final class Fishing {
             casts++;
             castTicks = 0;
             sinceCast = 0;
+            dryTicks = 0;
             bite = false;
             return Status.WORKING;
         }
@@ -137,7 +145,12 @@ public final class Fishing {
             catches++;
             return before >= 0 && catches >= 1 ? Status.DONE : Status.WORKING;
         }
-        if (sinceCast > 900 || !self.fishing.isInWater() && sinceCast > 60) {
+        BlockPos hook = self.fishing.blockPosition();
+        boolean wet = self.fishing.isInWater() || self.serverLevel().getFluidState(hook).is(FluidTags.WATER)
+                || self.serverLevel().getFluidState(hook.below()).is(FluidTags.WATER);
+        dryTicks = wet ? 0 : dryTicks + 1;
+        debug = "since=" + sinceCast + " dry=" + dryTicks + " hook=" + hook.toShortString();
+        if (sinceCast > 1800 || dryTicks > 40 && sinceCast > 60) {
             motor.useHeldItem(InteractionHand.MAIN_HAND); // nothing / landed badly: pull in and cast again
         }
         return Status.WORKING;

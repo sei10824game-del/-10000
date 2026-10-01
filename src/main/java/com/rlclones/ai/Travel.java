@@ -55,13 +55,14 @@ public final class Travel {
     /** Length of the gap straight ahead (0 = none, -1 = no land within 16 blocks). */
     public int gapAhead(Direction d) {
         BlockPos feet = self.blockPosition();
-        for (int i = 1; i <= 16; i++) {
+        int start = solid(feet.below()) ? 1 : 0; // crouching over the edge: the gap already starts under us
+        for (int i = start; i <= 16; i++) {
             BlockPos c = feet.relative(d, i);
-            if (!passable(c) || !passable(c.above())) {
+            if (i > 0 && (!passable(c) || !passable(c.above()))) {
                 return i == 1 ? 0 : -1; // a wall: not a gap problem
             }
             if (solid(c.below())) {
-                return i - 1;
+                return i - start;
             }
         }
         return -1;
@@ -143,7 +144,8 @@ public final class Travel {
             lastFeet = feet;
         }
         BlockPos next = feet.relative(dir);
-        BlockPos under = next.below();
+        // hanging over the edge: fill the spot under us first, then the one ahead
+        BlockPos under = solid(feet.below()) ? next.below() : feet.below();
         if (!passable(next) || !passable(next.above())) {
             return finish(); // walked into something: let normal walking take over
         }

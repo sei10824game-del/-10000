@@ -108,7 +108,12 @@ public final class Farming {
         if (!(st.is(Blocks.GRASS_BLOCK) || st.is(Blocks.DIRT) || st.is(Blocks.DIRT_PATH) || st.is(Blocks.COARSE_DIRT) || st.is(Blocks.ROOTED_DIRT))) {
             return false;
         }
-        return level.getBlockState(pos.above()).isAir() && nearWater(level, pos);
+        return level.getBlockState(pos.above()).isAir() && nearWater(level, pos) && bright(level, pos.above());
+    }
+
+    /** Crops only take where there is light (sky or a lamp). */
+    private static boolean bright(ServerLevel level, BlockPos pos) {
+        return level.getRawBrightness(pos, 0) >= 8 || level.canSeeSky(pos);
     }
 
     /** Vanilla farmland stays hydrated within 4 blocks of water on the same level. */
@@ -132,7 +137,8 @@ public final class Farming {
         if (eye.distanceTo(top) > 24) {
             return false;
         }
-        BlockHitResult hit = level.clip(new ClipContext(eye, top, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+        // grass and crops in between do not hide it (VISUAL ignores shapes without collision)
+        BlockHitResult hit = level.clip(new ClipContext(eye, top, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, self));
         return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(pos);
     }
 
@@ -150,7 +156,7 @@ public final class Farming {
             Job j = null;
             if (breaking && ripe(st)) {
                 j = Job.HARVEST;
-            } else if (seeds && st.getBlock() instanceof FarmBlock && level.getBlockState(p.above()).isAir()) {
+            } else if (seeds && st.getBlock() instanceof FarmBlock && level.getBlockState(p.above()).isAir() && bright(level, p.above())) {
                 j = Job.PLANT;
             } else if (seeds && hoe && tillable(level, p)) {
                 j = Job.TILL;

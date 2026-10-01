@@ -436,7 +436,9 @@ public final class Animals {
         ServerLevel level = self.serverLevel();
         BlockPos gate = penOrigin.offset(2, 0, 0);
         Vec3 outside = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, -1)); // right in front of the gateway
-        if (Motor.horizontalDistance(self.position(), outside) > 0.7) {
+        // all the way out: a gate cannot go where we still stand
+        boolean out = self.getZ() < penOrigin.getZ() - 0.35 && Motor.horizontalDistance(self.position(), outside) < 1.2;
+        if (!out) {
             motor.navigate(outside, 0.4, false);
             if (Motor.horizontalDistance(self.position(), outside) < 3.0) {
                 motor.moveToward(outside);

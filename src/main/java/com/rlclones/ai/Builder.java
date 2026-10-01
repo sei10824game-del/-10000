@@ -31,6 +31,8 @@ public final class Builder {
     private int stuckOn;
     private int cooldown;
     public int placed;
+    /** Why the last build ended / blocks skipped (for diagnostics). */
+    public String debug = "";
 
     public Builder(ServerPlayer self, Motor motor) {
         this.self = self;
@@ -63,6 +65,7 @@ public final class Builder {
         plan.clear();
         ticks = 0;
         placed = 0;
+        debug = "";
         for (int y = 0; y <= 1; y++) {
             for (int x = 0; x < SIZE; x++) {
                 for (int z = 0; z < SIZE; z++) {
@@ -138,6 +141,7 @@ public final class Builder {
     public Status tick() {
         ServerLevel level = self.serverLevel();
         if (++ticks > 3600) {
+            debug += " timeout";
             return Status.FAILED;
         }
         Vec3 stand = Vec3.atBottomCenterOf(center());
@@ -146,7 +150,11 @@ public final class Builder {
             if (Motor.horizontalDistance(self.position(), stand) < 1.2) {
                 motor.moveToward(stand);
             }
-            return motor.stuckCount() > 6 ? Status.FAILED : Status.WORKING;
+            if (motor.stuckCount() > 6) {
+                debug += " stuck@" + self.blockPosition().toShortString();
+                return Status.FAILED;
+            }
+            return Status.WORKING;
         }
         motor.stop();
         if (cooldown > 0) {
@@ -166,6 +174,7 @@ public final class Builder {
         BlockPos rel = next.subtract(origin);
         int slot = materialSlot(rel.getY() < 2 && corner(rel.getX(), rel.getZ()));
         if (slot < 0) {
+            debug += " nomaterial";
             return Status.FAILED; // out of material
         }
         Equipment.select(self, slot);
@@ -174,6 +183,7 @@ public final class Builder {
             stuckOn = 0;
             cooldown = 3; // a human needs a moment per block too
         } else if (++stuckOn > 20) {
+            debug += " skip" + next.subtract(origin).toShortString();
             plan.remove(next); // something is in the way; build around it
             stuckOn = 0;
         }

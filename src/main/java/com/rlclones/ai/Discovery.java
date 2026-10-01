@@ -389,8 +389,9 @@ public final class Discovery {
             return;
         }
         Map<String, List<ClonePlayer>> lacking = new LinkedHashMap<>();
-        for (Perception.Seen s : perception.visible()) {
-            if (!(s.entity instanceof ClonePlayer other) || other == self || !other.isAlive() || other.distanceTo(self) > 16
+        for (Perception.Seen s : perception.remembered()) {
+            // seen in the last few seconds: still around even if we just looked away
+            if (now - s.lastSeen > 200 || !(s.entity instanceof ClonePlayer other) || other == self || !other.isAlive() || other.distanceTo(self) > 16
                     || other.getCloneBrain() == null || other.getCloneBrain() == mine) {
                 continue;
             }

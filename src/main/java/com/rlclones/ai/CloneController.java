@@ -466,9 +466,9 @@ public final class CloneController {
         if (p.getY() < feet.getY() - 1) {
             return false;
         }
-        boolean underUs = p.getY() < feet.getY() && Math.abs(p.getX() + 0.5 - self.getX()) < 0.9 && Math.abs(p.getZ() + 0.5 - self.getZ()) < 0.9;
+        // the ground we walk on: only take it where it leaves a shallow dip, never a hole into the dark (or under our feet)
         BlockPos below = p.below();
-        if (underUs && level.getBlockState(below).getCollisionShape(level, below).isEmpty()) {
+        if (p.getY() < feet.getY() && (level.getBlockState(below).getCollisionShape(level, below).isEmpty() || !level.getFluidState(below).isEmpty())) {
             return false;
         }
         for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
@@ -1327,7 +1327,11 @@ public final class CloneController {
         stepReward += blocked * 0.5f;
     }
 
+    /** How the clone last died (for diagnostics). */
+    public String lastDeath = "";
+
     public void onDeath(DamageSource source) {
+        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option;
         if (option != null) {
             finishOption(true);
         }

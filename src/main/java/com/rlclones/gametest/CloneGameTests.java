@@ -906,7 +906,8 @@ public final class CloneGameTests {
             com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             com.rlclones.clone.Bases.Base base = bases.nearest(h.getLevel().dimension(), c.position(), 16);
             h.assertTrue(base != null, "clone should found a base");
-            h.assertTrue(c.controller().storage().builder().placed >= 45, "clone should build the hut (placed " + c.controller().storage().builder().placed + ")");
+            h.assertTrue(c.controller().storage().builder().placed >= 45, "clone should build the hut (placed " + c.controller().storage().builder().placed
+                    + c.controller().storage().builder().debug + ")");
             h.assertTrue(!base.chests.isEmpty(), "a storage chest is placed in the base");
             var chest = (net.minecraft.world.Container) h.getLevel().getBlockEntity(base.chests.get(0));
             h.assertTrue(chest != null && chest.hasAnyOf(java.util.Set.of(Items.BONE, Items.STONE_SWORD, Items.STRING)), "surplus is put into the chest");
@@ -1107,7 +1108,9 @@ public final class CloneGameTests {
             h.assertTrue(facts.contains("craft=") && facts.contains("minecraft:wheat") && facts.contains("then=") && facts.contains("minecraft:bread"),
                     "it should understand that the hay bale gives wheat and from that bread (" + facts + ")");
             h.assertTrue(said(name, "DISCOVER minecraft:hay_block"), "the discovery is announced in chat");
-            h.assertTrue(friend.getCloneBrain().knowsItem("minecraft:hay_block"), "a clone nearby that did not know it is told");
+            h.assertTrue(friend.getCloneBrain().knowsItem("minecraft:hay_block"), "a clone nearby that did not know it is told (told="
+                    + c.controller().discovery().told + " seen=" + (c.controller().perception().get(friend) != null) + " "
+                    + c.controller().perception().explain(friend) + ")");
             finish(h, c, friend);
         });
     }
@@ -1251,7 +1254,8 @@ public final class CloneGameTests {
                     + " " + c.controller().crafting().debug());
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
                     + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced
-                    + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog + " " + c.controller().crafting().debug());
+                    + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog + " " + c.controller().crafting().debug()
+                    + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath + " pos=" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             finish(h, c);
         });
     }
@@ -1716,7 +1720,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             int now = c.getInventory().items.stream().mapToInt(ItemStack::getCount).sum();
             h.assertTrue(c.controller().fishing().catches >= 1 && now > before, "clone should cast, hear the bite and reel something in (casts "
-                    + c.controller().fishing().casts + ")");
+                    + c.controller().fishing().casts + " heard " + c.controller().fishing().heard + " " + c.controller().fishing().debug + ")");
             finish(h, c);
         });
     }
@@ -1794,11 +1798,11 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "salvage")
     public static void takesPlanksFromBuildingsButNotFromBases(GameTestHelper h) {
         clearBases(h);
-        for (int z = 6; z <= 8; z++) {
-            h.setBlock(new BlockPos(11, 2, z), Blocks.OAK_PLANKS);
+        for (int z = 1; z <= 3; z++) {
+            h.setBlock(new BlockPos(13, 2, z), Blocks.OAK_PLANKS);
         }
-        h.setBlock(new BlockPos(2, 2, 12), Blocks.OAK_PLANKS);
-        BlockPos baseWood = h.absolutePos(new BlockPos(2, 2, 12));
+        h.setBlock(new BlockPos(1, 2, 13), Blocks.OAK_PLANKS);
+        BlockPos baseWood = h.absolutePos(new BlockPos(1, 2, 13));
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.add(h.getLevel().dimension(), baseWood, "someone");
         ClonePlayer c = clone(h, 7.5, 7.5, -90f, true);
@@ -1846,7 +1850,8 @@ public final class CloneGameTests {
                 }
             }
             h.assertTrue(c.controller().farming().grassCut >= 1, "clone should cut grass to get seeds");
-            h.assertTrue(planted >= 1, "and then till by the water and plant them");
+            h.assertTrue(planted >= 1, "and then till by the water and plant them: seeds=" + c.getInventory().countItem(Items.WHEAT_SEEDS)
+                    + " cut=" + c.controller().farming().grassCut + " " + c.controller().farming().debug());
             finish(h, c);
         });
     }
