@@ -507,6 +507,10 @@ public final class Travel {
             stairsFrom = feet;
         }
         BlockPos ahead = feet.relative(d);
+        if (ticks % 50 == 0 && stairsDebug.length() < 400) {
+            stairsDebug += " {" + (feet.getY() - stairsFrom.getY()) + " a" + (solid(ahead) ? 1 : 0) + (solid(ahead.above()) ? 1 : 0)
+                    + (solid(ahead.above(2)) ? 1 : 0) + " h" + (solid(feet.above(2)) ? 1 : 0) + " g" + (self.onGround() ? 1 : 0) + "}";
+        }
         BlockPos[] clear;
         BlockPos next;
         if (stairsSign > 0) {

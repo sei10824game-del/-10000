@@ -1893,6 +1893,10 @@ public final class CloneGameTests {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.add(h.getLevel().dimension(), baseWood, "someone");
         ClonePlayer c = clone(h, 7.5, 7.5, -90f, true);
+        for (int z = 1; z <= 3; z++) {
+            c.controller().perception().noteBlock(h.absolutePos(new BlockPos(13, 2, z))); // seen on the way in
+        }
+        c.controller().perception().noteBlock(baseWood);
         h.succeedWhen(() -> {
             h.assertTrue(c.getInventory().countItem(Items.OAK_PLANKS) >= 1, "with no tree around, the clone takes planks from what was built: options "
                     + c.controller().optionLog + " harvest=" + c.controller().harvestDebug + " wood=" + c.controller().perception().blocks().entrySet().stream()

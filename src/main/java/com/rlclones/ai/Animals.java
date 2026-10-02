@@ -851,8 +851,7 @@ public final class Animals {
                 }
                 if (inside >= ls.animals().size()) {
                     lured = inside;
-                    emptyHand(); // crop away: they stop following
-                    stage = 7;
+                    stage = 7; // crop still in hand: they follow us to the gate, staying inside behind us
                     ticks = 0;
                 } else if (ticks > 2400) {
                     return Status.FAILED;
@@ -875,12 +874,15 @@ public final class Animals {
                 BlockState gs = level.getBlockState(gate);
                 if (gs.getBlock() instanceof FenceGateBlock && gs.getValue(BlockStateProperties.OPEN)) {
                     toggleGate(gate);
+                    return Status.WORKING;
                 }
+                emptyHand(); // shut in: crop away, they stop following
                 stage = 8;
                 ticks = 0;
+                tries = 0;
             }
             default -> {
-                Status st = leaveAndClose(false);
+                Status st = exitThroughFence(gate());
                 if (st != Status.WORKING) {
                     Bases.Pen pen = Bases.get(self.getServer()).penAt(level.dimension(), Vec3.atCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2)));
                     int in = 0;
@@ -890,6 +892,64 @@ public final class Animals {
                     livestockDebug = "closed with " + in + " inside";
                 }
                 return st;
+            }
+        }
+        return Status.WORKING;
+    }
+
+    private BlockPos gate() {
+        return penOrigin.offset(penSize / 2, 0, 0);
+    }
+
+    /**
+     * Out of the pen without opening the gate (they would follow): take out the fence next to the gate, step
+     * through and put it straight back from outside.
+     */
+    private Status exitThroughFence(BlockPos gate) {
+        ServerLevel level = self.serverLevel();
+        BlockPos f = gate.west();
+        BlockPos sideIn = f.south();
+        BlockPos outside = f.north();
+        if (ticks > 600) {
+            return Status.FAILED;
+        }
+        switch (tries) {
+            case 0 -> {
+                BlockState st = level.getBlockState(f);
+                if (st.canBeReplaced()) {
+                    tries = 1;
+                    return Status.WORKING;
+                }
+                motor.stop();
+                Equipment.select(self, Equipment.bestToolSlot(self, st));
+                motor.mine(f);
+            }
+            case 1 -> {
+                Vec3 c = Vec3.atBottomCenterOf(sideIn);
+                if (Motor.horizontalDistance(self.position(), c) > 0.35) {
+                    motor.moveToward(c);
+                } else {
+                    tries = 2;
+                }
+            }
+            case 2 -> {
+                Vec3 c = Vec3.atBottomCenterOf(outside);
+                motor.moveToward(c);
+                if (self.getZ() < f.getZ() - 0.4 && Motor.horizontalDistance(self.position(), c) < 0.6) {
+                    tries = 3;
+                }
+            }
+            default -> {
+                motor.stop();
+                if (!level.getBlockState(f).canBeReplaced()) {
+                    return Status.DONE; // fence back in place
+                }
+                int slot = slotOf(s -> s.is(ItemTags.WOODEN_FENCES));
+                if (slot < 0) {
+                    return Status.FAILED;
+                }
+                Equipment.select(self, slot);
+                motor.placeBlockAt(f);
             }
         }
         return Status.WORKING;
