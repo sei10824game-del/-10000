@@ -406,6 +406,15 @@ public final class Motor {
     /** Why the last mining tick did not get on (for diagnostics). */
     public String mineDebug = "";
 
+    /** A block standing between our eyes and {@code pos} (gravel that fell in the way...), or null if the view is clear. */
+    @javax.annotation.Nullable
+    public BlockPos obstruction(BlockPos pos) {
+        ServerLevel level = self.serverLevel();
+        Vec3 eye = self.getEyePosition();
+        BlockHitResult hit = level.clip(new ClipContext(eye, visiblePoint(level, eye, pos), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+        return hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(pos) ? hit.getBlockPos().immutable() : null;
+    }
+
     public boolean mine(BlockPos pos) {
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);

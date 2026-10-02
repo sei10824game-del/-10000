@@ -40,6 +40,10 @@ public final class Animals {
     private enum Job {TAME, BREED, PEN, EGGS, RIDE, STAND, LIVESTOCK}
 
     public static final int PEN_FENCES = 15;
+    /** Bigger animals get a bigger pen: 7x7 (5x5 inside) - room for two of them and the clone leading them in. */
+    public static final int LIVESTOCK_SIZE = 7;
+    public static final int LIVESTOCK_FENCES = LIVESTOCK_SIZE * 4 - 5;
+    private int penSize = 5;
 
     private final ClonePlayer self;
     private final Motor motor;
@@ -179,11 +183,12 @@ public final class Animals {
 
     /** Crafting asks this: fences / a gate still to be made for the pen. */
     private boolean livestockReady() {
-        return count(s -> s.is(ItemTags.WOODEN_FENCES)) >= PEN_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1 && livestockWanted() != null;
+        return count(s -> s.is(ItemTags.WOODEN_FENCES)) >= LIVESTOCK_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1 && livestockWanted() != null;
     }
 
     public boolean needsFences() {
-        return (penWanted() || livestockWanted() != null) && count(s -> s.is(ItemTags.WOODEN_FENCES)) < PEN_FENCES;
+        int fences = count(s -> s.is(ItemTags.WOODEN_FENCES));
+        return penWanted() && fences < PEN_FENCES || livestockWanted() != null && fences < LIVESTOCK_FENCES;
     }
 
     public boolean needsGate() {
@@ -324,6 +329,7 @@ public final class Animals {
         mate = null;
         ticks = 0;
         stage = 0;
+        penSize = 5;
         motor.resetStuck();
         Animal[] pair = breedPair();
         Animal t = tameCandidate();
@@ -345,9 +351,10 @@ public final class Animals {
             mate = pair[1];
         } else if (canBuildPen()) {
             job = Job.PEN;
-        } else if (stock != null && count(s -> s.is(ItemTags.WOODEN_FENCES)) >= PEN_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1
+        } else if (stock != null && count(s -> s.is(ItemTags.WOODEN_FENCES)) >= LIVESTOCK_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1
                 && self.onGround()) {
             job = Job.LIVESTOCK;
+            penSize = LIVESTOCK_SIZE;
             livestock = stock;
         } else if (eggsForPen()) {
             job = Job.EGGS;
@@ -486,14 +493,14 @@ public final class Animals {
         double bestD = Double.MAX_VALUE;
         for (int dx = -8; dx <= 8; dx++) {
             for (int dz = -8; dz <= 8; dz++) {
-                BlockPos origin = feet.offset(dx - 2, 0, dz - 2);
-                double d = origin.offset(2, 0, 2).distSqr(feet);
+                BlockPos origin = feet.offset(dx - penSize / 2, 0, dz - penSize / 2);
+                double d = origin.offset(penSize / 2, 0, penSize / 2).distSqr(feet);
                 if (d >= bestD || bases.nearest(level.dimension(), Vec3.atCenterOf(origin), 10) != null) {
                     continue;
                 }
                 boolean ok = true;
-                for (int x = 0; x < 5 && ok; x++) {
-                    for (int z = -1; z < 5 && ok; z++) {
+                for (int x = 0; x < penSize && ok; x++) {
+                    for (int z = -1; z < penSize && ok; z++) {
                         BlockPos g = origin.offset(x, -1, z);
                         ok = level.getFluidState(g).isEmpty() && level.getBlockState(g).isCollisionShapeFullBlock(level, g)
                                 && level.getBlockState(g.above()).canBeReplaced() && level.getFluidState(g.above()).isEmpty()
@@ -519,10 +526,10 @@ public final class Animals {
                     return Status.FAILED;
                 }
                 penPlan.clear();
-                for (int x = 0; x < 5; x++) {
-                    for (int z = 0; z < 5; z++) {
-                        boolean edge = x == 0 || z == 0 || x == 4 || z == 4;
-                        if (edge && !(x == 2 && z == 0)) {
+                for (int x = 0; x < penSize; x++) {
+                    for (int z = 0; z < penSize; z++) {
+                        boolean edge = x == 0 || z == 0 || x == penSize - 1 || z == penSize - 1;
+                        if (edge && !(x == penSize / 2 && z == 0)) {
                             penPlan.add(penOrigin.offset(x, 0, z));
                         }
                     }
@@ -531,7 +538,7 @@ public final class Animals {
             }
             case 1 -> {
                 // fences all around, standing in the middle
-                Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, 2));
+                Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2));
                 if (Motor.horizontalDistance(self.position(), center) > 0.6) {
                     motor.navigate(center, 0.3, false);
                     if (Motor.horizontalDistance(self.position(), center) < 1.2) {
@@ -604,8 +611,8 @@ public final class Animals {
     /** Walk out through the gateway and put the gate in (new pen) / shut it (existing pen). */
     private Status leaveAndClose(boolean newPen) {
         ServerLevel level = self.serverLevel();
-        BlockPos gate = penOrigin.offset(2, 0, 0);
-        Vec3 outside = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, -1)); // right in front of the gateway
+        BlockPos gate = penOrigin.offset(penSize / 2, 0, 0);
+        Vec3 outside = Vec3.atBottomCenterOf(penOrigin.offset(penSize / 2, 0, -1)); // right in front of the gateway
         // all the way out: a gate cannot go where we still stand
         boolean out = self.getZ() < penOrigin.getZ() - 0.35 && Motor.horizontalDistance(self.position(), outside) < 1.2;
         if (!out) {
@@ -690,8 +697,8 @@ public final class Animals {
 
     @Nullable
     public Livestock livestockWanted() {
-        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || count(s -> s.is(ItemTags.WOODEN_FENCES)) < PEN_FENCES
-                && woodPlanks() < 40 || count(s -> s.is(ItemTags.FENCE_GATES)) < 1 && woodPlanks() < 40 + 8) {
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || count(s -> s.is(ItemTags.WOODEN_FENCES)) < LIVESTOCK_FENCES
+                && woodPlanks() < 60 || count(s -> s.is(ItemTags.FENCE_GATES)) < 1 && woodPlanks() < 60 + 8) {
             livestockDebug = "no fences";
             return null;
         }
@@ -738,9 +745,9 @@ public final class Animals {
                     return Status.FAILED;
                 }
                 penPlan.clear();
-                for (int x = 0; x < 5; x++) {
-                    for (int z = 0; z < 5; z++) {
-                        if ((x == 0 || z == 0 || x == 4 || z == 4) && !(x == 2 && z == 0)) {
+                for (int x = 0; x < penSize; x++) {
+                    for (int z = 0; z < penSize; z++) {
+                        if ((x == 0 || z == 0 || x == penSize - 1 || z == penSize - 1) && !(x == penSize / 2 && z == 0)) {
                             penPlan.add(penOrigin.offset(x, 0, z));
                         }
                     }
@@ -760,7 +767,7 @@ public final class Animals {
             case 3 -> {
                 // out through the gateway, put the gate in and open it
                 Status st = leaveAndClose(false);
-                BlockPos gate = penOrigin.offset(2, 0, 0);
+                BlockPos gate = penOrigin.offset(penSize / 2, 0, 0);
                 BlockState gs = level.getBlockState(gate);
                 if (gs.canBeReplaced()) {
                     if (st == Status.WORKING) {
@@ -779,7 +786,7 @@ public final class Animals {
                 if (gs.getBlock() instanceof FenceGateBlock && !gs.getValue(BlockStateProperties.OPEN)) {
                     toggleGate(gate);
                 }
-                Bases.get(self.getServer()).addPen(level.dimension(), penOrigin, ls.kind());
+                Bases.get(self.getServer()).addPen(level.dimension(), penOrigin, ls.kind(), penSize);
                 livestockPens++;
                 pensBuilt++;
                 stage = 4;
@@ -803,7 +810,7 @@ public final class Animals {
             case 5 -> {
                 // lead them into the pen (walk in slowly, crop held high)
                 Equipment.select(self, slotOf(s -> s.is(ls.crop())));
-                Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, 3));
+                Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(penSize / 2, 0, penSize - 2)); // the far end: they come all the way in
                 if (Motor.horizontalDistance(self.position(), center) > 0.6) {
                     motor.navigate(center, 0.4, false);
                     if (Motor.horizontalDistance(self.position(), center) < 2.5) {

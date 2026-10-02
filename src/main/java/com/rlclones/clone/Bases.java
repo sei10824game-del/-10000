@@ -46,18 +46,18 @@ public class Bases extends SavedData {
     public final List<Base> bases = new ArrayList<>();
 
     /** A fenced 5x5 animal pen (origin = north-west corner, gate in the middle of the north side). */
-    public record Pen(ResourceKey<Level> dimension, BlockPos origin, String kind) {
+    public record Pen(ResourceKey<Level> dimension, BlockPos origin, String kind, int size) {
         public Pen(ResourceKey<Level> dimension, BlockPos origin) {
-            this(dimension, origin, "");
+            this(dimension, origin, "", 5);
         }
 
         public boolean contains(Vec3 p) {
-            return p.x >= origin.getX() + 1 && p.x <= origin.getX() + 4 && p.z >= origin.getZ() + 1 && p.z <= origin.getZ() + 4
+            return p.x >= origin.getX() + 1 && p.x <= origin.getX() + size - 1 && p.z >= origin.getZ() + 1 && p.z <= origin.getZ() + size - 1
                     && Math.abs(p.y - origin.getY()) < 3;
         }
 
         public BlockPos center() {
-            return origin.offset(2, 0, 2);
+            return origin.offset(size / 2, 0, size / 2);
         }
     }
 
@@ -105,7 +105,11 @@ public class Bases extends SavedData {
 
     /** {@code kind}: the animal kept in it ("" = chickens / anything). */
     public void addPen(ResourceKey<Level> dim, BlockPos origin, String kind) {
-        pens.add(new Pen(dim, origin.immutable(), kind));
+        addPen(dim, origin, kind, 5);
+    }
+
+    public void addPen(ResourceKey<Level> dim, BlockPos origin, String kind, int size) {
+        pens.add(new Pen(dim, origin.immutable(), kind, size));
         setDirty();
     }
 
@@ -280,7 +284,7 @@ public class Bases extends SavedData {
         for (int i = 0; i < pens.size(); i++) {
             CompoundTag pt = pens.getCompound(i);
             r.pens.add(new Pen(ResourceKey.create(Registries.DIMENSION, new ResourceLocation(pt.getString("dim"))), NbtUtils.readBlockPos(pt.getCompound("origin")),
-                    pt.getString("kind")));
+                    pt.getString("kind"), pt.contains("size") ? pt.getInt("size") : 5));
         }
         ListTag stairList = tag.getList("staircases", Tag.TAG_COMPOUND);
         for (int i = 0; i < stairList.size(); i++) {
@@ -328,6 +332,7 @@ public class Bases extends SavedData {
             pt.putString("dim", p.dimension().location().toString());
             pt.put("origin", NbtUtils.writeBlockPos(p.origin()));
             pt.putString("kind", p.kind());
+            pt.putInt("size", p.size());
             penList.add(pt);
         }
         tag.put("pens", penList);

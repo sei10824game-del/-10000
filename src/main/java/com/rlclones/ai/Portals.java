@@ -297,6 +297,16 @@ public final class Portals {
                     return motor.stuckCount() > 6 ? Status.FAILED : Status.WORKING;
                 }
                 motor.stop();
+                BlockPos ob = motor.obstruction(obsidianAt);
+                if (ob != null) {
+                    var st = level().getBlockState(ob);
+                    float hard = st.getDestroySpeed(level(), ob);
+                    if (hard >= 0 && hard < 50 && !st.hasBlockEntity()) {
+                        Equipment.select(self, Equipment.bestToolSlot(self, st));
+                        motor.mine(ob); // something fell in the way: clear it first
+                        return Status.WORKING;
+                    }
+                }
                 Equipment.select(self, Equipment.bestToolSlot(self, level().getBlockState(obsidianAt)));
                 if (motor.mine(obsidianAt)) {
                     obsidianMade++;

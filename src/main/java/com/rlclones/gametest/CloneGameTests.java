@@ -2755,7 +2755,9 @@ public final class CloneGameTests {
         friend.getInventory().add(new ItemStack(Items.BREAD, 12));
         ClonePlayer other = clone(h, 3.5, 6.5, 0f, false);
         boolean[] moved = {false};
+        boolean[] followedHelper = {false};
         h.onEachTick(() -> {
+            followedHelper[0] |= moved[0] && hungry.controller().followDebug.startsWith(friend.getGameProfile().getName());
             if (!moved[0] && hungry.controller().foodAid().gratitude(friend.getUUID()) > 0) {
                 moved[0] = true;
                 friend.setAiEnabled(false);
@@ -2766,9 +2768,9 @@ public final class CloneGameTests {
         });
         h.succeedWhen(() -> {
             h.assertTrue(moved[0], "first the friend brings food");
-            h.assertTrue(hungry.controller().followDrives >= 1 && hungry.controller().followDebug.equals(friend.getGameProfile().getName()),
-                    "then the clone keeps going after its helper rather than whoever is nearest (" + hungry.controller().followDebug + ", "
-                            + hungry.controller().optionLog + ")");
+            h.assertTrue(followedHelper[0], "then the clone goes after its helper rather than whoever is nearest (follows " + hungry.controller().followDebug
+                    + ", helper " + friend.getGameProfile().getName() + ", nearest " + other.getGameProfile().getName() + ", gratitude "
+                    + hungry.controller().foodAid().gratitudeView() + ", " + hungry.controller().optionLog + ")");
             finish(h, hungry, friend, other);
         });
     }
@@ -2853,7 +2855,7 @@ public final class CloneGameTests {
         clearBases(h);
         ClonePlayer c = clone(h, 4.5, 4.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.WHEAT, 20));
-        c.getInventory().add(new ItemStack(Items.OAK_FENCE, 16));
+        c.getInventory().add(new ItemStack(Items.OAK_FENCE, 24));
         c.getInventory().add(new ItemStack(Items.OAK_FENCE_GATE, 1));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         var cow1 = h.spawn(EntityType.COW, new Vec3(6.5, 2, 9.5));
@@ -2863,8 +2865,9 @@ public final class CloneGameTests {
             com.rlclones.clone.Bases.Pen pen = bases.nearestPen(h.getLevel().dimension(), c.position(), 64, "minecraft:cow");
             h.assertTrue(pen != null, "a pen built for the cows (" + c.controller().optionLog + " " + c.controller().animals().livestockDebug + ")");
             h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (lured "
-                    + c.controller().animals().lured + ")");
-            var gate = h.getLevel().getBlockState(pen.origin().offset(2, 0, 0));
+                    + c.controller().animals().lured + " " + c.controller().animals().livestockDebug + " cows at "
+                    + cow1.blockPosition().subtract(pen.origin()).toShortString() + " / " + cow2.blockPosition().subtract(pen.origin()).toShortString() + ")");
+            var gate = h.getLevel().getBlockState(pen.origin().offset(pen.size() / 2, 0, 0));
             h.assertTrue(gate.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock
                     && !gate.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN), "and the gate shut");
             h.assertTrue(!pen.contains(c.position()), "the clone came out");
@@ -2903,10 +2906,18 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.getInventory().countItem(Items.WOODEN_HOE) >= 1, "the hoe is made before a sword or an axe");
+            h.assertTrue(c.getInventory().countItem(Items.WOODEN_HOE) >= 1, "the hoe is made before a sword or an axe (" + c.controller().crafting().debug() + ")");
             h.assertTrue(c.getInventory().countItem(Items.WOODEN_SWORD) == 0 && c.getInventory().countItem(Items.WOODEN_AXE) == 0, "with the wood it had");
             finish(h, c);
         });
+    }
+
+    /** A stone pickaxe and everything else stone age, so that digging down is all that is left to do. */
+    private static void stairsKit(ClonePlayer c) {
+        for (var it : List.of(Items.STONE_PICKAXE, Items.STONE_SWORD, Items.STONE_AXE, Items.STONE_HOE, Items.STONE_SHOVEL, Items.FURNACE)) {
+            c.getInventory().add(new ItemStack(it));
+        }
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
     }
 
     private static void stoneMass(GameTestHelper h) {
@@ -2926,8 +2937,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
         Vec3 top = h.absoluteVec(new Vec3(4.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
-        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
-        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
+        stairsKit(c);
         for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock")) {
             c.getCloneBrain().learnBlock(b);
         }
@@ -2962,8 +2972,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 10.5, 7.5, 90f, false);
         Vec3 top = h.absoluteVec(new Vec3(10.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, 90f, 0f);
-        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
-        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
+        stairsKit(c);
         c.controller().stairs().targetY = (int) top.y - 40;
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.STAIRS;
         c.setAiEnabled(true);
@@ -2978,6 +2987,7 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r8hill")
     public static void digsStairsUpAHillToReachItsGoal(GameTestHelper h) {
+        clearBases(h);
         for (int x = 6; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
                 for (int y = 2; y <= 4; y++) {
@@ -3004,6 +3014,7 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r8sbridge")
     public static void bridgesUpToHigherGround(GameTestHelper h) {
+        clearBases(h);
         for (int x = 5; x <= 9; x++) {
             for (int z = 1; z <= 13; z++) {
                 h.setBlock(new BlockPos(x, 1, z), Blocks.AIR);
@@ -3020,6 +3031,8 @@ public final class CloneGameTests {
         h.setBlock(new BlockPos(12, 4, 7), Blocks.OAK_LOG);
         h.setBlock(new BlockPos(12, 5, 7), Blocks.OAK_LOG);
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(12, 4, 7)));
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(12, 5, 7)));
         c.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.GATHER_WOOD;

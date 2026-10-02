@@ -1598,7 +1598,7 @@ public final class CloneController {
     private Entity pickFollowTarget(long now) {
         Player fav = foodAid.favourite(64);
         if (fav != null) {
-            followDebug = fav.getGameProfile().getName();
+            followDebug = fav.getGameProfile().getName() + " (helped us)";
             return fav;
         }
         Perception.Seen ally = Senses.nearestAlly(perception, self, self, now, 64);
