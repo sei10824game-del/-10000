@@ -453,6 +453,8 @@ public final class Travel {
     private int stairsSign;
     private int stairsLeft;
     private int airTicksStairs;
+    @javax.annotation.Nullable
+    private BlockPos stairsNext;
     private BlockPos stairsFrom;
     public int stairSteps;
     public String stairsDebug = "";
@@ -487,6 +489,9 @@ public final class Travel {
             return finish();
         }
         if (!self.onGround() && ++airTicksStairs < 20) {
+            if (stairsNext != null) {
+                motor.moveToward(Vec3.atBottomCenterOf(stairsNext)); // keep pushing onto the step while in the air
+            }
             return true; // mid-jump / dropping onto the step
         }
         airTicksStairs = 0;
@@ -552,6 +557,8 @@ public final class Travel {
         if (ticks % 100 == 0 && stairsDebug.length() < 300) {
             stairsDebug += " move@" + feet.toShortString();
         }
+        stairsNext = next;
+        motor.lookAt(Vec3.atCenterOf(next));
         motor.moveToward(Vec3.atBottomCenterOf(next));
         if (stairsSign > 0) {
             motor.jump();

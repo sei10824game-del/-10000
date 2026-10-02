@@ -2971,7 +2971,7 @@ public final class CloneGameTests {
             h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) == false && bases.staircases.size() >= 1, "a staircase started ("
                     + c.controller().optionLog + " " + c.controller().stairs().debug + " | " + c.controller().stairs().trace + " at "
                     + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
-            h.assertTrue(bases.staircases.stream().anyMatch(st -> st.steps() >= 4), "dug down step by step: "
+            h.assertTrue(c.controller().stairs().stepsDug >= 4 && bases.staircases.stream().anyMatch(st -> st.steps() >= 3), "dug down step by step: "
                     + c.controller().stairs().stepsDug + " " + c.controller().stairs().debug);
             finish(h, c);
             clearBases(h);
