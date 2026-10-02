@@ -155,17 +155,20 @@ public final class BoatTrap {
             ticks = 0;
             return;
         }
-        if (ticks > 120) {
+        if (ticks > 240) {
             stage = null;
             return;
         }
-        if (self.distanceTo(boat) > 3.0) {
-            motor.navigate(boat.position(), 2.0, false);
+        if (!motor.withinReach(boat)) {
+            motor.navigate(boat.position(), 1.5, false);
             return;
         }
         motor.stop();
-        motor.lookAt(boat);
-        if (ticks % 5 == 0 && motor.canHit(boat)) {
+        if (ticks % 20 == 1) {
+            Equipment.manage(self, true); // a proper weapon breaks it in one go
+        }
+        motor.lookAt(boat.getBoundingBox().getCenter());
+        if (motor.canHit(boat) && self.getAttackStrengthScale(0.5f) >= 0.9f) {
             motor.attack(boat);
         }
     }

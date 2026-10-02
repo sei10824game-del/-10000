@@ -573,6 +573,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 800)
     public static void retrievesThrownTrident(GameTestHelper h) {
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.COLLECT;
         var trident = new net.minecraft.world.entity.projectile.ThrownTrident(h.getLevel(), c, new ItemStack(Items.TRIDENT));
         trident.pickup = net.minecraft.world.entity.projectile.AbstractArrow.Pickup.ALLOWED;
         Vec3 at = h.absoluteVec(new Vec3(9.5, 2.2, 7.5));
@@ -1839,7 +1840,8 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "tnt")
     public static void blowsUpACrowdWithTnt(GameTestHelper h) {
         clearBases(h);
-        ClonePlayer c = clone(h, 3.5, 3.5, -45f, true);
+        ClonePlayer c = clone(h, 3.5, 3.5, -45f, false);
+        h.runAfterDelay(10, () -> c.setAiEnabled(true)); // it has seen them before it starts moving
         c.getInventory().add(new ItemStack(Items.TNT));
         c.getInventory().add(new ItemStack(Items.OAK_BUTTON));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
@@ -2182,7 +2184,8 @@ public final class CloneGameTests {
                 h.setBlock(new BlockPos(7, y, 0), Blocks.OBSIDIAN);
             }
         }
-        ClonePlayer c = clone(h, 7.5, 1.5, 0f, true);
+        ClonePlayer c = clone(h, 7.5, 1.5, 0f, false);
+        h.runAfterDelay(10, () -> c.setAiEnabled(true)); // it has seen the husk before it starts moving
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
@@ -2511,7 +2514,8 @@ public final class CloneGameTests {
             h.assertTrue(pt.netherTrips >= 1 && c.getCloneBrain().hasFlag(com.rlclones.ai.Portals.NETHER_FLAG),
                     "a clone that has never been to the Nether goes through the portal (" + pt.debug + " options " + c.controller().optionLog + ")");
             h.assertTrue(pt.homeTrips >= 1 && c.level().dimension() == net.minecraft.world.level.Level.OVERWORLD,
-                    "and comes back on its own (" + c.level().dimension().location() + " " + pt.debug + " events" + pt.events + " start@" + start[0] + ")");
+                    "and comes back on its own (" + c.level().dimension().location() + " " + pt.debug + " events" + pt.events + " start@" + start[0]
+                    + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath + " options " + c.controller().optionLog + ")");
             finish(h, c);
             clearBases(h);
         });

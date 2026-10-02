@@ -2032,18 +2032,27 @@ public final class CloneController {
     public String shootDebug = "";
     private int lobDraw;
 
+    /** Friends seen in the last minute: we know where they stand even while looking elsewhere (up a lob, say). */
+    private final java.util.Map<Entity, Long> recentAllies = new java.util.HashMap<>();
+
     /** A player / clone of ours standing in the straight line of fire. */
     private Entity allyInLine(Entity t) {
         Vec3 eye = self.getEyePosition();
         Vec3 aim = t.getBoundingBox().getCenter();
         double dist = eye.distanceTo(aim);
         long now = now();
-        for (Perception.Seen s : perception.remembered()) {
-            if (now - s.lastSeen > 300 || s.entity == self || s.entity == t || !s.entity.isAlive() || !Senses.isAllyOf(s.entity, self)) {
+        for (Perception.Seen s : perception.visible()) {
+            if (s.entity != self && Senses.isAllyOf(s.entity, self)) {
+                recentAllies.put(s.entity, now);
+            }
+        }
+        recentAllies.entrySet().removeIf(e -> now - e.getValue() > 1200 || !e.getKey().isAlive() || e.getKey().level() != self.level());
+        for (Entity a : recentAllies.keySet()) {
+            if (a == t || !Senses.isAllyOf(a, self)) {
                 continue;
             }
-            if (s.entity.distanceTo(self) < dist && s.entity.getBoundingBox().inflate(0.6).clip(eye, aim).isPresent()) {
-                return s.entity;
+            if (a.distanceTo(self) < dist && a.getBoundingBox().inflate(0.6).clip(eye, aim).isPresent()) {
+                return a;
             }
         }
         return null;

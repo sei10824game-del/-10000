@@ -96,7 +96,7 @@ public final class Explosives {
             }
         }
         double d = c.distanceTo(self.position());
-        if (bunched < 3 || d < 4 || d > 12) {
+        if (bunched < 3 || d < 3 || d > 12) {
             return null;
         }
         return c;
