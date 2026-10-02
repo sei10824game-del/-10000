@@ -596,6 +596,13 @@ public final class CloneManager {
 
     public void tick() {
         ticks++;
+        // the chunks around a human follow its movement packets; a clone has none, so its chunk tickets are moved here
+        // (if they only moved when the clone itself is ticked, walking into a chunk that is not loaded yet would stop it for good)
+        for (ClonePlayer c : clones.values()) {
+            if (c.isAlive() && !c.isRemoved()) {
+                c.serverLevel().getChunkSource().move(c);
+            }
+        }
         if (!deadSince.isEmpty()) {
             boolean respawn = isRespawnEnabled();
             for (Map.Entry<UUID, Long> e : new ArrayList<>(deadSince.entrySet())) {

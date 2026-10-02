@@ -581,7 +581,9 @@ public final class CloneGameTests {
         trident.setDeltaMovement(0, -0.1, 0);
         h.getLevel().addFreshEntity(trident);
         h.succeedWhen(() -> {
-            h.assertTrue(c.getInventory().countItem(Items.TRIDENT) >= 1, "clone should walk over and pick its trident up");
+            h.assertTrue(c.getInventory().countItem(Items.TRIDENT) >= 1, "clone should walk over and pick its trident up (trident "
+                    + trident.position().subtract(h.absoluteVec(Vec3.ZERO)) + " alive=" + trident.isAlive() + " clone "
+                    + c.position().subtract(h.absoluteVec(Vec3.ZERO)) + " options " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
