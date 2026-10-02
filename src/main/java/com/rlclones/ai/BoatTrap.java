@@ -66,6 +66,8 @@ public final class BoatTrap {
             stage = Stage.AIM;
             foe = target;
             ticks = 0;
+            spot = null;
+            push = 0;
             lastTry = now;
         }
         ticks++;
@@ -82,6 +84,7 @@ public final class BoatTrap {
     }
 
     private Vec3 spot;
+    private double push;
 
     private void aim() {
         if (!foe.isAlive() || ticks > 30) {
@@ -92,7 +95,9 @@ public final class BoatTrap {
             // a boat cannot be put down on top of a mob: right up against it instead (a boat picks up whatever touches it -
             // a walking mob would simply step over it)
             Vec3 toUs = new Vec3(self.getX() - foe.getX(), 0, self.getZ() - foe.getZ()).normalize();
-            Vec3 front = foe.position().add(toUs.scale(foe.getBbWidth() / 2 + 0.6875 + 0.06)); // a boat is 1.375 wide
+            // boxes are axis aligned: clear the mob along the dominant axis only (a boat is 1.375 wide)
+            double clear = (foe.getBbWidth() / 2 + 0.6875 + 0.06 + push) / Math.max(Math.abs(toUs.x), Math.abs(toUs.z));
+            Vec3 front = foe.position().add(toUs.scale(clear));
             BlockPos under = BlockPos.containing(front.x, foe.getY() - 0.5, front.z);
             spot = new Vec3(front.x, under.getY() + 1.0, front.z);
         }
@@ -111,8 +116,18 @@ public final class BoatTrap {
                     net.minecraft.world.level.ClipContext.Block.OUTLINE, net.minecraft.world.level.ClipContext.Fluid.ANY, self));
             var bb = new net.minecraft.world.phys.AABB(hit.getLocation().x - 0.6875, hit.getLocation().y, hit.getLocation().z - 0.6875,
                     hit.getLocation().x + 0.6875, hit.getLocation().y + 0.5625, hit.getLocation().z + 0.6875);
-            note = "hit=" + hit.getType() + " off=" + String.format("%.2f", hit.getLocation().distanceTo(spot)) + " free="
-                    + self.level().noCollision(bb) + " mobs=" + self.level().getEntities(self, bb).size() + " hand=" + self.getMainHandItem();
+            StringBuilder in = new StringBuilder();
+            for (var e : self.level().getEntities((net.minecraft.world.entity.Entity) null, bb.inflate(1.0E-7))) {
+                in.append(' ').append(net.minecraft.world.entity.EntityType.getKey(e.getType()).getPath()).append('@').append(String.format("%.2f,%.2f,%.2f", e.getX(), e.getY(), e.getZ()));
+            }
+            note = "hit=" + hit.getType() + " off=" + String.format("%.2f", hit.getLocation().distanceTo(spot)) + " at="
+                    + String.format("%.2f,%.2f,%.2f", spot.x, spot.y, spot.z) + " foe=" + String.format("%.2f,%.2f,%.2f", foe.getX(), foe.getY(), foe.getZ())
+                    + " push=" + push + " in=[" + in + "] hand=" + self.getMainHandItem();
+            if (in.length() > 0 && push < 0.12) {
+                push += 0.04; // something is in the way: step the boat a little further out (still inside its pick-up reach)
+                spot = null;
+                return;
+            }
             if (self.getMainHandItem().getItem() instanceof BoatItem && motor.useHeldItem(InteractionHand.MAIN_HAND)) {
                 trapsSet++;
                 touched = false;
