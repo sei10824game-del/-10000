@@ -2697,7 +2697,7 @@ public final class CloneController {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget))); // the right tool for the job
         }
         if (blockTicks > 240) {
-            traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)));
+            traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)) + " " + motor.mineDebug);
             skipBlocks.put(blockTarget.immutable(), now());
             perception.forgetBlock(blockTarget);
             blockTarget = null;

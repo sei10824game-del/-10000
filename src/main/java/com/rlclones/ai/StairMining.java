@@ -43,6 +43,14 @@ public final class StairMining {
     public int stepsDug;
     public int resumed;
     public String debug = "";
+    /** Recent events (diagnostics, tests). */
+    public String trace = "";
+
+    private void trace(String what) {
+        if (trace.length() < 500) {
+            trace += " " + what;
+        }
+    }
 
     public StairMining(ClonePlayer self, Motor motor) {
         this.self = self;
@@ -107,6 +115,7 @@ public final class StairMining {
     }
 
     public void begin() {
+        trace("begin@" + self.blockPosition().toShortString());
         stairs = bases().nearestStaircase(self.level().dimension(), self.position(), 64);
         stage = stairs == null ? 2 : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig
         if (stairs != null) {
@@ -192,6 +201,9 @@ public final class StairMining {
             stuck = 0;
             lastFeet = feet;
         }
+        if (ticks % 100 == 1) {
+            trace("s" + stage + "@" + feet.toShortString() + (stage == 0 ? " " + motor.mineDebug.length() + "/" + motor.stuckCount() : ""));
+        }
         switch (stage) {
             case 0 -> {
                 Bases.Staircase s = stairs;
@@ -245,6 +257,7 @@ public final class StairMining {
             }
             stairs = bases().addStaircase(self.level().dimension(), feet, d);
             debug = "new staircase " + feet.toShortString() + " " + d;
+            trace("new@" + feet.toShortString() + d);
         }
         Bases.Staircase s = stairs;
         if (self.onGround() && feet.getY() < s.end.getY() && feet.distManhattan(s.end) <= 2) {
@@ -302,7 +315,8 @@ public final class StairMining {
         StringBuilder why = new StringBuilder();
         for (Direction d : Direction.Plane.HORIZONTAL) {
             BlockPos next = feet.relative(d).below();
-            boolean floor = solid(next.below());
+            boolean floor = solid(next.below()) || Equipment.pillarBlockSlot(self) >= 0 && self.level().getFluidState(next.below()).isEmpty()
+                    && solid(next.below(2));
             boolean a = diggable(next);
             boolean b = diggable(next.above());
             boolean c = diggable(next.above(2));
@@ -312,6 +326,7 @@ public final class StairMining {
             why.append(' ').append(d).append(floor ? "" : ":nofloor").append(a ? "" : ":step").append(b ? "" : ":head").append(c ? "" : ":top");
         }
         debug = "no way down at " + feet.toShortString() + why;
+        trace("nodir@" + feet.toShortString());
         return null;
     }
 

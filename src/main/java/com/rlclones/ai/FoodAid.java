@@ -162,6 +162,17 @@ public final class FoodAid {
         return best;
     }
 
+    /** Diagnostics. */
+    public String state() {
+        StringBuilder sb = new StringBuilder("asks=" + asks.size() + " surplus=" + surplus() + " food=" + self.getFoodData().getFoodLevel());
+        for (Ask a : asks) {
+            Player p = online(a.from);
+            sb.append(' ').append(a.name).append(p == null ? ":offline" : ":d" + (int) p.distanceTo(self) + "/f" + p.getFoodData().getFoodLevel()
+                    + "/i" + foodItems(p));
+        }
+        return sb.toString();
+    }
+
     public boolean canHelp() {
         return surplus() >= 2 && self.getFoodData().getFoodLevel() > 6 && pick() != null;
     }
