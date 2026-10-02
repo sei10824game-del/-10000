@@ -1651,7 +1651,8 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "lava")
     public static void usesLavaBucketInAFightAndTakesItBack(GameTestHelper h) {
         clearBases(h);
-        ClonePlayer c = clone(h, 6.5, 7.5, -90f, true);
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
+        h.runAfterDelay(10, () -> c.setAiEnabled(true)); // it has seen the husk before it starts moving
         c.getInventory().add(new ItemStack(Items.LAVA_BUCKET));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
@@ -2377,8 +2378,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
-        Husk husk = h.spawn(EntityType.HUSK, new Vec3(11.5, 2, 7.5)); // coming for us
-        husk.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        Husk husk = dummy(h, 10.5, 7.5);
         h.succeedWhen(() -> {
             h.assertTrue(husk.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat && c.controller().boatTrap().trapsSprung >= 1,
                     "a boat put at its feet: the husk sits in it (" + c.controller().boatTrap().debug + ")");
@@ -2393,7 +2393,8 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
-        var spider = h.spawn(EntityType.SPIDER, new Vec3(11.5, 2, 7.5));
+        var spider = h.spawn(EntityType.SPIDER, new Vec3(10.5, 2, 7.5));
+        spider.setNoAi(true);
         spider.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         h.succeedWhen(() -> {
             h.assertTrue(c.getCloneBrain().hasFlag("noboat:minecraft:spider"), "the spider did not get in: learned (" + c.controller().boatTrap().debug + ")");
