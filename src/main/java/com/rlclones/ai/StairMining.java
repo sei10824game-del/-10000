@@ -106,7 +106,7 @@ public final class StairMining {
 
     /** On the surface (sky overhead), carrying a pickaxe, missing iron gear, not deep enough yet. */
     public boolean wanted() {
-        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || pickTier() < 0 || ironGeared(self) || !self.onGround()) {
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || pickTier() < 0 || ironGeared(self) || self.isInWater()) {
             return false;
         }
         boolean surface = assumeSurface || self.level().canSeeSky(self.blockPosition().above());

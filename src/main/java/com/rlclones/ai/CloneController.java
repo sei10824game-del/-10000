@@ -2211,7 +2211,8 @@ public final class CloneController {
         if (Senses.gap(self, t) < 2.5) {
             motor.lookAt(t);
         } else {
-            aimProjectile(t, 1.5);
+            double speed = Equipment.projectileSpeed(self.getMainHandItem());
+            aimProjectile(t, speed > 0.1 ? speed : 1.5);
         }
         if (!useStarted) {
             if (actionTicks >= 2) {

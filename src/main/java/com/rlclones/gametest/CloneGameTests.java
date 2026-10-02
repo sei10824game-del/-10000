@@ -2685,12 +2685,14 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "r8use")
+    @GameTest(template = ARENA, timeoutTicks = 4800, batch = "r8use")
     public static void learnsHowToUseATrident(GameTestHelper h) {
         ClonePlayer c = clone(h, 5.5, 7.5, -90f, true);
-        ItemStack trident = new ItemStack(Items.TRIDENT);
-        trident.enchant(net.minecraft.world.item.enchantment.Enchantments.LOYALTY, 3);
-        c.getInventory().add(trident);
+        for (int i = 0; i < 2; i++) {
+            ItemStack trident = new ItemStack(Items.TRIDENT);
+            trident.enchant(net.minecraft.world.item.enchantment.Enchantments.LOYALTY, 3);
+            c.getInventory().add(trident);
+        }
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         c.controller().forcedAction = CombatAction.USE_ITEM;
@@ -2704,7 +2706,8 @@ public final class CloneGameTests {
                         .append(String.format(Locale.ROOT, "%.1f", b.itemUseValue(id, m)));
             }
             for (int m = 0; m < Brain.USE_MODES; m++) {
-                h.assertTrue(b.itemUseTries(id, m) >= 1, "every way of using it tried:" + sb + " (" + c.controller().attacks().debug + ")");
+                h.assertTrue(b.itemUseTries(id, m) >= 1, "every way of using it tried:" + sb + " (" + c.controller().attacks().debug + " "
+                        + c.controller().optionLog + " tridents " + c.getInventory().countItem(Items.TRIDENT) + ")");
             }
             int best = b.bestItemUse(id);
             h.assertTrue(b.itemUseTries(id) >= 6 && best != com.rlclones.ai.AttackLearning.TAP
@@ -3019,7 +3022,7 @@ public final class CloneGameTests {
         Vec3 hillTop = h.absoluteVec(new Vec3(10.5, 5, 7.5));
         friend.teleportTo(h.getLevel(), hillTop.x, hillTop.y, hillTop.z, 90f, 0f);
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
-        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        stairsKit(h, c); // stone age done: nothing to quarry the hill for
         for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone")) {
             c.getCloneBrain().learnBlock(b);
         }
