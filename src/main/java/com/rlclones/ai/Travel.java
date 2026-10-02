@@ -105,6 +105,7 @@ public final class Travel {
     /** Called every tick while walking somewhere: returns true when it took over the movement. */
     /** Set by the controller each tick: monsters close by (no time to dig a tunnel). */
     public boolean threatened;
+    public String guardDebug = "";
 
     public boolean tick(long now) {
         if (bridging) {
@@ -127,6 +128,9 @@ public final class Travel {
             return false;
         }
         Vec3 goal = motor.recentGoal();
+        if (goal != null && motor.stuckCount() >= 1) {
+            guardDebug = "goal " + BlockPos.containing(goal).toShortString() + " stuck=" + motor.stuckCount() + " ground=" + self.onGround();
+        }
         if (goal == null || Motor.horizontalDistance(self.position(), goal) < 6 && Math.abs(goal.y - self.getY()) < 3 || motor.stuckCount() < 2
                 || !self.onGround() || self.isInWater() || self.isPassenger()) {
             return false;
@@ -633,6 +637,7 @@ public final class Travel {
     private boolean stairBridgeTick() {
         int[] level = stairBridge;
         if (level == null || ++ticks > 1200) {
+            stairBridgeDebug += " timeout at " + bridgeCol;
             stairBridge = null;
             return finish();
         }
@@ -642,12 +647,17 @@ public final class Travel {
         BlockPos feet = self.blockPosition();
         if (self.getY() < level[Math.max(0, k - 1)] - 0.5 && self.onGround()) {
             stairBridge = null; // fell off
+            stairBridgeDebug += " fell at " + k;
             return finish();
         }
         if (!(feet.getX() == stand.getX() && feet.getZ() == stand.getZ()) || Math.abs(feet.getY() - stand.getY()) > 0) {
             // get onto column k (one step forward: up, level or down)
             motor.moveToward(Vec3.atBottomCenterOf(stand));
-            motor.sneak(level[k] <= level[Math.max(0, k - 1)]);
+            boolean levelStep = level[k] == level[Math.max(0, k - 1)];
+            motor.sneak(levelStep);
+            if (!levelStep) {
+                motor.dare(); // a step up or down onto the block we just put there: no edge-crouching
+            }
             if (stand.getY() > feet.getY() && self.onGround()) {
                 motor.jump();
             }
@@ -680,6 +690,9 @@ public final class Travel {
                 if (motor.placeBlockAt(p)) {
                     stairBridgeBlocks++;
                     blocksBridged++;
+                    if (stairBridgeDebug.length() < 300) {
+                        stairBridgeDebug += " +" + (p.getX() - bridgeStart.getX()) + "," + (p.getY() - bridgeStart.getY());
+                    }
                 }
                 return true;
             }

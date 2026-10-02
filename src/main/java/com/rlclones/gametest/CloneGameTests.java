@@ -2858,8 +2858,8 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.OAK_FENCE, 24));
         c.getInventory().add(new ItemStack(Items.OAK_FENCE_GATE, 1));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
-        var cow1 = h.spawn(EntityType.COW, new Vec3(6.5, 2, 9.5));
-        var cow2 = h.spawn(EntityType.COW, new Vec3(8.5, 2, 9.5));
+        var cow1 = h.spawn(EntityType.COW, new Vec3(4.5, 2, 7.5));
+        var cow2 = h.spawn(EntityType.COW, new Vec3(5.5, 2, 8.0));
         h.succeedWhen(() -> {
             var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             com.rlclones.clone.Bases.Pen pen = bases.nearestPen(h.getLevel().dimension(), c.position(), 64, "minecraft:cow");
@@ -2896,7 +2896,8 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r8hoe")
     public static void makesAHoeRightAfterThePickaxe(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        h.setBlock(new BlockPos(8, 2, 8), Blocks.CRAFTING_TABLE);
+        h.setBlock(new BlockPos(7, 2, 10), Blocks.CRAFTING_TABLE);
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(7, 2, 10)));
         c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
         c.getInventory().add(new ItemStack(Items.STICK, 2));
@@ -3006,7 +3007,8 @@ public final class CloneGameTests {
         boolean[] up = {false};
         h.onEachTick(() -> up[0] |= c.getY() >= topY - 0.01 && c.onGround());
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().travel().stairSteps >= 2, "stairs dug up the slope (" + c.controller().travel().stairsDebug + " " + c.controller().travel().debug + ")");
+            h.assertTrue(c.controller().travel().stairSteps >= 2, "stairs dug up the slope (" + c.controller().travel().stairsDebug + " " + c.controller().travel().debug
+                    + " " + c.controller().travel().guardDebug + " " + c.controller().optionLog + ")");
             h.assertTrue(up[0], "and up on top of the hill");
             finish(h, c);
         });

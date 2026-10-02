@@ -111,12 +111,32 @@ public final class StairMining {
         stage = stairs == null ? 2 : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig
         if (stairs != null) {
             resumed++;
-            debug = "resume " + stairs.top.toShortString() + " -> " + stairs.end.toShortString();
+            BlockPos feet = self.blockPosition();
+            if (feet.distManhattan(stairs.end) <= 2) {
+                stage = 2; // already down at the bottom
+            } else if (feet.distManhattan(stairs.top) <= 2 || onStairs(feet)) {
+                stage = 1;
+            }
+            debug = "resume " + stairs.top.toShortString() + " -> " + stairs.end.toShortString() + " from stage " + stage;
         }
         ticks = 0;
         stuck = 0;
         lastFeet = self.blockPosition();
         motor.resetStuck();
+    }
+
+    /** Standing somewhere on the steps between the top and the bottom. */
+    private boolean onStairs(BlockPos feet) {
+        Bases.Staircase s = stairs;
+        if (s == null) {
+            return false;
+        }
+        for (int i = 0; i <= s.steps(); i++) {
+            if (s.top.relative(s.dir, i).below(i).distManhattan(feet) <= 1) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean solid(BlockPos p) {
@@ -167,6 +187,7 @@ public final class StairMining {
                     stage = 1;
                     motor.resetStuck();
                 } else if (motor.stuckCount() > 8) {
+                    debug = "cannot reach the top " + s.top.toShortString() + " from " + feet.toShortString();
                     return Status.FAILED;
                 }
             }
@@ -179,6 +200,7 @@ public final class StairMining {
                 if (motor.navigate(Vec3.atBottomCenterOf(s.end), 0.6, false) || feet.getY() <= s.end.getY() && feet.distManhattan(s.end) <= 1) {
                     stage = 2;
                 } else if (motor.stuckCount() > 8) {
+                    debug = "cannot get down to " + s.end.toShortString() + " from " + feet.toShortString();
                     return Status.FAILED;
                 }
             }
@@ -242,6 +264,7 @@ public final class StairMining {
         // step down
         motor.moveToward(Vec3.atBottomCenterOf(next));
         if (stuck > 60) {
+            debug = "cannot step down to " + next.toShortString() + " from " + feet.toShortString();
             return Status.FAILED;
         }
         return Status.WORKING;

@@ -566,11 +566,13 @@ public final class Animals {
                     return Status.FAILED;
                 }
                 Equipment.select(self, slot);
+                boolean occupied = !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, new net.minecraft.world.phys.AABB(next),
+                        e -> e != self).isEmpty();
                 if (motor.placeBlockAt(next)) {
                     fencesPlaced++;
                     tries = 0;
-                } else if (++tries > 15) {
-                    penPlan.remove(next); // something in the way: leave that spot
+                } else if (++tries > (occupied ? 200 : 15)) {
+                    penPlan.remove(next); // something in the way for good: leave that spot (an animal standing there walks off)
                     tries = 0;
                 }
             }
@@ -702,7 +704,11 @@ public final class Animals {
             livestockDebug = "no fences";
             return null;
         }
-        livestockDebug = "no animals for a crop";
+        int seen = 0;
+        for (Perception.Seen s : perception.remembered()) {
+            seen += s.entity instanceof Animal ? 1 : 0;
+        }
+        livestockDebug = "no animals for a crop (animals seen " + seen + ")";
         for (Item crop : CROPS) {
             if (count(s -> s.is(crop)) < CROP_SURPLUS) {
                 continue;

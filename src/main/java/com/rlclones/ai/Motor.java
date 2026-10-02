@@ -344,7 +344,11 @@ public final class Motor {
             progressTimer = 0;
         }
         if (++progressTimer >= 20) {
-            if (self.position().distanceTo(progressAnchor) < 0.5) {
+            // hopping against a wall is no progress: only ground covered counts (or height gained on a ladder / swimming)
+            boolean climbing = self.onClimbable() || self.isInWater();
+            double moved = climbing ? self.position().distanceTo(progressAnchor) : horizontalDistance(self.position(), progressAnchor)
+                    + (self.onGround() ? Math.max(0, Math.abs(self.getY() - progressAnchor.y) - 0.4) : 0);
+            if (moved < 0.5) {
                 stuckCount++;
                 if (!atEdge && !noHop) {
                     jump(); // never hop forward at a deadly edge
