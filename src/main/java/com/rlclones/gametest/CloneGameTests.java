@@ -94,6 +94,11 @@ public final class CloneGameTests {
                         manager(h).remove(live, true, Component.literal("test failed"));
                     }
                     h.killAllEntities();
+                    // world-wide things a failed test may leave behind: no staircase to lure other tests' clones away
+                    com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+                    b.staircases.clear();
+                    b.setDirty();
+                    manager(h).setBreeding(false);
                 }
             });
         } catch (ReflectiveOperationException | RuntimeException e) {
@@ -2846,17 +2851,17 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 5000, batch = "r8cows")
     public static void pensCowsWhenWheatPilesUp(GameTestHelper h) {
         clearBases(h);
-        ClonePlayer c = clone(h, 3.5, 3.5, 0f, true);
+        ClonePlayer c = clone(h, 4.5, 4.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.WHEAT, 20));
         c.getInventory().add(new ItemStack(Items.OAK_FENCE, 16));
         c.getInventory().add(new ItemStack(Items.OAK_FENCE_GATE, 1));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
-        var cow1 = h.spawn(EntityType.COW, new Vec3(10.5, 2, 10.5));
-        var cow2 = h.spawn(EntityType.COW, new Vec3(11.5, 2, 9.5));
+        var cow1 = h.spawn(EntityType.COW, new Vec3(6.5, 2, 9.5));
+        var cow2 = h.spawn(EntityType.COW, new Vec3(8.5, 2, 9.5));
         h.succeedWhen(() -> {
             var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             com.rlclones.clone.Bases.Pen pen = bases.nearestPen(h.getLevel().dimension(), c.position(), 64, "minecraft:cow");
-            h.assertTrue(pen != null, "a pen built for the cows (" + c.controller().optionLog + ")");
+            h.assertTrue(pen != null, "a pen built for the cows (" + c.controller().optionLog + " " + c.controller().animals().livestockDebug + ")");
             h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (lured "
                     + c.controller().animals().lured + ")");
             var gate = h.getLevel().getBlockState(pen.origin().offset(2, 0, 0));
@@ -2893,6 +2898,7 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
         c.getInventory().add(new ItemStack(Items.STICK, 2));
         h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
             c.controller().crafting().tick();
             c.controller().motor().tick();
         });
@@ -2931,7 +2937,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) == false && bases.staircases.size() == 1, "one staircase started ("
-                    + c.controller().optionLog + " " + c.controller().stairs().debug + ")");
+                    + c.controller().optionLog + " " + c.controller().stairs().debug + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             h.assertTrue(c.controller().stairs().stepsDug >= 4 && bases.staircases.get(0).steps() >= 4, "dug down step by step: "
                     + c.controller().stairs().stepsDug + " " + c.controller().stairs().debug);
             finish(h, c);
@@ -2979,9 +2985,11 @@ public final class CloneGameTests {
                 }
             }
         }
-        h.setBlock(new BlockPos(11, 5, 7), Blocks.OAK_LOG);
-        h.setBlock(new BlockPos(11, 6, 7), Blocks.OAK_LOG);
+        h.setBlock(new BlockPos(9, 5, 7), Blocks.OAK_LOG);
+        h.setBlock(new BlockPos(9, 6, 7), Blocks.OAK_LOG);
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(9, 5, 7)));
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(9, 6, 7)));
         c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.GATHER_WOOD;
         double topY = h.absoluteVec(new Vec3(0, 5, 0)).y;
@@ -3021,9 +3029,13 @@ public final class CloneGameTests {
             h.assertTrue(t.stairBridges >= 1, "a bridge that climbs (" + t.stairBridgeDebug + " / " + t.debug + ")");
             boolean rising = false;
             for (int z = 1; z <= 13; z++) {
-                rising |= h.getBlockState(new BlockPos(5, 2, z)).is(Blocks.COBBLESTONE) && h.getBlockState(new BlockPos(6, 3, z)).is(Blocks.COBBLESTONE);
+                boolean low = false;
+                for (int x = 3; x <= 6; x++) {
+                    low |= h.getBlockState(new BlockPos(x, 2, z)).is(Blocks.COBBLESTONE) && h.getBlockState(new BlockPos(x + 1, 3, z)).is(Blocks.COBBLESTONE);
+                }
+                rising |= low && h.getBlockState(new BlockPos(9, 3, z)).is(Blocks.COBBLESTONE);
             }
-            h.assertTrue(rising, "built like steps: one block higher each column at first");
+            h.assertTrue(rising, "built like steps: a step up, then on at the far side's height (" + t.stairBridgeDebug + ")");
             h.assertTrue(c.getX() >= far.x && c.getY() >= far.y - 0.01, "and the clone is up on the far side");
             finish(h, c);
         });

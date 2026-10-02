@@ -686,12 +686,16 @@ public final class Animals {
     public int livestockPens;
     public int lured;
 
+    public String livestockDebug = "";
+
     @Nullable
     public Livestock livestockWanted() {
         if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || count(s -> s.is(ItemTags.WOODEN_FENCES)) < PEN_FENCES
                 && woodPlanks() < 40 || count(s -> s.is(ItemTags.FENCE_GATES)) < 1 && woodPlanks() < 40 + 8) {
+            livestockDebug = "no fences";
             return null;
         }
+        livestockDebug = "no animals for a crop";
         for (Item crop : CROPS) {
             if (count(s -> s.is(crop)) < CROP_SURPLUS) {
                 continue;
@@ -706,6 +710,7 @@ public final class Animals {
                 }
             }
             for (var e : byKind.entrySet()) {
+                livestockDebug = e.getKey() + " x" + e.getValue().size();
                 if (e.getValue().size() >= 2 && Bases.get(self.getServer()).nearestPen(self.level().dimension(), self.position(), 48, e.getKey()) == null) {
                     return new Livestock(e.getKey(), crop, e.getValue().subList(0, 2));
                 }
@@ -724,6 +729,7 @@ public final class Animals {
         if (ls == null) {
             return Status.FAILED;
         }
+        livestockDebug = "stage " + stage + " t=" + ticks;
         switch (stage) {
             case 0 -> {
                 penOrigin = findPenSite();

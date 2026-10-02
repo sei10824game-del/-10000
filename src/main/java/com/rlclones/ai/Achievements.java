@@ -244,6 +244,9 @@ public final class Achievements {
             case "obtain" -> {
                 for (String id : c.ids()) {
                     Item it = item(id);
+                    if (it != null && self.getInventory().countItem(it) > 0) {
+                        return false; // already carried: the game hands it out by itself
+                    }
                     if (it != null && (fluidFor(it) != null && hasBucket() && fluidNear(fluidFor(it)) != null
                             || craftable(it) || dropSource(it) != null)) {
                         return true;

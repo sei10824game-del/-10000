@@ -68,6 +68,7 @@ public final class BoatTrap {
             ticks = 0;
             spot = null;
             push = 0;
+            backoffs = 0;
             lastTry = now;
         }
         ticks++;
@@ -85,6 +86,7 @@ public final class BoatTrap {
 
     private Vec3 spot;
     private double push;
+    private int backoffs;
 
     private void aim() {
         if (!foe.isAlive() || ticks > 30) {
@@ -100,6 +102,17 @@ public final class BoatTrap {
             Vec3 front = foe.position().add(toUs.scale(clear));
             BlockPos under = BlockPos.containing(front.x, foe.getY() - 0.5, front.z);
             spot = new Vec3(front.x, under.getY() + 1.0, front.z);
+        }
+        if (Math.abs(self.getX() - spot.x) < 0.6875 + 0.35 && Math.abs(self.getZ() - spot.z) < 0.6875 + 0.35) {
+            // we stand where the boat would go: a step back first
+            motor.moveAwayFrom(foe.position());
+            spot = null;
+            if (++backoffs > 40) {
+                stage = null; // cornered: no room for a boat between us
+            }
+            ticks = Math.min(ticks, 20);
+            note = "backing off";
+            return;
         }
         Vec3 eye = self.getEyePosition();
         float yaw = (float) Math.toDegrees(Mth.atan2(spot.z - eye.z, spot.x - eye.x)) - 90.0F;

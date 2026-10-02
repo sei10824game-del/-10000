@@ -193,13 +193,17 @@ public final class StairMining {
         if (stairs == null) {
             Direction d = pickDirection(feet);
             if (d == null) {
-                debug = "no way down here";
                 return Status.FAILED;
             }
             stairs = bases().addStaircase(self.level().dimension(), feet, d);
             debug = "new staircase " + feet.toShortString() + " " + d;
         }
         Bases.Staircase s = stairs;
+        if (self.onGround() && feet.getY() < s.end.getY() && feet.distManhattan(s.end) <= 2) {
+            stepsDug++; // stepped down onto the new step
+            s.end = feet.immutable();
+            bases().setDirty();
+        }
         if (feet.getY() <= targetY) {
             s.finished = true;
             bases().setDirty();
@@ -236,13 +240,8 @@ public final class StairMining {
             return Status.WORKING;
         }
         // step down
-        Vec3 c = Vec3.atBottomCenterOf(next);
-        motor.moveToward(c);
-        if (feet.equals(next)) {
-            stepsDug++;
-            s.end = next.immutable();
-            bases().setDirty();
-        } else if (stuck > 60) {
+        motor.moveToward(Vec3.atBottomCenterOf(next));
+        if (stuck > 60) {
             return Status.FAILED;
         }
         return Status.WORKING;
@@ -251,12 +250,19 @@ public final class StairMining {
     /** A direction with solid ground to dig into (no liquid, no drop right ahead). */
     @Nullable
     private Direction pickDirection(BlockPos feet) {
+        StringBuilder why = new StringBuilder();
         for (Direction d : Direction.Plane.HORIZONTAL) {
             BlockPos next = feet.relative(d).below();
-            if (solid(next.below()) && diggable(next) && diggable(next.above()) && diggable(next.above(2))) {
+            boolean floor = solid(next.below());
+            boolean a = diggable(next);
+            boolean b = diggable(next.above());
+            boolean c = diggable(next.above(2));
+            if (floor && a && b && c) {
                 return d;
             }
+            why.append(' ').append(d).append(floor ? "" : ":nofloor").append(a ? "" : ":step").append(b ? "" : ":head").append(c ? "" : ":top");
         }
+        debug = "no way down at " + feet.toShortString() + why;
         return null;
     }
 

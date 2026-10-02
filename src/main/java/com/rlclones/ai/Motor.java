@@ -427,7 +427,8 @@ public final class Motor {
         lookAt(visiblePoint(level, eye, pos));
         BlockHitResult hit = level.clip(new ClipContext(eye, eye.add(self.getViewVector(1.0F).scale(BLOCK_REACH)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
         if (hit.getType() != HitResult.Type.BLOCK || !hit.getBlockPos().equals(pos)) {
-            mineDebug = "aim " + hit.getType() + " " + (hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos().subtract(pos).toShortString() : "")
+            mineDebug = "aim " + hit.getType() + " " + (hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos().subtract(pos).toShortString()
+                    + " " + level.getBlockState(hit.getBlockPos()) : "") + " from " + self.blockPosition().subtract(pos).toShortString()
                     + " yaw=" + (int) self.getYRot() + " pitch=" + (int) self.getXRot();
             return false;
         }

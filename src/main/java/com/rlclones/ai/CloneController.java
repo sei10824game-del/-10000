@@ -572,6 +572,12 @@ public final class CloneController {
     public long heardSounds;
     public int quarried;
     public String harvestDebug = "";
+    /** Not skipped for now, and - for planks / logs of buildings - not part of somebody's base. */
+    private boolean harvestable(Perception.BlockKind kind, BlockPos p) {
+        return !skipBlocks.containsKey(p) && (kind != Perception.BlockKind.WOOD
+                || com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(p), 12) == null);
+    }
+
     /** Blocks found not to be taken (a base's, unsafe, out of reach): left alone for a minute even though seen again. */
     private final java.util.Map<BlockPos, Long> skipBlocks = new java.util.HashMap<>();
     /** Recent harvest events (diagnostics, tests). */
@@ -1160,6 +1166,12 @@ public final class CloneController {
         return false;
     }
 
+    /** Real work: while any of these is possible, the clone is not "out of things to do". */
+    private static final int BUSY_OPTIONS = Option.HELP.bit() | Option.STORE.bit() | Option.FETCH.bit() | Option.LOOT.bit() | Option.FARM.bit()
+            | Option.EXPEDITION.bit() | Option.JOIN.bit() | Option.QUARRY.bit() | Option.BREW.bit() | Option.ANIMALS.bit() | Option.SALVAGE.bit()
+            | Option.PORTAL.bit() | Option.FEED.bit() | Option.BREED.bit() | Option.FIGHT.bit() | Option.FLEE.bit() | Option.EAT.bit()
+            | Option.GATHER_WOOD.bit() | Option.MINE.bit() | Option.CRAFT.bit();
+
     /** Options only a clone knows about itself (read from chat / its own plans). */
     public int extraOptions(long now) {
         int mask = 0;
@@ -1202,7 +1214,7 @@ public final class CloneController {
         if (fishing.canFish()) {
             mask |= Option.FISH.bit();
         }
-        if (needWood() && Senses.nearestBlock(perception, self, Perception.BlockKind.WOOD, 24) != null) {
+        if (needWood() && Senses.nearestBlock(perception, self, Perception.BlockKind.WOOD, 24, p -> harvestable(Perception.BlockKind.WOOD, p)) != null) {
             mask |= Option.SALVAGE.bit();
         }
         if (self.onGround() && portals.hasWork()) {
@@ -1215,7 +1227,7 @@ public final class CloneController {
             mask |= Option.BREED.bit();
         }
         if (stairs.wanted()) {
-            mask |= Option.STAIRS.bit();
+            mask |= Option.STAIRS.bit(); // (only when idle: see startOption)
         }
         if (achievements.hasGoal(now)) {
             mask |= Option.ACHIEVE.bit();
@@ -1597,6 +1609,9 @@ public final class CloneController {
     private void startOption(long now) {
         int s = Senses.strategyState(perception, self, self, brain(), now);
         int mask = Senses.strategyMask(perception, self, self, now);
+        if ((mask & BUSY_OPTIONS) != 0) {
+            mask &= ~(Option.STAIRS.bit() | Option.ACHIEVE.bit()); // those are for when there is nothing else to do
+        }
         int o;
         Option committed = expedition.isLeading() ? Option.EXPEDITION : expedition.joinedOffer() != null ? Option.JOIN : null;
         if (forcedOption != null && (mask & forcedOption.bit()) != 0) {
@@ -2648,7 +2663,7 @@ public final class CloneController {
         if (blockTarget == null) {
             long at = now();
             skipBlocks.values().removeIf(t -> at - t > 1200);
-            blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24, p -> !skipBlocks.containsKey(p));
+            blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24, p -> harvestable(kind, p));
             blockTicks = 0;
             if (blockTarget == null) {
                 return true;
