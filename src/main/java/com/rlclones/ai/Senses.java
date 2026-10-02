@@ -270,6 +270,9 @@ public final class Senses {
             if (!isFoodAnimal(s.entity) || now - s.lastSeen > 60) {
                 continue;
             }
+            if (agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().animals().keepAlive(s.entity)) {
+                continue; // future livestock: we have their food in plenty and mean to pen them
+            }
             double d = s.pos.distanceTo(agent.position());
             if (d < bestD) {
                 bestD = d;

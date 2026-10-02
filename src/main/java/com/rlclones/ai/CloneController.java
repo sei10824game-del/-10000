@@ -1576,8 +1576,8 @@ public final class CloneController {
         if ((mask & Option.BREED.bit()) != 0 && random.nextFloat() < 0.7f) {
             return Option.BREED;
         }
-        if ((mask & Option.ANIMALS.bit()) != 0 && animals.tameCandidate() != null && random.nextFloat() < 0.7f) {
-            return Option.ANIMALS; // it could be ours: tame it
+        if ((mask & Option.ANIMALS.bit()) != 0 && (animals.tameCandidate() != null || animals.livestockPending()) && random.nextFloat() < 0.7f) {
+            return Option.ANIMALS; // it could be ours: tame it / pen it
         }
         Player fav = foodAid.favourite(64);
         if ((mask & Option.FOLLOW.bit()) != 0 && fav != null && fav.distanceTo(self) > 6

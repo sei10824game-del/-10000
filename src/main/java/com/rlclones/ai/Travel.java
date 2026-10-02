@@ -452,6 +452,7 @@ public final class Travel {
     private Direction stairsDir;
     private int stairsSign;
     private int stairsLeft;
+    private int airTicksStairs;
     private BlockPos stairsFrom;
     public int stairSteps;
     public String stairsDebug = "";
@@ -481,13 +482,14 @@ public final class Travel {
     private boolean stairsTick() {
         Direction d = stairsDir;
         if (d == null || ++ticks > 600 || stairsLeft <= 0) {
-            stairsDebug += ticks > 600 ? " timeout" : "";
+            stairsDebug += ticks > 600 ? " timeout at " + self.blockPosition().subtract(stairsFrom).toShortString() + " ground=" + self.onGround() : "";
             stairsDir = null;
             return finish();
         }
-        if (!self.onGround()) {
+        if (!self.onGround() && ++airTicksStairs < 20) {
             return true; // mid-jump / dropping onto the step
         }
+        airTicksStairs = 0;
         BlockPos feet = self.blockPosition();
         if (!feet.equals(stairsFrom)) {
             if (feet.getY() == stairsFrom.getY() + stairsSign) {

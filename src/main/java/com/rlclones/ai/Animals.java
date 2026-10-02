@@ -182,6 +182,10 @@ public final class Animals {
     }
 
     /** Crafting asks this: fences / a gate still to be made for the pen. */
+    public boolean livestockPending() {
+        return livestockReady();
+    }
+
     private boolean livestockReady() {
         return count(s -> s.is(ItemTags.WOODEN_FENCES)) >= LIVESTOCK_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1 && livestockWanted() != null;
     }
@@ -690,6 +694,19 @@ public final class Animals {
 
     private static final Item[] CROPS = {Items.WHEAT, Items.CARROT, Items.POTATO, Items.BEETROOT};
     public static final int CROP_SURPLUS = 10;
+
+    /** An animal we would rather pen than eat: its favourite crop is piling up in our bag. */
+    public boolean keepAlive(Entity e) {
+        if (!(e instanceof Animal a) || a instanceof TamableAnimal || a.isBaby()) {
+            return false;
+        }
+        for (Item crop : CROPS) {
+            if (count(s -> s.is(crop)) >= CROP_SURPLUS && a.isFood(new ItemStack(crop))) {
+                return true;
+            }
+        }
+        return false;
+    }
     @Nullable
     private Livestock livestock;
     public int livestockPens;
