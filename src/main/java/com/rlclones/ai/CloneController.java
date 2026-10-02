@@ -537,6 +537,14 @@ public final class CloneController {
     public long heardSounds;
     public int quarried;
     public String harvestDebug = "";
+    /** Recent harvest events (diagnostics, tests). */
+    public final StringBuilder harvestTrace = new StringBuilder();
+
+    private void traceHarvest(String what) {
+        if (harvestTrace.length() < 600) {
+            harvestTrace.append(' ').append(what).append('@').append(optionTicks);
+        }
+    }
 
     /**
      * Safe to dig out like a careful player: never the block right under our own feet with a drop below it, nothing
@@ -1922,8 +1930,12 @@ public final class CloneController {
             actionDone = true; // no throwing past a friend's head
             return;
         }
-        if (actionTicks == 0 || !self.isUsingItem()) {
+        if (actionTicks == 0 || !self.isUsingItem() || friend != null && lobDraw == 0) {
+            int was = lobDraw;
             lobDraw = friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.BOW ? lobDrawTicks(t) : 0;
+            if (was == 0 && lobDraw > 0 && self.isUsingItem()) {
+                self.stopUsingItem(); // drawn for a straight shot, then a friend is seen in the line: start over up the arc
+            }
         }
         shootDebug = "friend=" + (friend != null) + " kind=" + Equipment.rangedKind(held) + " lob=" + lobDraw + " pitch=" + (int) self.getXRot()
                 + "/" + (int) lobPitch + " using=" + self.isUsingItem() + " t=" + actionTicks;
@@ -1988,6 +2000,9 @@ public final class CloneController {
                         arcShots++;
                         actionDone = true;
                     }
+                } else if (friend != null) {
+                    self.stopUsingItem(); // no arc to be had: never loose straight through a friend
+                    actionDone = true;
                 } else if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
                     self.releaseUsingItem();
                     actionDone = true;
@@ -2391,6 +2406,7 @@ public final class CloneController {
                 return false;
             }
             harvestDebug = "target " + blockTarget.toShortString();
+            traceHarvest("t" + blockTarget.toShortString());
             if (perception.kindAt(blockTarget) != kind) {
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
@@ -2403,6 +2419,7 @@ public final class CloneController {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget))); // the right tool for the job
         }
         if (blockTicks > 240) {
+            traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)));
             perception.forgetBlock(blockTarget);
             blockTarget = null;
             return false;
@@ -2411,12 +2428,14 @@ public final class CloneController {
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3) {
             motor.navigate(kind == Perception.BlockKind.LOG ? center : motor.approachPoint(blockTarget), kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
             if (motor.stuckCount() > 3) {
+                traceHarvest("stuck " + self.blockPosition().toShortString());
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
             }
             return false;
         }
         if (motor.mine(blockTarget)) {
+            traceHarvest("mined");
             blocksDone++;
             if (kind == Perception.BlockKind.STONE) {
                 quarried++;

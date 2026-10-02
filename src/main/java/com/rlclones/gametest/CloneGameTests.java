@@ -1884,7 +1884,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(c.getInventory().countItem(Items.OAK_PLANKS) >= 1, "with no tree around, the clone takes planks from what was built: options "
                     + c.controller().optionLog + " harvest=" + c.controller().harvestDebug + " wood=" + c.controller().perception().blocks().entrySet().stream()
-                    .filter(e -> e.getValue() == com.rlclones.ai.Perception.BlockKind.WOOD).map(e -> e.getKey().toShortString()).toList());
+                    .filter(e -> e.getValue() == com.rlclones.ai.Perception.BlockKind.WOOD).map(e -> e.getKey().toShortString()).toList() + " trace" + c.controller().harvestTrace);
             h.assertTrue(h.getLevel().getBlockState(baseWood).is(Blocks.OAK_PLANKS), "but never from a base");
             finish(h, c);
             clearBases(h);
