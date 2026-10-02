@@ -3000,8 +3000,8 @@ public final class CloneGameTests {
             }
         }
         ClonePlayer friend = clone(h, 10.5, 7.5, 90f, false);
-        Vec3 up = h.absoluteVec(new Vec3(10.5, 5, 7.5));
-        friend.teleportTo(h.getLevel(), up.x, up.y, up.z, 90f, 0f);
+        Vec3 hillTop = h.absoluteVec(new Vec3(10.5, 5, 7.5));
+        friend.teleportTo(h.getLevel(), hillTop.x, hillTop.y, hillTop.z, 90f, 0f);
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
         c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
         for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone")) {
