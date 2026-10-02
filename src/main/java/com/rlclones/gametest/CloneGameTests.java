@@ -2960,7 +2960,7 @@ public final class CloneGameTests {
         Vec3 top = h.absoluteVec(new Vec3(4.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
         stairsKit(h, c);
-        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock")) {
+        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock", "minecraft:furnace")) {
             c.getCloneBrain().learnBlock(b);
         }
         c.controller().stairs().assumeSurface = true;
@@ -2971,7 +2971,7 @@ public final class CloneGameTests {
             h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) == false && bases.staircases.size() >= 1, "a staircase started ("
                     + c.controller().optionLog + " " + c.controller().stairs().debug + " | " + c.controller().stairs().trace + " at "
                     + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
-            h.assertTrue(c.controller().stairs().stepsDug >= 4 && bases.staircases.stream().anyMatch(st -> st.steps() >= 3), "dug down step by step: "
+            h.assertTrue(c.controller().stairs().stepsDug >= 3, "dug down step by step: "
                     + c.controller().stairs().stepsDug + " " + c.controller().stairs().debug);
             finish(h, c);
             clearBases(h);

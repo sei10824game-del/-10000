@@ -150,7 +150,8 @@ public final class FoodAid {
         double bestScore = Double.MAX_VALUE;
         for (Ask a : asks) {
             Player p = online(a.from);
-            if (p == null || p.distanceTo(self) > 64 || foodItems(p) > 0 || p.getFoodData().getFoodLevel() > 6) {
+            // still without food in the bag and not full: a bite somebody else gave does not end the request
+            if (p == null || p.distanceTo(self) > 64 || foodItems(p) >= 2 || p.getFoodData().getFoodLevel() >= 17) {
                 continue;
             }
             double score = p.distanceTo(self) - (CloneManager.isParentOf(self, p) ? 1000 : 0);
