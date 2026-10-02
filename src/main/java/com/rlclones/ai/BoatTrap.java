@@ -101,8 +101,18 @@ public final class BoatTrap {
         float pitch = (float) -Math.toDegrees(Mth.atan2(spot.y - eye.y, Math.sqrt((spot.x - eye.x) * (spot.x - eye.x) + (spot.z - eye.z) * (spot.z - eye.z))));
         motor.stop();
         motor.lookAngles(yaw, pitch);
-        if (Math.abs(Mth.wrapDegrees(self.getYRot() - yaw)) < 2f && Math.abs(self.getXRot() - pitch) < 2f) {
+        boolean aimed = Math.abs(Mth.wrapDegrees(self.getYRot() - yaw)) < 2f && Math.abs(self.getXRot() - pitch) < 2f;
+        if (!aimed) {
+            note = "aim " + (int) self.getYRot() + "/" + (int) yaw + " " + (int) self.getXRot() + "/" + (int) pitch;
+        }
+        if (aimed) {
             Equipment.select(self, Boating.boatSlot(self));
+            var hit = self.level().clip(new net.minecraft.world.level.ClipContext(eye, eye.add(self.getViewVector(1f).scale(4.5)),
+                    net.minecraft.world.level.ClipContext.Block.OUTLINE, net.minecraft.world.level.ClipContext.Fluid.ANY, self));
+            var bb = new net.minecraft.world.phys.AABB(hit.getLocation().x - 0.6875, hit.getLocation().y, hit.getLocation().z - 0.6875,
+                    hit.getLocation().x + 0.6875, hit.getLocation().y + 0.5625, hit.getLocation().z + 0.6875);
+            note = "hit=" + hit.getType() + " off=" + String.format("%.2f", hit.getLocation().distanceTo(spot)) + " free="
+                    + self.level().noCollision(bb) + " mobs=" + self.level().getEntities(self, bb).size() + " hand=" + self.getMainHandItem();
             if (self.getMainHandItem().getItem() instanceof BoatItem && motor.useHeldItem(InteractionHand.MAIN_HAND)) {
                 trapsSet++;
                 touched = false;
