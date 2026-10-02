@@ -89,9 +89,10 @@ public final class BoatTrap {
             return;
         }
         if (ticks == 1 || spot == null) {
-            // a boat cannot be put down on top of a mob: right in front of it, in its way to us, so it walks into it
+            // a boat cannot be put down on top of a mob: right up against it instead (a boat picks up whatever touches it -
+            // a walking mob would simply step over it)
             Vec3 toUs = new Vec3(self.getX() - foe.getX(), 0, self.getZ() - foe.getZ()).normalize();
-            Vec3 front = foe.position().add(toUs.scale(foe.getBbWidth() / 2 + 0.9)); // a boat is 1.375 wide
+            Vec3 front = foe.position().add(toUs.scale(foe.getBbWidth() / 2 + 0.6875 + 0.06)); // a boat is 1.375 wide
             BlockPos under = BlockPos.containing(front.x, foe.getY() - 0.5, front.z);
             spot = new Vec3(front.x, under.getY() + 1.0, front.z);
         }
