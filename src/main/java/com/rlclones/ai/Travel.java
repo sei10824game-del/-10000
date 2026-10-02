@@ -481,6 +481,7 @@ public final class Travel {
     private boolean stairsTick() {
         Direction d = stairsDir;
         if (d == null || ++ticks > 600 || stairsLeft <= 0) {
+            stairsDebug += ticks > 600 ? " timeout" : "";
             stairsDir = null;
             return finish();
         }
@@ -496,7 +497,8 @@ public final class Travel {
                     stairsDir = null;
                     return finish();
                 }
-            } else if (Math.abs(feet.getY() - stairsFrom.getY()) > 1 || feet.distManhattan(stairsFrom) > 2) {
+            } else if (Math.abs(feet.getY() - stairsFrom.getY()) > 1 || feet.distManhattan(stairsFrom) > 3) {
+                stairsDebug += " moved off";
                 stairsDir = null; // fell or got pushed away
                 return finish();
             }
@@ -509,6 +511,7 @@ public final class Travel {
             clear = new BlockPos[]{feet.above(2), ahead.above(2), ahead.above()};
             next = ahead.above();
             if (!solid(ahead)) {
+                stairsDebug += " top@" + stairSteps;
                 stairsDir = null; // nothing to step up on: the slope is behind us
                 return finish();
             }
@@ -523,6 +526,7 @@ public final class Travel {
         for (BlockPos p : clear) {
             if (solid(p)) {
                 if (!diggable(p)) {
+                    stairsDebug += " undiggable " + self.level().getBlockState(p).getBlock();
                     stairsDir = null;
                     return finish();
                 }

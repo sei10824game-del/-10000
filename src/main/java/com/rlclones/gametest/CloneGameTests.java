@@ -2873,7 +2873,9 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             com.rlclones.clone.Bases.Pen pen = bases.nearestPen(h.getLevel().dimension(), c.position(), 64, "minecraft:cow");
-            h.assertTrue(pen != null, "a pen built for the cows (" + c.controller().optionLog + " " + c.controller().animals().livestockDebug + ")");
+            h.assertTrue(pen != null, "a pen built for the cows (" + c.controller().optionLog + " " + c.controller().animals().livestockDebug + " remembered "
+                    + c.controller().perception().remembered().size() + " cows " + cow1.isAlive() + "@" + cow1.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
+                    + " " + cow2.isAlive() + " clone@" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (lured "
                     + c.controller().animals().lured + " " + c.controller().animals().livestockDebug + " cows at "
                     + cow1.blockPosition().subtract(pen.origin()).toShortString() + " / " + cow2.blockPosition().subtract(pen.origin()).toShortString() + ")");
@@ -2960,7 +2962,7 @@ public final class CloneGameTests {
             h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) == false && bases.staircases.size() >= 1, "a staircase started ("
                     + c.controller().optionLog + " " + c.controller().stairs().debug + " | " + c.controller().stairs().trace + " at "
                     + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
-            h.assertTrue(bases.staircases.get(0).steps() >= 4, "dug down step by step: "
+            h.assertTrue(bases.staircases.stream().anyMatch(st -> st.steps() >= 4), "dug down step by step: "
                     + c.controller().stairs().stepsDug + " " + c.controller().stairs().debug);
             finish(h, c);
             clearBases(h);

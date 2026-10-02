@@ -315,13 +315,19 @@ public final class Portals {
                 }
             }
             case 4 -> {
-                // walk over the dropped block
-                if (++tries > 40 || obsidianAt == null) {
+                // walk over the dropped block (wherever it popped out to)
+                var drops = level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, self.getBoundingBox().inflate(8),
+                        e -> e.getItem().is(Items.OBSIDIAN));
+                if (++tries > 100 || obsidianAt == null || drops.isEmpty() && tries > 10) {
                     obsidianAt = null;
                     stage = 0;
                     return count(Items.OBSIDIAN) >= 10 ? Status.DONE : Status.WORKING;
                 }
-                motor.navigate(Vec3.atBottomCenterOf(obsidianAt), 0.4, false);
+                Vec3 to = drops.isEmpty() ? Vec3.atBottomCenterOf(obsidianAt) : drops.get(0).position();
+                motor.navigate(to, 0.3, false);
+                if (Motor.horizontalDistance(self.position(), to) < 1.5) {
+                    motor.moveToward(to);
+                }
             }
             default -> {
                 return Status.DONE;

@@ -227,6 +227,14 @@ public final class StairMining {
                 }
                 int i = stepIndex(feet);
                 if (i < 0) {
+                    if (feet.distManhattan(s.top) <= 3) {
+                        // right by the top step: onto it
+                        motor.moveToward(Vec3.atBottomCenterOf(s.top));
+                        if (s.top.getY() > feet.getY() && self.onGround()) {
+                            motor.jump();
+                        }
+                        return stuck > 80 ? Status.FAILED : Status.WORKING;
+                    }
                     stage = 0; // not on the stairs (any more): to the top first
                     return Status.WORKING;
                 }

@@ -79,6 +79,7 @@ public final class CloneController {
     private final Lighting lighting;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
+    private boolean lookedAround;
     private final FoodAid foodAid;
     private final Breeding breeding;
     private final Achievements achievements;
@@ -406,7 +407,8 @@ public final class CloneController {
         long now = now();
         trackRewards();
         attacks.tick(now);
-        if (((now + self.getId()) & 3) == 0) {
+        if (((now + self.getId()) & 3) == 0 || !lookedAround) {
+            lookedAround = true; // a first look around before the very first decision
             perception.update(now);
             observeWorld(now);
             watcher.update(now);
