@@ -168,8 +168,8 @@ public final class BoatTrap {
             stage = null;
             return;
         }
-        if (foe.isAlive() && foe.distanceTo(boat) < foe.getBbWidth() / 2 + 0.9) {
-            touched = true; // it came right up to the boat
+        if (foe.isAlive() && boat.getBoundingBox().inflate(0.3, 0.1, 0.3).intersects(foe.getBoundingBox())) {
+            touched = true; // it came right up to the boat (boxes side by side)
         }
         if (foe.getVehicle() == boat) {
             trapsSprung++; // sitting in it now: it cannot walk at us any more

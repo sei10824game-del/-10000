@@ -125,6 +125,22 @@ public final class StairMining {
         motor.resetStuck();
     }
 
+    /** Which step of the staircase we stand on (0 = the top), -1 if none. */
+    private int stepIndex(BlockPos feet) {
+        Bases.Staircase s = stairs;
+        if (s == null) {
+            return -1;
+        }
+        int best = -1;
+        for (int i = 0; i <= s.steps(); i++) {
+            BlockPos step = s.top.relative(s.dir, i).below(i);
+            if (step.getX() == feet.getX() && step.getZ() == feet.getZ() && Math.abs(step.getY() - feet.getY()) <= 1) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
     /** Standing somewhere on the steps between the top and the bottom. */
     private boolean onStairs(BlockPos feet) {
         Bases.Staircase s = stairs;
@@ -183,7 +199,7 @@ public final class StairMining {
                     stage = 2;
                     return Status.WORKING;
                 }
-                if (motor.navigate(Vec3.atBottomCenterOf(s.top), 1.0, false)) {
+                if (motor.navigate(Vec3.atBottomCenterOf(s.top), 1.0, false) || stepIndex(feet) >= 0) {
                     stage = 1;
                     motor.resetStuck();
                 } else if (motor.stuckCount() > 8) {
@@ -192,15 +208,25 @@ public final class StairMining {
                 }
             }
             case 1 -> {
-                // down the steps to where the digging stopped
+                // down the steps to where the digging stopped, one step after the other
                 Bases.Staircase s = stairs;
                 if (s == null) {
                     return Status.FAILED;
                 }
-                if (motor.navigate(Vec3.atBottomCenterOf(s.end), 0.6, false) || feet.getY() <= s.end.getY() && feet.distManhattan(s.end) <= 1) {
+                int i = stepIndex(feet);
+                if (i < 0) {
+                    stage = 0; // not on the stairs (any more): to the top first
+                    return Status.WORKING;
+                }
+                if (i >= s.steps()) {
                     stage = 2;
-                } else if (motor.stuckCount() > 8) {
-                    debug = "cannot get down to " + s.end.toShortString() + " from " + feet.toShortString();
+                    return Status.WORKING;
+                }
+                if (self.onGround()) {
+                    motor.moveToward(Vec3.atBottomCenterOf(s.top.relative(s.dir, i + 1).below(i + 1)));
+                }
+                if (stuck > 80) {
+                    debug = "stuck on step " + i + " of " + s.steps() + " at " + feet.toShortString();
                     return Status.FAILED;
                 }
             }

@@ -835,7 +835,7 @@ public final class Animals {
                 if (inside >= ls.animals().size()) {
                     lured = inside;
                     emptyHand(); // crop away: they stop following
-                    stage = 6;
+                    stage = 7;
                     ticks = 0;
                 } else if (ticks > 2400) {
                     return Status.FAILED;
@@ -843,8 +843,36 @@ public final class Animals {
                     stage = 4; // somebody lost interest: fetch again
                 }
             }
+            case 7 -> {
+                // still inside: shut the gate first (they stay at the back where they followed us), then slip out
+                BlockPos gate = penOrigin.offset(penSize / 2, 0, 0);
+                Vec3 inner = Vec3.atBottomCenterOf(gate.south());
+                if (Motor.horizontalDistance(self.position(), inner) > 0.8 && ticks < 200) {
+                    motor.navigate(inner, 0.5, false);
+                    if (Motor.horizontalDistance(self.position(), inner) < 2.0) {
+                        motor.moveToward(inner);
+                    }
+                    return Status.WORKING;
+                }
+                motor.stop();
+                BlockState gs = level.getBlockState(gate);
+                if (gs.getBlock() instanceof FenceGateBlock && gs.getValue(BlockStateProperties.OPEN)) {
+                    toggleGate(gate);
+                }
+                stage = 8;
+                ticks = 0;
+            }
             default -> {
-                return leaveAndClose(false);
+                Status st = leaveAndClose(false);
+                if (st != Status.WORKING) {
+                    Bases.Pen pen = Bases.get(self.getServer()).penAt(level.dimension(), Vec3.atCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2)));
+                    int in = 0;
+                    for (Animal a : ls.animals()) {
+                        in += a.isAlive() && pen != null && pen.contains(a.position()) ? 1 : 0;
+                    }
+                    livestockDebug = "closed with " + in + " inside";
+                }
+                return st;
             }
         }
         return Status.WORKING;

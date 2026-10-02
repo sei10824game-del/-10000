@@ -678,6 +678,14 @@ public final class Travel {
             needed.add(nextCol.atY(level[k + 1]));
         }
         for (BlockPos p : needed) {
+            if (!solid(p) && self.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(p))) {
+                // hanging over the rim: back onto the middle of our column before building the step ahead
+                motor.moveToward(Vec3.atBottomCenterOf(stand));
+                motor.sneak(true);
+                return true;
+            }
+        }
+        for (BlockPos p : needed) {
             if (!solid(p)) {
                 int slot = bridgeBlockSlot();
                 if (slot < 0) {

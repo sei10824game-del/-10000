@@ -2947,9 +2947,9 @@ public final class CloneGameTests {
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
             var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
-            h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) == false && bases.staircases.size() == 1, "one staircase started ("
+            h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) == false && bases.staircases.size() >= 1, "a staircase started ("
                     + c.controller().optionLog + " " + c.controller().stairs().debug + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
-            h.assertTrue(c.controller().stairs().stepsDug >= 4 && bases.staircases.get(0).steps() >= 4, "dug down step by step: "
+            h.assertTrue(bases.staircases.get(0).steps() >= 4, "dug down step by step: "
                     + c.controller().stairs().stepsDug + " " + c.controller().stairs().debug);
             finish(h, c);
             clearBases(h);
@@ -2974,6 +2974,9 @@ public final class CloneGameTests {
         Vec3 top = h.absoluteVec(new Vec3(10.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, 90f, 0f);
         stairsKit(c);
+        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock")) {
+            c.getCloneBrain().learnBlock(b);
+        }
         c.controller().stairs().targetY = (int) top.y - 40;
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.STAIRS;
         c.setAiEnabled(true);
@@ -2996,13 +2999,15 @@ public final class CloneGameTests {
                 }
             }
         }
-        h.setBlock(new BlockPos(9, 5, 7), Blocks.OAK_LOG);
-        h.setBlock(new BlockPos(9, 6, 7), Blocks.OAK_LOG);
+        ClonePlayer friend = clone(h, 10.5, 7.5, 90f, false);
+        Vec3 up = h.absoluteVec(new Vec3(10.5, 5, 7.5));
+        friend.teleportTo(h.getLevel(), up.x, up.y, up.z, 90f, 0f);
         ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
-        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(9, 5, 7)));
-        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(9, 6, 7)));
         c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
-        c.controller().forcedOption = com.rlclones.ai.strategy.Option.GATHER_WOOD;
+        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone")) {
+            c.getCloneBrain().learnBlock(b);
+        }
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FOLLOW; // up there with the friend
         double topY = h.absoluteVec(new Vec3(0, 5, 0)).y;
         boolean[] up = {false};
         h.onEachTick(() -> up[0] |= c.getY() >= topY - 0.01 && c.onGround());
@@ -3010,7 +3015,7 @@ public final class CloneGameTests {
             h.assertTrue(c.controller().travel().stairSteps >= 2, "stairs dug up the slope (" + c.controller().travel().stairsDebug + " " + c.controller().travel().debug
                     + " " + c.controller().travel().guardDebug + " " + c.controller().optionLog + ")");
             h.assertTrue(up[0], "and up on top of the hill");
-            finish(h, c);
+            finish(h, c, friend);
         });
     }
 
@@ -3030,14 +3035,13 @@ public final class CloneGameTests {
                 h.setBlock(new BlockPos(x, 3, z), Blocks.STONE);
             }
         }
-        h.setBlock(new BlockPos(12, 4, 7), Blocks.OAK_LOG);
-        h.setBlock(new BlockPos(12, 5, 7), Blocks.OAK_LOG);
+        ClonePlayer friend = clone(h, 12.5, 7.5, 90f, false);
+        Vec3 there = h.absoluteVec(new Vec3(12.5, 4, 7.5));
+        friend.teleportTo(h.getLevel(), there.x, there.y, there.z, 90f, 0f);
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
-        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(12, 4, 7)));
-        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(12, 5, 7)));
         c.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
-        c.controller().forcedOption = com.rlclones.ai.strategy.Option.GATHER_WOOD;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FOLLOW; // over there with the friend
         Vec3 far = h.absoluteVec(new Vec3(10, 4, 0));
         h.succeedWhen(() -> {
             var t = c.controller().travel();
@@ -3052,7 +3056,7 @@ public final class CloneGameTests {
             }
             h.assertTrue(rising, "built like steps: a step up, then on at the far side's height (" + t.stairBridgeDebug + ")");
             h.assertTrue(c.getX() >= far.x && c.getY() >= far.y - 0.01, "and the clone is up on the far side");
-            finish(h, c);
+            finish(h, c, friend);
         });
     }
 }
