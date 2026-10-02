@@ -280,6 +280,11 @@ public final class Senses {
     }
 
     public static BlockPos nearestBlock(Perception observer, Player agent, Perception.BlockKind kind, double radius) {
+        return nearestBlock(observer, agent, kind, radius, p -> true);
+    }
+
+    public static BlockPos nearestBlock(Perception observer, Player agent, Perception.BlockKind kind, double radius,
+                                        java.util.function.Predicate<BlockPos> allowed) {
         BlockPos best = null;
         double bestD = radius * radius;
         boolean breaking = Config.get(Config.ALLOW_BLOCK_BREAKING, true);
@@ -295,7 +300,7 @@ public final class Senses {
             if (kind == Perception.BlockKind.STONE && p.getY() < agent.getBlockY()) {
                 d += 64; // rock at eye level before digging into the ground under us
             }
-            if (d >= bestD) {
+            if (d >= bestD || !allowed.test(p)) {
                 continue;
             }
             if (kind == Perception.BlockKind.ORE && !Equipment.canHarvest(agent, agent.level().getBlockState(p))) {

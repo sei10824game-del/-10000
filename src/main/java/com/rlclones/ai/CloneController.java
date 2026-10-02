@@ -28,6 +28,9 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.level.ClipContext;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -537,6 +540,8 @@ public final class CloneController {
     public long heardSounds;
     public int quarried;
     public String harvestDebug = "";
+    /** Blocks found not to be taken (a base's, unsafe, out of reach): left alone for a minute even though seen again. */
+    private final java.util.Map<BlockPos, Long> skipBlocks = new java.util.HashMap<>();
     /** Recent harvest events (diagnostics, tests). */
     public final StringBuilder harvestTrace = new StringBuilder();
 
@@ -1840,6 +1845,12 @@ public final class CloneController {
             }
             case CRIT_ATTACK -> {
                 motor.lookAt(t);
+                int axe = Equipment.bestOfKind(self, net.minecraft.world.item.AxeItem.class);
+                if (axe >= 0 && !(self.getMainHandItem().getItem() instanceof net.minecraft.world.item.AxeItem) && !self.isUsingItem()) {
+                    Equipment.select(self, axe); // the axe stays in hand for the whole jump
+                }
+                critDebug = "t=" + actionTicks + " ground=" + self.onGround() + " vy=" + String.format("%.2f", self.getDeltaMovement().y) + " hit="
+                        + motor.canHit(t) + " gap=" + String.format("%.2f", gap) + " hand=" + self.getMainHandItem();
                 if (actionTicks == 0 && self.onGround()) {
                     motor.jump();
                 }
@@ -1940,7 +1951,7 @@ public final class CloneController {
         shootDebug = "friend=" + (friend != null) + " kind=" + Equipment.rangedKind(held) + " lob=" + lobDraw + " pitch=" + (int) self.getXRot()
                 + "/" + (int) lobPitch + " using=" + self.isUsingItem() + " t=" + actionTicks;
         if (lobDraw > 0) {
-            aimLob(t, lobDraw);
+            aimLob(t, self.isUsingItem() ? Math.max(lobDraw, self.getTicksUsingItem() + 1) : lobDraw);
         } else {
             aimProjectile(t, Equipment.projectileSpeed(held));
         }
@@ -1995,16 +2006,28 @@ public final class CloneController {
                     return;
                 }
                 if (lobDraw > 0) {
-                    if (self.getTicksUsingItem() >= lobDraw) {
-                        self.releaseUsingItem(); // a high arc over the friend's head
-                        arcShots++;
-                        actionDone = true;
+                    int drawn = self.getTicksUsingItem();
+                    if (drawn >= lobDraw) {
+                        if (arrowClearsFriends(drawn)) {
+                            self.releaseUsingItem(); // a high arc over the friend's head
+                            arcShots++;
+                            actionDone = true;
+                        } else if (drawn > lobDraw + 30) {
+                            self.stopUsingItem(); // the aim never came right: lower the bow
+                            actionDone = true;
+                        } else {
+                            heldShots++; // not pointing up the arc yet (looked away?): hold the arrow
+                        }
                     }
                 } else if (friend != null) {
                     self.stopUsingItem(); // no arc to be had: never loose straight through a friend
                     actionDone = true;
                 } else if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
-                    self.releaseUsingItem();
+                    if (arrowClearsFriends(self.getTicksUsingItem())) {
+                        self.releaseUsingItem();
+                    } else {
+                        self.stopUsingItem();
+                    }
                     actionDone = true;
                 }
             }
@@ -2043,6 +2066,8 @@ public final class CloneController {
 
     /** Arrows lobbed over a friend / bows taken instead of a crossbow because of one (diagnostics, tests). */
     public int arcShots;
+    public int heldShots;
+    public String critDebug = "";
     public int bowSwitches;
     public String shootDebug = "";
     private int lobDraw;
@@ -2071,6 +2096,38 @@ public final class CloneController {
             }
         }
         return null;
+    }
+
+    /** Follows the arrow a bow drawn {@code drawn} ticks would loose right now: true if it flies past every friend. */
+    private boolean arrowClearsFriends(int drawn) {
+        float f = Math.min(1f, drawn / 20f);
+        double speed = Math.min(1.0, (f * f + f * 2) / 3) * 3.0;
+        Vec3 pos = self.getEyePosition().subtract(0, 0.1, 0);
+        Vec3 vel = self.getViewVector(1f).scale(speed);
+        java.util.List<AABB> friends = new java.util.ArrayList<>();
+        for (Entity a : recentAllies.keySet()) {
+            if (a != self && a.isAlive() && a.level() == self.level() && a.distanceTo(self) < 64) {
+                friends.add(a.getBoundingBox().inflate(0.5));
+            }
+        }
+        if (friends.isEmpty()) {
+            return true;
+        }
+        double floor = self.getY() - 8;
+        for (int i = 0; i < 100 && pos.y > floor; i++) {
+            Vec3 next = pos.add(vel);
+            for (AABB bb : friends) {
+                if (bb.contains(pos) || bb.clip(pos, next).isPresent()) {
+                    return false;
+                }
+            }
+            if (self.level().clip(new ClipContext(pos, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self)).getType() != HitResult.Type.MISS) {
+                return true; // stuck in a block before reaching anyone
+            }
+            pos = next;
+            vel = vel.scale(0.99).add(0, -0.05, 0);
+        }
+        return true;
     }
 
     private static final double LOB_ANGLE = Math.toRadians(55);
@@ -2387,7 +2444,9 @@ public final class CloneController {
             blockTarget = null;
         }
         if (blockTarget == null) {
-            blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24);
+            long at = now();
+            skipBlocks.values().removeIf(t -> at - t > 1200);
+            blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24, p -> !skipBlocks.containsKey(p));
             blockTicks = 0;
             if (blockTarget == null) {
                 return true;
@@ -2395,12 +2454,14 @@ public final class CloneController {
             if (kind == Perception.BlockKind.WOOD
                     && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(blockTarget), 12) != null) {
                 harvestDebug = "base " + blockTarget.toShortString();
-                perception.forgetBlock(blockTarget); // never take a base apart
+                skipBlocks.put(blockTarget.immutable(), now()); // never take a base apart (seen again at once: skip it a while)
+                perception.forgetBlock(blockTarget);
                 blockTarget = null;
                 return false;
             }
             if (kind != Perception.BlockKind.LOG && (!safeToDig(blockTarget) || kind == Perception.BlockKind.STONE && blockTarget.getY() > self.getBlockY() + 3)) {
                 harvestDebug = "unsafe " + blockTarget.toShortString();
+                skipBlocks.put(blockTarget.immutable(), now());
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
                 return false;
@@ -2420,6 +2481,7 @@ public final class CloneController {
         }
         if (blockTicks > 240) {
             traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)));
+            skipBlocks.put(blockTarget.immutable(), now());
             perception.forgetBlock(blockTarget);
             blockTarget = null;
             return false;
@@ -2429,6 +2491,7 @@ public final class CloneController {
             motor.navigate(kind == Perception.BlockKind.LOG ? center : motor.approachPoint(blockTarget), kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
             if (motor.stuckCount() > 3) {
                 traceHarvest("stuck " + self.blockPosition().toShortString());
+                skipBlocks.put(blockTarget.immutable(), now());
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
             }

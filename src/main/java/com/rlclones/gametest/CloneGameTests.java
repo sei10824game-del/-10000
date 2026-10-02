@@ -2149,7 +2149,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + " "
                     + c.controller().shootDebug + " options " + c.controller().optionLog + ")");
-            h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + hurt + ")");
+            h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + hurt + " held " + c.controller().heldShots + ")");
             h.assertTrue(hit[0], "and the arrows come down on the enemy");
             finish(h, c, friend);
         });
@@ -2217,7 +2217,7 @@ public final class CloneGameTests {
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         dummy(h, 8.0, 7.5);
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().axeCrits >= 1, "jump attacks are done with the axe");
+            h.assertTrue(c.controller().axeCrits >= 1, "jump attacks are done with the axe (" + c.controller().critDebug + " options " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
