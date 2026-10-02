@@ -338,7 +338,9 @@ public final class Achievements {
         for (Perception.Seen s : perception.remembered()) {
             if (s.entity instanceof LivingEntity l && l.isAlive() && s.visible && l.distanceTo(self) < 16 && !Senses.isAllyOf(l, self)
                     && !(l instanceof net.minecraft.world.entity.player.Player)
-                    && (c.ids().isEmpty() || c.ids().contains(Perception.typeId(l)))
+                    // "kill something": a monster - never our livestock, pets or penned animals just for a tick in the list
+                    && (c.ids().isEmpty() ? Senses.isHostileTo(l, self) : c.ids().contains(Perception.typeId(l)))
+                    && !Animals.protectedAnimal(l) && !(l instanceof net.minecraft.world.entity.TamableAnimal t && t.isTame())
                     && (best == null || l.distanceTo(self) < best.distanceTo(self))) {
                 best = l;
             }

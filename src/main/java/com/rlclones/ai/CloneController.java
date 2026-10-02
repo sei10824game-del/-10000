@@ -2680,8 +2680,7 @@ public final class CloneController {
             }
             if (kind != Perception.BlockKind.LOG && (!safeToDig(blockTarget) || kind == Perception.BlockKind.STONE && blockTarget.getY() > self.getBlockY() + 3)) {
                 harvestDebug = "unsafe " + blockTarget.toShortString();
-                skipBlocks.put(blockTarget.immutable(), now());
-                perception.forgetBlock(blockTarget);
+                perception.forgetBlock(blockTarget); // (often only from where we stand right now: no long skip)
                 blockTarget = null;
                 return false;
             }

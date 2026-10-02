@@ -534,9 +534,17 @@ public final class Travel {
                 Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
                 if (motor.mine(p)) {
                     blocksTunneled++;
+                    if (stairsDebug.length() < 300) {
+                        stairsDebug += " dug" + (p.getX() - feet.getX()) + "," + (p.getY() - feet.getY());
+                    }
+                } else if (ticks % 100 == 0 && stairsDebug.length() < 300) {
+                    stairsDebug += " [" + motor.mineDebug + "]";
                 }
                 return true;
             }
+        }
+        if (ticks % 100 == 0 && stairsDebug.length() < 300) {
+            stairsDebug += " move@" + feet.toShortString();
         }
         motor.moveToward(Vec3.atBottomCenterOf(next));
         if (stairsSign > 0) {

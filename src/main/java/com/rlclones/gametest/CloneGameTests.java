@@ -2926,11 +2926,13 @@ public final class CloneGameTests {
     }
 
     /** A stone pickaxe and everything else stone age, so that digging down is all that is left to do. */
-    private static void stairsKit(ClonePlayer c) {
-        for (var it : List.of(Items.STONE_PICKAXE, Items.STONE_SWORD, Items.STONE_AXE, Items.STONE_HOE, Items.STONE_SHOVEL, Items.FURNACE)) {
+    private static void stairsKit(GameTestHelper h, ClonePlayer c) {
+        for (var it : List.of(Items.STONE_PICKAXE, Items.STONE_SWORD, Items.STONE_AXE, Items.STONE_HOE, Items.STONE_SHOVEL)) {
             c.getInventory().add(new ItemStack(it));
         }
         c.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
+        h.setBlock(new BlockPos(1, 2, 1), Blocks.FURNACE); // a furnace already standing about
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(1, 2, 1)));
     }
 
     private static void stoneMass(GameTestHelper h) {
@@ -2950,7 +2952,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
         Vec3 top = h.absoluteVec(new Vec3(4.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
-        stairsKit(c);
+        stairsKit(h, c);
         for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock")) {
             c.getCloneBrain().learnBlock(b);
         }
@@ -2986,7 +2988,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 10.5, 7.5, 90f, false);
         Vec3 top = h.absoluteVec(new Vec3(10.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, 90f, 0f);
-        stairsKit(c);
+        stairsKit(h, c);
         for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock")) {
             c.getCloneBrain().learnBlock(b);
         }
