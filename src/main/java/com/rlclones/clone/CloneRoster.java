@@ -16,6 +16,9 @@ public class CloneRoster extends SavedData {
     public final Map<UUID, CompoundTag> profiles = new LinkedHashMap<>();
     public final Map<UUID, UUID> summoners = new LinkedHashMap<>();
     public final Map<UUID, String> teams = new LinkedHashMap<>();
+    /** Clones born of two parents (N key breeding): child -> its parents. */
+    public final Map<UUID, java.util.List<UUID>> parents = new LinkedHashMap<>();
+    public boolean breeding;
     public boolean linked;
     public boolean respawn;
     public int nextIndex = 1;
@@ -24,6 +27,7 @@ public class CloneRoster extends SavedData {
         CloneRoster r = new CloneRoster();
         r.linked = tag.getBoolean("linked");
         r.respawn = tag.getBoolean("respawn");
+        r.breeding = tag.getBoolean("breeding");
         r.nextIndex = Math.max(1, tag.getInt("nextIndex"));
         ListTag list = tag.getList("clones", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -39,6 +43,14 @@ public class CloneRoster extends SavedData {
             if (c.contains("team")) {
                 r.teams.put(id, c.getString("team"));
             }
+            ListTag ps = c.getList("parents", Tag.TAG_INT_ARRAY);
+            if (!ps.isEmpty()) {
+                java.util.List<UUID> list2 = new java.util.ArrayList<>();
+                for (Tag t : ps) {
+                    list2.add(net.minecraft.nbt.NbtUtils.loadUUID(t));
+                }
+                r.parents.put(id, list2);
+            }
         }
         return r;
     }
@@ -47,6 +59,7 @@ public class CloneRoster extends SavedData {
     public CompoundTag save(CompoundTag tag) {
         tag.putBoolean("linked", linked);
         tag.putBoolean("respawn", respawn);
+        tag.putBoolean("breeding", breeding);
         tag.putInt("nextIndex", nextIndex);
         ListTag list = new ListTag();
         profiles.forEach((id, profile) -> {
@@ -60,6 +73,12 @@ public class CloneRoster extends SavedData {
             String team = teams.get(id);
             if (team != null) {
                 c.putString("team", team);
+            }
+            java.util.List<UUID> ps = parents.get(id);
+            if (ps != null) {
+                ListTag pl = new ListTag();
+                ps.forEach(u -> pl.add(net.minecraft.nbt.NbtUtils.createUUID(u)));
+                c.put("parents", pl);
             }
             list.add(c);
         });

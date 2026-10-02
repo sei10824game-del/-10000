@@ -623,21 +623,27 @@ public final class Consumables {
         Vec3 best = null;
         float bestYaw = 0;
         float bestPitch = 0;
-        for (float dy : new float[]{0f, 8f, -8f, 16f, -16f}) {
-            for (float pitch = -35f; pitch <= 30f; pitch += 5f) {
+        double dyGoal = Math.abs(goal.y - start.y);
+        int tried = 0;
+        for (float dy : new float[]{0f, 8f, -8f, 16f, -16f, 30f, -30f, 45f, -45f, 60f, -60f}) {
+            for (float pitch = -60f; pitch <= 30f; pitch += 5f) {
                 float yaw = baseYaw + dy;
                 Vec3 land = simulate(yaw, pitch);
-                if (land == null || land.y < start.y - 3 || land.y > start.y + 4 || !standable(land)) {
+                tried++;
+                if (land == null || land.y < start.y - 12 || land.y > start.y + 12 || !standable(land)) {
                     continue;
                 }
                 double after = Motor.horizontalDistance(land, goal);
-                if (before - after >= 4 && (best == null || after < Motor.horizontalDistance(best, goal))) {
+                // clearly closer - or, for a goal up / down a cliff, onto its level
+                boolean closer = before - after >= 3 || (dyGoal >= 3 && Math.abs(land.y - goal.y) < 1.5 && after < before + 2);
+                if (closer && (best == null || after + Math.abs(land.y - goal.y) < Motor.horizontalDistance(best, goal) + Math.abs(best.y - goal.y))) {
                     best = land;
                     bestYaw = yaw;
                     bestPitch = pitch;
                 }
             }
         }
+        pearlDebug = "toward " + (best == null ? "no landing of " + tried : "landing " + BlockPos.containing(best).toShortString());
         if (best == null) {
             return false;
         }

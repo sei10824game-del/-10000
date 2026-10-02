@@ -161,7 +161,7 @@ public final class Senses {
         if (Equipment.rangedSlot(agent) < 0) {
             mask &= ~CombatAction.SHOOT.bit();
         }
-        if (Equipment.specialSlot(agent) < 0) {
+        if (Equipment.usableSlot(agent, x -> true) < 0) {
             mask &= ~CombatAction.USE_ITEM.bit();
         }
         boolean headroom = agent.level().getBlockState(agent.blockPosition().above(2)).getCollisionShape(agent.level(), agent.blockPosition().above(2)).isEmpty();
@@ -209,7 +209,7 @@ public final class Senses {
         return 1;
     }
 
-    private static boolean hasFood(Player agent) {
+    public static boolean hasFood(Player agent) {
         for (ItemStack s : agent.getInventory().items) {
             if (Equipment.foodScore(agent, s) > 0 || s.is(net.minecraft.world.item.Items.CAKE)) {
                 return true;

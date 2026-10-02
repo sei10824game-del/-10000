@@ -47,6 +47,24 @@ public final class Equipment {
         return dmg * Math.sqrt(Math.max(0.25, speed) / 4.0) + (stack.isEnchanted() ? 0.5 : 0.0);
     }
 
+    /** What swinging this item has actually done per hit (scaled like {@link #attackDamage}); 0 until tried a few times. */
+    public static double learnedSwing(Player p, ItemStack s) {
+        if (!(p instanceof com.rlclones.clone.ClonePlayer c) || c.getCloneBrain() == null) {
+            return 0;
+        }
+        String id = AttackLearning.itemId(s);
+        if (c.getCloneBrain().itemUseTries(id, AttackLearning.SWING) < 3) {
+            return 0;
+        }
+        double speed = 4.0;
+        for (AttributeModifier m : s.getAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_SPEED)) {
+            if (m.getOperation() == AttributeModifier.Operation.ADDITION) {
+                speed += m.getAmount();
+            }
+        }
+        return c.getCloneBrain().itemUseValue(id, AttackLearning.SWING) * Math.sqrt(Math.max(0.25, speed) / 4.0);
+    }
+
     public static int bestWeaponSlot(Player p) {
         Inventory inv = p.getInventory();
         int best = -1;
@@ -56,7 +74,7 @@ public final class Equipment {
             if (s.isEmpty() || isLauncher(s) || s.isEdible()) {
                 continue;
             }
-            double score = attackDamage(s);
+            double score = Math.max(attackDamage(s), learnedSwing(p, s));
             if (score > bestScore + 0.01) {
                 bestScore = score;
                 best = i;
@@ -219,6 +237,42 @@ public final class Equipment {
         return false;
     }
 
+    /**
+     * Something worth trying on an enemy with right clicks as well as swings: special / modded weapons, tridents,
+     * throwables, rods... (not food, potions, pearls, buckets, blocks, boats or launchers - those have their own uses).
+     */
+    public static boolean isTriable(ItemStack s) {
+        if (s.isEmpty() || s.isEdible() || s.getItem() instanceof BlockItem || s.getItem() instanceof ShieldItem || isLauncher(s)
+                || s.getItem() instanceof net.minecraft.world.item.PotionItem || s.is(Items.ENDER_PEARL) || s.is(Items.ENDER_EYE)
+                || s.getItem() instanceof net.minecraft.world.item.BucketItem || s.getItem() instanceof net.minecraft.world.item.MilkBucketItem
+                || s.getItem() instanceof net.minecraft.world.item.BoatItem || s.getItem() instanceof net.minecraft.world.item.MinecartItem
+                || s.getItem() instanceof net.minecraft.world.item.SpawnEggItem || s.getItem() instanceof net.minecraft.world.item.FlintAndSteelItem
+                || s.is(Items.EXPERIENCE_BOTTLE) || s.is(Items.FIREWORK_ROCKET) || s.getItem() instanceof net.minecraft.world.item.Equipable
+                || s.getItem() instanceof net.minecraft.world.item.EmptyMapItem || s.getItem() instanceof net.minecraft.world.item.WritableBookItem
+                || s.getItem() instanceof net.minecraft.world.item.WrittenBookItem || s.getItem() instanceof net.minecraft.world.item.SpyglassItem
+                || s.getItem() instanceof net.minecraft.world.item.InstrumentItem || s.getItem() instanceof net.minecraft.world.item.BundleItem
+                || s.getItem() instanceof net.minecraft.world.item.KnowledgeBookItem) {
+            return false;
+        }
+        return isSpecialWeapon(s) || s.getItem() instanceof TridentItem || overridesUse(s.getItem());
+    }
+
+    /** A triable item (see {@link #isTriable}) that {@code ok} accepts, the selected one first; -1 if none. */
+    public static int usableSlot(Player p, java.util.function.Predicate<ItemStack> ok) {
+        Inventory inv = p.getInventory();
+        ItemStack sel = inv.getSelected();
+        if (isTriable(sel) && ok.test(sel) && !p.getCooldowns().isOnCooldown(sel.getItem())) {
+            return inv.selected;
+        }
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (isTriable(s) && ok.test(s) && !p.getCooldowns().isOnCooldown(s.getItem())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     public static int specialSlot(Player p) {
         Inventory inv = p.getInventory();
         if (isSpecialWeapon(inv.getSelected()) && !p.getCooldowns().isOnCooldown(inv.getSelected().getItem())) {
@@ -309,7 +363,8 @@ public final class Equipment {
             return false;
         }
         Block block = bi.getBlock();
-        if (block instanceof EntityBlock || block instanceof FallingBlock || block instanceof net.minecraft.world.level.block.MagmaBlock) {
+        if (block instanceof EntityBlock || block instanceof FallingBlock || block instanceof net.minecraft.world.level.block.MagmaBlock
+                || block instanceof net.minecraft.world.level.block.TntBlock) {
             return false;
         }
         BlockState state = block.defaultBlockState();

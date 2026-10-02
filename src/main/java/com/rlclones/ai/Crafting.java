@@ -228,8 +228,10 @@ public final class Crafting {
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
             out.addAll(List.of(BOATS)); // lots of swimming lately: a boat would help
         }
-        if (tierOf(p, HoeItem.class) < 0 && Farming.seedSlot(p) >= 0) {
-            out.add(Items.WOODEN_HOE); // seeds but nothing to till with: the hoe comes before other tools
+        if (tierOf(p, HoeItem.class) < 0 && (Farming.seedSlot(p) >= 0 || tierOf(p, PickaxeItem.class) >= 0)) {
+            // a field feeds us for good: the hoe comes right after the first pickaxe, before weapons and other tools
+            out.add(Items.STONE_HOE);
+            out.add(Items.WOODEN_HOE);
         }
         double weapon = bestWeapon(p);
         for (Item sword : SWORDS) {
@@ -382,7 +384,7 @@ public final class Crafting {
         return b != null && b.knowsItem(Discovery.keyOf(r.getResultItem(self.serverLevel().registryAccess())));
     }
 
-    private static boolean canCraft(Player p, CraftingRecipe r) {
+    public static boolean canCraft(Player p, CraftingRecipe r) {
         StackedContents contents = new StackedContents();
         p.getInventory().fillStackedContents(contents);
         return contents.canCraft(r, null);
@@ -428,7 +430,7 @@ public final class Crafting {
         return out;
     }
 
-    private static List<CraftingRecipe> recipesFor(ServerPlayer p, java.util.function.Predicate<ItemStack> result) {
+    public static List<CraftingRecipe> recipesFor(ServerPlayer p, java.util.function.Predicate<ItemStack> result) {
         List<CraftingRecipe> out = new ArrayList<>();
         for (Entry e : index(p)) {
             if (result.test(e.result())) {

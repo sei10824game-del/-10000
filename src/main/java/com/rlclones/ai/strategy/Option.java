@@ -42,7 +42,15 @@ public enum Option {
     /** No trees anywhere: take planks / logs from things built (never from a base). */
     SALVAGE(400),
     /** Obsidian from lava + water, a Nether portal, and a first trip through it. */
-    PORTAL(3000);
+    PORTAL(3000),
+    /** Bring food to whoever asked for it in chat (one's own children first). */
+    FEED(1800),
+    /** N key: two clones with full stomachs and food to spare make a new clone. */
+    BREED(1200),
+    /** Work towards an advancement not made yet (what unlocks it is read from its criteria). */
+    ACHIEVE(1800),
+    /** Dig a staircase down for ore - or carry on down one already started. */
+    STAIRS(3000);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

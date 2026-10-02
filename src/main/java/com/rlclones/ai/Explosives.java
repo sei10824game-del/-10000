@@ -57,6 +57,35 @@ public final class Explosives {
         return -1;
     }
 
+    private long judgeAt = -1;
+
+    private void lit() {
+        tntUsed++;
+        stage = 3;
+        ticks = 0;
+        judgeAt = self.level().getGameTime() + 100;
+        victimHealth = victim == null ? 0 : victim.getHealth();
+        debug = "lit" + (victim == null ? "" : " vs " + Perception.typeId(victim));
+    }
+
+    /** After the bang: did it hurt the enemy it was meant for? (TNT learned useless against kinds that always get away) */
+    private void judge(long now) {
+        if (judgeAt < 0 || now < judgeAt) {
+            return;
+        }
+        judgeAt = -1;
+        if (victim != null && brain != null) {
+            boolean hurt = !victim.isAlive() || victim.getHealth() < victimHealth - 0.5f;
+            if (!victim.hasEffect(net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE)) {
+                brain.get().knowledge(Perception.typeId(victim)).traits.mergeInt((hurt ? "effect:" : "noeffect:") + "tnt", 1, Integer::sum);
+            }
+            hits += hurt ? 1 : 0;
+        }
+    }
+
+    /** Explosions that hurt the enemy they were meant for (diagnostics, tests). */
+    public int hits;
+
     public boolean busy() {
         return stage >= 0;
     }
@@ -102,13 +131,53 @@ public final class Explosives {
         return c;
     }
 
-    /** Reflex: returns true while busy with the TNT this tick. */
-    public boolean tick(long now) {
+    private int igniterSlot() {
+        int b = slot(s -> s.is(ItemTags.BUTTONS));
+        return b >= 0 ? b : slot(s -> s.is(Items.FLINT_AND_STEEL));
+    }
+
+    /** A tough single enemy in a fight (or two side by side), 4..10 blocks off, that TNT is not known to miss. */
+    @Nullable
+    private Vec3 fightTarget(@Nullable net.minecraft.world.entity.Entity t, long now) {
+        if (!(t instanceof LivingEntity lt) || !t.isAlive() || now - lastUse < 200 || brain == null) {
+            return null;
+        }
+        double d = t.distanceTo(self);
+        if (d < 4 || d > 10) {
+            return null;
+        }
+        var k = brain.get().knowledgeIfPresent(Perception.typeId(t));
+        if (AttackLearning.useless(k, "tnt")) {
+            return null; // learned: it walks away from the fuse / does not mind the blast
+        }
+        boolean tough = lt.getMaxHealth() >= 20 || Senses.threats(perception, self, now, 12).size() >= 2 || self.getHealth() < 10;
+        return tough ? t.position() : null;
+    }
+
+    private long lastUse = -1000;
+    @Nullable
+    private java.util.function.Supplier<com.rlclones.ai.brain.Brain> brain;
+    @Nullable
+    private LivingEntity victim;
+    private float victimHealth;
+
+    public void setBrain(java.util.function.Supplier<com.rlclones.ai.brain.Brain> brain) {
+        this.brain = brain;
+    }
+
+    /** Reflex: returns true while busy with the TNT this tick. {@code fight} is the enemy being fought, if any. */
+    public boolean tick(long now, @Nullable net.minecraft.world.entity.Entity fight) {
+        judge(now);
         if (stage < 0) {
-            if (now % 10 != 0 || slot(s -> s.is(Items.TNT)) < 0 || slot(s -> s.is(ItemTags.BUTTONS)) < 0 || !self.onGround()) {
+            if (now % 10 != 0 || slot(s -> s.is(Items.TNT)) < 0 || igniterSlot() < 0 || !self.onGround()) {
                 return false;
             }
             Vec3 c = crowd(now);
+            victim = null;
+            if (c == null) {
+                c = fightTarget(fight, now);
+                victim = c == null ? null : (LivingEntity) fight;
+            }
             if (c == null || !safeAt(c)) {
                 return false;
             }
@@ -122,6 +191,11 @@ public final class Explosives {
             tnt = spot;
             stage = 0;
             ticks = 0;
+            lastUse = now;
+            if (victim == null) {
+                List<Perception.Seen> th = Senses.threats(perception, self, now, 14);
+                victim = th.isEmpty() || !(th.get(0).entity instanceof LivingEntity l) ? null : l;
+            }
             runTo = self.position().subtract(dir.scale(16));
         }
         if (++ticks > 200) {
@@ -146,8 +220,8 @@ public final class Explosives {
                 }
             }
             case 1 -> {
-                // a button on the side facing us
-                int s = slot(st -> st.is(ItemTags.BUTTONS));
+                // a button on the side facing us (or straight to the fuse with flint and steel)
+                int s = igniterSlot();
                 if (s < 0 || !level.getBlockState(tnt).is(net.minecraft.world.level.block.Blocks.TNT)) {
                     stage = -1;
                     return false;
@@ -157,9 +231,23 @@ public final class Explosives {
                 Equipment.select(self, s);
                 Vec3 hit = c.add(face.getStepX() * 0.5, 0, face.getStepZ() * 0.5);
                 motor.lookAt(hit);
+                motor.sneak(false);
+                self.setShiftKeyDown(false); // crouching, a click would not reach the block
+                boolean flint = self.getMainHandItem().is(Items.FLINT_AND_STEEL);
                 self.gameMode.useItemOn(self, level, self.getMainHandItem(), InteractionHand.MAIN_HAND, new BlockHitResult(hit, face, tnt, false));
+                self.swing(InteractionHand.MAIN_HAND);
+                if (flint) {
+                    if (!level.getBlockState(tnt).is(net.minecraft.world.level.block.Blocks.TNT)) {
+                        lit();
+                    } else if (ticks > 20) {
+                        stage = -1;
+                        return false;
+                    }
+                    return true;
+                }
                 button = tnt.relative(face);
                 stage = level.getBlockState(button).is(net.minecraft.tags.BlockTags.BUTTONS) ? 2 : 1;
+                debug = "button " + (stage == 2 ? "placed" : "not placed: " + level.getBlockState(button));
                 if (stage == 1 && ticks > 20) {
                     stage = -1;
                     return false;
@@ -169,13 +257,13 @@ public final class Explosives {
                 // press it, then run
                 Vec3 c = Vec3.atCenterOf(button);
                 motor.lookAt(c);
+                motor.sneak(false);
+                self.setShiftKeyDown(false); // a crouching click would place the held item instead of pressing
                 self.gameMode.useItemOn(self, level, self.getMainHandItem(), InteractionHand.MAIN_HAND,
                         new BlockHitResult(c, Direction.UP, button, false));
                 self.swing(InteractionHand.MAIN_HAND);
                 if (!level.getBlockState(tnt).is(net.minecraft.world.level.block.Blocks.TNT)) {
-                    tntUsed++;
-                    stage = 3;
-                    ticks = 0;
+                    lit();
                 } else if (ticks > 40) {
                     stage = -1;
                     return false;

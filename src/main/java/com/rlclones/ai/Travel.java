@@ -5,6 +5,7 @@ import com.rlclones.clone.ClonePlayer;
 import com.rlclones.ai.brain.Brain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.player.Inventory;
@@ -41,7 +42,7 @@ public final class Travel {
     }
 
     public boolean busy() {
-        return bridging || parkour || tunnel != null;
+        return bridging || parkour || tunnel != null || stairsDir != null || stairBridge != null;
     }
 
     private boolean solid(BlockPos p) {
@@ -115,20 +116,43 @@ public final class Travel {
         if (tunnel != null) {
             return tunnelTick();
         }
+        if (stairsDir != null) {
+            return stairsTick();
+        }
+        if (stairBridge != null) {
+            return stairBridgeTick();
+        }
         if (cooldown > 0) {
             cooldown--;
             return false;
         }
         Vec3 goal = motor.recentGoal();
-        if (goal == null || Motor.horizontalDistance(self.position(), goal) < 6 || motor.stuckCount() < 2 || !self.onGround()
-                || self.isInWater() || self.isPassenger()) {
+        if (goal == null || Motor.horizontalDistance(self.position(), goal) < 6 && Math.abs(goal.y - self.getY()) < 3 || motor.stuckCount() < 2
+                || !self.onGround() || self.isInWater() || self.isPassenger()) {
             return false;
         }
         Direction d = Direction.getNearest(goal.x - self.getX(), 0, goal.z - self.getZ());
         int g = gapAhead(d);
         debug = "gap=" + g + " dir=" + d;
+        double rise = goal.y - self.getY();
         if (g == 0) {
-            return !threatened && startTunnel(d);
+            if (threatened) {
+                return false;
+            }
+            // a cliff / slope between us and a goal up (or down) there: a staircase, not a level tunnel
+            if (rise >= 2 && startStairs(d, 1, goal)) {
+                return true;
+            }
+            if (rise <= -2 && startStairs(d, -1, goal)) {
+                return true;
+            }
+            return startTunnel(d);
+        }
+        if (rise <= -3 && Motor.horizontalDistance(self.position(), goal) < 3 && !threatened && startStairs(d, -1, goal)) {
+            return true; // right above it, down in the ground: dig our way down to it
+        }
+        if (g < 0 && Config.get(Config.ALLOW_BLOCK_PLACING, true) && startStairBridge(d, goal)) {
+            return true; // ground on the far side at another height: a bridge that climbs / descends to it
         }
         boolean blocks = Config.get(Config.ALLOW_BLOCK_PLACING, true) && bridgeBlocks() >= g;
         boolean lava = g > 0 && lavaBelow(d, g);
@@ -416,5 +440,251 @@ public final class Travel {
         cooldown = 20;
         motor.resetStuck();
         return false;
+    }
+
+    // ------------------------------------------------------------------ stairs dug through the ground
+
+    @javax.annotation.Nullable
+    private Direction stairsDir;
+    private int stairsSign;
+    private int stairsLeft;
+    private BlockPos stairsFrom;
+    public int stairSteps;
+    public String stairsDebug = "";
+
+    /** Start digging a staircase up ({@code sign} 1) or down (-1) in direction {@code d}, as many steps as the goal is high. */
+    private boolean startStairs(Direction d, int sign, Vec3 goal) {
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            return false;
+        }
+        BlockPos feet = self.blockPosition();
+        BlockPos ahead = feet.relative(d);
+        if (sign > 0 && !(solid(ahead) && diggable(ahead.above()) && diggable(ahead.above(2)) && diggable(feet.above(2)))) {
+            return false;
+        }
+        if (sign < 0 && !(solid(ahead.below(2)) && diggable(ahead.above()) && diggable(ahead) && diggable(ahead.below()))) {
+            return false;
+        }
+        stairsDir = d;
+        stairsSign = sign;
+        stairsLeft = Math.max(1, (int) Math.ceil(Math.abs(goal.y - self.getY())) + 1);
+        stairsFrom = feet;
+        ticks = 0;
+        stairsDebug = (sign > 0 ? "up " : "down ") + d + " x" + stairsLeft;
+        return stairsTick();
+    }
+
+    private boolean stairsTick() {
+        Direction d = stairsDir;
+        if (d == null || ++ticks > 600 || stairsLeft <= 0) {
+            stairsDir = null;
+            return finish();
+        }
+        if (!self.onGround()) {
+            return true; // mid-jump / dropping onto the step
+        }
+        BlockPos feet = self.blockPosition();
+        if (!feet.equals(stairsFrom)) {
+            if (feet.getY() == stairsFrom.getY() + stairsSign) {
+                stairSteps++;
+                stairsLeft--;
+                if (stairsLeft <= 0) {
+                    stairsDir = null;
+                    return finish();
+                }
+            } else if (Math.abs(feet.getY() - stairsFrom.getY()) > 1 || feet.distManhattan(stairsFrom) > 2) {
+                stairsDir = null; // fell or got pushed away
+                return finish();
+            }
+            stairsFrom = feet;
+        }
+        BlockPos ahead = feet.relative(d);
+        BlockPos[] clear;
+        BlockPos next;
+        if (stairsSign > 0) {
+            clear = new BlockPos[]{feet.above(2), ahead.above(2), ahead.above()};
+            next = ahead.above();
+            if (!solid(ahead)) {
+                stairsDir = null; // nothing to step up on: the slope is behind us
+                return finish();
+            }
+        } else {
+            clear = new BlockPos[]{ahead.above(), ahead, ahead.below()};
+            next = ahead.below();
+            if (!solid(next.below())) {
+                stairsDir = null; // a drop below: no stair to dig into
+                return finish();
+            }
+        }
+        for (BlockPos p : clear) {
+            if (solid(p)) {
+                if (!diggable(p)) {
+                    stairsDir = null;
+                    return finish();
+                }
+                motor.stop();
+                Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
+                if (motor.mine(p)) {
+                    blocksTunneled++;
+                }
+                return true;
+            }
+        }
+        motor.moveToward(Vec3.atBottomCenterOf(next));
+        if (stairsSign > 0) {
+            motor.jump();
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ bridges that climb or come down
+
+    /** Planned bridge: support level of each column from the start (index 0) to the landing (last). */
+    @javax.annotation.Nullable
+    private int[] stairBridge;
+    private BlockPos bridgeStart;
+    private int bridgeCol;
+    public int stairBridges;
+    public int stairBridgeBlocks;
+    public String stairBridgeDebug = "";
+
+    /** The far side ahead at another height: {column, support level}; null if none within 12 blocks. */
+    @javax.annotation.Nullable
+    private int[] landingAhead(BlockPos from, Direction d, Vec3 goal) {
+        int l0 = from.getY() - 1;
+        boolean gapSeen = false;
+        for (int i = 1; i <= 12; i++) {
+            BlockPos c = from.relative(d, i);
+            boolean ground = solid(c.atY(l0)) && passable(c.atY(l0 + 1)) && passable(c.atY(l0 + 2));
+            if (!gapSeen) {
+                if (ground) {
+                    continue; // still our own ground
+                }
+                if (solid(c.atY(l0 + 1)) || solid(c.atY(l0 + 2))) {
+                    return null; // a wall right ahead: digging, not bridging
+                }
+                gapSeen = true;
+            }
+            if (ground && i > 1) {
+                return null; // ground at our own level: an ordinary bridge does
+            }
+            // higher: the lowest top with room to stand
+            if (solid(c.atY(l0 + 1)) || solid(c.atY(l0 + 2))) {
+                for (int up = 1; up <= 6; up++) {
+                    if (solid(c.atY(l0 + up)) && passable(c.atY(l0 + up + 1)) && passable(c.atY(l0 + up + 2))) {
+                        return new int[]{i, l0 + up};
+                    }
+                }
+                return null;
+            }
+            // lower: ground not below the goal's level (not just the bottom of a pit)
+            for (int down = 1; down <= 6; down++) {
+                int y = l0 - down;
+                if (solid(c.atY(y)) && passable(c.atY(y + 1)) && passable(c.atY(y + 2))) {
+                    if (y + 1 >= goal.y - 2) {
+                        return new int[]{i, y};
+                    }
+                    break;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean startStairBridge(Direction d, Vec3 goal) {
+        BlockPos from = self.blockPosition();
+        if (!solid(from.below())) {
+            from = from.relative(d.getOpposite()); // crouching over the rim
+            if (!solid(from.below())) {
+                return false;
+            }
+        }
+        int[] land = landingAhead(from, d, goal);
+        if (land == null) {
+            return false;
+        }
+        int cols = land[0];
+        int[] level = new int[cols + 1];
+        level[0] = from.getY() - 1;
+        for (int k = 1; k < cols; k++) {
+            level[k] = level[k - 1] + Mth.clamp(land[1] - level[k - 1], -1, 1);
+        }
+        level[cols] = land[1];
+        if (land[1] - level[cols - 1] > 1) {
+            return false; // too steep to climb in the room there is
+        }
+        int need = 0;
+        for (int k = 1; k < cols; k++) {
+            need += level[k] == level[k - 1] ? 1 : 2;
+        }
+        if (bridgeBlocks() < need) {
+            return false;
+        }
+        stairBridge = level;
+        bridgeStart = from;
+        bridgeCol = 0;
+        dir = d;
+        ticks = 0;
+        stairBridges++;
+        stairBridgeDebug = "cols=" + cols + " from " + level[0] + " to " + land[1] + " blocks=" + need;
+        return stairBridgeTick();
+    }
+
+    private boolean stairBridgeTick() {
+        int[] level = stairBridge;
+        if (level == null || ++ticks > 1200) {
+            stairBridge = null;
+            return finish();
+        }
+        int k = bridgeCol;
+        BlockPos col = bridgeStart.relative(dir, k);
+        BlockPos stand = col.atY(level[k] + 1);
+        BlockPos feet = self.blockPosition();
+        if (self.getY() < level[Math.max(0, k - 1)] - 0.5 && self.onGround()) {
+            stairBridge = null; // fell off
+            return finish();
+        }
+        if (!(feet.getX() == stand.getX() && feet.getZ() == stand.getZ()) || Math.abs(feet.getY() - stand.getY()) > 0) {
+            // get onto column k (one step forward: up, level or down)
+            motor.moveToward(Vec3.atBottomCenterOf(stand));
+            motor.sneak(level[k] <= level[Math.max(0, k - 1)]);
+            if (stand.getY() > feet.getY() && self.onGround()) {
+                motor.jump();
+            }
+            return true;
+        }
+        if (k + 1 >= level.length) {
+            stairBridge = null; // on the far side
+            return finish();
+        }
+        BlockPos nextCol = bridgeStart.relative(dir, k + 1);
+        java.util.List<BlockPos> needed = new java.util.ArrayList<>();
+        if (k + 1 < level.length - 1) {
+            if (level[k + 1] > level[k]) {
+                needed.add(nextCol.atY(level[k]));          // the block under the new step
+            } else if (level[k + 1] < level[k]) {
+                needed.add(col.atY(level[k] - 1));          // under our own step, to build the lower one against
+            }
+            needed.add(nextCol.atY(level[k + 1]));
+        }
+        for (BlockPos p : needed) {
+            if (!solid(p)) {
+                int slot = bridgeBlockSlot();
+                if (slot < 0) {
+                    stairBridge = null;
+                    return finish();
+                }
+                Equipment.select(self, slot);
+                motor.stop();
+                motor.sneak(true);
+                if (motor.placeBlockAt(p)) {
+                    stairBridgeBlocks++;
+                    blocksBridged++;
+                }
+                return true;
+            }
+        }
+        bridgeCol = k + 1;
+        return true;
     }
 }

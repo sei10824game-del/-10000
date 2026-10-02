@@ -33,6 +33,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.level.ClipContext;
 
 import javax.annotation.Nullable;
+import net.minecraft.world.entity.player.Player;
 import java.util.List;
 import java.util.Random;
 
@@ -77,6 +78,11 @@ public final class CloneController {
     private final BoatTrap boatTrap;
     private final Lighting lighting;
     private final Portals portals;
+    private final AttackLearning attacks = new AttackLearning(this::brain);
+    private final FoodAid foodAid;
+    private final Breeding breeding;
+    private final Achievements achievements;
+    private final StairMining stairs;
     private final CreativeHelper creative;
     /** What can be done riding a horse (anything else: get off first). */
     private static final java.util.Set<Option> ON_HORSEBACK = java.util.EnumSet.of(Option.EXPLORE, Option.EXPEDITION, Option.JOIN, Option.FOLLOW,
@@ -168,6 +174,11 @@ public final class CloneController {
         this.boatTrap = new BoatTrap(self, motor);
         this.lighting = new Lighting(self, motor);
         this.portals = new Portals(self, motor);
+        this.explosives.setBrain(this::brain);
+        this.foodAid = new FoodAid(self, motor);
+        this.breeding = new Breeding(self, motor);
+        this.achievements = new Achievements(self, motor, perception, this::brain, crafting);
+        this.stairs = new StairMining(self, motor);
         this.creative = new CreativeHelper(self, motor, perception);
         expedition.foesNear = p -> {
             long t = now();
@@ -250,6 +261,22 @@ public final class CloneController {
 
     public Explosives explosives() {
         return explosives;
+    }
+
+    public FoodAid foodAid() {
+        return foodAid;
+    }
+
+    public Breeding breeding() {
+        return breeding;
+    }
+
+    public Achievements achievements() {
+        return achievements;
+    }
+
+    public StairMining stairs() {
+        return stairs;
     }
 
     public Perch perch() {
@@ -378,6 +405,7 @@ public final class CloneController {
     public void tick() {
         long now = now();
         trackRewards();
+        attacks.tick(now);
         if (((now + self.getId()) & 3) == 0) {
             perception.update(now);
             observeWorld(now);
@@ -399,6 +427,7 @@ public final class CloneController {
                 && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
                 && option != Option.QUARRY && option != Option.DISCOVER && option != Option.BREW
                 && option != Option.ANIMALS && option != Option.FISH && option != Option.SALVAGE && option != Option.PORTAL
+                && option != Option.STAIRS && option != Option.ACHIEVE
                 && !explosives.busy() && !travel.busy() && !perch.busy() && !boatTrap.busy() && !portals.busy()
                 && cleanTarget == null && !consumables.busy() && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
@@ -418,13 +447,16 @@ public final class CloneController {
         if (((now + self.getId()) % 100) == 50) {
             discovery.share(now);
         }
+        if (((now + self.getId()) % 20) == 7) {
+            foodAid.tick(now);
+        }
         boolean threatened = !Senses.threats(perception, self, now, 12).isEmpty();
         if (threatened) {
             lastThreatSeen = now;
         }
         boolean itemBusy = consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
-            itemBusy = explosives.tick(now);
+            itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
         if (!itemBusy && option == Option.FIGHT && (target != null || boatTrap.busy())) {
             itemBusy = boatTrap.tick(target, now); // a boat at its feet: most mobs sit down in it
@@ -790,6 +822,9 @@ public final class CloneController {
             return;
         }
         if (expedition.onChat(sender, t, now)) {
+            return;
+        }
+        if (foodAid.onChat(sender, t, now)) {
             return;
         }
         if (discovery.onChat(t) || t.startsWith("DISCOVER ")) {
@@ -1173,6 +1208,22 @@ public final class CloneController {
         if (self.onGround() && portals.hasWork()) {
             mask |= Option.PORTAL.bit();
         }
+        if (foodAid.canHelp()) {
+            mask |= Option.FEED.bit();
+        }
+        if (breeding.canStart()) {
+            mask |= Option.BREED.bit();
+        }
+        if (stairs.wanted()) {
+            mask |= Option.STAIRS.bit();
+        }
+        if (achievements.hasGoal(now)) {
+            mask |= Option.ACHIEVE.bit();
+        }
+        Player fav = foodAid.favourite(64);
+        if (fav != null && fav.distanceTo(self) > 5) {
+            mask |= Option.FOLLOW.bit();
+        }
         return mask;
     }
 
@@ -1380,6 +1431,7 @@ public final class CloneController {
     // ------------------------------------------------------------------ own reward signals
 
     public void onDealtDamage(LivingEntity victim, float amount) {
+        attacks.onDealt(victim, amount);
         if (victim == target || Senses.isHostileTo(victim, self) || Senses.isFoodAnimal(victim)) {
             stepReward += amount;
             if (Senses.isHostileTo(victim, self)) {
@@ -1483,12 +1535,63 @@ public final class CloneController {
             case FISH -> fishing.tick() != Fishing.Status.WORKING;
             case SALVAGE -> runHarvest(Perception.BlockKind.WOOD) || !needWood() && blocksDone >= 2;
             case PORTAL -> portals.tick() != Portals.Status.WORKING;
+            case FEED -> foodAid.helpTick() != FoodAid.Status.WORKING;
+            case BREED -> breeding.tick() != Breeding.Status.WORKING;
+            case ACHIEVE -> achievements.tick() != Achievements.Status.WORKING;
+            case STAIRS -> stairs.tick() != StairMining.Status.WORKING;
         };
         optionTicks++;
         optionReward -= 0.005f;
         if (option != null && (done || optionTicks >= option.maxTicks || shouldInterrupt(now))) {
             finishOption(false);
         }
+    }
+
+    /**
+     * Strong pulls that win over the learned policy most of the time: a friend starving (bring food), an animal
+     * that could be tamed, a partner for a child, and - the more they helped us - staying with our helpers.
+     */
+    @Nullable
+    private Option drive(long now, int mask) {
+        if (!Senses.threats(perception, self, now, 16).isEmpty()) {
+            return null;
+        }
+        if ((mask & Option.FEED.bit()) != 0 && random.nextFloat() < 0.85f) {
+            return Option.FEED;
+        }
+        if ((mask & Option.BREED.bit()) != 0 && random.nextFloat() < 0.7f) {
+            return Option.BREED;
+        }
+        if ((mask & Option.ANIMALS.bit()) != 0 && animals.tameCandidate() != null && random.nextFloat() < 0.7f) {
+            return Option.ANIMALS; // it could be ours: tame it
+        }
+        Player fav = foodAid.favourite(64);
+        if ((mask & Option.FOLLOW.bit()) != 0 && fav != null && fav.distanceTo(self) > 6
+                && random.nextFloat() < Math.min(0.6f, 0.12f * foodAid.gratitude(fav.getUUID()))) {
+            followDrives++;
+            return Option.FOLLOW;
+        }
+        return null;
+    }
+
+    /** FOLLOW options started because of gratitude (diagnostics, tests). */
+    public int followDrives;
+    @Nullable
+    private Entity followTarget;
+    /** Who the last FOLLOW went after (diagnostics, tests). */
+    public String followDebug = "";
+
+    /** Whom to follow: the helper we owe most if one is around, otherwise the nearest friend. */
+    @Nullable
+    private Entity pickFollowTarget(long now) {
+        Player fav = foodAid.favourite(64);
+        if (fav != null) {
+            followDebug = fav.getGameProfile().getName();
+            return fav;
+        }
+        Perception.Seen ally = Senses.nearestAlly(perception, self, self, now, 64);
+        followDebug = ally == null ? "" : ally.entity.getName().getString();
+        return ally == null ? null : ally.entity;
     }
 
     private void startOption(long now) {
@@ -1503,7 +1606,8 @@ public final class CloneController {
         } else if (committed != null && (mask & committed.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
             o = committed.ordinal(); // a promise: keep going with the group until the trip is over
         } else {
-            o = brain().chooseStrategy(s, mask);
+            Option pull = drive(now, mask);
+            o = pull != null ? pull.ordinal() : brain().chooseStrategy(s, mask);
         }
         if (o < 0) {
             return;
@@ -1547,6 +1651,11 @@ public final class CloneController {
             case ANIMALS -> animals.begin();
             case FISH -> fishing.begin();
             case PORTAL -> portals.begin();
+            case FEED -> foodAid.begin();
+            case BREED -> breeding.begin();
+            case ACHIEVE -> achievements.begin();
+            case STAIRS -> stairs.begin();
+            case FOLLOW -> followTarget = pickFollowTarget(now);
             case EXPEDITION -> {
                 if (!expedition.isLeading()) {
                     Object[] hunt = huntTarget(now);
@@ -1716,7 +1825,7 @@ public final class CloneController {
         if (action == null || actionDone || actionTicks >= action.duration) {
             EnemyKnowledge k = brain().knowledge(targetType);
             int s = Senses.combatState(self, target, k, sinceEnemyAttack(target), Senses.crowd(perception, self));
-            int mask = Senses.combatMask(self);
+            int mask = Senses.combatMask(self) & ~uselessActions();
             if (action != null && combatState >= 0) {
                 brain().learn(targetType, combatState, action.ordinal(), stepReward, s, false,
                         (float) Config.get(Config.DISCOUNT, 0.9), mask, 1f, false);
@@ -1812,7 +1921,7 @@ public final class CloneController {
                     Equipment.select(self, Equipment.rangedSlot(self));
                 }
             }
-            case USE_ITEM -> Equipment.select(self, Equipment.specialSlot(self));
+            case USE_ITEM -> useMode = -1;
             default -> {
             }
         }
@@ -1901,7 +2010,7 @@ public final class CloneController {
             }
             case HOLD -> motor.lookAt(t);
             case SHOOT -> shoot(t, gap);
-            case USE_ITEM -> useSpecial(t);
+            case USE_ITEM -> useLearned(t);
             case PILLAR -> pillar();
         }
     }
@@ -2034,34 +2143,123 @@ public final class CloneController {
         }
     }
 
-    /** Right-click a special weapon; hold it like a charge item if it starts "using", release after a while. */
-    private void useSpecial(Entity t) {
-        if (!Equipment.isSpecialWeapon(self.getMainHandItem())) {
-            int slot = Equipment.specialSlot(self);
+    // ---------------------------------------------------------------- items used the way experience says works
+
+    private int useMode = -1;
+    private String useItem = "";
+    private boolean useStarted;
+    private double useDealtBefore;
+
+    /** Use an item on the enemy: swing it / right click it / hold and let go - untried ways first, then the best one. */
+    private void useLearned(Entity t) {
+        if (!(t instanceof LivingEntity lt)) {
+            actionDone = true;
+            return;
+        }
+        if (actionTicks == 0 || useMode < 0) {
+            EnemyKnowledge k = brain().knowledgeIfPresent(targetType);
+            int slot = Equipment.usableSlot(self, st -> !AttackLearning.useless(k, AttackLearning.rangedMethod(st)));
             if (slot < 0) {
                 actionDone = true;
                 return;
             }
+            if (self.isUsingItem()) {
+                self.stopUsingItem();
+            }
             Equipment.select(self, slot);
+            useItem = AttackLearning.itemId(self.getMainHandItem());
+            useMode = brain().chooseItemUse(useItem, self.getRandom());
+            useStarted = false;
+            useDealtBefore = attacks.dealtTo(lt);
         }
-        motor.lookAt(t);
-        if (!self.isUsingItem()) {
-            if (actionTicks == 1 || actionTicks == 2) {
-                motor.useHeldItem(InteractionHand.MAIN_HAND);
-                if (!self.isUsingItem()) {
-                    self.swing(InteractionHand.MAIN_HAND);
-                    actionDone = true; // instant ability
-                }
-            } else if (actionTicks > 2) {
+        if (!AttackLearning.itemId(self.getMainHandItem()).equals(useItem)) {
+            useMode = -1;
+            actionDone = true; // used up or put away
+            return;
+        }
+        if (useMode == AttackLearning.SWING) {
+            motor.lookAt(t);
+            if (!motor.withinReach(t)) {
+                motor.moveToward(t.position());
+            }
+            if (motor.canHit(t) && self.getAttackStrengthScale(0.5f) >= 0.9f) {
+                motor.attack(t);
+                finishUse(lt, 2);
+            } else if (actionTicks > 40) {
+                useMode = -1;
                 actionDone = true;
             }
             return;
         }
-        int hold = Math.max(10, Math.min(self.getUseItem().getUseDuration(), 20));
-        if (self.getTicksUsingItem() >= hold) {
-            self.releaseUsingItem();
-            actionDone = true;
+        if (Senses.gap(self, t) < 2.5) {
+            motor.lookAt(t);
+        } else {
+            aimProjectile(t, 1.5);
         }
+        if (!useStarted) {
+            if (actionTicks >= 2) {
+                motor.useHeldItem(InteractionHand.MAIN_HAND);
+                useStarted = true;
+                if (!self.isUsingItem()) {
+                    self.swing(InteractionHand.MAIN_HAND);
+                    finishUse(lt, 40); // an instant use: a throw, a zap...
+                }
+            }
+            return;
+        }
+        if (!self.isUsingItem()) {
+            finishUse(lt, 40);
+            return;
+        }
+        if (self.getTicksUsingItem() >= AttackLearning.HOLD_TICKS[useMode]) {
+            self.releaseUsingItem();
+            finishUse(lt, 40);
+        }
+    }
+
+    private void finishUse(LivingEntity t, int wait) {
+        attacks.trial(useItem, useMode, t, useDealtBefore, now() + wait);
+        useMode = -1;
+        actionDone = true;
+    }
+
+    /** Attacks found to do nothing to this kind of enemy are not chosen any more. */
+    private int uselessActions() {
+        EnemyKnowledge k = brain().knowledgeIfPresent(targetType);
+        if (k == null) {
+            return 0;
+        }
+        int m = 0;
+        if (AttackLearning.useless(k, "melee")) {
+            m |= CombatAction.ATTACK.bit() | CombatAction.CRIT_ATTACK.bit() | CombatAction.SPRINT_ATTACK.bit();
+        }
+        int r = Equipment.rangedSlot(self);
+        if (r >= 0 && AttackLearning.useless(k, AttackLearning.rangedMethod(self.getInventory().getItem(r)))) {
+            m |= CombatAction.SHOOT.bit();
+        }
+        if (Equipment.usableSlot(self, st -> !AttackLearning.useless(k, AttackLearning.rangedMethod(st))) < 0) {
+            m |= CombatAction.USE_ITEM.bit();
+        }
+        return m;
+    }
+
+    /** A swing of ours connected (AttackEntityEvent): judged a few ticks later (did it take any health?). */
+    public void onMeleeHit(Entity target) {
+        if (target instanceof LivingEntity lt) {
+            attacks.attempt(lt, "melee", now());
+            if (action != CombatAction.USE_ITEM && !self.getMainHandItem().isEmpty()) {
+                attacks.trial(AttackLearning.itemId(self.getMainHandItem()), AttackLearning.SWING, lt, attacks.dealtTo(lt), now() + 2);
+            }
+        }
+    }
+
+    /** One of our projectiles struck something. */
+    public void onProjectileHit(LivingEntity target, Entity projectile) {
+        attacks.attempt(target, AttackLearning.projectileMethod(projectile), now());
+    }
+
+    public AttackLearning attacks() {
+        return attacks;
     }
 
     /** Arrows lobbed over a friend / bows taken instead of a crossbow because of one (diagnostics, tests). */
@@ -2385,16 +2583,20 @@ public final class CloneController {
     }
 
     private boolean runFollow(long now) {
-        Perception.Seen ally = Senses.nearestAlly(perception, self, self, now, 64);
-        if (ally == null) {
+        Entity who = followTarget;
+        if (who == null || !who.isAlive() || who.level() != self.level()) {
+            Perception.Seen ally = Senses.nearestAlly(perception, self, self, now, 64);
+            who = ally == null ? null : ally.entity;
+        }
+        if (who == null) {
             return true;
         }
-        double d = ally.pos.distanceTo(self.position());
+        double d = who.position().distanceTo(self.position());
         if (d > 4) {
-            motor.navigate(ally.pos, 3.0, d > 10);
+            motor.navigate(who.position(), 3.0, d > 10);
             closeTicks = 0;
         } else {
-            motor.lookAt(ally.entity);
+            motor.lookAt(who);
             if (++closeTicks > 40) {
                 return true;
             }

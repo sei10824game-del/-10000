@@ -19,6 +19,7 @@ import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
@@ -137,12 +138,24 @@ public final class ServerEvents {
         }
     }
 
-    /** Sneak + right click a clone to open its inventory. */
+    /** Sneak + right click a clone to open its inventory; with breeding on (N key), a plain right click makes a child with it. */
     @SubscribeEvent
     public static void onInteract(PlayerInteractEvent.EntityInteract event) {
         Player player = event.getEntity();
-        if (player.level().isClientSide || event.getHand() != InteractionHand.MAIN_HAND || !player.isShiftKeyDown()
+        if (player.level().isClientSide || event.getHand() != InteractionHand.MAIN_HAND
                 || !(event.getTarget() instanceof ClonePlayer clone) || player instanceof ClonePlayer) {
+            return;
+        }
+        if (!player.isShiftKeyDown()) {
+            CloneManager m = CloneManager.peek();
+            if (m != null && m.isBreeding()) {
+                ClonePlayer child = m.breed(player, clone);
+                player.displayClientMessage(child != null
+                        ? Component.translatable("rlclones.msg.born_you", child.getGameProfile().getName(), clone.getGameProfile().getName())
+                        : Component.translatable("rlclones.msg.breed_need", com.rlclones.ai.Breeding.FOOD_NEEDED), true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+                event.setCanceled(true);
+            }
             return;
         }
         player.openMenu(new SimpleMenuProvider((id, inv, p) -> new ChestMenu(MenuType.GENERIC_9x4, id, inv, new CloneInventory(clone), 4), clone.getDisplayName()));
@@ -279,6 +292,10 @@ public final class ServerEvents {
             }
             return;
         }
+        if (victim instanceof Mob mob && killer instanceof Player saviour && mob.getTarget() instanceof ClonePlayer saved && saved != saviour
+                && saved.controller() != null) {
+            saved.controller().foodAid().thank(saviour.getUUID(), 2f); // it was after us and they finished it
+        }
         boolean hostile = killer instanceof LivingEntity k && Senses.isHostileTo(victim, k);
         boolean byAgent = Senses.isAgent(killer);
         if (byAgent) {
@@ -379,6 +396,22 @@ public final class ServerEvents {
             flags |= AgentEvents.FLAG_HOSTILE;
         }
         AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.ATTACK, 0, event.getTarget().getId(), flags);
+        if (p instanceof ClonePlayer cp && cp.controller() != null) {
+            cp.controller().onMeleeHit(event.getTarget());
+        }
+    }
+
+    /** One of a clone's projectiles struck a living thing: did it hurt? (learning what does nothing to what) */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onProjectileImpact(net.minecraftforge.event.entity.ProjectileImpactEvent event) {
+        var proj = event.getProjectile();
+        if (proj.level().isClientSide || event.isCanceled()) {
+            return;
+        }
+        if (proj.getOwner() instanceof ClonePlayer cp && cp.controller() != null
+                && event.getRayTraceResult() instanceof net.minecraft.world.phys.EntityHitResult hit && hit.getEntity() instanceof LivingEntity victim) {
+            cp.controller().onProjectileHit(victim, proj);
+        }
     }
 
     @SubscribeEvent
@@ -392,6 +425,11 @@ public final class ServerEvents {
         CloneController c = controllerOf(p);
         if (c != null) {
             c.onPickup(count);
+            // something tossed to us by someone else (food above all): a helper to remember
+            net.minecraft.nbt.CompoundTag t = event.getOriginalEntity().saveWithoutId(new net.minecraft.nbt.CompoundTag());
+            if (t.hasUUID("Thrower") && !t.getUUID("Thrower").equals(p.getUUID())) {
+                c.foodAid().thank(t.getUUID("Thrower"), com.rlclones.ai.FoodAid.goodFood(event.getStack()) ? 3f : 1f);
+            }
         }
     }
 

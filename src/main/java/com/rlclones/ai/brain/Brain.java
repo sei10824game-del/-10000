@@ -75,6 +75,88 @@ public final class Brain {
         flags.add(f);
     }
 
+    // ---------------------------------------------------------------- how to use an item (learned by trying)
+
+    /** Ways of using an item on an enemy: swing it, right click once, hold right click briefly / long and let go. */
+    public static final int USE_MODES = 4;
+    private final Map<String, float[]> useQ = new HashMap<>();
+    private final Map<String, int[]> useN = new HashMap<>();
+
+    public float itemUseValue(String item, int mode) {
+        float[] q = useQ.get(item);
+        return q == null ? 0f : q[mode];
+    }
+
+    public int itemUseTries(String item, int mode) {
+        int[] n = useN.get(item);
+        return n == null ? 0 : n[mode];
+    }
+
+    public int itemUseTries(String item) {
+        int[] n = useN.get(item);
+        return n == null ? 0 : java.util.Arrays.stream(n).sum();
+    }
+
+    /** Untried ways first, then mostly the best one so far (one time in six another, to keep learning). */
+    public int chooseItemUse(String item, net.minecraft.util.RandomSource rnd) {
+        int[] n = useN.computeIfAbsent(item, k -> new int[USE_MODES]);
+        List<Integer> untried = new java.util.ArrayList<>();
+        for (int m = 0; m < USE_MODES; m++) {
+            if (n[m] == 0) {
+                untried.add(m);
+            }
+        }
+        if (!untried.isEmpty()) {
+            return untried.get(rnd.nextInt(untried.size()));
+        }
+        if (rnd.nextInt(6) == 0) {
+            return rnd.nextInt(USE_MODES);
+        }
+        return bestItemUse(item);
+    }
+
+    public int bestItemUse(String item) {
+        float[] q = useQ.get(item);
+        if (q == null) {
+            return -1;
+        }
+        int best = 0;
+        for (int m = 1; m < USE_MODES; m++) {
+            if (q[m] > q[best]) {
+                best = m;
+            }
+        }
+        return best;
+    }
+
+    public void learnItemUse(String item, int mode, float reward) {
+        float[] q = useQ.computeIfAbsent(item, k -> new float[USE_MODES]);
+        int[] n = useN.computeIfAbsent(item, k -> new int[USE_MODES]);
+        n[mode]++;
+        q[mode] += (reward - q[mode]) / Math.min(n[mode], 12);
+    }
+
+    public Set<String> itemUseKeys() {
+        return Collections.unmodifiableSet(useQ.keySet());
+    }
+
+    // ---------------------------------------------------------------- advancements and what unlocks them
+
+    private final Map<String, String> advancementFacts = new HashMap<>();
+
+    /** What we understood unlocks an advancement ("obtain minecraft:lava_bucket", "kill minecraft:zombie"...). */
+    public String advancementFact(String id) {
+        return advancementFacts.get(id);
+    }
+
+    public void learnAdvancement(String id, String condition) {
+        advancementFacts.put(id, condition);
+    }
+
+    public Map<String, String> advancementFacts() {
+        return Collections.unmodifiableMap(advancementFacts);
+    }
+
     /** Parkour: value of jumping a gap of 1..4 blocks by walking up to it (0) or with a sprinting run-up (1). */
     public static final int PARKOUR_GAPS = 5;
     private final float[][] parkQ = new float[PARKOUR_GAPS][2];
@@ -399,6 +481,20 @@ public final class Brain {
         tag.putIntArray("lookQ", lq);
         tag.putIntArray("lookN", ln);
         tag.putLong("lookUpdates", lookUpdates);
+        CompoundTag iu = new CompoundTag();
+        useQ.forEach((k, q) -> {
+            int[] n = useN.getOrDefault(k, new int[USE_MODES]);
+            int[] packed = new int[USE_MODES * 2];
+            for (int m = 0; m < USE_MODES; m++) {
+                packed[m] = Float.floatToIntBits(q[m]);
+                packed[USE_MODES + m] = n[m];
+            }
+            iu.putIntArray(k, packed);
+        });
+        tag.put("itemUse", iu);
+        CompoundTag af = new CompoundTag();
+        advancementFacts.forEach(af::putString);
+        tag.put("advancements", af);
         return tag;
     }
 
@@ -462,6 +558,24 @@ public final class Brain {
             }
         }
         b.lookUpdates = tag.getLong("lookUpdates");
+        CompoundTag iu = tag.getCompound("itemUse");
+        for (String k : iu.getAllKeys()) {
+            int[] packed = iu.getIntArray(k);
+            if (packed.length == USE_MODES * 2) {
+                float[] q = new float[USE_MODES];
+                int[] n = new int[USE_MODES];
+                for (int m = 0; m < USE_MODES; m++) {
+                    q[m] = Float.intBitsToFloat(packed[m]);
+                    n[m] = packed[USE_MODES + m];
+                }
+                b.useQ.put(k, q);
+                b.useN.put(k, n);
+            }
+        }
+        CompoundTag af = tag.getCompound("advancements");
+        for (String k : af.getAllKeys()) {
+            b.advancementFacts.put(k, af.getString(k));
+        }
         return b;
     }
 
@@ -521,6 +635,19 @@ public final class Brain {
             }
         }
         lookUpdates += b.lookUpdates;
+        b.useQ.forEach((k, bq) -> {
+            float[] q = useQ.computeIfAbsent(k, x -> new float[USE_MODES]);
+            int[] n = useN.computeIfAbsent(k, x -> new int[USE_MODES]);
+            int[] bn = b.useN.getOrDefault(k, new int[USE_MODES]);
+            for (int m = 0; m < USE_MODES; m++) {
+                int t = n[m] + bn[m];
+                if (t > 0) {
+                    q[m] = (q[m] * n[m] + bq[m] * bn[m]) / t;
+                }
+                n[m] = t;
+            }
+        });
+        b.advancementFacts.forEach(advancementFacts::putIfAbsent);
     }
 
     // ---------------------------------------------------------------- introspection

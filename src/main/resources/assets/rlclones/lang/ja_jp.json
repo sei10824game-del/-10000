@@ -91,5 +91,14 @@
   "rlclones.msg.br_on": "バトルロイヤル開始！ クローン（%s体）もプレイヤーも全員が敵同士です",
   "rlclones.msg.br_off": "バトルロイヤル終了：いつものチームに戻りました",
   "rlclones.cmd.summoned_team": "チーム %2$s のクローンを%1$s体召喚しました（他チームと敵対します）",
-  "rlclones.chat.portal": "ネザーゲートを X:%s Y:%s Z:%s に作った！ ネザーを見たい人はどうぞ"
+  "rlclones.chat.portal": "ネザーゲートを X:%s Y:%s Z:%s に作った！ ネザーを見たい人はどうぞ",
+  "key.rlclones.breeding": "クローン交配のオン/オフ",
+  "rlclones.msg.breeding_on": "交配オン：満腹で食べ物に余裕のあるクローン（とプレイヤー）が新しいクローンを生みます",
+  "rlclones.msg.breeding_off": "交配オフ",
+  "rlclones.msg.born": "%2$s と %3$s の間に %1$s が生まれました",
+  "rlclones.msg.born_you": "あなたと %2$s の間に %1$s が生まれました",
+  "rlclones.msg.breed_need": "親になるには2人とも満腹で、食べ物を%s個以上持っている必要があります",
+  "rlclones.chat.food": "お腹がすいて食べ物がありません！食べ物をください (%s %s %s)",
+  "rlclones.cmd.gave_item": "%s に %s を %s 個渡しました",
+  "rlclones.cmd.gave_items": "%s 体のクローンにそれぞれ違うランダムな使えるアイテムを渡しました"
 }

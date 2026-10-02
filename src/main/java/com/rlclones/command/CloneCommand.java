@@ -68,6 +68,11 @@ public final class CloneCommand {
                         .executes(ctx -> setBattleRoyale(ctx, !manager(ctx).isBattleRoyale()))
                         .then(Commands.literal("on").executes(ctx -> setBattleRoyale(ctx, true)))
                         .then(Commands.literal("off").executes(ctx -> setBattleRoyale(ctx, false))))
+                .then(Commands.literal("breeding").requires(CloneCommand::mayControl)
+                        .executes(ctx -> setBreeding(ctx, !manager(ctx).isBreeding()))
+                        .then(Commands.literal("on").executes(ctx -> setBreeding(ctx, true)))
+                        .then(Commands.literal("off").executes(ctx -> setBreeding(ctx, false))))
+                .then(Commands.literal("giveitems").requires(CloneCommand::mayControl).executes(CloneCommand::giveItems))
                 .then(Commands.literal("list").executes(CloneCommand::list))
                 .then(Commands.literal("remove").requires(CloneCommand::mayControl)
                         .then(Commands.literal("all").executes(ctx -> {
@@ -125,6 +130,28 @@ public final class CloneCommand {
         ctx.getSource().sendSuccess(() -> on ? Component.translatable("rlclones.msg.br_on", manager(ctx).clones().size())
                 : Component.translatable("rlclones.msg.br_off"), true);
         return 1;
+    }
+
+    private static int setBreeding(CommandContext<CommandSourceStack> ctx, boolean on) {
+        manager(ctx).setBreeding(on);
+        ctx.getSource().sendSuccess(() -> on ? Component.translatable("rlclones.msg.breeding_on")
+                : Component.translatable("rlclones.msg.breeding_off"), true);
+        return 1;
+    }
+
+    /** Every clone gets one random usable item (weapon, armour, pearls, mod items...), no two clones the same. */
+    private static int giveItems(CommandContext<CommandSourceStack> ctx) {
+        CloneManager m = manager(ctx);
+        List<ClonePlayer> clones = new ArrayList<>(m.clones());
+        List<net.minecraft.world.item.ItemStack> given = com.rlclones.clone.UsableItems.giveEach(clones, ctx.getSource().getLevel().getRandom());
+        for (int i = 0; i < given.size(); i++) {
+            ClonePlayer c = clones.get(i);
+            net.minecraft.world.item.ItemStack s = given.get(i);
+            ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.cmd.gave_item", c.getGameProfile().getName(), s.getHoverName(), s.getCount()), false);
+        }
+        int n = given.size();
+        ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.cmd.gave_items", n), true);
+        return n;
     }
 
     private static int summon(CommandContext<CommandSourceStack> ctx, int count, String team) {

@@ -70,7 +70,7 @@ public final class StrategyState {
         q[Option.STORE.ordinal()] = threat == 0 ? 0.8f : -0.5f;
         q[Option.FETCH.ordinal()] = threat == 0 ? 0.9f : -0.3f;
         q[Option.LOOT.ordinal()] = threat == 0 ? 0.6f : -0.3f;
-        q[Option.FARM.ordinal()] = threat == 0 ? 0.5f : -0.4f;
+        q[Option.FARM.ordinal()] = threat == 0 ? 0.75f : -0.4f;
         q[Option.EXPEDITION.ordinal()] = threat == 0 && hp == 2 ? 0.15f : -0.5f;
         q[Option.JOIN.ordinal()] = threat == 0 ? 0.8f : 0.1f;
         q[Option.QUARRY.ordinal()] = threat == 0 ? 0.65f : -0.3f;
@@ -80,5 +80,9 @@ public final class StrategyState {
         q[Option.FISH.ordinal()] = threat == 0 ? (food <= 1 && !hasFood ? 0.7f : 0.25f) : -0.4f;
         q[Option.SALVAGE.ordinal()] = threat == 0 ? 0.5f : -0.3f;
         q[Option.PORTAL.ordinal()] = threat == 0 ? 0.6f : -0.4f;
+        q[Option.FEED.ordinal()] = threat == 0 ? 1.0f : -0.3f;
+        q[Option.BREED.ordinal()] = threat == 0 && hp == 2 ? 0.9f : -0.5f;
+        q[Option.ACHIEVE.ordinal()] = threat == 0 ? 0.35f : -0.4f;
+        q[Option.STAIRS.ordinal()] = threat == 0 ? 0.45f : -0.4f;
     }
 }

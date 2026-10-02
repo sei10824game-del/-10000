@@ -407,8 +407,14 @@ public final class Discovery {
                 lacking.computeIfAbsent(key, x -> new ArrayList<>()).add(other);
             }
         }
+        // our own children hear (and get) things first
+        List<Map.Entry<String, List<ClonePlayer>>> order = new ArrayList<>(lacking.entrySet());
+        for (List<ClonePlayer> l : lacking.values()) {
+            l.sort(java.util.Comparator.comparingInt(o -> com.rlclones.clone.CloneManager.isParentOf(self, o) ? 0 : 1));
+        }
+        order.sort(java.util.Comparator.comparingInt(e -> com.rlclones.clone.CloneManager.isParentOf(self, e.getValue().get(0)) ? 0 : 1));
         int lines = 0;
-        for (Map.Entry<String, List<ClonePlayer>> e : lacking.entrySet()) {
+        for (Map.Entry<String, List<ClonePlayer>> e : order) {
             if (lines++ >= 2) {
                 break;
             }

@@ -91,5 +91,14 @@
   "rlclones.msg.br_on": "BATTLE ROYALE! Every clone (%s) and every player is now everyone's enemy",
   "rlclones.msg.br_off": "Battle royale is over: teams as usual",
   "rlclones.cmd.summoned_team": "Summoned %s clone(s) for team %s (enemies of the other teams)",
-  "rlclones.chat.portal": "I built a Nether portal at X:%s Y:%s Z:%s - who wants to see the Nether?"
+  "rlclones.chat.portal": "I built a Nether portal at X:%s Y:%s Z:%s - who wants to see the Nether?",
+  "key.rlclones.breeding": "Toggle clone breeding",
+  "rlclones.msg.breeding_on": "Breeding ON: well-fed clones (and players) with food to spare make new clones",
+  "rlclones.msg.breeding_off": "Breeding OFF",
+  "rlclones.msg.born": "%s was born to %s and %s",
+  "rlclones.msg.born_you": "%s was born to you and %s",
+  "rlclones.msg.breed_need": "Both parents need a full food bar and at least %s food items",
+  "rlclones.chat.food": "I'm starving and have nothing to eat! Please bring me some food (%s %s %s)",
+  "rlclones.cmd.gave_item": "%s got %s x%s",
+  "rlclones.cmd.gave_items": "Gave %s clone(s) a random usable item each (no two the same)"
 }

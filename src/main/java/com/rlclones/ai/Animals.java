@@ -15,6 +15,7 @@ import net.minecraft.world.entity.animal.Cat;
 import net.minecraft.world.entity.animal.Parrot;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -36,7 +37,7 @@ import java.util.function.Predicate;
 public final class Animals {
     public enum Status {WORKING, DONE, FAILED}
 
-    private enum Job {TAME, BREED, PEN, EGGS, RIDE}
+    private enum Job {TAME, BREED, PEN, EGGS, RIDE, STAND, LIVESTOCK}
 
     public static final int PEN_FENCES = 15;
 
@@ -111,11 +112,12 @@ public final class Animals {
     }
 
     @Nullable
-    private Animal tameCandidate() {
+    public Animal tameCandidate() {
         Animal best = null;
-        double bestD = 16;
+        double bestD = 24;
+        long now = self.level().getGameTime();
         for (Perception.Seen s : perception.remembered()) {
-            if (!(s.entity instanceof Animal a) || !a.isAlive() || !s.visible) {
+            if (!(s.entity instanceof Animal a) || !a.isAlive() || now - s.lastSeen > 100) {
                 continue;
             }
             Predicate<ItemStack> food = tamingFood(a);
@@ -176,12 +178,16 @@ public final class Animals {
     }
 
     /** Crafting asks this: fences / a gate still to be made for the pen. */
+    private boolean livestockReady() {
+        return count(s -> s.is(ItemTags.WOODEN_FENCES)) >= PEN_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1 && livestockWanted() != null;
+    }
+
     public boolean needsFences() {
-        return penWanted() && count(s -> s.is(ItemTags.WOODEN_FENCES)) < PEN_FENCES;
+        return (penWanted() || livestockWanted() != null) && count(s -> s.is(ItemTags.WOODEN_FENCES)) < PEN_FENCES;
     }
 
     public boolean needsGate() {
-        return penWanted() && count(s -> s.is(ItemTags.FENCE_GATES)) < 1;
+        return (penWanted() || livestockWanted() != null) && count(s -> s.is(ItemTags.FENCE_GATES)) < 1;
     }
 
     private boolean canBuildPen() {
@@ -197,7 +203,8 @@ public final class Animals {
             cooldown--;
             return false;
         }
-        return tameCandidate() != null || breedPair() != null || canBuildPen() || eggsForPen() || rideCandidate() != null;
+        return tameCandidate() != null || breedPair() != null || canBuildPen() || eggsForPen() || rideCandidate() != null
+                || sittingPet() != null || livestockReady();
     }
 
     /** A horse / donkey / mule to ride: a wild one (we carry a saddle) or our own saddled one standing about. */
@@ -218,7 +225,7 @@ public final class Animals {
             if (h.isTamed() && !ours) {
                 continue; // somebody else's horse
             }
-            if ((saddle || ours && h.isSaddled()) && (best == null || h.distanceTo(self) < best.distanceTo(self))) {
+            if ((saddle || ours && h.isSaddled() || !h.isTamed()) && (best == null || h.distanceTo(self) < best.distanceTo(self))) {
                 best = h;
             }
         }
@@ -259,6 +266,10 @@ public final class Animals {
                     return Status.DONE; // our horse now
                 }
                 self.stopRiding(); // off for a moment to put the saddle on
+                if (slotOf(s -> s.is(Items.SADDLE)) < 0) {
+                    tamed++;
+                    return Status.DONE; // tamed - the saddle can come later
+                }
                 return Status.WORKING;
             }
             motor.stop(); // holding on while it bucks
@@ -317,7 +328,12 @@ public final class Animals {
         Animal[] pair = breedPair();
         Animal t = tameCandidate();
         var steed = rideCandidate();
-        if (steed != null) {
+        TamableAnimal sitting = sittingPet();
+        Livestock stock = livestockWanted();
+        if (sitting != null) {
+            job = Job.STAND;
+            target = sitting;
+        } else if (steed != null) {
             job = Job.RIDE;
             horse = steed;
         } else if (t != null) {
@@ -329,6 +345,10 @@ public final class Animals {
             mate = pair[1];
         } else if (canBuildPen()) {
             job = Job.PEN;
+        } else if (stock != null && count(s -> s.is(ItemTags.WOODEN_FENCES)) >= PEN_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1
+                && self.onGround()) {
+            job = Job.LIVESTOCK;
+            livestock = stock;
         } else if (eggsForPen()) {
             job = Job.EGGS;
             Bases.Pen pen = Bases.get(self.getServer()).nearestPen(self.level().dimension(), self.position(), 32);
@@ -346,6 +366,8 @@ public final class Animals {
             case PEN -> penTick();
             case EGGS -> eggsTick();
             case RIDE -> rideTick();
+            case STAND -> standTick();
+            case LIVESTOCK -> livestockTick();
         };
     }
 
@@ -372,6 +394,10 @@ public final class Animals {
             return Status.FAILED;
         }
         if (target instanceof TamableAnimal t && t.isTame()) {
+            if (t.isOwnedBy(self) && t.isOrderedToSit()) {
+                standUp(t); // the game sits a freshly tamed pet down: up and come along instead
+                return Status.WORKING;
+            }
             if (t.isOwnedBy(self)) {
                 tamed++;
             }
@@ -387,6 +413,50 @@ public final class Animals {
             feed(target, food); // one try every half second, like a player clicking
         }
         return Status.WORKING;
+    }
+
+    /** Our own pet sitting: an empty-handed click makes it stand up and follow. */
+    private void standUp(TamableAnimal t) {
+        if (t.distanceTo(self) > 3.0) {
+            motor.navigate(t.position(), 2.0, false);
+            return;
+        }
+        motor.stop();
+        motor.lookAt(t.getEyePosition());
+        if (ticks % 5 == 0) {
+            emptyHand();
+            self.interactOn(t, InteractionHand.MAIN_HAND);
+            self.swing(InteractionHand.MAIN_HAND);
+            if (!t.isOrderedToSit()) {
+                stoodUp++;
+            }
+        }
+    }
+
+    /** Pets stood up again (diagnostics, tests). */
+    public int stoodUp;
+
+    @Nullable
+    private TamableAnimal sittingPet() {
+        for (Perception.Seen s : perception.remembered()) {
+            if (s.entity instanceof TamableAnimal t && t.isAlive() && t.isTame() && t.isOwnedBy(self) && t.isOrderedToSit()
+                    && t.distanceTo(self) < 16 && !t.isInWater()) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    private Status standTick() {
+        if (!(target instanceof TamableAnimal t) || !t.isAlive() || t.distanceTo(self) > 24) {
+            return Status.FAILED;
+        }
+        if (!t.isOrderedToSit()) {
+            cooldown = 20;
+            return Status.DONE;
+        }
+        standUp(t);
+        return ticks > 400 ? Status.FAILED : Status.WORKING;
     }
 
     private Status breedTick() {
@@ -601,5 +671,170 @@ public final class Animals {
             }
         }
         return Status.WORKING;
+    }
+
+    // ---------------------------------------------------------------- pens for cows, pigs, sheep... fed from the field
+
+    /** Two animals of one kind that eat a crop we have plenty of: worth a pen of their own. */
+    public record Livestock(String kind, Item crop, List<Animal> animals) {
+    }
+
+    private static final Item[] CROPS = {Items.WHEAT, Items.CARROT, Items.POTATO, Items.BEETROOT};
+    public static final int CROP_SURPLUS = 10;
+    @Nullable
+    private Livestock livestock;
+    public int livestockPens;
+    public int lured;
+
+    @Nullable
+    public Livestock livestockWanted() {
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || count(s -> s.is(ItemTags.WOODEN_FENCES)) < PEN_FENCES
+                && woodPlanks() < 40 || count(s -> s.is(ItemTags.FENCE_GATES)) < 1 && woodPlanks() < 40 + 8) {
+            return null;
+        }
+        for (Item crop : CROPS) {
+            if (count(s -> s.is(crop)) < CROP_SURPLUS) {
+                continue;
+            }
+            java.util.Map<String, List<Animal>> byKind = new java.util.HashMap<>();
+            for (Perception.Seen s : perception.remembered()) {
+                if (s.entity instanceof Animal a && a.isAlive() && !a.isBaby() && !(a instanceof TamableAnimal)
+                        && !(a instanceof net.minecraft.world.entity.animal.Chicken) && !(a instanceof net.minecraft.world.entity.animal.horse.AbstractHorse)
+                        && a.distanceTo(self) < 24 && a.isFood(new ItemStack(crop))
+                        && Bases.get(self.getServer()).penAt(self.level().dimension(), a.position()) == null) {
+                    byKind.computeIfAbsent(Perception.typeId(a), k -> new ArrayList<>()).add(a);
+                }
+            }
+            for (var e : byKind.entrySet()) {
+                if (e.getValue().size() >= 2 && Bases.get(self.getServer()).nearestPen(self.level().dimension(), self.position(), 48, e.getKey()) == null) {
+                    return new Livestock(e.getKey(), crop, e.getValue().subList(0, 2));
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Fence a pen (gate and all), open the gate, walk out holding the crop - the animals follow a held favourite
+     * food - lead them in, put the crop away and slip out, shutting the gate behind us.
+     */
+    private Status livestockTick() {
+        ServerLevel level = self.serverLevel();
+        Livestock ls = livestock;
+        if (ls == null) {
+            return Status.FAILED;
+        }
+        switch (stage) {
+            case 0 -> {
+                penOrigin = findPenSite();
+                if (penOrigin == null) {
+                    cooldown = 600;
+                    return Status.FAILED;
+                }
+                penPlan.clear();
+                for (int x = 0; x < 5; x++) {
+                    for (int z = 0; z < 5; z++) {
+                        if ((x == 0 || z == 0 || x == 4 || z == 4) && !(x == 2 && z == 0)) {
+                            penPlan.add(penOrigin.offset(x, 0, z));
+                        }
+                    }
+                }
+                stage = 1;
+            }
+            case 1, 2 -> {
+                // stage 1: the fences, stage 2 (reused from the chicken pen): the gate, from outside
+                if (stage == 1) {
+                    Status st = penTick();
+                    if (stage == 2) {
+                        stage = 3; // fences done (penTick moves on to 2: eggs) -> our own next step
+                    }
+                    return st == Status.FAILED ? Status.FAILED : Status.WORKING;
+                }
+            }
+            case 3 -> {
+                // out through the gateway, put the gate in and open it
+                Status st = leaveAndClose(false);
+                BlockPos gate = penOrigin.offset(2, 0, 0);
+                BlockState gs = level.getBlockState(gate);
+                if (gs.canBeReplaced()) {
+                    if (st == Status.WORKING) {
+                        return Status.WORKING;
+                    }
+                    int slot = slotOf(s -> s.is(ItemTags.FENCE_GATES));
+                    if (slot < 0) {
+                        return Status.FAILED;
+                    }
+                    Equipment.select(self, slot);
+                    if (!motor.placeBlockAt(gate) && ++tries > 40) {
+                        return Status.FAILED;
+                    }
+                    return Status.WORKING;
+                }
+                if (gs.getBlock() instanceof FenceGateBlock && !gs.getValue(BlockStateProperties.OPEN)) {
+                    toggleGate(gate);
+                }
+                Bases.get(self.getServer()).addPen(level.dimension(), penOrigin, ls.kind());
+                livestockPens++;
+                pensBuilt++;
+                stage = 4;
+                ticks = 0;
+            }
+            case 4 -> {
+                // fetch them: crop in hand, close enough for them to notice
+                Equipment.select(self, slotOf(s -> s.is(ls.crop())));
+                Animal far = null;
+                for (Animal a : ls.animals()) {
+                    if (a.isAlive() && a.distanceTo(self) > 4 && (far == null || a.distanceTo(self) > far.distanceTo(self))) {
+                        far = a;
+                    }
+                }
+                if (far != null && ticks < 1200) {
+                    motor.navigate(far.position(), 3.0, false);
+                    return Status.WORKING;
+                }
+                stage = 5;
+            }
+            case 5 -> {
+                // lead them into the pen (walk in slowly, crop held high)
+                Equipment.select(self, slotOf(s -> s.is(ls.crop())));
+                Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(2, 0, 3));
+                if (Motor.horizontalDistance(self.position(), center) > 0.6) {
+                    motor.navigate(center, 0.4, false);
+                    if (Motor.horizontalDistance(self.position(), center) < 2.5) {
+                        motor.moveToward(center);
+                    }
+                    return ticks > 2400 ? Status.FAILED : Status.WORKING;
+                }
+                motor.stop();
+                Bases.Pen pen = Bases.get(self.getServer()).penAt(level.dimension(), self.position());
+                int inside = 0;
+                for (Animal a : ls.animals()) {
+                    if (a.isAlive() && pen != null && pen.contains(a.position())) {
+                        inside++;
+                    }
+                }
+                if (inside >= ls.animals().size()) {
+                    lured = inside;
+                    emptyHand(); // crop away: they stop following
+                    stage = 6;
+                    ticks = 0;
+                } else if (ticks > 2400) {
+                    return Status.FAILED;
+                } else if (ticks % 200 == 199) {
+                    stage = 4; // somebody lost interest: fetch again
+                }
+            }
+            default -> {
+                return leaveAndClose(false);
+            }
+        }
+        return Status.WORKING;
+    }
+
+    private void toggleGate(BlockPos gate) {
+        Vec3 c = Vec3.atCenterOf(gate);
+        motor.lookAt(c);
+        self.gameMode.useItemOn(self, self.serverLevel(), self.getMainHandItem(), InteractionHand.MAIN_HAND,
+                new BlockHitResult(c, Direction.NORTH, gate, false));
     }
 }

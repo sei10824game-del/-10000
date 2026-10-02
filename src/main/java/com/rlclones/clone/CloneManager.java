@@ -92,6 +92,95 @@ public final class CloneManager {
         battleRoyale = on;
     }
 
+    // ------------------------------------------------------------------ breeding (N key)
+
+    /** Clones born so far (diagnostics, tests). */
+    public int births;
+
+    /**
+     * Two parents - clones, or a player and a clone - with full stomachs and food to spare give most of their food
+     * gauge to make a new clone that knows everything both of them knew. Returns the child, or null.
+     */
+    @Nullable
+    public ClonePlayer breed(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
+        if (!isBreeding() || a == b || !com.rlclones.ai.Breeding.eligible(a) || !com.rlclones.ai.Breeding.eligible(b)
+                || a.level() != b.level() || a.distanceTo(b) > 4.0 || !(a.level() instanceof ServerLevel level)) {
+            return null;
+        }
+        ClonePlayer ca = a instanceof ClonePlayer x ? x : null;
+        ClonePlayer cb = b instanceof ClonePlayer x ? x : null;
+        List<Brain> brains = new ArrayList<>();
+        if (ca != null && ca.getCloneBrain() != null) {
+            brains.add(ca.getCloneBrain());
+        }
+        if (cb != null && cb.getCloneBrain() != null) {
+            brains.add(cb.getCloneBrain());
+        }
+        Brain inherited = brains.isEmpty() ? new Brain() : Brain.merge(brains);
+        inherited.members = 1;
+        String team = ca != null ? ca.cloneTeam() : cb != null ? cb.cloneTeam() : ClonePlayer.DEFAULT_TEAM;
+        Vec3 mid = a.position().add(b.position()).scale(0.5);
+        GameProfile looks = (ca != null ? ca : a).getGameProfile();
+        ClonePlayer child = summon(null, level, mid, a.getYRot(), team, inherited, looks);
+        if (child == null) {
+            return null;
+        }
+        for (net.minecraft.world.entity.player.Player p : List.of(a, b)) {
+            p.getFoodData().setFoodLevel(Math.max(0, p.getFoodData().getFoodLevel() - 14));
+            p.getFoodData().setSaturation(0f);
+        }
+        CloneRoster r = roster();
+        r.parents.put(child.getUUID(), List.of(a.getUUID(), b.getUUID()));
+        UUID owner = ca != null ? r.summoners.get(ca.getUUID()) : null;
+        if (owner == null && cb != null) {
+            owner = r.summoners.get(cb.getUUID());
+        }
+        if (owner == null && !(a instanceof ClonePlayer)) {
+            owner = a.getUUID();
+        }
+        if (owner == null && !(b instanceof ClonePlayer)) {
+            owner = b.getUUID();
+        }
+        if (owner != null) {
+            r.summoners.put(child.getUUID(), owner);
+        }
+        r.setDirty();
+        births++;
+        broadcast(Component.translatable("rlclones.msg.born", child.getGameProfile().getName(), a.getGameProfile().getName(), b.getGameProfile().getName())
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
+        return child;
+    }
+
+    /** Note who a clone was born of (breeding; tests). */
+    public void recordParents(UUID child, UUID a, UUID b) {
+        roster().parents.put(child, List.of(a, b));
+        roster().setDirty();
+    }
+
+    /** Is {@code parent} one of the two {@code child} was born of? */
+    public static boolean isParentOf(net.minecraft.world.entity.player.Player parent, net.minecraft.world.entity.player.Player child) {
+        CloneManager m = instance;
+        if (m == null || parent == null || child == null) {
+            return false;
+        }
+        List<UUID> ps = m.roster().parents.get(child.getUUID());
+        return ps != null && ps.contains(parent.getUUID());
+    }
+
+    /** N key: clones (and players) with a full stomach and food to spare make new clones together. */
+    public static boolean breedingOn() {
+        return instance != null && instance.isBreeding();
+    }
+
+    public boolean isBreeding() {
+        return roster().breeding;
+    }
+
+    public void setBreeding(boolean on) {
+        roster().breeding = on;
+        roster().setDirty();
+    }
+
     public static void shutdown() {
         instance = null;
         AgentEvents.clear();
@@ -239,16 +328,22 @@ public final class CloneManager {
 
     /** Summon a clone for {@code team}: clones of other teams are its enemies. */
     public ClonePlayer summon(@Nullable ServerPlayer summoner, ServerLevel level, Vec3 pos, float yaw, String team) {
+        return summon(summoner, level, pos, yaw, team, null, summoner == null ? null : summoner.getGameProfile());
+    }
+
+    /** {@code brain}: what the new clone knows from the start (null = a fresh one); {@code looks}: whose skin it wears. */
+    public ClonePlayer summon(@Nullable ServerPlayer summoner, ServerLevel level, Vec3 pos, float yaw, String team, @Nullable Brain brain,
+                              @Nullable GameProfile looks) {
         restore();
         if (clones.size() >= Config.cloneLimit()) {
             return null;
         }
         CloneRoster r = roster();
         GameProfile profile = new GameProfile(UUID.randomUUID(), nextName(r));
-        if (summoner != null) {
-            profile.getProperties().putAll("textures", summoner.getGameProfile().getProperties().get("textures"));
+        if (looks != null) {
+            profile.getProperties().putAll("textures", looks.getProperties().get("textures"));
         }
-        ClonePlayer clone = new ClonePlayer(server, level, profile, isLinked() ? sharedBrain() : new Brain());
+        ClonePlayer clone = new ClonePlayer(server, level, profile, isLinked() ? sharedBrain() : brain != null ? brain : new Brain());
         if (isLinked()) {
             sharedBrain().members++;
         }
@@ -438,6 +533,12 @@ public final class CloneManager {
                         : Component.translatable("rlclones.msg.respawn_off").withStyle(ChatFormatting.GRAY));
             }
             case TEACH_HARMFUL -> teachHarmful(sender);
+            case TOGGLE_BREEDING -> {
+                setBreeding(!isBreeding());
+                broadcast(isBreeding()
+                        ? Component.translatable("rlclones.msg.breeding_on").withStyle(ChatFormatting.LIGHT_PURPLE)
+                        : Component.translatable("rlclones.msg.breeding_off").withStyle(ChatFormatting.GRAY));
+            }
             case BATTLE_ROYALE -> {
                 setBattleRoyale(!isBattleRoyale());
                 broadcast(isBattleRoyale()
