@@ -24,6 +24,7 @@ public final class CreativeHelper {
     private final Motor motor;
     private final Perception perception;
     private long lastGift = Long.MIN_VALUE / 2;
+    private final CreativePlay play;
 
     public int takenFromMenu;
     public int gifts;
@@ -34,6 +35,24 @@ public final class CreativeHelper {
         this.self = self;
         this.motor = motor;
         this.perception = perception;
+        this.play = new CreativePlay(self, motor, perception, this);
+    }
+
+    public CreativePlay play() {
+        return play;
+    }
+
+    /** Over to {@code p}: flying when it is far, up high or out of reach on foot, walking the last bit. */
+    private void goTo(Vec3 p, double arrive) {
+        double d = self.position().distanceTo(p);
+        if (d > 8 || Math.abs(p.y - self.getY()) > 1.5 || self.getAbilities().flying && d > arrive + 1) {
+            motor.fly(p.add(0, 1.2, 0));
+        } else {
+            if (self.getAbilities().flying && self.onGround()) {
+                motor.land();
+            }
+            motor.navigate(p, arrive, d > 10);
+        }
     }
 
     /** Take {@code stack} out of the creative menu into a hotbar slot, exactly as the creative inventory screen does. */
@@ -117,8 +136,15 @@ public final class CreativeHelper {
             takeFromMenu(new ItemStack(Items.NETHERITE_SWORD)); // our own tool for the job
         }
         Player friend = friend(now);
+        boolean inNeed = friend != null && (!need(friend).isEmpty() || !Senses.threats(perception, friend, now, 8).isEmpty() && play.job() == CreativePlay.Job.NONE
+                && Senses.threats(perception, friend, now, 8).size() < 3);
+        if (play.tick(now, inNeed)) {
+            debug = play.debug;
+            return;
+        }
         if (friend == null) {
             motor.stop();
+            motor.land();
             debug = "nobody to help";
             return;
         }
@@ -133,7 +159,7 @@ public final class CreativeHelper {
                 motor.attack(foe);
                 hits++;
             } else {
-                motor.navigate(foe.position(), 1.5, true);
+                goTo(foe.position(), 1.5);
             }
             return;
         }
@@ -142,7 +168,7 @@ public final class CreativeHelper {
         if (!want.isEmpty() && now - lastGift > 60) {
             debug = "bringing " + want.getHoverName().getString() + " to " + friend.getGameProfile().getName();
             if (d > 2.5) {
-                motor.navigate(friend.position(), 2.0, true);
+                goTo(friend.position(), 2.0);
                 return;
             }
             motor.stop();
@@ -162,8 +188,8 @@ public final class CreativeHelper {
             return;
         }
         debug = "staying with " + friend.getGameProfile().getName();
-        if (d > 5) {
-            motor.navigate(friend.position(), 3.0, d > 10);
+        if (d > 5 || Math.abs(friend.getY() - self.getY()) > 2) {
+            goTo(friend.position(), 3.0);
         } else {
             motor.lookAt(friend);
         }

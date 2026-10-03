@@ -106,6 +106,37 @@ public final class Motor {
         dive = true;
     }
 
+    @javax.annotation.Nullable
+    private Vec3 flyGoal;
+    /** Ticks spent flying in creative (tests). */
+    public int creativeFlightTicks;
+
+    /** Creative flight straight through the air to {@code goal} (up and down as with the jump / sneak keys). */
+    public void fly(Vec3 goal) {
+        var ab = self.getAbilities();
+        if (!ab.mayfly) {
+            moveToward(goal);
+            return;
+        }
+        if (!ab.flying) {
+            ab.flying = true;
+            self.onUpdateAbilities();
+        }
+        flyGoal = goal;
+        if (horizontalDistance(self.position(), goal) > 0.25) {
+            moveToward(goal);
+        }
+    }
+
+    /** Stop flying (drop to the ground). */
+    public void land() {
+        var ab = self.getAbilities();
+        if (ab.flying) {
+            ab.flying = false;
+            self.onUpdateAbilities();
+        }
+    }
+
     /** How far one would fall stepping off at (x, z) from the current feet level; 64 = no ground / deadly below. */
     public int dropAt(double x, double z) {
         ServerLevel level = self.serverLevel();
@@ -545,6 +576,28 @@ public final class Motor {
         return false;
     }
 
+    /** Right-click face {@code face} of {@code against} with the main hand item, looking straight at it (ladders, torches on walls). */
+    public boolean useOnFace(BlockPos against, Direction face) {
+        Vec3 hit = Vec3.atCenterOf(against).add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
+        Vec3 eye = self.getEyePosition();
+        double dx = hit.x - eye.x;
+        double dy = hit.y - eye.y;
+        double dz = hit.z - eye.z;
+        float yaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
+        float pitch = (float) -Math.toDegrees(Mth.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
+        self.setYRot(yaw);
+        self.setYHeadRot(yaw);
+        self.setXRot(Mth.clamp(pitch, -89f, 89f));
+        self.resetLastActionTime();
+        InteractionResult r = self.gameMode.useItemOn(self, self.level(), self.getMainHandItem(), InteractionHand.MAIN_HAND,
+                new BlockHitResult(hit, face, against, false));
+        if (r.consumesAction()) {
+            self.swing(InteractionHand.MAIN_HAND);
+            return true;
+        }
+        return false;
+    }
+
     /** Right-click the top face of {@code against} with the main hand item (e.g. placing a block on it). */
     public boolean useOnTopFace(BlockPos against) {
         ItemStack stack = self.getMainHandItem();
@@ -744,6 +797,16 @@ public final class Motor {
                 jump = true;
             }
         }
+        if (flyGoal != null && self.getAbilities().flying) {
+            Vec3 dm = self.getDeltaMovement();
+            double dy = flyGoal.y - self.getY();
+            self.setDeltaMovement(dm.x, Mth.clamp(dy * 0.35, -0.6, 0.6), dm.z);
+            if (horizontalDistance(self.position(), flyGoal) < 0.6) {
+                self.setDeltaMovement(dm.x * 0.5, self.getDeltaMovement().y, dm.z * 0.5); // hover there
+            }
+            jump = false;
+            creativeFlightTicks++;
+        }
         self.zza = zza;
         self.xxa = xxa;
         self.setJumping(jump);
@@ -758,6 +821,7 @@ public final class Motor {
         sprint = false;
         sneak = false;
         dive = false;
+        flyGoal = null;
         noHop = false;
         daring = false;
         if (!moving) {

@@ -218,6 +218,9 @@ public final class ServerEvents {
         Entity attacker = source.getEntity();
         Entity direct = source.getDirectEntity();
         MinecraftServer server = victim.getServer();
+        if (attacker instanceof LivingEntity && direct == attacker && attacker != victim) {
+            com.rlclones.ai.AttackTells.attacked(attacker); // a blow: what it showed just before is how it announces one
+        }
         if (source.is(DamageTypeTags.IS_EXPLOSION)) {
             if (attacker != null && attacker.getId() == lastExploderId && tick(victim) - lastExplosionTick <= 1) {
                 double distance = lastExplosionCenter.distanceTo(victim.getBoundingBox().getCenter());
@@ -336,6 +339,9 @@ public final class ServerEvents {
         lastExploderId = exploder.getId();
         lastExplosionCenter = explosion.getPosition();
         lastExplosionTick = exploder.level().getGameTime();
+        if (exploder instanceof LivingEntity) {
+            com.rlclones.ai.AttackTells.attacked(exploder); // a blast (a creeper swells first)
+        }
         if (exploder instanceof Mob) {
             for (ClonePlayer o : witnesses(exploder.getServer(), exploder)) {
                 o.controller().observeExplosion(exploder);
@@ -349,6 +355,9 @@ public final class ServerEvents {
             return;
         }
         Entity owner = projectile.getOwner();
+        if (owner instanceof LivingEntity) {
+            com.rlclones.ai.AttackTells.attacked(owner); // a shot (a skeleton's arrow, a rival clone's bow)
+        }
         if (owner instanceof Mob mob && !Senses.isAgent(owner)) {
             for (ClonePlayer o : witnesses(mob.getServer(), mob)) {
                 o.controller().observeShot(mob);
@@ -452,12 +461,33 @@ public final class ServerEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onPlace(BlockEvent.EntityPlaceEvent event) {
         Entity e = event.getEntity();
-        if (!(e instanceof ServerPlayer p) || event.isCanceled()) {
+        if (event.isCanceled()) {
+            return;
+        }
+        if (e instanceof net.minecraft.world.entity.player.Player pl && !(pl instanceof ClonePlayer) && pl.level() instanceof ServerLevel sl
+                && (event.getPlacedBlock().getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+                || event.getPlacedBlock().getBlock() instanceof net.minecraft.world.level.block.BarrelBlock)) {
+            playerChest(sl, event.getPos(), pl.getGameProfile().getName());
+        }
+        if (!(e instanceof ServerPlayer p)) {
             return;
         }
         BlockPos pos = event.getPos();
         if (pos.getX() == p.getBlockX() && pos.getZ() == p.getBlockZ() && pos.getY() < p.getY()) {
             AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.PILLAR, 1, -1, 0);
+        }
+    }
+
+    /** A chest a player puts down counts as a base: clones store their surplus there and fetch from it. */
+    public static void playerChest(ServerLevel level, BlockPos pos, String player) {
+        com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(level.getServer());
+        com.rlclones.clone.Bases.Base base = bases.nearest(level.dimension(), Vec3.atCenterOf(pos), 24);
+        if (base == null) {
+            base = bases.add(level.dimension(), pos, player);
+        }
+        bases.addChest(base, pos);
+        if (level.getBlockEntity(pos) instanceof net.minecraft.world.Container c) {
+            bases.record(level.dimension(), pos, c);
         }
     }
 

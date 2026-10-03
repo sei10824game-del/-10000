@@ -114,7 +114,8 @@ public final class Consumables {
         if (drinkForSituation(enemy)) {
             return true;
         }
-        if (enemy != null && (throwAtEnemy(enemy) || lavaAttack(enemy, now))) {
+        judgeTrap(now);
+        if (enemy != null && (throwAtEnemy(enemy) || lavaAttack(enemy, now) || feetTrap(enemy, now))) {
             return true;
         }
         if (!threatened && now - lastChore > 40) {
@@ -444,6 +445,9 @@ public final class Consumables {
     // ------------------------------------------------------------------ chores: fill buckets, milk cows
 
     private boolean chores() {
+        if (plantSapling()) {
+            return true;
+        }
         int empty = slotOf(s -> s.is(Items.BUCKET));
         if (empty < 0) {
             return false;
@@ -663,10 +667,12 @@ public final class Consumables {
     public int lavaRecovered;
     public String lavaDebug = "";
 
+    private double lavaSafeDistance = 3.0;
+
     /** Is pouring lava at {@code spot} safe for everyone but the enemy (allies, pets, bases, flammable surroundings)? */
     public boolean lavaSafe(BlockPos spot) {
         ServerLevel level = self.serverLevel();
-        if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(spot)) < 3.0) {
+        if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(spot)) < lavaSafeDistance) {
             lavaDebug = "too close to self";
             return false;
         }
@@ -780,6 +786,197 @@ public final class Consumables {
             placedLava = null;
             lavaRecovered++;
         }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ fire and cobwebs at the enemy's feet
+
+    @Nullable
+    private net.minecraft.world.entity.LivingEntity trapTarget;
+    private String trapMethod = "";
+    private long trapAt;
+    private float trapHealth;
+    private BlockPos trapPos;
+    private long lastTrap = Long.MIN_VALUE / 2;
+    public int firesSet;
+    public int websPlaced;
+    public int trapsJudged;
+    public String trapDebug = "";
+
+    private static boolean useless(@Nullable com.rlclones.ai.brain.EnemyKnowledge k, String method) {
+        return k != null && AttackLearning.useless(k, method);
+    }
+
+    /**
+     * Like the lava bucket: flint and steel / a fire charge sets the ground under the enemy alight, a cobweb put at its
+     * feet holds it fast. Whether it worked on that kind (it burnt / it got stuck) is learned, and a trap that does
+     * nothing to a kind (fire on the fire-proof, webs on spiders) is not used on it again.
+     */
+    private boolean feetTrap(Entity enemy, long now) {
+        if (!(enemy instanceof net.minecraft.world.entity.LivingEntity le) || now - lastTrap < 60 || trapTarget != null
+                || enemy.getY() - enemy.blockPosition().getY() > 0.2) {
+            return false;
+        }
+        double d = enemy.distanceTo(self);
+        if (d < 2.0 || d > 4.6) {
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        BlockPos spot = enemy.blockPosition();
+        BlockPos ground = spot.below();
+        if (level.getBlockState(ground).getCollisionShape(level, ground).isEmpty() || !level.getBlockState(spot).isAir() || !level.getFluidState(spot).isEmpty()) {
+            return false;
+        }
+        var k = self.getCloneBrain() == null ? null : self.getCloneBrain().knowledgeIfPresent(Perception.typeId(enemy));
+        int web = slotOf(st -> st.is(Items.COBWEB));
+        int fire = slotOf(st -> st.is(Items.FLINT_AND_STEEL) || st.is(Items.FIRE_CHARGE));
+        String method = null;
+        int slot = -1;
+        if (web >= 0 && !useless(k, "web") && le.getDeltaMovement().horizontalDistance() < 0.5) {
+            method = "web";
+            slot = web;
+        } else if (fire >= 0 && !le.fireImmune() && !le.isOnFire() && !le.isInWaterRainOrBubble() && !useless(k, "fire") && fireSafe(spot)) {
+            method = "fire";
+            slot = fire;
+        }
+        if (method == null) {
+            return false;
+        }
+        Vec3 aim = new Vec3(ground.getX() + 0.5, ground.getY() + 1.0, ground.getZ() + 0.5);
+        if (self.getEyePosition().distanceTo(aim) > 4.4) {
+            return false;
+        }
+        BlockHitResult los = level.clip(new ClipContext(self.getEyePosition(), aim.subtract(0, 0.05, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
+        if (los.getType() == HitResult.Type.BLOCK && !los.getBlockPos().equals(ground)) {
+            return false;
+        }
+        lastTrap = now;
+        Equipment.select(self, slot);
+        lookAtNow(aim);
+        motor.useOnTopFace(ground);
+        boolean placed = method.equals("web") ? level.getBlockState(spot).is(net.minecraft.world.level.block.Blocks.COBWEB)
+                : level.getBlockState(spot).is(net.minecraft.tags.BlockTags.FIRE);
+        trapDebug = method + " at " + spot.toShortString() + " placed=" + placed;
+        if (placed) {
+            if (method.equals("web")) {
+                websPlaced++;
+            } else {
+                firesSet++;
+            }
+            trapTarget = le;
+            trapMethod = method;
+            trapAt = now;
+            trapHealth = le.getHealth();
+            trapPos = spot.immutable();
+        }
+        Equipment.manage(self, true);
+        return true;
+    }
+
+    /** No friends, pets, base or anything that burns around the spot. */
+    private boolean fireSafe(BlockPos spot) {
+        double keep = lavaSafeDistance;
+        lavaSafeDistance = 2.0;
+        boolean ok = lavaSafe(spot);
+        lavaSafeDistance = keep;
+        return ok;
+    }
+
+    /** Did the trap do anything? (fire: it burnt or lost health; web: it is still standing in it, slowed down) */
+    private void judgeTrap(long now) {
+        net.minecraft.world.entity.LivingEntity t = trapTarget;
+        if (t == null) {
+            return;
+        }
+        boolean web = trapMethod.equals("web");
+        if (now - trapAt < (web ? 12 : 30)) {
+            if (!web && t.isOnFire()) {
+                trapHealth += 1000; // seen burning: that is all we wanted to know
+            }
+            return;
+        }
+        boolean worked;
+        if (web) {
+            worked = t.isAlive() && t.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(trapPos)) && t.getDeltaMovement().horizontalDistance() < 0.08;
+        } else {
+            worked = trapHealth > 999 || t.isOnFire() || t.getHealth() < trapHealth || !t.isAlive();
+        }
+        if (t.isAlive() || worked) {
+            if (self.getCloneBrain() != null) {
+                self.getCloneBrain().knowledge(Perception.typeId(t)).traits.mergeInt((worked ? "effect:" : "noeffect:") + trapMethod, 1, Integer::sum);
+            }
+            trapsJudged++;
+            trapDebug += " -> " + (worked ? "worked" : "no effect");
+        }
+        trapTarget = null;
+    }
+
+    // ------------------------------------------------------------------ saplings
+
+    public int saplingsPlanted;
+    public String saplingDebug = "";
+
+    /** A sapling in the bag goes into the ground somewhere a tree can grow (open sky, room around, no farm, no base). */
+    private boolean plantSapling() {
+        int slot = slotOf(st -> st.is(net.minecraft.tags.ItemTags.SAPLINGS) && st.getItem() instanceof net.minecraft.world.item.BlockItem);
+        if (slot < 0) {
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        var block = ((net.minecraft.world.item.BlockItem) self.getInventory().items.get(slot).getItem()).getBlock();
+        BlockPos feet = self.blockPosition();
+        if (com.rlclones.clone.Bases.get(self.getServer()).nearest(level.dimension(), self.position(), 8) != null) {
+            saplingDebug = "base near";
+            return false;
+        }
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-4, -2, -4), feet.offset(4, 1, 4))) {
+            if (Math.abs(p.getX() - feet.getX()) <= 1 && Math.abs(p.getZ() - feet.getZ()) <= 1) {
+                continue; // not where we stand
+            }
+            BlockPos ground = p.below();
+            Vec3 aim = new Vec3(ground.getX() + 0.5, ground.getY() + 1.0, ground.getZ() + 0.5);
+            double dist = self.getEyePosition().distanceTo(aim);
+            if (dist > 4.3 || dist >= bestD || !level.getBlockState(p).isAir() || !block.defaultBlockState().canSurvive(level, p)) {
+                continue;
+            }
+            boolean room = true;
+            for (int up = 1; up <= 4 && room; up++) {
+                room = level.getBlockState(p.above(up)).isAir();
+            }
+            for (BlockPos q : BlockPos.betweenClosed(p.offset(-2, -1, -2), p.offset(2, 2, 2))) {
+                var st = level.getBlockState(q);
+                if (st.is(net.minecraft.tags.BlockTags.SAPLINGS) || st.is(net.minecraft.tags.BlockTags.LOGS) || st.is(net.minecraft.world.level.block.Blocks.FARMLAND)
+                        || st.getBlock() instanceof net.minecraft.world.level.block.CropBlock || st.hasBlockEntity()) {
+                    room = false; // too close to another tree, a field or something built
+                    break;
+                }
+            }
+            if (!room) {
+                continue;
+            }
+            BlockHitResult los = level.clip(new ClipContext(self.getEyePosition(), aim.subtract(0, 0.05, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
+            if (los.getType() == HitResult.Type.BLOCK && !los.getBlockPos().equals(ground)) {
+                continue;
+            }
+            best = p.immutable();
+            bestD = dist;
+        }
+        if (best == null) {
+            saplingDebug = "no spot";
+            return false;
+        }
+        Equipment.select(self, slot);
+        BlockPos ground = best.below();
+        lookAtNow(new Vec3(ground.getX() + 0.5, ground.getY() + 1.0, ground.getZ() + 0.5));
+        motor.stop();
+        motor.useOnTopFace(ground);
+        if (level.getBlockState(best).is(net.minecraft.tags.BlockTags.SAPLINGS)) {
+            saplingsPlanted++;
+            saplingDebug = "planted at " + best.toShortString();
+        }
+        Equipment.manage(self, true);
         return true;
     }
 

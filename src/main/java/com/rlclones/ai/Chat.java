@@ -37,6 +37,8 @@ public final class Chat {
     private static final String[] RESOLVED_WORDS = {"resolved", "all clear", "i'm fine", "im fine", "i'm ok", "i'm safe", "no longer need",
             "解決", "もう大丈夫", "助かった", "たすかった", "もう平気", "応援不要", "救援不要"};
     private static final Deque<String> RECENT = new ArrayDeque<>();
+    /** Lines said while chat was hidden (still delivered to the other clones). */
+    public static int hiddenLines;
 
     private Chat() {
     }
@@ -47,7 +49,11 @@ public final class Chat {
         if (server == null) {
             return;
         }
-        server.getPlayerList().broadcastSystemMessage(Component.translatable("chat.type.text", sender.getDisplayName(), content), false);
+        if (CloneManager.chatShown() || !(sender instanceof ClonePlayer)) {
+            server.getPlayerList().broadcastSystemMessage(Component.translatable("chat.type.text", sender.getDisplayName(), content), false);
+        } else {
+            hiddenLines++;
+        }
         synchronized (RECENT) {
             RECENT.addLast(sender.getGameProfile().getName() + ": " + plain);
             while (RECENT.size() > 50) {

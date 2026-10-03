@@ -181,6 +181,16 @@ public final class CloneManager {
         roster().setDirty();
     }
 
+    /** /rlclone chat: whether clone chat lines show up in the players' chat (clones read each other either way). */
+    public static boolean chatShown() {
+        return instance == null || !instance.roster().chatHidden;
+    }
+
+    public void setChatShown(boolean on) {
+        roster().chatHidden = !on;
+        roster().setDirty();
+    }
+
     public static void shutdown() {
         instance = null;
         AgentEvents.clear();

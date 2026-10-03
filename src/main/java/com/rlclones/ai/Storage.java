@@ -391,6 +391,7 @@ public final class Storage {
         chest = null;
         base = null;
         openTries = 0;
+        claimFailed = false;
         crafting.forcedTarget = null;
     }
 
@@ -481,6 +482,15 @@ public final class Storage {
                     stage = 5; // craft the storage chest first, out here in the open
                     return Status.WORKING;
                 }
+                BlockPos home = claimFailed ? null : strayBuilding(bases);
+                if (home != null) {
+                    claimSpot = home; // a house standing empty nearby: move in instead of building one
+                    claimTicks = 0;
+                    openTries = 0;
+                    motor.resetStuck();
+                    stage = 20;
+                    return Status.WORKING;
+                }
                 List<BlockPos> avoid = new ArrayList<>();
                 for (Bases.Base b : bases.bases) {
                     avoid.add(b.center);
@@ -505,6 +515,45 @@ public final class Storage {
                 } else if (b == Builder.Status.FAILED) {
                     stage = 10;
                     openTries = 0;
+                }
+                return Status.WORKING;
+            }
+            case 20 -> {
+                BlockPos home = claimSpot;
+                if (++claimTicks > 400 || motor.stuckCount() > 6) {
+                    badBuildings.add(home);
+                    claimFailed = true;
+                    claimDebug = "could not get into " + home.toShortString();
+                    stage = 0;
+                    return Status.WORKING;
+                }
+                Vec3 inside = Vec3.atBottomCenterOf(home);
+                if (Motor.horizontalDistance(self.position(), inside) > 0.9 || Math.abs(self.getY() - home.getY()) > 0.9) {
+                    motor.navigate(inside, 0.5, false);
+                    return Status.WORKING;
+                }
+                motor.stop();
+                BlockPos spot = chestSpotInside(home);
+                if (spot == null) {
+                    badBuildings.add(home);
+                    claimFailed = true;
+                    stage = 0;
+                    return Status.WORKING;
+                }
+                Equipment.select(self, slotOf(Items.CHEST));
+                if (motor.placeBlockAt(spot)) {
+                    base = bases.add(self.level().dimension(), home, self.getGameProfile().getName());
+                    report("BASE", "rlclones.chat.base", home, Map.of());
+                    bases.addChest(base, spot);
+                    perception.noteBlock(spot);
+                    Equipment.manage(self, true);
+                    buildingsClaimed++;
+                    claimDebug = "moved into " + home.toShortString() + " chest " + spot.toShortString();
+                    stage = 3;
+                } else if (++openTries > 40) {
+                    badBuildings.add(home);
+                    claimFailed = true;
+                    stage = 0;
                 }
                 return Status.WORKING;
             }
@@ -625,6 +674,105 @@ public final class Storage {
             }
         }
         return null;
+    }
+
+    // ------------------------------------------------------------------ moving into a building found standing
+
+    private boolean claimFailed;
+    private BlockPos claimSpot;
+    private int claimTicks;
+    private final Set<BlockPos> badBuildings = new HashSet<>();
+    public int buildingsClaimed;
+    public String claimDebug = "";
+
+    /** Blocks people build with (not what the ground is made of). */
+    private static boolean builtBlock(net.minecraft.world.level.block.state.BlockState st) {
+        return st.is(net.minecraft.tags.BlockTags.PLANKS) || st.is(net.minecraft.tags.BlockTags.LOGS) || st.is(net.minecraft.tags.BlockTags.STAIRS)
+                || st.is(net.minecraft.tags.BlockTags.SLABS) || st.is(net.minecraft.tags.BlockTags.WALLS) || st.is(net.minecraft.tags.BlockTags.DOORS)
+                || st.is(net.minecraft.tags.BlockTags.FENCES) || st.is(net.minecraft.tags.BlockTags.STONE_BRICKS) || st.is(net.minecraft.tags.BlockTags.TERRACOTTA)
+                || st.is(net.minecraft.tags.BlockTags.WOOL) || st.is(net.minecraftforge.common.Tags.Blocks.GLASS) || st.is(net.minecraftforge.common.Tags.Blocks.GLASS_PANES)
+                || st.is(net.minecraft.world.level.block.Blocks.COBBLESTONE) || st.is(net.minecraft.world.level.block.Blocks.MOSSY_COBBLESTONE)
+                || st.is(net.minecraft.world.level.block.Blocks.BRICKS) || st.is(net.minecraft.world.level.block.Blocks.CUT_SANDSTONE)
+                || st.is(net.minecraft.world.level.block.Blocks.SMOOTH_SANDSTONE) || st.is(net.minecraft.world.level.block.Blocks.SMOOTH_STONE);
+    }
+
+    /** Can a person stand at {@code p} with a built roof overhead and built walls on at least three sides? */
+    private boolean indoors(ServerLevel level, BlockPos p) {
+        if (!level.getBlockState(p).getCollisionShape(level, p).isEmpty() || !level.getBlockState(p.above()).getCollisionShape(level, p.above()).isEmpty()
+                || level.getBlockState(p.below()).getCollisionShape(level, p.below()).isEmpty() || !level.getFluidState(p).isEmpty()) {
+            return false;
+        }
+        boolean roof = false;
+        for (int up = 2; up <= 5; up++) {
+            var st = level.getBlockState(p.above(up));
+            if (!st.isAir()) {
+                roof = builtBlock(st);
+                break;
+            }
+        }
+        if (!roof) {
+            return false;
+        }
+        int walls = 0;
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            for (int i = 1; i <= 4; i++) {
+                BlockPos q = p.relative(d, i);
+                var st = level.getBlockState(q);
+                var st2 = level.getBlockState(q.above());
+                if (!st.getCollisionShape(level, q).isEmpty() || !st2.getCollisionShape(level, q.above()).isEmpty() || st.is(net.minecraft.tags.BlockTags.DOORS)) {
+                    if (builtBlock(st) || builtBlock(st2)) {
+                        walls++;
+                    }
+                    break;
+                }
+            }
+        }
+        return walls >= 3;
+    }
+
+    /** The inside of a building nobody has made a base of, within 20 blocks (a village house, a ruin...). */
+    @Nullable
+    private BlockPos strayBuilding(Bases bases) {
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (BlockPos q : BlockPos.betweenClosed(feet.offset(-20, -4, -20), feet.offset(20, 4, 20))) {
+            double d = q.distSqr(feet);
+            if (d >= bestD || !indoors(level, q)) {
+                continue;
+            }
+            BlockPos p = q.immutable();
+            boolean bad = false;
+            for (BlockPos b : badBuildings) {
+                bad |= b.distManhattan(p) <= 8;
+            }
+            if (bad || bases.nearest(level.dimension(), Vec3.atCenterOf(p), 24) != null) {
+                continue;
+            }
+            best = p;
+            bestD = d;
+        }
+        return best;
+    }
+
+    /** A spot for the chest inside: against a wall, next to where we stand. */
+    @Nullable
+    private BlockPos chestSpotInside(BlockPos home) {
+        ServerLevel level = self.serverLevel();
+        BlockPos fallback = null;
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            BlockPos c = home.relative(d);
+            if (!level.getBlockState(c).canBeReplaced() || !level.getBlockState(c.above()).canBeReplaced()
+                    || level.getBlockState(c.below()).getCollisionShape(level, c.below()).isEmpty() || !indoors(level, c)) {
+                continue;
+            }
+            if (!level.getBlockState(c.relative(d)).getCollisionShape(level, c.relative(d)).isEmpty()) {
+                return c;
+            }
+            fallback = c;
+        }
+        return fallback;
     }
 
     @Nullable

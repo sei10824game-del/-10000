@@ -97,6 +97,7 @@ public final class CloneGameTests {
                     // world-wide things a failed test may leave behind: no staircase to lure other tests' clones away
                     com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
                     b.staircases.clear();
+                    b.shafts.clear();
                     b.setDirty();
                     manager(h).setBreeding(false);
                 }
@@ -900,6 +901,8 @@ public final class CloneGameTests {
         b.pens.clear();
         b.portals.clear();
         b.staircases.clear();
+        b.shafts.clear();
+        b.projects.clear();
         b.setDirty();
     }
 
@@ -3083,5 +3086,677 @@ public final class CloneGameTests {
             h.assertTrue(c.getX() >= far.x && c.getY() >= far.y - 0.01, "and the clone is up on the far side");
             finish(h, c, friend);
         });
+    }
+
+    // ------------------------------------------------------------------ AC round 9
+
+    private static ItemStack warRockets(int n) {
+        ItemStack rocket = new ItemStack(Items.FIREWORK_ROCKET, n);
+        net.minecraft.nbt.CompoundTag fw = rocket.getOrCreateTagElement("Fireworks");
+        net.minecraft.nbt.ListTag ex = new net.minecraft.nbt.ListTag();
+        net.minecraft.nbt.CompoundTag star = new net.minecraft.nbt.CompoundTag();
+        star.putByte("Type", (byte) 0);
+        star.putIntArray("Colors", new int[]{0xFF0000});
+        ex.add(star);
+        fw.put("Explosions", ex);
+        fw.putByte("Flight", (byte) 1);
+        return rocket;
+    }
+
+    private static net.minecraft.world.entity.monster.Husk slowHusk(GameTestHelper h, double x, double y, double z) {
+        var husk = h.spawn(EntityType.HUSK, new Vec3(x, y, z));
+        husk.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6000, 255));
+        husk.setPersistenceRequired();
+        return husk;
+    }
+
+    private static ClonePlayer creative(GameTestHelper h, double x, double z, float yaw) {
+        ClonePlayer cr = clone(h, x, z, yaw, true);
+        cr.setGameMode(GameType.CREATIVE);
+        return cr;
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r9tells")
+    public static void learnsTheSignsOfAnAttackAndRaisesTheShieldInTime(GameTestHelper h) {
+        // what announces an attack: a creeper swelling (synced entity data, as modded bosses animate theirs), a bow drawn
+        var creeper = h.spawn(EntityType.CREEPER, new Vec3(12.5, 2, 12.5));
+        creeper.setNoAi(true);
+        creeper.setSwellDir(1);
+        List<String> swell = com.rlclones.ai.AttackTells.cues(creeper);
+        creeper.discard();
+        h.assertTrue(swell.contains("d16=1"), "a swelling creeper shows it in its data: " + swell);
+        ClonePlayer rival = clone(h, 12.5, 2.5, 0f, false);
+        rival.getInventory().add(new ItemStack(Items.ARROW, 4));
+        rival.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.BOW));
+        rival.startUsingItem(InteractionHand.MAIN_HAND);
+        List<String> draw = com.rlclones.ai.AttackTells.cues(rival);
+        manager(h).remove(rival, true, Component.literal("cue checked"));
+        h.assertTrue(draw.contains("use:bow"), "a clone drawing its bow shows it: " + draw);
+
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(new ItemStack(Items.SHIELD));
+        com.rlclones.ai.Equipment.manage(c, true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 6000, 2));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        c.controller().forcedAction = CombatAction.HOLD; // only the reflex raises the shield
+        var sk = h.spawn(EntityType.SKELETON, new Vec3(10.5, 2, 7.5));
+        sk.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.LEATHER_HELMET));
+        sk.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
+        sk.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6000, 255));
+        sk.setPersistenceRequired();
+        h.succeedWhen(() -> {
+            EnemyKnowledge k = c.getCloneBrain().knowledgeIfPresent("minecraft:skeleton");
+            String traits = k == null ? "none" : k.traits.toString();
+            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + ")");
+            h.assertTrue(c.controller().tells().tellBlocks >= 2, "and the shield comes up in time to catch the arrows (" + c.controller().tells().tellBlocks
+                    + " " + c.controller().tells().debug + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r9sight")
+    public static void seesMuchFurtherThanBefore(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        h.assertTrue(c.controller().perception().maxRange() >= 96, "view distance raised: " + c.controller().perception().maxRange());
+        BlockPos base = h.absolutePos(new BlockPos(7, 2, 7));
+        for (int y = 2; y <= 75; y++) {
+            h.getLevel().setBlockAndUpdate(base.above(y), Blocks.AIR.defaultBlockState());
+        }
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(h.getLevel(), base.getX() + 0.5, base.getY() + 70, base.getZ() + 0.5);
+        stand.setNoGravity(true);
+        stand.setGlowingTag(true);
+        h.getLevel().addFreshEntity(stand);
+        c.setXRot(-90f);
+        h.runAfterDelay(3, () -> {
+            boolean seen = c.controller().perception().canSee(stand);
+            String why = c.controller().perception().explain(stand);
+            stand.discard();
+            h.assertTrue(seen, "something 70 blocks off (beyond the old 48) is seen: " + why);
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9cover")
+    public static void fleesBehindCoverOutOfSight(GameTestHelper h) {
+        for (int x = 5; x <= 9; x++) {
+            for (int y = 2; y <= 4; y++) {
+                h.setBlock(new BlockPos(x, y, 11), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, 90f, false);
+        target(h, 3.5, 7.5, 40f);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
+        h.runAfterDelay(5, () -> wake(h, c));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().coverTaken >= 1, "the clone runs behind the wall where the husk cannot see it (at "
+                    + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " " + c.controller().optionLog + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9rocket")
+    public static void shootsFireworksFromACrossbow(GameTestHelper h) {
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.CROSSBOW));
+        c.getInventory().add(warRockets(8));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        c.controller().forcedAction = CombatAction.SHOOT;
+        var husk = target(h, 11.5, 7.5, 40f);
+        boolean[] rocket = {false};
+        h.onEachTick(() -> rocket[0] |= !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.FireworkRocketEntity.class,
+                c.getBoundingBox().inflate(24), r -> r.getOwner() == c).isEmpty());
+        h.succeedWhen(() -> {
+            h.assertTrue(rocket[0] && c.controller().rocketShots >= 1, "a firework rocket is loaded into the crossbow and shot ("
+                    + c.controller().shootDebug + ")");
+            h.assertTrue(husk.getHealth() < 40f, "and it blows up on the husk");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9fire")
+    public static void setsTheGroundUnderTheEnemyAlight(GameTestHelper h) {
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.FLINT_AND_STEEL));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        c.controller().forcedAction = CombatAction.HOLD;
+        var husk = target(h, 8.5, 7.5, 40f);
+        boolean[] burnt = {false};
+        h.onEachTick(() -> burnt[0] |= husk.isOnFire());
+        h.succeedWhen(() -> {
+            var k = c.getCloneBrain().knowledgeIfPresent("minecraft:husk");
+            h.assertTrue(c.controller().consumables().firesSet >= 1 && burnt[0], "flint and steel sets the ground under the husk alight ("
+                    + c.controller().consumables().trapDebug + ")");
+            h.assertTrue(k != null && k.traits.getInt("effect:fire") >= 1, "and it is learned that fire works on it");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9web")
+    public static void putsACobwebAtTheEnemysFeet(GameTestHelper h) {
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.COBWEB, 4));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        c.controller().forcedAction = CombatAction.HOLD;
+        target(h, 8.5, 7.5, 40f);
+        h.succeedWhen(() -> {
+            var k = c.getCloneBrain().knowledgeIfPresent("minecraft:husk");
+            h.assertTrue(c.controller().consumables().websPlaced >= 1 && h.getBlockState(new BlockPos(8, 2, 7)).is(Blocks.COBWEB),
+                    "a cobweb goes down where the husk stands (" + c.controller().consumables().trapDebug + ")");
+            h.assertTrue(k != null && k.traits.getInt("effect:web") >= 1, "and it is learned that it holds it fast");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9offhand")
+    public static void keepsTheBowOrFoodInTheOffHand(GameTestHelper h) {
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(new ItemStack(Items.BOW));
+        c.getInventory().add(new ItemStack(Items.ARROW, 32));
+        com.rlclones.ai.Equipment.manage(c, true);
+        h.assertTrue(c.getOffhandItem().is(Items.BOW) && c.getMainHandItem().is(Items.IRON_SWORD),
+                "no shield or totem: the bow goes to the off hand, the sword stays in the main hand (" + c.getOffhandItem() + "/" + c.getMainHandItem() + ")");
+        ClonePlayer d = clone(h, 2.5, 3.5, -90f, false);
+        d.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        d.getInventory().add(new ItemStack(Items.BREAD, 8));
+        com.rlclones.ai.Equipment.manage(d, true);
+        h.assertTrue(d.getOffhandItem().is(Items.BREAD) && d.getMainHandItem().is(Items.IRON_SWORD), "nothing to shoot: food in the off hand");
+        d.getFoodData().setFoodLevel(10);
+        d.controller().forcedOption = com.rlclones.ai.strategy.Option.EAT;
+        d.setAiEnabled(true);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        c.controller().forcedAction = CombatAction.SHOOT;
+        dummy(h, 11.5, 7.5);
+        boolean[] sword = {true};
+        h.onEachTick(() -> sword[0] &= c.getMainHandItem().is(Items.IRON_SWORD));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().offhandShots >= 1, "arrows are shot with the bow in the off hand (" + c.controller().shootDebug + ")");
+            h.assertTrue(sword[0], "the sword never leaves the main hand");
+            h.assertTrue(d.controller().offhandMeals >= 1 && d.getFoodData().getFoodLevel() > 10 && d.getMainHandItem().is(Items.IRON_SWORD),
+                    "and the food is eaten straight from the off hand");
+            finish(h, c, d);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9sapling")
+    public static void plantsSaplings(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 8; x <= 12; x++) {
+            for (int z = 5; z <= 9; z++) {
+                h.setBlock(new BlockPos(x, 1, z), Blocks.GRASS_BLOCK);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_SAPLING, 3));
+        h.runAfterDelay(5, () -> wake(h, c));
+        h.succeedWhen(() -> {
+            boolean planted = false;
+            for (int x = 8; x <= 12; x++) {
+                for (int z = 5; z <= 9; z++) {
+                    planted |= h.getBlockState(new BlockPos(x, 2, z)).is(net.minecraft.tags.BlockTags.SAPLINGS);
+                }
+            }
+            h.assertTrue(planted && c.controller().consumables().saplingsPlanted >= 1, "a sapling is planted in the grass ("
+                    + c.controller().consumables().saplingDebug + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9fly")
+    public static void creativeClonesFly(GameTestHelper h) {
+        clearBases(h);
+        for (int y = 2; y <= 8; y++) {
+            h.setBlock(new BlockPos(11, y, 7), Blocks.STONE);
+        }
+        ClonePlayer friend = clone(h, 11.5, 7.5, 90f, false);
+        Vec3 top = h.absoluteVec(new Vec3(11.5, 9, 7.5));
+        friend.teleportTo(h.getLevel(), top.x, top.y, top.z, 90f, 0f);
+        friend.getFoodData().setFoodLevel(4);
+        ClonePlayer cr = creative(h, 3.5, 7.5, -90f);
+        double[] maxY = {-1000};
+        h.onEachTick(() -> maxY[0] = Math.max(maxY[0], cr.getY()));
+        h.succeedWhen(() -> {
+            h.assertTrue(cr.controller().motor().creativeFlightTicks > 0 && maxY[0] >= top.y - 0.5, "the creative clone flies up to the friend on the pillar ("
+                    + cr.controller().creative().debug + " max y " + maxY[0] + " / " + top.y + ")");
+            h.assertTrue(cr.controller().creative().gifts >= 1, "and hands over food up there");
+            finish(h, cr, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9tnt")
+    public static void creativeBlowsUpACrowdWithTnt(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer cr = creative(h, 2.5, 2.5, -45f);
+        List<Husk> crowd = new ArrayList<>();
+        for (double[] p : new double[][]{{9.5, 9.5}, {10.5, 9.5}, {9.5, 10.5}, {10.5, 10.5}, {11.5, 10.5}}) {
+            crowd.add(target(h, p[0], p[1], 20f));
+        }
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            h.assertTrue(play.tntLit >= 1, "TNT from the creative menu is put down by the crowd and lit (" + play.log + ")");
+            h.assertTrue(crowd.stream().filter(e -> e.isAlive() && e.getHealth() >= 20f).count() <= 1, "and the blast catches the crowd");
+            finish(h, cr);
+        });
+    }
+
+    private static void baseAt(GameTestHelper h, BlockPos rel, String... done) {
+        h.setBlock(rel, Blocks.CHEST);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var base = bases.add(h.getLevel().dimension(), h.absolutePos(rel), "friend");
+        bases.addChest(base, h.absolutePos(rel));
+        for (String kind : done) {
+            bases.addProject(h.getLevel().dimension(), kind, h.absolutePos(rel)); // built already: not this test's business
+        }
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3600, batch = "r9build")
+    public static void creativeBuildsPortalsAndAnEnchantingRoom(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer friend = clone(h, 7.5, 7.5, 0f, false);
+        friend.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ClonePlayer cr = creative(h, 6.5, 6.5, 0f);
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            h.assertTrue(play.enchantRooms >= 1, "an enchanting table with its bookshelves (" + play.log + ")");
+            int shelves = 0;
+            BlockPos table = null;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 2, 13)))) {
+                if (h.getLevel().getBlockState(p).is(Blocks.ENCHANTING_TABLE)) {
+                    table = p.immutable();
+                }
+            }
+            h.assertTrue(table != null, "the table stands");
+            for (BlockPos p : BlockPos.betweenClosed(table.offset(-2, 0, -2), table.offset(2, 1, 2))) {
+                shelves += h.getLevel().getBlockState(p).is(Blocks.BOOKSHELF) ? 1 : 0;
+            }
+            h.assertTrue(shelves >= 15, "with 15 bookshelves around it: " + shelves);
+            h.assertTrue(play.portalsBuilt >= 1, "a Nether portal built and lit (" + play.log + ")");
+            h.assertTrue(play.endPortals >= 1, "an End portal, frames facing in and all eyes in (" + play.log + ")");
+            finish(h, cr, friend);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r9farm")
+    public static void creativeMakesAFarmByTheBase(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                h.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+            }
+        }
+        baseAt(h, new BlockPos(3, 2, 3), "enchanting", "nether_portal", "end_portal");
+        ClonePlayer friend = clone(h, 4.5, 5.5, 0f, false);
+        friend.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ClonePlayer cr = creative(h, 5.5, 5.5, 0f);
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            int farmland = 0;
+            int crops = 0;
+            boolean water = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 1, 1)), h.absolutePos(new BlockPos(13, 2, 13)))) {
+                var st = h.getLevel().getBlockState(p);
+                farmland += st.is(Blocks.FARMLAND) ? 1 : 0;
+                crops += st.is(Blocks.WHEAT) ? 1 : 0;
+                water |= h.getLevel().getFluidState(p).isSource() && st.is(Blocks.WATER);
+            }
+            h.assertTrue(play.farmsMade >= 1 && farmland >= 8 && water, "the ground is broken open for water and a field tilled around it ("
+                    + farmland + " farmland, " + play.log + ")");
+            h.assertTrue(crops >= 4, "and sown: " + crops);
+            finish(h, cr, friend);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r9mobs")
+    public static void creativeSpawnsAnimalsAndBuildsAnIronGolem(GameTestHelper h) {
+        clearBases(h);
+        baseAt(h, new BlockPos(3, 2, 3), "enchanting", "nether_portal", "end_portal", "farm");
+        ClonePlayer friend = clone(h, 4.5, 5.5, 0f, false);
+        friend.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ClonePlayer cr = creative(h, 5.5, 5.5, 0f);
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            h.assertTrue(play.mobsSpawned >= 3, "farm animals let out of spawn eggs (" + play.mobsSpawned + " " + play.log + ")");
+            h.assertTrue(play.golemsBuilt >= 1 && !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.animal.IronGolem.class,
+                    new net.minecraft.world.phys.AABB(h.absolutePos(BlockPos.ZERO)).inflate(20)).isEmpty(), "and an iron golem built (" + play.log + ")");
+            finish(h, cr, friend);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9pchest")
+    public static void aChestAPlayerPutsDownBecomesABase(GameTestHelper h) {
+        clearBases(h);
+        BlockPos rel = new BlockPos(7, 2, 11);
+        h.setBlock(rel, Blocks.CHEST);
+        BlockPos abs = h.absolutePos(rel);
+        net.minecraft.world.entity.player.Player player = h.makeMockPlayer();
+        com.rlclones.event.ServerEvents.onPlace(new net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent(
+                net.minecraftforge.common.util.BlockSnapshot.create(h.getLevel().dimension(), h.getLevel(), abs), Blocks.STONE.defaultBlockState(), player));
+        com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        h.assertTrue(bases.isBaseChest(h.getLevel().dimension(), abs), "the chest the player put down counts as a base chest");
+        ClonePlayer c = clone(h, 7.5, 5.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.BONE, 3));
+        c.getInventory().add(new ItemStack(Items.STRING, 4));
+        c.getInventory().add(new ItemStack(Items.GUNPOWDER, 2));
+        c.getInventory().add(new ItemStack(Items.FEATHER, 5));
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.STORE, new boolean[1]);
+        h.succeedWhen(() -> {
+            var be = (net.minecraft.world.Container) h.getLevel().getBlockEntity(abs);
+            h.assertTrue(be.hasAnyOf(java.util.Set.of(Items.BONE)), "the clone stores its surplus in the player's chest");
+            h.assertTrue(bases.bases.size() == 1, "and founds no base of its own");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9potion")
+    public static void creativeThrowsPotionsThatHurtTheCrowd(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer cr = creative(h, 2.5, 2.5, -45f);
+        List<Husk> crowd = new ArrayList<>();
+        for (double[] p : new double[][]{{9.5, 9.5}, {10.5, 9.5}, {9.5, 10.5}}) {
+            crowd.add(target(h, p[0], p[1], 20f));
+        }
+        boolean[] healing = {false};
+        h.onEachTick(() -> {
+            for (var tp : h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.ThrownPotion.class, cr.getBoundingBox().inflate(32), t -> t.getOwner() == cr)) {
+                for (var e : net.minecraft.world.item.alchemy.PotionUtils.getMobEffects(tp.getItem())) {
+                    healing[0] |= e.getEffect() == MobEffects.HEAL;
+                }
+            }
+        });
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            h.assertTrue(play.potionsThrown >= 1 && healing[0], "a splash potion of healing - which hurts the undead - is thrown at the crowd ("
+                    + play.lastPotionThrown + " " + play.log + ")");
+            h.assertTrue(crowd.stream().anyMatch(e -> !e.isAlive() || e.getHealth() < 20f), "and it hurts them");
+            h.assertTrue(com.rlclones.ai.CreativePlay.potionScore(net.minecraft.world.item.alchemy.Potions.HARMING, false)
+                    > com.rlclones.ai.CreativePlay.potionScore(net.minecraft.world.item.alchemy.Potions.HEALING, false), "the living get harming instead");
+            finish(h, cr);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9cliff")
+    public static void creativeBreaksTheGroundFromUnderAMonster(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 6; x <= 8; x++) {
+            h.setBlock(new BlockPos(x, 6, 7), Blocks.STONE); // a thin bridge high up, nothing under it
+        }
+        var husk = slowHusk(h, 7.5, 7, 7.5);
+        ClonePlayer cr = creative(h, 1.5, 7.5, -90f);
+        cr.setXRot(-25f);
+        double startY = h.absoluteVec(new Vec3(0, 7, 0)).y;
+        boolean[] fell = {false};
+        h.onEachTick(() -> fell[0] |= husk.getY() < startY - 3);
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            h.assertTrue(play.cliffDrops >= 1 && fell[0], "the block under the husk is broken away and down it goes (" + play.log + ")");
+            finish(h, cr);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1000, batch = "r9rod")
+    public static void creativeHooksAMonsterFliesUpAndReelsItIn(GameTestHelper h) {
+        clearBases(h);
+        var husk = slowHusk(h, 9.5, 2, 7.5);
+        ClonePlayer cr = creative(h, 3.5, 7.5, -90f);
+        double floor = h.absoluteVec(new Vec3(0, 2, 0)).y;
+        double[] maxY = {-1000};
+        boolean[] fall = {false};
+        h.onEachTick(() -> {
+            maxY[0] = Math.max(maxY[0], husk.getY());
+            var src = husk.getLastDamageSource();
+            fall[0] |= src != null && src.is(net.minecraft.world.damagesource.DamageTypes.FALL);
+        });
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            h.assertTrue(play.rodLaunches >= 1, "hooked with a rod, up into the air and reeled in (" + play.log + ")");
+            h.assertTrue(maxY[0] > floor + 3 && fall[0], "the husk is flung up and hurt by the fall (max " + (maxY[0] - floor) + ")");
+            finish(h, cr);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r9hazard")
+    public static void creativeBlowsUpAPatchOfHarmfulBlocks(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 8; x <= 12; x++) {
+            for (int z = 5; z <= 9; z++) {
+                if ((x + z) % 2 == 0) {
+                    h.setBlock(new BlockPos(x, 2, z), Blocks.COBWEB);
+                } else {
+                    h.setBlock(new BlockPos(x, 1, z), Blocks.MAGMA_BLOCK);
+                }
+            }
+        }
+        ClonePlayer cr = creative(h, 3.5, 7.5, -90f);
+        h.succeedWhen(() -> {
+            var play = cr.controller().creative().play();
+            int left = 0;
+            for (int x = 8; x <= 12; x++) {
+                for (int z = 5; z <= 9; z++) {
+                    left += h.getBlockState(new BlockPos(x, 2, z)).is(Blocks.COBWEB) || h.getBlockState(new BlockPos(x, 1, z)).is(Blocks.MAGMA_BLOCK) ? 1 : 0;
+                }
+            }
+            h.assertTrue(play.hazardBlasts >= 1 && left <= 12, "TNT clears the patch of cobwebs and magma (" + left + " of 25 left, " + play.log + ")");
+            finish(h, cr);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r9climb")
+    public static void swimsUpAWaterfallToHigherGround(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 9; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 7; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.OBSIDIAN);
+                }
+            }
+        }
+        for (int y = 2; y <= 8; y++) {
+            h.setBlock(new BlockPos(8, y, 6), Blocks.GLASS);
+            h.setBlock(new BlockPos(8, y, 8), Blocks.GLASS);
+            if (y >= 4) {
+                h.setBlock(new BlockPos(7, y, 7), Blocks.GLASS);
+            }
+        }
+        h.setBlock(new BlockPos(8, 8, 7), Blocks.WATER); // falls down the glass tube and runs out at the bottom
+        ClonePlayer friend = clone(h, 11.5, 7.5, 90f, false);
+        Vec3 up = h.absoluteVec(new Vec3(11.5, 8, 7.5));
+        friend.teleportTo(h.getLevel(), up.x, up.y, up.z, 90f, 0f);
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, true);
+        c.controller().foodAid().thank(friend.getUUID(), 10f);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FOLLOW;
+        boolean[] top = {false};
+        h.onEachTick(() -> top[0] |= c.getY() >= up.y - 0.01 && c.onGround() && c.getX() > up.x - 3);
+        h.succeedWhen(() -> {
+            var t = c.controller().travel();
+            h.assertTrue(t.waterClimbs >= 1 && top[0], "up the waterfall and out on top (" + t.waterDebug + " / " + t.debug + " " + c.controller().optionLog + ")");
+            finish(h, c, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r9dive")
+    public static void jumpsOffACliffIntoTheWaterBelow(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 1; x <= 4; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 9; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.OBSIDIAN);
+                }
+            }
+        }
+        for (int x = 5; x <= 9; x++) {
+            for (int z = 5; z <= 9; z++) {
+                boolean rim = x == 5 || x == 9 || z == 5 || z == 9;
+                h.setBlock(new BlockPos(x, 2, z), rim ? Blocks.GLASS : Blocks.WATER);
+            }
+        }
+        h.setBlock(new BlockPos(5, 2, 7), Blocks.WATER); // the pool reaches the foot of the cliff
+        ClonePlayer friend = clone(h, 11.5, 7.5, 90f, false);
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
+        Vec3 cliff = h.absoluteVec(new Vec3(2.5, 10, 7.5));
+        c.teleportTo(h.getLevel(), cliff.x, cliff.y, cliff.z, -90f, 0f);
+        c.controller().foodAid().thank(friend.getUUID(), 10f);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FOLLOW;
+        float[] lowest = {20f};
+        h.onEachTick(() -> lowest[0] = Math.min(lowest[0], c.getHealth()));
+        h.succeedWhen(() -> {
+            var t = c.controller().travel();
+            h.assertTrue(t.waterDrops >= 1 && c.getY() < cliff.y - 5, "down off the cliff into the water (" + t.waterDebug + " / " + t.debug + ")");
+            h.assertTrue(lowest[0] >= 20f, "without a scratch: " + lowest[0]);
+            finish(h, c, friend);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r9claim")
+    public static void movesIntoABuildingStandingEmpty(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 8; x <= 12; x++) {
+            for (int z = 4; z <= 8; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    if (x == 8 || x == 12 || z == 4 || z == 8) {
+                        h.setBlock(new BlockPos(x, y, z), Blocks.OAK_PLANKS);
+                    }
+                }
+                h.setBlock(new BlockPos(x, 5, z), Blocks.OAK_PLANKS);
+            }
+        }
+        h.setBlock(new BlockPos(10, 2, 8), Blocks.AIR);
+        h.setBlock(new BlockPos(10, 3, 8), Blocks.AIR); // the doorway
+        ClonePlayer c = clone(h, 4.5, 11.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.CHEST));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        c.getInventory().add(new ItemStack(Items.BONE, 3));
+        c.getInventory().add(new ItemStack(Items.STRING, 4));
+        c.getInventory().add(new ItemStack(Items.GUNPOWDER, 2));
+        c.getInventory().add(new ItemStack(Items.FEATHER, 5));
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.STORE, new boolean[1]);
+        h.succeedWhen(() -> {
+            var st = c.controller().storage();
+            com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+            var base = bases.nearest(h.getLevel().dimension(), c.position(), 32);
+            h.assertTrue(st.buildingsClaimed >= 1 && base != null, "the clone moves into the empty house (" + st.claimDebug + ")");
+            BlockPos center = base.center.subtract(h.absolutePos(BlockPos.ZERO));
+            h.assertTrue(center.getX() >= 9 && center.getX() <= 11 && center.getZ() >= 5 && center.getZ() <= 8, "the base is inside it: " + center.toShortString());
+            BlockPos chest = base.chests.get(0).subtract(h.absolutePos(BlockPos.ZERO));
+            h.assertTrue(chest.getX() >= 9 && chest.getX() <= 11 && chest.getZ() >= 5 && chest.getZ() <= 7, "its chest stands inside: " + chest.toShortString());
+            h.assertTrue(st.builder().placed == 0, "no hut of its own built");
+            var be = (net.minecraft.world.Container) h.getLevel().getBlockEntity(base.chests.get(0));
+            h.assertTrue(be != null && be.hasAnyOf(java.util.Set.of(Items.BONE)), "and the surplus goes into the chest");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    private static void shaftBlock(GameTestHelper h) {
+        for (int x = 6; x <= 8; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = 2; y <= 6; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
+    }
+
+    private static void shaftMind(GameTestHelper h, ClonePlayer c, double topY) {
+        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:bedrock", "minecraft:furnace",
+                "minecraft:crafting_table", "minecraft:ladder")) {
+            c.getCloneBrain().learnBlock(b);
+        }
+        c.controller().shafts().assumeSurface = true;
+        c.controller().shafts().targetY = (int) topY - 40;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.SHAFT;
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "r9shaft")
+    public static void digsAShaftStraightDownWithLadders(GameTestHelper h) {
+        clearBases(h);
+        shaftBlock(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        Vec3 top = h.absoluteVec(new Vec3(7.5, 7, 7.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, 0f, 0f);
+        stairsKit(h, c);
+        c.getInventory().add(new ItemStack(Items.STICK, 7));
+        h.setBlock(new BlockPos(6, 7, 6), Blocks.CRAFTING_TABLE);
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(6, 7, 6)));
+        shaftMind(h, c, top.y);
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var sm = c.controller().shafts();
+            com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+            var s = bases.shafts.isEmpty() ? null : bases.shafts.get(0);
+            h.assertTrue(sm.laddersCrafted >= 3, "ladders crafted first (" + sm.debug + " | " + sm.trace + " " + c.controller().optionLog + ")");
+            h.assertTrue(s != null && s.depth() >= 3 && sm.laddersPlaced >= 3, "dug straight down with a ladder at every level ("
+                    + (s == null ? "no shaft" : "depth " + s.depth()) + " ladders " + sm.laddersPlaced + " " + sm.debug + " | " + sm.trace + ")");
+            int ladders = 0;
+            for (int y = 2; y <= 6; y++) {
+                ladders += h.getLevel().getBlockState(new BlockPos(s.top.getX(), h.absolutePos(new BlockPos(0, y, 0)).getY(), s.top.getZ())).is(Blocks.LADDER) ? 1 : 0;
+            }
+            h.assertTrue(ladders >= 3, "the ladders are on the wall: " + ladders);
+            h.assertTrue(c.getInventory().countItem(Items.LADDER) == 0, "until they ran out");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "r9shaft2")
+    public static void carriesOnDownAShaftAlreadyDug(GameTestHelper h) {
+        clearBases(h);
+        shaftBlock(h);
+        var ladder = Blocks.LADDER.defaultBlockState().setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.WEST);
+        h.setBlock(new BlockPos(7, 6, 7), ladder);
+        h.setBlock(new BlockPos(7, 5, 7), ladder);
+        com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var shaft = bases.addShaft(h.getLevel().dimension(), h.absolutePos(new BlockPos(7, 7, 7)), Direction.EAST);
+        shaft.end = h.absolutePos(new BlockPos(7, 5, 7));
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        Vec3 top = h.absoluteVec(new Vec3(6.5, 7, 6.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, 0f, 0f);
+        stairsKit(h, c);
+        c.getInventory().add(new ItemStack(Items.LADDER, 3));
+        shaftMind(h, c, top.y);
+        c.setAiEnabled(true);
+        int bottom = h.absolutePos(new BlockPos(0, 3, 0)).getY();
+        h.succeedWhen(() -> {
+            var sm = c.controller().shafts();
+            h.assertTrue(sm.resumed >= 1 && shaft.end.getY() <= bottom, "climbed down the shaft someone started and dug on from its bottom ("
+                    + shaft.end.getY() + " / " + bottom + " " + sm.debug + " | " + sm.trace + " " + c.controller().optionLog + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r9chat")
+    public static void cloneChatCanBeHiddenByCommand(GameTestHelper h) {
+        ClonePlayer a = clone(h, 3.5, 7.5, 0f, false);
+        ClonePlayer b = clone(h, 6.5, 7.5, 0f, false);
+        var server = h.getLevel().getServer();
+        var src = server.createCommandSourceStack().withSuppressedOutput();
+        int before = com.rlclones.ai.Chat.hiddenLines;
+        server.getCommands().performPrefixedCommand(src, "rlclone chat off");
+        boolean off = !CloneManager.chatShown();
+        com.rlclones.ai.Chat.say(a, Component.literal("FOOD 1 2 3"), "FOOD 1 2 3");
+        int hidden = com.rlclones.ai.Chat.hiddenLines - before;
+        String heard = b.controller().foodAid().state();
+        server.getCommands().performPrefixedCommand(src, "rlclone chat on");
+        h.assertTrue(off, "/rlclone chat off hides clone chat");
+        h.assertTrue(hidden == 1, "the line is kept out of the players' chat: " + hidden);
+        h.assertTrue(heard.contains(a.getGameProfile().getName()), "but the other clones still read it: " + heard);
+        h.assertTrue(CloneManager.chatShown(), "/rlclone chat on shows it again");
+        finish(h, a, b);
+        h.succeed();
     }
 }

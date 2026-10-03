@@ -95,6 +95,8 @@
   "key.rlclones.breeding": "クローン交配のオン/オフ",
   "rlclones.msg.breeding_on": "交配オン：満腹で食べ物に余裕のあるクローン（とプレイヤー）が新しいクローンを生みます",
   "rlclones.msg.breeding_off": "交配オフ",
+  "rlclones.msg.chat_on": "クローンのチャットを表示",
+  "rlclones.msg.chat_off": "クローンのチャットを非表示（クローン同士の会話は続きます）",
   "rlclones.msg.born": "%2$s と %3$s の間に %1$s が生まれました",
   "rlclones.msg.born_you": "あなたと %2$s の間に %1$s が生まれました",
   "rlclones.msg.breed_need": "親になるには2人とも満腹で、食べ物を%s個以上持っている必要があります",

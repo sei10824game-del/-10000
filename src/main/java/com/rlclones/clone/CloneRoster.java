@@ -19,6 +19,8 @@ public class CloneRoster extends SavedData {
     /** Clones born of two parents (N key breeding): child -> its parents. */
     public final Map<UUID, java.util.List<UUID>> parents = new LinkedHashMap<>();
     public boolean breeding;
+    /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
+    public boolean chatHidden;
     public boolean linked;
     public boolean respawn;
     public int nextIndex = 1;
@@ -28,6 +30,7 @@ public class CloneRoster extends SavedData {
         r.linked = tag.getBoolean("linked");
         r.respawn = tag.getBoolean("respawn");
         r.breeding = tag.getBoolean("breeding");
+        r.chatHidden = tag.getBoolean("chatHidden");
         r.nextIndex = Math.max(1, tag.getInt("nextIndex"));
         ListTag list = tag.getList("clones", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -60,6 +63,7 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("linked", linked);
         tag.putBoolean("respawn", respawn);
         tag.putBoolean("breeding", breeding);
+        tag.putBoolean("chatHidden", chatHidden);
         tag.putInt("nextIndex", nextIndex);
         ListTag list = new ListTag();
         profiles.forEach((id, profile) -> {

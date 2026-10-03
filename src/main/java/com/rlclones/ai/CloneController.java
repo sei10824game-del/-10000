@@ -22,6 +22,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.FireworkRocketItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
@@ -84,6 +85,8 @@ public final class CloneController {
     private final Breeding breeding;
     private final Achievements achievements;
     private final StairMining stairs;
+    private final AttackTells tells;
+    private final ShaftMining shafts;
     private final CreativeHelper creative;
     /** What can be done riding a horse (anything else: get off first). */
     private static final java.util.Set<Option> ON_HORSEBACK = java.util.EnumSet.of(Option.EXPLORE, Option.EXPEDITION, Option.JOIN, Option.FOLLOW,
@@ -180,6 +183,8 @@ public final class CloneController {
         this.breeding = new Breeding(self, motor);
         this.achievements = new Achievements(self, motor, perception, this::brain, crafting);
         this.stairs = new StairMining(self, motor);
+        this.tells = new AttackTells(self);
+        this.shafts = new ShaftMining(self, motor, crafting);
         this.creative = new CreativeHelper(self, motor, perception);
         expedition.foesNear = p -> {
             long t = now();
@@ -274,6 +279,14 @@ public final class CloneController {
 
     public Achievements achievements() {
         return achievements;
+    }
+
+    public ShaftMining shafts() {
+        return shafts;
+    }
+
+    public AttackTells tells() {
+        return tells;
     }
 
     public StairMining stairs() {
@@ -429,7 +442,7 @@ public final class CloneController {
                 && option != Option.CRAFT && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.FARM
                 && option != Option.QUARRY && option != Option.DISCOVER && option != Option.BREW
                 && option != Option.ANIMALS && option != Option.FISH && option != Option.SALVAGE && option != Option.PORTAL
-                && option != Option.STAIRS && option != Option.ACHIEVE
+                && option != Option.STAIRS && option != Option.ACHIEVE && option != Option.SHAFT
                 && !explosives.busy() && !travel.busy() && !perch.busy() && !boatTrap.busy() && !portals.busy()
                 && cleanTarget == null && !consumables.busy() && self.containerMenu == self.inventoryMenu && !motor.isFlying()
                 && (action == null || action == CombatAction.APPROACH || action == CombatAction.HOLD)) {
@@ -456,7 +469,8 @@ public final class CloneController {
         if (threatened) {
             lastThreatSeen = now;
         }
-        boolean itemBusy = consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        watchTells(now);
+        boolean itemBusy = tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
@@ -1231,6 +1245,9 @@ public final class CloneController {
         if (stairs.wanted()) {
             mask |= Option.STAIRS.bit(); // (only when idle: see startOption)
         }
+        if (shafts.wanted()) {
+            mask |= Option.SHAFT.bit(); // the other way down (also only when idle)
+        }
         if (achievements.hasGoal(now)) {
             mask |= Option.ACHIEVE.bit();
         }
@@ -1493,6 +1510,49 @@ public final class CloneController {
 
     public void onShieldBlock(float blocked) {
         stepReward += blocked * 0.5f;
+        if (tells.blocking()) {
+            tells.tellBlocks++; // raised because we saw it coming
+        }
+    }
+
+    /** Watch the enemies in view for the cues that announce their attacks (every other tick). */
+    private void watchTells(long now) {
+        if ((now & 1) != 0 || brain() == null) {
+            return;
+        }
+        for (Perception.Seen s : perception.visible()) {
+            Entity e = s.entity;
+            if ((e instanceof Mob || e instanceof Player) && e.isAlive() && e.distanceTo(self) < 32) {
+                tells.watch(e, now, brain(), Senses.isHostileTo(e, self));
+            }
+        }
+        if (now % 400 == 0) {
+            tells.prune();
+        }
+    }
+
+    /** A known tell is showing and the blow is due: shield up, facing it (a reflex, like a player who sees the bow drawn). */
+    private boolean tellReflex(long now) {
+        Entity due = Equipment.hasShield(self) ? tells.blockNow(now) : null;
+        if (due != null) {
+            motor.lookAt(due);
+            boolean shieldUp = self.isUsingItem() && self.getUseItem().getItem() instanceof net.minecraft.world.item.ShieldItem;
+            if (!shieldUp) {
+                if (self.isUsingItem()) {
+                    self.stopUsingItem();
+                }
+                motor.useHeldItem(InteractionHand.OFF_HAND);
+            }
+            tells.setBlocking(true);
+            return true;
+        }
+        if (tells.blocking()) {
+            tells.setBlocking(false);
+            if (action != CombatAction.BLOCK && self.isUsingItem() && self.getUseItem().getItem() instanceof net.minecraft.world.item.ShieldItem) {
+                self.stopUsingItem();
+            }
+        }
+        return false;
     }
 
     private long lastTrapCheck = Long.MIN_VALUE / 2;
@@ -1553,6 +1613,7 @@ public final class CloneController {
             case BREED -> breeding.tick() != Breeding.Status.WORKING;
             case ACHIEVE -> achievements.tick() != Achievements.Status.WORKING;
             case STAIRS -> stairs.tick() != StairMining.Status.WORKING;
+            case SHAFT -> shafts.tick() != ShaftMining.Status.WORKING;
         };
         optionTicks++;
         optionReward -= 0.005f;
@@ -1612,7 +1673,11 @@ public final class CloneController {
         int s = Senses.strategyState(perception, self, self, brain(), now);
         int mask = Senses.strategyMask(perception, self, self, now);
         if ((mask & BUSY_OPTIONS) != 0) {
-            mask &= ~(Option.STAIRS.bit() | Option.ACHIEVE.bit()); // those are for when there is nothing else to do
+            int idle = Option.STAIRS.bit() | Option.ACHIEVE.bit() | Option.SHAFT.bit();
+            if (forcedOption != null) {
+                idle &= ~forcedOption.bit();
+            }
+            mask &= ~idle; // those are for when there is nothing else to do
         }
         int o;
         Option committed = expedition.isLeading() ? Option.EXPEDITION : expedition.joinedOffer() != null ? Option.JOIN : null;
@@ -1672,6 +1737,7 @@ public final class CloneController {
             case BREED -> breeding.begin();
             case ACHIEVE -> achievements.begin();
             case STAIRS -> stairs.begin();
+            case SHAFT -> shafts.begin();
             case FOLLOW -> followTarget = pickFollowTarget(now);
             case EXPEDITION -> {
                 if (!expedition.isLeading()) {
@@ -1704,6 +1770,9 @@ public final class CloneController {
         if (option == Option.FIGHT || option == Option.HUNT) {
             closeCombatStep(died, died);
             target = null;
+        }
+        if (option == Option.SHAFT && (crafting.forcedTarget == Items.LADDER || crafting.forcedTarget == Items.STICK)) {
+            crafting.forcedTarget = null;
         }
         long now = now();
         if (died) {
@@ -1934,7 +2003,7 @@ public final class CloneController {
                 Equipment.select(self, Equipment.pillarBlockSlot(self));
             }
             case SHOOT -> {
-                if (!Equipment.canFire(self, self.getMainHandItem())) {
+                if (!Equipment.canFire(self, self.getMainHandItem()) && !Equipment.offhandRanged(self)) {
                     Equipment.select(self, Equipment.rangedSlot(self));
                 }
             }
@@ -2035,7 +2104,13 @@ public final class CloneController {
     /** Fire whatever ranged weapon we carry, operated the way that weapon type is operated by a player. */
     private void shoot(Entity t, double gap) {
         ItemStack held = self.getMainHandItem();
-        if (!Equipment.canFire(self, held)) {
+        InteractionHand hand = InteractionHand.MAIN_HAND;
+        boolean drawingOff = self.isUsingItem() && self.getUsedItemHand() == InteractionHand.OFF_HAND
+                && Equipment.rangedKind(self.getUseItem()) != Equipment.RangedKind.NONE;
+        if (!Equipment.canFire(self, held) && (drawingOff || Equipment.offhandRanged(self))) {
+            hand = InteractionHand.OFF_HAND; // the sword stays in the main hand: shoot with the off hand
+            held = self.getOffhandItem();
+        } else if (!Equipment.canFire(self, held)) {
             int slot = Equipment.rangedSlot(self);
             if (slot < 0) {
                 actionDone = true;
@@ -2061,7 +2136,11 @@ public final class CloneController {
             }
             Equipment.select(self, bow);
             held = self.getMainHandItem();
+            hand = InteractionHand.MAIN_HAND;
             bowSwitches++;
+        }
+        if (held.getItem() instanceof CrossbowItem && !CrossbowItem.isCharged(held) && !self.isUsingItem()) {
+            readyAmmo(hand, t); // fireworks or arrows into the crossbow
         }
         if (friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.THROWN) {
             actionDone = true; // no throwing past a friend's head
@@ -2086,14 +2165,18 @@ public final class CloneController {
             case CROSSBOW -> {
                 if (held.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(held)) {
                     if (actionTicks >= 2 && canSee) {
-                        motor.useHeldItem(InteractionHand.MAIN_HAND); // loaded: right-click fires
+                        boolean rocket = CrossbowItem.containsChargedProjectile(held, Items.FIREWORK_ROCKET);
+                        if (motor.useHeldItem(hand)) { // loaded: right-click fires
+                            rocketShots += rocket ? 1 : 0;
+                            offhandShots += hand == InteractionHand.OFF_HAND ? 1 : 0;
+                        }
                         actionDone = true;
                     }
                     return;
                 }
                 if (!self.isUsingItem()) {
                     if (actionTicks < 3) {
-                        motor.useHeldItem(InteractionHand.MAIN_HAND); // start winding
+                        motor.useHeldItem(hand); // start winding
                     } else {
                         actionDone = true;
                     }
@@ -2107,7 +2190,7 @@ public final class CloneController {
             case THROWN -> {
                 if (!self.isUsingItem()) {
                     if (actionTicks < 3) {
-                        motor.useHeldItem(InteractionHand.MAIN_HAND);
+                        motor.useHeldItem(hand);
                     } else {
                         actionDone = true;
                     }
@@ -2124,7 +2207,7 @@ public final class CloneController {
                     boolean ready = lobDraw == 0 || Math.abs(self.getXRot() - lobPitch) < 4;
                     if (actionTicks < (lobDraw > 0 ? 12 : 3)) {
                         if (ready) {
-                            motor.useHeldItem(InteractionHand.MAIN_HAND);
+                            motor.useHeldItem(hand);
                         }
                     } else {
                         actionDone = true;
@@ -2150,6 +2233,7 @@ public final class CloneController {
                     actionDone = true;
                 } else if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
                     if (arrowClearsFriends(self.getTicksUsingItem())) {
+                        offhandShots += self.getUsedItemHand() == InteractionHand.OFF_HAND ? 1 : 0;
                         self.releaseUsingItem();
                     } else {
                         self.stopUsingItem();
@@ -2157,6 +2241,37 @@ public final class CloneController {
                     actionDone = true;
                 }
             }
+        }
+    }
+
+    /** Shots fired with a firework loaded in the crossbow / with the weapon held in the off hand (tests). */
+    public int rocketShots;
+    public int offhandShots;
+
+    /**
+     * Before winding the crossbow: a firework rocket (with stars) is loaded from the other hand - when there are no
+     * arrows, or a bunch of enemies stands together and no friend is near them. Otherwise arrows.
+     */
+    private void readyAmmo(InteractionHand hand, Entity t) {
+        boolean arrows = false;
+        for (ItemStack st : self.getInventory().items) {
+            arrows |= st.getItem() instanceof net.minecraft.world.item.ArrowItem;
+        }
+        boolean friendNear = !self.level().getEntitiesOfClass(LivingEntity.class, t.getBoundingBox().inflate(5), e -> e != self && e != t && e.isAlive()
+                && (e instanceof Player p && !p.isSpectator() && !Senses.rivals(p, self)
+                || e instanceof net.minecraft.world.entity.TamableAnimal ta && ta.isTame())).isEmpty();
+        boolean rockets = Equipment.hasWarRockets(self) && !friendNear && t.distanceTo(self) > 5 && (!arrows || enemiesAround(t, 3.5) >= 2);
+        if (hand == InteractionHand.MAIN_HAND) {
+            boolean offRocket = self.getOffhandItem().getItem() instanceof FireworkRocketItem;
+            if (rockets && !Equipment.isWarRocket(self.getOffhandItem())) {
+                Equipment.toOffhand(self, Equipment.warRocketSlot(self)); // the crossbow takes what is in the other hand first
+            } else if (!rockets && offRocket && arrows) {
+                Equipment.stowOffhand(self);
+            }
+        } else if (rockets && !Equipment.isWarRocket(self.getMainHandItem())) {
+            Equipment.select(self, Equipment.warRocketSlot(self)); // crossbow in the off hand: the rocket in the main hand
+        } else if (!rockets && self.getMainHandItem().getItem() instanceof FireworkRocketItem) {
+            Equipment.select(self, Equipment.bestWeaponSlot(self));
         }
     }
 
@@ -2252,7 +2367,8 @@ public final class CloneController {
             m |= CombatAction.ATTACK.bit() | CombatAction.CRIT_ATTACK.bit() | CombatAction.SPRINT_ATTACK.bit();
         }
         int r = Equipment.rangedSlot(self);
-        if (r >= 0 && AttackLearning.useless(k, AttackLearning.rangedMethod(self.getInventory().getItem(r)))) {
+        ItemStack rangedItem = Equipment.offhandRanged(self) ? self.getOffhandItem() : r >= 0 ? self.getInventory().getItem(r) : ItemStack.EMPTY;
+        if (!rangedItem.isEmpty() && AttackLearning.useless(k, AttackLearning.rangedMethod(rangedItem))) {
             m |= CombatAction.SHOOT.bit();
         }
         if (Equipment.usableSlot(self, st -> !AttackLearning.useless(k, AttackLearning.rangedMethod(st))) < 0) {
@@ -2461,8 +2577,19 @@ public final class CloneController {
                 Vec3 toAlly = ally.pos.subtract(self.position());
                 away = away.add(new Vec3(toAlly.x, 0, toAlly.z).normalize().scale(0.7)).normalize();
             }
-            goal = self.position().add(away.scale(14));
-            goalTimer = 20;
+            Vec3 cover = threats.isEmpty() ? null : findCover(threats, away);
+            if (cover != null) {
+                if (coverGoal == null || cover.distanceTo(coverGoal) > 0.5) {
+                    coverReached = false;
+                }
+                goal = cover; // out of their sight behind something solid
+                coverGoal = cover;
+                goalTimer = 40;
+            } else {
+                goal = self.position().add(away.scale(14));
+                coverGoal = null;
+                goalTimer = 20;
+            }
             boolean cornered = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
             if (cornered && self.getHealth() <= self.getMaxHealth() * 0.6f) {
                 consumables.pearlAway(away); // only if the 5 damage of the pearl leaves us alive
@@ -2507,8 +2634,114 @@ public final class CloneController {
             fleeStuck = 0;
             return true;
         }
+        if (coverGoal != null && goal == coverGoal) {
+            if (Motor.horizontalDistance(self.position(), coverGoal) < 0.7 && Math.abs(self.getY() - coverGoal.y) < 1.2) {
+                motor.stop();
+                if (hiddenAt(threats, self.position())) {
+                    if (!coverReached) {
+                        coverReached = true;
+                        coverTaken++;
+                    }
+                    goalTimer = Math.max(goalTimer, 10); // stay hidden
+                } else {
+                    goalTimer = 0; // they can see us here after all: somewhere else
+                }
+                return false;
+            }
+            if (motor.stuckCount() > 3) {
+                badCover.add(BlockPos.containing(coverGoal));
+                coverGoal = null;
+                goalTimer = 0;
+            }
+            motor.navigate(goal, 0.4, true);
+            return false;
+        }
         motor.navigate(goal, 1.5, true);
         return false;
+    }
+
+    /** Times the clone ran into cover (out of the threats' sight) while fleeing. */
+    public int coverTaken;
+    @Nullable
+    private Vec3 coverGoal;
+    private boolean coverReached;
+    private final java.util.Set<BlockPos> badCover = new java.util.HashSet<>();
+
+    private boolean hazardBlock(net.minecraft.world.level.block.state.BlockState st) {
+        if (st.isAir()) {
+            return false;
+        }
+        var b = st.getBlock();
+        return b instanceof net.minecraft.world.level.block.MagmaBlock || b instanceof net.minecraft.world.level.block.CactusBlock
+                || b instanceof net.minecraft.world.level.block.SweetBerryBushBlock || b instanceof net.minecraft.world.level.block.WebBlock
+                || st.is(net.minecraft.tags.BlockTags.FIRE) || st.is(net.minecraft.tags.BlockTags.CAMPFIRES)
+                || brain() != null && brain().isHarmful(net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(b).toString());
+    }
+
+    /** None of the threats has a line of sight to someone standing at {@code at}. */
+    private boolean hiddenAt(List<Perception.Seen> threats, Vec3 at) {
+        for (Perception.Seen t : threats) {
+            Vec3 eye = t.pos.add(0, t.entity.getEyeHeight(), 0);
+            if (perception.clearLine(eye, at.add(0, 1.5, 0)) || perception.clearLine(eye, at.add(0, 0.4, 0))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Somewhere close (3 to 10 blocks) where none of the threats can see us - behind a wall, a tree, a hill - preferably
+     * snug among solid blocks and away from them (never closer to them than we are now).
+     */
+    @Nullable
+    private Vec3 findCover(List<Perception.Seen> threats, Vec3 away) {
+        ServerLevel level = self.serverLevel();
+        BlockPos me = self.blockPosition();
+        double nearestNow = Double.MAX_VALUE;
+        for (Perception.Seen t : threats) {
+            nearestNow = Math.min(nearestNow, t.pos.distanceTo(self.position()));
+        }
+        Vec3 best = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (int dx = -10; dx <= 10; dx++) {
+            for (int dz = -10; dz <= 10; dz++) {
+                double r = Math.sqrt(dx * dx + dz * dz);
+                if (r < 2.5 || r > 10.5) {
+                    continue;
+                }
+                for (int dy = 2; dy >= -2; dy--) {
+                    BlockPos p = me.offset(dx, dy, dz);
+                    if (badCover.contains(p) || !level.getFluidState(p).isEmpty() || !level.getBlockState(p).getCollisionShape(level, p).isEmpty()
+                            || !level.getBlockState(p.above()).getCollisionShape(level, p.above()).isEmpty()
+                            || level.getBlockState(p.below()).getCollisionShape(level, p.below()).isEmpty() || hazardBlock(level.getBlockState(p.below()))
+                            || hazardBlock(level.getBlockState(p))) {
+                        continue;
+                    }
+                    Vec3 spot = Vec3.atBottomCenterOf(p);
+                    double nearest = Double.MAX_VALUE;
+                    for (Perception.Seen t : threats) {
+                        nearest = Math.min(nearest, t.pos.distanceTo(spot));
+                    }
+                    if (nearest < 4 || nearest < nearestNow - 0.5 || !hiddenAt(threats, spot)) {
+                        break;
+                    }
+                    int solid = 0;
+                    for (BlockPos q : BlockPos.betweenClosed(p.offset(-1, 0, -1), p.offset(1, 1, 1))) {
+                        if (!level.getBlockState(q).getCollisionShape(level, q).isEmpty()) {
+                            solid++;
+                        }
+                    }
+                    Vec3 dir = spot.subtract(self.position());
+                    double score = solid + 2.0 * away.dot(new Vec3(dir.x, 0, dir.z).normalize()) - 0.3 * r + 0.2 * nearest;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = spot;
+                    }
+                    break;
+                }
+            }
+        }
+        return best;
     }
 
     private int fleeStuck;
@@ -2570,7 +2803,17 @@ public final class CloneController {
         return false;
     }
 
+    /** Meals eaten straight from the off hand (no switching). */
+    public int offhandMeals;
+
     private boolean runEat() {
+        if (!eatStarted && FoodAid.goodFood(self.getOffhandItem()) && self.canEat(false)) {
+            eatStarted = motor.useHeldItem(InteractionHand.OFF_HAND) && self.isUsingItem(); // food at the ready in the other hand
+            offhandMeals += eatStarted ? 1 : 0;
+            if (eatStarted) {
+                return false;
+            }
+        }
         if (!eatStarted) {
             int slot = Equipment.bestFoodSlot(self);
             if (slot < 0) {

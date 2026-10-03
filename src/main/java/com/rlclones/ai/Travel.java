@@ -42,7 +42,7 @@ public final class Travel {
     }
 
     public boolean busy() {
-        return bridging || parkour || tunnel != null || stairsDir != null || stairBridge != null;
+        return bridging || parkour || tunnel != null || stairsDir != null || stairBridge != null || waterColumn != null || dropWater != null;
     }
 
     private boolean solid(BlockPos p) {
@@ -123,11 +123,26 @@ public final class Travel {
         if (stairBridge != null) {
             return stairBridgeTick();
         }
+        if (waterColumn != null) {
+            return waterClimbTick();
+        }
+        if (dropWater != null) {
+            return waterDropTick();
+        }
         if (cooldown > 0) {
             cooldown--;
             return false;
         }
         Vec3 goal = motor.recentGoal();
+        if (goal != null && motor.stuckCount() >= 2 && !self.isPassenger() && Motor.horizontalDistance(self.position(), goal) > 1.5) {
+            double up = goal.y - self.getY();
+            if (up >= 3 && startWaterClimb(goal)) {
+                return true; // a waterfall / water column up there: swim up it
+            }
+            if (up <= -3 && self.onGround() && startWaterDrop(goal)) {
+                return true; // water below the cliff: jump into it instead of climbing down
+            }
+        }
         if (goal != null && motor.stuckCount() >= 1) {
             guardDebug = "goal " + BlockPos.containing(goal).toShortString() + " stuck=" + motor.stuckCount() + " ground=" + self.onGround();
         }
@@ -191,6 +206,166 @@ public final class Travel {
         }
         cooldown = 40;
         return consumables.pearlToward(goal);
+    }
+
+    // ------------------------------------------------------------------ water: swimming up falls, diving off cliffs
+
+    private BlockPos waterColumn;
+    private int waterTop;
+    private int waterTicks;
+    private double waterStartY;
+    private Vec3 waterGoal;
+    public int waterClimbs;
+    public String waterDebug = "";
+
+    private boolean water(BlockPos p) {
+        return self.level().getFluidState(p).is(net.minecraft.tags.FluidTags.WATER);
+    }
+
+    /** A column of water (falling water, a waterfall) nearby that reaches up to about the goal's height. */
+    private boolean startWaterClimb(Vec3 goal) {
+        BlockPos feet = self.blockPosition();
+        BlockPos best = null;
+        int bestTop = 0;
+        double bestScore = Double.MAX_VALUE;
+        for (BlockPos q : BlockPos.betweenClosed(feet.offset(-8, -1, -8), feet.offset(8, 1, 8))) {
+            if (!water(q) || water(q.below())) {
+                continue;
+            }
+            BlockPos p = q.immutable();
+            int top = p.getY();
+            while (top - p.getY() < 48 && water(new BlockPos(p.getX(), top + 1, p.getZ()))) {
+                top++;
+            }
+            if (top - feet.getY() < 3 || top + 1.5 < goal.y) {
+                continue; // not much of a climb / does not get us up there
+            }
+            double score = Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(p)) + 0.5 * Vec3.atCenterOf(new BlockPos(p.getX(), top, p.getZ())).distanceTo(goal);
+            if (score < bestScore) {
+                bestScore = score;
+                best = p;
+                bestTop = top;
+            }
+        }
+        if (best == null) {
+            return false;
+        }
+        waterColumn = best;
+        waterTop = bestTop;
+        waterTicks = 0;
+        waterStartY = self.getY();
+        waterGoal = goal;
+        waterDebug = "climb " + best.toShortString() + " to y" + bestTop;
+        return waterClimbTick();
+    }
+
+    private boolean waterClimbTick() {
+        BlockPos col = waterColumn;
+        if (++waterTicks > 500 || !water(col)) {
+            waterDebug += " gave up at " + self.blockPosition().toShortString();
+            waterColumn = null;
+            cooldown = 100;
+            return false;
+        }
+        boolean inColumn = self.getBlockX() == col.getX() && self.getBlockZ() == col.getZ();
+        if (self.getY() >= waterTop - 0.8 || (!inColumn && self.getY() > col.getY() + 1.5)) {
+            // up at the top: out onto the land beside it, towards the goal
+            motor.moveToward(waterGoal);
+            motor.jump();
+            if (self.onGround() && !self.isInWater()) {
+                if (self.getY() - waterStartY >= 2.5) {
+                    waterClimbs++;
+                }
+                waterDebug += " out at " + self.blockPosition().toShortString();
+                waterColumn = null;
+                motor.resetStuck();
+            }
+            return true;
+        }
+        Vec3 center = new Vec3(col.getX() + 0.5, self.getY(), col.getZ() + 0.5);
+        if (!inColumn) {
+            motor.moveToward(center); // into the bottom of the fall
+            if (self.horizontalCollision && self.onGround()) {
+                motor.jump();
+            }
+            return true;
+        }
+        if (Motor.horizontalDistance(self.position(), center) > 0.15) {
+            motor.moveToward(center);
+        }
+        motor.jump(); // swim up against the falling water
+        return true;
+    }
+
+    private BlockPos dropWater;
+    private int dropTicks;
+    private double dropStartY;
+    public int waterDrops;
+
+    /** Standing high above the goal: water down below, close enough to jump into, breaks the fall. */
+    private boolean startWaterDrop(Vec3 goal) {
+        BlockPos feet = self.blockPosition();
+        BlockPos best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (BlockPos q : BlockPos.betweenClosed(feet.offset(-4, -32, -4), feet.offset(4, -3, 4))) {
+            if (!water(q) || water(q.above())) {
+                continue; // the surface of the water
+            }
+            double hd = Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(q));
+            if (hd > 4.2) {
+                continue;
+            }
+            boolean clear = true;
+            for (int y = q.getY() + 1; y <= feet.getY() + 1 && clear; y++) {
+                clear = passable(new BlockPos(q.getX(), y, q.getZ()));
+            }
+            if (!clear) {
+                continue;
+            }
+            double score = hd + 0.3 * Vec3.atCenterOf(q).distanceTo(goal);
+            if (score < bestScore) {
+                bestScore = score;
+                best = q.immutable();
+            }
+        }
+        if (best == null) {
+            return false;
+        }
+        dropWater = best;
+        dropTicks = 0;
+        dropStartY = self.getY();
+        waterDebug = "drop into " + best.toShortString() + " from " + feet.toShortString();
+        return waterDropTick();
+    }
+
+    private boolean waterDropTick() {
+        BlockPos w = dropWater;
+        if (++dropTicks > 200) {
+            dropWater = null;
+            cooldown = 60;
+            return false;
+        }
+        if (self.getY() < dropStartY - 2 && (self.isInWater() || self.onGround())) {
+            if (self.isInWater()) {
+                waterDrops++;
+                waterDebug += " splash";
+            }
+            dropWater = null;
+            motor.resetStuck();
+            return false;
+        }
+        Vec3 target = new Vec3(w.getX() + 0.5, self.getY(), w.getZ() + 0.5);
+        motor.dare(); // off the edge on purpose
+        motor.moveToward(target);
+        double hd = Motor.horizontalDistance(self.position(), target);
+        if (self.onGround() && hd > 2.5) {
+            Direction d = Direction.getNearest(target.x - self.getX(), 0, target.z - self.getZ());
+            if (passable(self.blockPosition().relative(d).below())) {
+                motor.sprint(true);
+                motor.jump(); // a run and a leap out over the water
+            }
+        }
+        return true;
     }
 
     private boolean bridgeTick() {

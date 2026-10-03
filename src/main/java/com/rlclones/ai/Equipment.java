@@ -155,9 +155,107 @@ public final class Equipment {
             return true;
         }
         if (s.getItem() instanceof ProjectileWeaponItem) {
-            return p.getAbilities().instabuild || !p.getProjectile(s).isEmpty();
+            return p.getAbilities().instabuild || !p.getProjectile(s).isEmpty() || s.getItem() instanceof CrossbowItem && hasWarRockets(p);
         }
         return true; // modded launcher with its own ammo logic: just try it
+    }
+
+    /** A firework rocket with stars: shot from a crossbow it explodes where it hits (a plain rocket does no harm). */
+    public static boolean isWarRocket(ItemStack s) {
+        if (!(s.getItem() instanceof FireworkRocketItem)) {
+            return false;
+        }
+        net.minecraft.nbt.CompoundTag fw = s.getTagElement("Fireworks");
+        return fw != null && !fw.getList("Explosions", net.minecraft.nbt.Tag.TAG_COMPOUND).isEmpty();
+    }
+
+    public static int warRocketSlot(Player p) {
+        Inventory inv = p.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            if (isWarRocket(inv.items.get(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static boolean hasWarRockets(Player p) {
+        return warRocketSlot(p) >= 0 || isWarRocket(p.getOffhandItem());
+    }
+
+    /** A ranged weapon ready in the off hand (the main hand keeps the sword). */
+    public static boolean offhandRanged(Player p) {
+        ItemStack off = p.getOffhandItem();
+        return rangedKind(off) != RangedKind.NONE && canFire(p, off);
+    }
+
+    /** Swap inventory slot {@code slot} with whatever is in the off hand. */
+    public static void toOffhand(Player p, int slot) {
+        if (slot < 0) {
+            return;
+        }
+        Inventory inv = p.getInventory();
+        ItemStack off = p.getOffhandItem().copy();
+        p.setItemSlot(EquipmentSlot.OFFHAND, inv.items.get(slot).copy());
+        inv.items.set(slot, off);
+    }
+
+    /** Off hand item back into the bag. */
+    public static void stowOffhand(Player p) {
+        ItemStack off = p.getOffhandItem().copy();
+        if (!off.isEmpty() && p.getInventory().add(off)) {
+            p.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+        }
+    }
+
+    /**
+     * Nothing that belongs in the off hand (shield, totem): with a melee weapon in the main hand, a ranged weapon goes
+     * into the off hand so both are at the ready without switching - or, with nothing to shoot, food to eat on the go.
+     */
+    public static void offhandLoadout(Player p) {
+        ItemStack off = p.getOffhandItem();
+        if (off.getItem() instanceof ShieldItem || off.is(Items.TOTEM_OF_UNDYING) || !isArmed(p)) {
+            return;
+        }
+        if (isLauncher(off) && canFire(p, off)) {
+            return;
+        }
+        Inventory inv = p.getInventory();
+        int ranged = -1;
+        int bestScore = 0;
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (i == inv.selected || !isLauncher(s) || !canFire(p, s)) {
+                continue;
+            }
+            int score = s.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(s) ? 3 : rangedKind(s) == RangedKind.BOW ? 2 : 1;
+            if (score > bestScore) {
+                bestScore = score;
+                ranged = i;
+            }
+        }
+        if (ranged >= 0) {
+            toOffhand(p, ranged);
+            return;
+        }
+        if (com.rlclones.ai.FoodAid.goodFood(off)) {
+            return;
+        }
+        if (!off.isEmpty() && !(isLauncher(off) || off.getItem() instanceof FireworkRocketItem)) {
+            return; // something put there on purpose (a torch, a map...)
+        }
+        int food = -1;
+        double bestFood = 0;
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (i != inv.selected && com.rlclones.ai.FoodAid.goodFood(s) && foodScore(p, s) > bestFood) {
+                bestFood = foodScore(p, s);
+                food = i;
+            }
+        }
+        if (food >= 0) {
+            toOffhand(p, food);
+        }
     }
 
     /** Muzzle speed used for aiming (blocks/tick). */
@@ -475,6 +573,7 @@ public final class Equipment {
             if (weapon >= 0 && attackDamage(inv.items.get(weapon)) > attackDamage(p.getMainHandItem()) + 0.01) {
                 select(p, weapon);
             }
+            offhandLoadout(p);
         }
     }
 

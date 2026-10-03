@@ -37,7 +37,7 @@ public final class Config {
         b.pop();
 
         b.push("vision");
-        VIEW_DISTANCE = b.comment("Maximum distance (blocks) a clone can see an entity in full daylight.").defineInRange("viewDistance", 48.0, 4.0, 128.0);
+        VIEW_DISTANCE = b.comment("Maximum distance (blocks) a clone can see an entity in full daylight.").defineInRange("viewDistance", 96.0, 4.0, 256.0);
         FOV_HORIZONTAL = b.comment("Horizontal field of view in degrees (a 16:9 screen at FOV 70 is about 102).").defineInRange("fovHorizontal", 102.0, 30.0, 180.0);
         FOV_VERTICAL = b.comment("Vertical field of view in degrees (the vanilla FOV setting).").defineInRange("fovVertical", 70.0, 30.0, 110.0);
         DARKNESS_LIMITS_VISION = b.comment("Dark targets are harder to see (like for a player without night vision).").define("darknessLimitsVision", true);

@@ -152,6 +152,80 @@ public class Bases extends SavedData {
 
     public final List<Staircase> staircases = new ArrayList<>();
 
+    // ---------------------------------------------------------------- shafts dug straight down (ladder on one wall)
+
+    /** A 1x1 shaft dug straight down from {@code top} (where one stands at the rim), ladders on the {@code wall} side. */
+    public static final class Shaft {
+        public final ResourceKey<Level> dimension;
+        public final BlockPos top;
+        public final net.minecraft.core.Direction wall;
+        public BlockPos end;
+        public boolean finished;
+        /** Who is down there digging right now and when it last dug (not saved). */
+        public String digger = "";
+        public long lastDug;
+
+        public Shaft(ResourceKey<Level> dimension, BlockPos top, net.minecraft.core.Direction wall, BlockPos end, boolean finished) {
+            this.dimension = dimension;
+            this.top = top.immutable();
+            this.wall = wall;
+            this.end = end.immutable();
+            this.finished = finished;
+        }
+
+        public int depth() {
+            return top.getY() - end.getY();
+        }
+    }
+
+    public final List<Shaft> shafts = new ArrayList<>();
+
+    public Shaft addShaft(ResourceKey<Level> dim, BlockPos top, net.minecraft.core.Direction wall) {
+        Shaft s = new Shaft(dim, top, wall, top, false);
+        shafts.add(s);
+        setDirty();
+        return s;
+    }
+
+    /** The nearest shaft not dug to the bottom that nobody else is digging right now. */
+    @Nullable
+    public Shaft nearestShaft(ResourceKey<Level> dim, Vec3 pos, double radius, String me, long now) {
+        Shaft best = null;
+        double bestD = radius;
+        for (Shaft s : shafts) {
+            double d = Vec3.atCenterOf(s.top).distanceTo(pos);
+            boolean taken = !s.digger.isEmpty() && !s.digger.equals(me) && now - s.lastDug < 200;
+            if (s.dimension == dim && !s.finished && !taken && d < bestD) {
+                bestD = d;
+                best = s;
+            }
+        }
+        return best;
+    }
+
+    // ---------------------------------------------------------------- things creative clones built for everyone
+
+    /** "kind@x,y,z" of portals, enchanting rooms, farms... built by creative clones (each built once per place). */
+    public final java.util.Set<String> projects = new java.util.LinkedHashSet<>();
+
+    public boolean hasProject(ResourceKey<Level> dim, String kind, BlockPos near, int radius) {
+        for (String p : projects) {
+            String[] parts = p.split("@|,|\\|");
+            if (parts.length == 5 && parts[0].equals(kind) && parts[1].equals(dim.location().toString().replace(':', '_'))) {
+                BlockPos at = new BlockPos(Integer.parseInt(parts[2]), Integer.parseInt(parts[3]), Integer.parseInt(parts[4]));
+                if (at.distManhattan(near) <= radius) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public void addProject(ResourceKey<Level> dim, String kind, BlockPos at) {
+        projects.add(kind + "@" + dim.location().toString().replace(':', '_') + "|" + at.getX() + "," + at.getY() + "," + at.getZ());
+        setDirty();
+    }
+
     public Staircase addStaircase(ResourceKey<Level> dim, BlockPos top, net.minecraft.core.Direction dir) {
         Staircase s = new Staircase(dim, top, dir, top, false);
         staircases.add(s);
@@ -293,6 +367,17 @@ public class Bases extends SavedData {
                     NbtUtils.readBlockPos(st.getCompound("top")), net.minecraft.core.Direction.from3DDataValue(st.getInt("dir")),
                     NbtUtils.readBlockPos(st.getCompound("end")), st.getBoolean("finished")));
         }
+        ListTag shaftList = tag.getList("shafts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < shaftList.size(); i++) {
+            CompoundTag st = shaftList.getCompound(i);
+            r.shafts.add(new Shaft(ResourceKey.create(Registries.DIMENSION, new ResourceLocation(st.getString("dim"))),
+                    NbtUtils.readBlockPos(st.getCompound("top")), net.minecraft.core.Direction.from3DDataValue(st.getInt("wall")),
+                    NbtUtils.readBlockPos(st.getCompound("end")), st.getBoolean("finished")));
+        }
+        ListTag projectList = tag.getList("projects", Tag.TAG_STRING);
+        for (int i = 0; i < projectList.size(); i++) {
+            r.projects.add(projectList.getString(i));
+        }
         ListTag portalList = tag.getList("portals", Tag.TAG_COMPOUND);
         for (int i = 0; i < portalList.size(); i++) {
             CompoundTag pt = portalList.getCompound(i);
@@ -347,6 +432,22 @@ public class Bases extends SavedData {
             stairList.add(t);
         }
         tag.put("staircases", stairList);
+        ListTag shaftList = new ListTag();
+        for (Shaft st : shafts) {
+            CompoundTag t = new CompoundTag();
+            t.putString("dim", st.dimension.location().toString());
+            t.put("top", NbtUtils.writeBlockPos(st.top));
+            t.put("end", NbtUtils.writeBlockPos(st.end));
+            t.putInt("wall", st.wall.get3DDataValue());
+            t.putBoolean("finished", st.finished);
+            shaftList.add(t);
+        }
+        tag.put("shafts", shaftList);
+        ListTag projectList = new ListTag();
+        for (String p : projects) {
+            projectList.add(net.minecraft.nbt.StringTag.valueOf(p));
+        }
+        tag.put("projects", projectList);
         ListTag portalList = new ListTag();
         for (Portal p : portals) {
             CompoundTag pt = new CompoundTag();

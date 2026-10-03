@@ -175,7 +175,7 @@ public final class Perception {
         if (self.hasEffect(MobEffects.DARKNESS)) {
             return 10.0;
         }
-        return Config.get(Config.VIEW_DISTANCE, 48.0);
+        return Config.get(Config.VIEW_DISTANCE, 96.0);
     }
 
     /** Instant check: can this clone see the entity right now? */

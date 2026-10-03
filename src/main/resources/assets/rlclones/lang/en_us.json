@@ -95,6 +95,8 @@
   "key.rlclones.breeding": "Toggle clone breeding",
   "rlclones.msg.breeding_on": "Breeding ON: well-fed clones (and players) with food to spare make new clones",
   "rlclones.msg.breeding_off": "Breeding OFF",
+  "rlclones.msg.chat_on": "Clone chat shown",
+  "rlclones.msg.chat_off": "Clone chat hidden (clones still talk to each other)",
   "rlclones.msg.born": "%s was born to %s and %s",
   "rlclones.msg.born_you": "%s was born to you and %s",
   "rlclones.msg.breed_need": "Both parents need a full food bar and at least %s food items",

@@ -84,5 +84,6 @@ public final class StrategyState {
         q[Option.BREED.ordinal()] = threat == 0 && hp == 2 ? 0.9f : -0.5f;
         q[Option.ACHIEVE.ordinal()] = threat == 0 ? 0.35f : -0.4f;
         q[Option.STAIRS.ordinal()] = threat == 0 ? 0.45f : -0.4f;
+        q[Option.SHAFT.ordinal()] = threat == 0 ? 0.4f : -0.4f;
     }
 }

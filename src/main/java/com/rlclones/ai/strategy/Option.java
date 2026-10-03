@@ -50,7 +50,9 @@ public enum Option {
     /** Work towards an advancement not made yet (what unlocks it is read from its criteria). */
     ACHIEVE(1800),
     /** Dig a staircase down for ore - or carry on down one already started. */
-    STAIRS(3000);
+    STAIRS(3000),
+    /** Dig a shaft straight down with ladders - or carry on down one already started. */
+    SHAFT(4000);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;

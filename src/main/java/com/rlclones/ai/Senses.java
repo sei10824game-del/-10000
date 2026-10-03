@@ -158,7 +158,7 @@ public final class Senses {
         if (!Equipment.hasShield(agent)) {
             mask &= ~CombatAction.BLOCK.bit();
         }
-        if (Equipment.rangedSlot(agent) < 0) {
+        if (Equipment.rangedSlot(agent) < 0 && !Equipment.offhandRanged(agent)) {
             mask &= ~CombatAction.SHOOT.bit();
         }
         if (Equipment.usableSlot(agent, x -> true) < 0) {
@@ -210,6 +210,9 @@ public final class Senses {
     }
 
     public static boolean hasFood(Player agent) {
+        if (Equipment.foodScore(agent, agent.getOffhandItem()) > 0) {
+            return true; // at the ready in the off hand
+        }
         for (ItemStack s : agent.getInventory().items) {
             if (Equipment.foodScore(agent, s) > 0 || s.is(net.minecraft.world.item.Items.CAKE)) {
                 return true;
