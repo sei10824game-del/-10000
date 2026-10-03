@@ -1242,6 +1242,7 @@ public final class CreativePlay {
             if (level().getFluidState(water).isSource()) {
                 stage = 1;
                 idx = 0;
+                tries = 0;
                 return true;
             }
             // right over the middle, looking straight down into the hole (the bucket pours where one looks)
@@ -1273,6 +1274,26 @@ public final class CreativePlay {
                     }
                 }
             }
+        }
+        if (stage == 1) {
+            // crops want light: torches at the four corners outside the field first
+            BlockPos[] corners = {site.offset(-1, 0, -1), site.offset(5, 0, -1), site.offset(-1, 0, 5), site.offset(5, 0, 5)};
+            if (tries < corners.length * 30) {
+                BlockPos t = corners[tries / 30];
+                tries++;
+                if (level().getBlockState(t).is(Blocks.TORCH) || !free(t) || !solid(t.below())) {
+                    tries = (tries / 30 + 1) * 30;
+                    return true;
+                }
+                if (reach(Vec3.atCenterOf(t)) && hold(Items.TORCH)) {
+                    motor.placeBlockAt(t);
+                }
+                return true;
+            }
+            stage = 2;
+            idx = 0;
+            tries = 0;
+            return true;
         }
         if (idx >= cells.size()) {
             int tilled = 0;

@@ -3185,22 +3185,26 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         h.assertTrue(c.controller().perception().maxRange() >= 96, "view distance raised: " + c.controller().perception().maxRange());
         BlockPos base = h.absolutePos(new BlockPos(7, 2, 7));
+        // a clear line straight up for one tick only (put back at once: no water or lava from above runs down it)
+        net.minecraft.world.level.block.state.BlockState[] was = new net.minecraft.world.level.block.state.BlockState[76];
         for (int y = 2; y <= 75; y++) {
-            h.getLevel().setBlockAndUpdate(base.above(y), Blocks.AIR.defaultBlockState());
+            was[y] = h.getLevel().getBlockState(base.above(y));
+            h.getLevel().setBlock(base.above(y), Blocks.AIR.defaultBlockState(), 2);
         }
         var stand = new net.minecraft.world.entity.decoration.ArmorStand(h.getLevel(), base.getX() + 0.5, base.getY() + 70, base.getZ() + 0.9);
         stand.setNoGravity(true);
         stand.setGlowingTag(true);
         h.getLevel().addFreshEntity(stand);
         c.setXRot(-90f);
-        h.runAfterDelay(3, () -> {
-            boolean seen = c.controller().perception().canSee(stand);
-            String why = c.controller().perception().explain(stand);
-            stand.discard();
-            h.assertTrue(seen, "something 70 blocks off (beyond the old 48) is seen: " + why);
-            finish(h, c);
-            h.succeed();
-        });
+        boolean seen = c.controller().perception().canSee(stand);
+        String why = c.controller().perception().explain(stand);
+        stand.discard();
+        for (int y = 2; y <= 75; y++) {
+            h.getLevel().setBlock(base.above(y), was[y], 2);
+        }
+        h.assertTrue(seen, "something 70 blocks off (beyond the old 48) is seen: " + why);
+        finish(h, c);
+        h.succeed();
     }
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9cover")
@@ -3619,7 +3623,9 @@ public final class CloneGameTests {
         h.onEachTick(() -> top[0] |= c.getY() >= up.y - 0.01 && c.onGround() && c.getX() > up.x - 3);
         h.succeedWhen(() -> {
             var t = c.controller().travel();
-            h.assertTrue(t.waterClimbs >= 1 && top[0], "up the waterfall and out on top (" + t.waterDebug + " / " + t.debug + " " + c.controller().optionLog + ")");
+            h.assertTrue(top[0], "up on top by the friend (clone at " + c.position().subtract(h.absoluteVec(Vec3.ZERO)) + " " + t.waterDebug + " / " + t.debug + " "
+                    + c.controller().optionLog + ")");
+            h.assertTrue(t.waterClimbs >= 1, "by swimming up the falling water (" + t.waterDebug + ")");
             finish(h, c, friend);
         });
     }
