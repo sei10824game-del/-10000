@@ -146,7 +146,7 @@ public final class AttackTells {
     }
 
     /** {@code attacker} struck (a blow, a shot, a blast): the cues it showed just before count as its tells. */
-    public void onAttack(Entity attacker, long now, Brain brain) {
+    public void onAttack(Entity attacker, long now, Brain brain, boolean shot) {
         Track t = tracks.get(attacker.getId());
         if (t == null) {
             return;
@@ -162,12 +162,17 @@ public final class AttackTells {
             learned++;
         }
         if (attacker == blockFrom && now >= blockStart) {
-            blockEnd = Math.min(blockEnd, now + 2); // it came: the shield can go down again
+            // it came: the shield can go down again - once a shot has had time to arrive
+            blockEnd = shot ? Math.max(blockEnd, now + 4 + (long) (attacker.distanceTo(self) / 1.5)) : Math.min(blockEnd, now + 2);
         }
     }
 
     /** Every clone that has been watching {@code attacker} learns from its attack. */
     public static void attacked(Entity attacker) {
+        attacked(attacker, false);
+    }
+
+    public static void attacked(Entity attacker, boolean shot) {
         CloneManager m = CloneManager.peek();
         if (m == null || attacker == null) {
             return;
@@ -175,7 +180,7 @@ public final class AttackTells {
         long now = attacker.level().getGameTime();
         for (ClonePlayer c : m.clones()) {
             if (c != attacker && c.isAlive() && c.level() == attacker.level() && c.getCloneBrain() != null) {
-                c.controller().tells().onAttack(attacker, now, c.getCloneBrain());
+                c.controller().tells().onAttack(attacker, now, c.getCloneBrain(), shot);
             }
         }
     }

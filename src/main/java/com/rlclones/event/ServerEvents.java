@@ -356,7 +356,7 @@ public final class ServerEvents {
         }
         Entity owner = projectile.getOwner();
         if (owner instanceof LivingEntity) {
-            com.rlclones.ai.AttackTells.attacked(owner); // a shot (a skeleton's arrow, a rival clone's bow)
+            com.rlclones.ai.AttackTells.attacked(owner, true); // a shot (a skeleton's arrow, a rival clone's bow)
         }
         if (owner instanceof Mob mob && !Senses.isAgent(owner)) {
             for (ClonePlayer o : witnesses(mob.getServer(), mob)) {

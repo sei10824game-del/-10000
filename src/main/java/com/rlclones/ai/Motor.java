@@ -350,6 +350,13 @@ public final class Motor {
         return stuckCount;
     }
 
+    /** A walkable path to {@code goal} (null if there is none that gets there). */
+    @javax.annotation.Nullable
+    public Path pathTo(Vec3 goal) {
+        Path p = computePath(goal, 0.5);
+        return p != null && p.canReach() ? p : null;
+    }
+
     private Path computePath(Vec3 goal, double arrive) {
         if (!(self.level() instanceof ServerLevel level)) {
             return null;

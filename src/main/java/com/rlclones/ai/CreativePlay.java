@@ -327,7 +327,11 @@ public final class CreativePlay {
         return choose(now, friendInNeed);
     }
 
+    private Vec3 origin = Vec3.ZERO;
+
     private void start(Job j) {
+        origin = self.position();
+        attempts.merge(j, 1, Integer::sum);
         job = j;
         stage = 0;
         ticks = 0;
@@ -337,8 +341,16 @@ public final class CreativePlay {
         note("start");
     }
 
+    private final java.util.Map<Job, Integer> attempts = new java.util.EnumMap<>(Job.class);
+    private int lastEnemies = -1;
+
     private boolean choose(long now, boolean friendInNeed) {
         List<LivingEntity> crowd = crowd();
+        int seen = enemies(24).size();
+        if (seen != lastEnemies && log.length() < 600) {
+            log += " [enemies " + seen + "]";
+            lastEnemies = seen;
+        }
         if (crowd.size() >= 4 && now - lastTnt > 300) {
             Vec3 c = centre(crowd);
             if (blastSafe(c)) {
@@ -470,9 +482,8 @@ public final class CreativePlay {
                 }
             }
             default -> {
-                // up and away from the blast
-                Vec3 away = Consumables.horizontal(self.position().subtract(Vec3.atCenterOf(cells.get(0))));
-                flyTo(Vec3.atCenterOf(cells.get(0)).add(away.scale(9)).add(0, 8, 0), 1.0);
+                // back where we came from and up, away from the blast
+                flyTo(origin.add(0, 4, 0), 1.0);
                 return ++idx < 80;
             }
         }
@@ -816,9 +827,14 @@ public final class CreativePlay {
     private BlockPos hazardPatch() {
         List<BlockPos> found = new ArrayList<>();
         BlockPos feet = self.blockPosition();
+        Vec3 eye = self.getEyePosition();
         for (BlockPos p : BlockPos.betweenClosed(feet.offset(-14, -6, -14), feet.offset(14, 4, 14))) {
             if (harmful(level().getBlockState(p))) {
-                found.add(p.immutable());
+                var hit = level().clip(new net.minecraft.world.level.ClipContext(eye, Vec3.atCenterOf(p), net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, self));
+                if (hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS || hit.getBlockPos().distManhattan(p) <= 1) {
+                    found.add(p.immutable()); // in sight (not behind a wall in somebody else's place)
+                }
             }
         }
         BlockPos best = null;
@@ -916,8 +932,7 @@ public final class CreativePlay {
             }
             return ticks < 900;
         }
-        Vec3 away = Consumables.horizontal(self.position().subtract(Vec3.atCenterOf(site)));
-        flyTo(Vec3.atCenterOf(site).add(away.scale(9)).add(0, 8, 0), 1.0);
+        flyTo(origin.add(0, 4, 0), 1.0);
         return ++idx < 90;
     }
 
@@ -1007,7 +1022,7 @@ public final class CreativePlay {
         BlockPos a = anchor();
         var dim = level().dimension();
         boolean hasBase = bases.nearest(dim, self.position(), 64) != null;
-        if (!bases.hasProject(dim, "enchanting", a, 48)) {
+        if (!bases.hasProject(dim, "enchanting", a, 48) && !tooMany(Job.ENCHANTING)) {
             BlockPos s = findSite(a, 5, 5, 3, 3);
             if (s != null) {
                 site = s;
@@ -1015,7 +1030,7 @@ public final class CreativePlay {
                 return true;
             }
         }
-        if (hasBase && !bases.hasProject(dim, "farm", a, 48) && !farmlandNear(a, 12)) {
+        if (hasBase && !bases.hasProject(dim, "farm", a, 48) && !farmlandNear(a, 12) && !tooMany(Job.FARM)) {
             BlockPos s = findSite(a, 5, 5, 2, 3);
             if (s != null) {
                 site = s;
@@ -1023,7 +1038,7 @@ public final class CreativePlay {
                 return true;
             }
         }
-        if (!bases.hasProject(dim, "end_portal", a, 48)) {
+        if (!bases.hasProject(dim, "end_portal", a, 48) && !tooMany(Job.END_PORTAL)) {
             BlockPos s = findSite(a, 5, 5, 3, 6);
             if (s != null) {
                 site = s;
@@ -1031,7 +1046,7 @@ public final class CreativePlay {
                 return true;
             }
         }
-        if (!bases.hasProject(dim, "nether_portal", a, 48) && bases.nearestPortal(dim, Vec3.atCenterOf(a), 48) == null) {
+        if (!bases.hasProject(dim, "nether_portal", a, 48) && bases.nearestPortal(dim, Vec3.atCenterOf(a), 48) == null && !tooMany(Job.NETHER_PORTAL)) {
             BlockPos s = findSite(a, 4, 3, 6, 4);
             if (s != null) {
                 site = s.offset(0, 0, 1);
@@ -1040,12 +1055,12 @@ public final class CreativePlay {
             }
         }
         List<Animal> animals = level().getEntitiesOfClass(Animal.class, new AABB(a).inflate(16), Animal::isAlive);
-        if (animals.size() < 6 && !bases.hasProject(dim, "mobs", a, 32)) {
+        if (animals.size() < 6 && !bases.hasProject(dim, "mobs", a, 32) && !tooMany(Job.MOBS)) {
             site = a;
             start(Job.MOBS);
             return true;
         }
-        if (level().getEntitiesOfClass(IronGolem.class, new AABB(a).inflate(32)).isEmpty() && !bases.hasProject(dim, "golem", a, 32)) {
+        if (level().getEntitiesOfClass(IronGolem.class, new AABB(a).inflate(32)).isEmpty() && !bases.hasProject(dim, "golem", a, 32) && !tooMany(Job.GOLEM)) {
             BlockPos s = findSite(a, 3, 1, 4, 2);
             if (s != null) {
                 site = s;
@@ -1066,7 +1081,13 @@ public final class CreativePlay {
         return false;
     }
 
+    /** A project that keeps failing here is left alone. */
+    private boolean tooMany(Job j) {
+        return attempts.getOrDefault(j, 0) >= 3;
+    }
+
     private void finishProject(String kind, BlockPos at) {
+        attempts.remove(job);
         Bases.get(self.getServer()).addProject(level().dimension(), kind, at);
         lastBuild = level().getGameTime();
     }
@@ -1163,19 +1184,25 @@ public final class CreativePlay {
                 tries = 0;
                 return true;
             }
-            // stand in the middle on the floor
-            if (Motor.horizontalDistance(self.position(), middle) > 0.4 || Math.abs(self.getY() - middle.y) > 0.6) {
-                motor.fly(middle);
-                if (++tries > 200) {
+            // from over the middle, facing out towards each frame: it is placed facing us, the middle
+            if (self.position().distanceTo(middle.add(0, 1.0, 0)) > 0.6) {
+                motor.fly(middle.add(0, 1.0, 0));
+                if (++tries > 300) {
+                    note("could not get over the middle from " + self.blockPosition().toShortString());
                     return false;
                 }
                 return true;
             }
-            motor.land();
+            motor.fly(middle.add(0, 1.0, 0));
             if (hold(Items.END_PORTAL_FRAME)) {
-                useOnTop(p.below()); // looking out at it: it faces us, the middle
+                Direction out = Direction.getNearest(p.getX() - site.getX() - 2, 0, p.getZ() - site.getZ() - 2);
+                self.setYRot(out.toYRot());
+                self.setYHeadRot(out.toYRot());
+                self.setXRot(60f);
+                motor.useOnTopFace(p.below());
             }
-            if (++tries > 260) {
+            if (++tries > 400) {
+                note("frames would not go down");
                 return false;
             }
             return true;

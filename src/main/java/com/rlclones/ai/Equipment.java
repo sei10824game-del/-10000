@@ -214,8 +214,8 @@ public final class Equipment {
      */
     public static void offhandLoadout(Player p) {
         ItemStack off = p.getOffhandItem();
-        if (off.getItem() instanceof ShieldItem || off.is(Items.TOTEM_OF_UNDYING) || !isArmed(p)) {
-            return;
+        if (off.getItem() instanceof ShieldItem || off.is(Items.TOTEM_OF_UNDYING) || attackDamage(p.getMainHandItem()) < 2.5) {
+            return; // (a melee weapon in the main hand first: even a wooden sword)
         }
         if (isLauncher(off) && canFire(p, off)) {
             return;

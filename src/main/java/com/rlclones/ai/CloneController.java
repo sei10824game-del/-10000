@@ -35,6 +35,7 @@ import net.minecraft.world.level.ClipContext;
 
 import javax.annotation.Nullable;
 import net.minecraft.world.entity.player.Player;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -495,7 +496,8 @@ public final class CloneController {
         if (trapCheck) {
             lastTrapCheck = now;
         }
-        if (trapCheck && now - escapeFailedAt > 600 && !motor.isFlying() && !hostileWithin(3.5, now) && escape.isTrapped()) {
+        if (trapCheck && now - escapeFailedAt > 600 && !motor.isFlying() && !hostileWithin(3.5, now) && option != Option.SHAFT
+                && forcedOption != Option.SHAFT && escape.isTrapped()) {
             // reflex, like a player who notices he fell into a hole: get out before doing anything else
             if (option != null) {
                 finishOption(false);
@@ -2703,8 +2705,8 @@ public final class CloneController {
         for (Perception.Seen t : threats) {
             nearestNow = Math.min(nearestNow, t.pos.distanceTo(self.position()));
         }
-        Vec3 best = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
+        List<Vec3> spots = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
         for (int dx = -10; dx <= 10; dx++) {
             for (int dz = -10; dz <= 10; dz++) {
                 double r = Math.sqrt(dx * dx + dz * dz);
@@ -2734,16 +2736,39 @@ public final class CloneController {
                         }
                     }
                     Vec3 dir = spot.subtract(self.position());
-                    double score = solid + 2.0 * away.dot(new Vec3(dir.x, 0, dir.z).normalize()) - 0.3 * r + 0.2 * nearest;
-                    if (score > bestScore) {
-                        bestScore = score;
-                        best = spot;
-                    }
+                    spots.add(spot);
+                    scores.add(solid + 2.0 * away.dot(new Vec3(dir.x, 0, dir.z).normalize()) - 0.3 * r + 0.2 * nearest);
                     break;
                 }
             }
         }
-        return best;
+        // the best few that can actually be walked to without passing them
+        for (int tries = 0; tries < 4 && !spots.isEmpty(); tries++) {
+            int bi = 0;
+            for (int i = 1; i < spots.size(); i++) {
+                if (scores.get(i) > scores.get(bi)) {
+                    bi = i;
+                }
+            }
+            Vec3 spot = spots.remove(bi);
+            scores.remove(bi);
+            net.minecraft.world.level.pathfinder.Path path = motor.pathTo(spot);
+            if (path == null || path.getNodeCount() > 30) {
+                badCover.add(BlockPos.containing(spot));
+                continue;
+            }
+            boolean pastThem = false;
+            for (int i = 0; i < path.getNodeCount() && !pastThem; i++) {
+                Vec3 n = Vec3.atBottomCenterOf(path.getNodePos(i));
+                for (Perception.Seen t : threats) {
+                    pastThem |= n.distanceTo(t.pos) < 2.0;
+                }
+            }
+            if (!pastThem) {
+                return spot;
+            }
+        }
+        return null;
     }
 
     private int fleeStuck;

@@ -1050,6 +1050,7 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "farm")
     public static void tillsSoilByWaterAndPlants(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 0, 10), Blocks.STONE); // the water must not run away under the floor
         h.setBlock(new BlockPos(7, 1, 10), Blocks.WATER);
         for (int x = 6; x <= 8; x++) {
             h.setBlock(new BlockPos(x, 1, 11), Blocks.GRASS_BLOCK);
@@ -3334,9 +3335,10 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9tnt")
     public static void creativeBlowsUpACrowdWithTnt(GameTestHelper h) {
         clearBases(h);
+        blastProof(h);
         ClonePlayer cr = creative(h, 2.5, 2.5, -45f);
         List<Husk> crowd = new ArrayList<>();
-        for (double[] p : new double[][]{{9.5, 9.5}, {10.5, 9.5}, {9.5, 10.5}, {10.5, 10.5}, {11.5, 10.5}}) {
+        for (double[] p : new double[][]{{6.5, 7.5}, {7.5, 7.5}, {6.5, 8.5}, {7.5, 8.5}, {8.5, 8.5}}) {
             crowd.add(target(h, p[0], p[1], 20f));
         }
         h.succeedWhen(() -> {
@@ -3345,6 +3347,17 @@ public final class CloneGameTests {
             h.assertTrue(crowd.stream().filter(e -> e.isAlive() && e.getHealth() >= 20f).count() <= 1, "and the blast catches the crowd");
             finish(h, cr);
         });
+    }
+
+    /** Obsidian under the floor: a blast in the arena cannot hollow out the ground the next tests stand on. */
+    private static void blastProof(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = -2; y <= 0; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.OBSIDIAN);
+                }
+            }
+        }
     }
 
     private static void baseAt(GameTestHelper h, BlockPos rel, String... done) {
@@ -3394,7 +3407,7 @@ public final class CloneGameTests {
             }
         }
         baseAt(h, new BlockPos(3, 2, 3), "enchanting", "nether_portal", "end_portal");
-        ClonePlayer friend = clone(h, 4.5, 5.5, 0f, false);
+        ClonePlayer friend = clone(h, 5.5, 8.5, 0f, false);
         friend.getInventory().add(new ItemStack(Items.IRON_SWORD));
         ClonePlayer cr = creative(h, 5.5, 5.5, 0f);
         h.succeedWhen(() -> {
@@ -3420,7 +3433,7 @@ public final class CloneGameTests {
     public static void creativeSpawnsAnimalsAndBuildsAnIronGolem(GameTestHelper h) {
         clearBases(h);
         baseAt(h, new BlockPos(3, 2, 3), "enchanting", "nether_portal", "end_portal", "farm");
-        ClonePlayer friend = clone(h, 4.5, 5.5, 0f, false);
+        ClonePlayer friend = clone(h, 5.5, 8.5, 0f, false);
         friend.getInventory().add(new ItemStack(Items.IRON_SWORD));
         ClonePlayer cr = creative(h, 5.5, 5.5, 0f);
         h.succeedWhen(() -> {
@@ -3531,7 +3544,8 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r9hazard")
     public static void creativeBlowsUpAPatchOfHarmfulBlocks(GameTestHelper h) {
         clearBases(h);
-        for (int x = 8; x <= 12; x++) {
+        blastProof(h);
+        for (int x = 6; x <= 10; x++) {
             for (int z = 5; z <= 9; z++) {
                 if ((x + z) % 2 == 0) {
                     h.setBlock(new BlockPos(x, 2, z), Blocks.COBWEB);
@@ -3540,11 +3554,11 @@ public final class CloneGameTests {
                 }
             }
         }
-        ClonePlayer cr = creative(h, 3.5, 7.5, -90f);
+        ClonePlayer cr = creative(h, 2.5, 7.5, -90f);
         h.succeedWhen(() -> {
             var play = cr.controller().creative().play();
             int left = 0;
-            for (int x = 8; x <= 12; x++) {
+            for (int x = 6; x <= 10; x++) {
                 for (int z = 5; z <= 9; z++) {
                     left += h.getBlockState(new BlockPos(x, 2, z)).is(Blocks.COBWEB) || h.getBlockState(new BlockPos(x, 1, z)).is(Blocks.MAGMA_BLOCK) ? 1 : 0;
                 }
@@ -3614,7 +3628,8 @@ public final class CloneGameTests {
         h.onEachTick(() -> lowest[0] = Math.min(lowest[0], c.getHealth()));
         h.succeedWhen(() -> {
             var t = c.controller().travel();
-            h.assertTrue(t.waterDrops >= 1 && c.getY() < cliff.y - 5, "down off the cliff into the water (" + t.waterDebug + " / " + t.debug + ")");
+            h.assertTrue(t.waterDrops >= 1 && c.getY() < cliff.y - 5, "down off the cliff into the water (" + t.waterDebug + " / " + t.debug + " "
+                    + t.guardDebug + " " + c.controller().optionLog + ")");
             h.assertTrue(lowest[0] >= 20f, "without a scratch: " + lowest[0]);
             finish(h, c, friend);
         });
@@ -3648,7 +3663,8 @@ public final class CloneGameTests {
             var st = c.controller().storage();
             com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             var base = bases.nearest(h.getLevel().dimension(), c.position(), 32);
-            h.assertTrue(st.buildingsClaimed >= 1 && base != null, "the clone moves into the empty house (" + st.claimDebug + ")");
+            h.assertTrue(st.buildingsClaimed >= 1 && base != null, "the clone moves into the empty house (" + st.claimDebug + " stage " + st.stage()
+                    + " bases " + bases.bases.size() + (base == null ? "" : " at " + base.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()) + ")");
             BlockPos center = base.center.subtract(h.absolutePos(BlockPos.ZERO));
             h.assertTrue(center.getX() >= 9 && center.getX() <= 11 && center.getZ() >= 5 && center.getZ() <= 8, "the base is inside it: " + center.toShortString());
             BlockPos chest = base.chests.get(0).subtract(h.absolutePos(BlockPos.ZERO));
@@ -3664,7 +3680,7 @@ public final class CloneGameTests {
     private static void shaftBlock(GameTestHelper h) {
         for (int x = 6; x <= 8; x++) {
             for (int z = 6; z <= 8; z++) {
-                for (int y = 2; y <= 6; y++) {
+                for (int y = 2; y <= 4; y++) {
                     h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
                 }
             }
@@ -3677,7 +3693,7 @@ public final class CloneGameTests {
             c.getCloneBrain().learnBlock(b);
         }
         c.controller().shafts().assumeSurface = true;
-        c.controller().shafts().targetY = (int) topY - 40;
+        c.controller().shafts().targetY = h.absolutePos(new BlockPos(0, 2, 0)).getY(); // never through the arena floor
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.SHAFT;
     }
 
@@ -3686,12 +3702,12 @@ public final class CloneGameTests {
         clearBases(h);
         shaftBlock(h);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        Vec3 top = h.absoluteVec(new Vec3(7.5, 7, 7.5));
+        Vec3 top = h.absoluteVec(new Vec3(7.5, 5, 7.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, 0f, 0f);
         stairsKit(h, c);
         c.getInventory().add(new ItemStack(Items.STICK, 7));
-        h.setBlock(new BlockPos(6, 7, 6), Blocks.CRAFTING_TABLE);
-        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(6, 7, 6)));
+        h.setBlock(new BlockPos(6, 5, 6), Blocks.CRAFTING_TABLE);
+        c.controller().perception().noteBlock(h.absolutePos(new BlockPos(6, 5, 6)));
         shaftMind(h, c, top.y);
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
@@ -3702,7 +3718,7 @@ public final class CloneGameTests {
             h.assertTrue(s != null && s.depth() >= 3 && sm.laddersPlaced >= 3, "dug straight down with a ladder at every level ("
                     + (s == null ? "no shaft" : "depth " + s.depth()) + " ladders " + sm.laddersPlaced + " " + sm.debug + " | " + sm.trace + ")");
             int ladders = 0;
-            for (int y = 2; y <= 6; y++) {
+            for (int y = 2; y <= 4; y++) {
                 ladders += h.getLevel().getBlockState(new BlockPos(s.top.getX(), h.absolutePos(new BlockPos(0, y, 0)).getY(), s.top.getZ())).is(Blocks.LADDER) ? 1 : 0;
             }
             h.assertTrue(ladders >= 3, "the ladders are on the wall: " + ladders);
@@ -3717,19 +3733,19 @@ public final class CloneGameTests {
         clearBases(h);
         shaftBlock(h);
         var ladder = Blocks.LADDER.defaultBlockState().setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.WEST);
-        h.setBlock(new BlockPos(7, 6, 7), ladder);
-        h.setBlock(new BlockPos(7, 5, 7), ladder);
+        h.setBlock(new BlockPos(7, 4, 7), ladder);
+        h.setBlock(new BlockPos(7, 3, 7), ladder);
         com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
-        var shaft = bases.addShaft(h.getLevel().dimension(), h.absolutePos(new BlockPos(7, 7, 7)), Direction.EAST);
-        shaft.end = h.absolutePos(new BlockPos(7, 5, 7));
+        var shaft = bases.addShaft(h.getLevel().dimension(), h.absolutePos(new BlockPos(7, 5, 7)), Direction.EAST);
+        shaft.end = h.absolutePos(new BlockPos(7, 3, 7));
         ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
-        Vec3 top = h.absoluteVec(new Vec3(6.5, 7, 6.5));
+        Vec3 top = h.absoluteVec(new Vec3(6.5, 5, 6.5));
         c.teleportTo(h.getLevel(), top.x, top.y, top.z, 0f, 0f);
         stairsKit(h, c);
         c.getInventory().add(new ItemStack(Items.LADDER, 3));
         shaftMind(h, c, top.y);
         c.setAiEnabled(true);
-        int bottom = h.absolutePos(new BlockPos(0, 3, 0)).getY();
+        int bottom = h.absolutePos(new BlockPos(0, 2, 0)).getY();
         h.succeedWhen(() -> {
             var sm = c.controller().shafts();
             h.assertTrue(sm.resumed >= 1 && shaft.end.getY() <= bottom, "climbed down the shaft someone started and dug on from its bottom ("

@@ -38,6 +38,7 @@ public final class ShaftMining {
     private int ticks;
     private int stuck;
     private int craftTries;
+    private int lastLadders;
     private BlockPos lastFeet = BlockPos.ZERO;
 
     /** Dig down to here at most. */
@@ -118,6 +119,7 @@ public final class ShaftMining {
         ticks = 0;
         stuck = 0;
         craftTries = 0;
+        lastLadders = ladders();
         lastFeet = self.blockPosition();
         motor.resetStuck();
     }
@@ -182,6 +184,11 @@ public final class ShaftMining {
     /** Ladders first: sticks if need be, then ladders (through the crafting table like anyone). */
     private Status craftTick() {
         int have = ladders();
+        if (have > lastLadders) {
+            laddersCrafted += have - lastLadders; // (whichever tick the crafting finished on)
+            trace("crafted" + have);
+        }
+        lastLadders = have;
         if (have >= WANT_LADDERS || have > 0 && craftTries > 2) {
             crafting.forcedTarget = null;
             crafting.reset();
@@ -201,10 +208,7 @@ public final class ShaftMining {
         crafting.forcedTarget = target;
         if (crafting.tick() == Crafting.Status.DONE) {
             int now = ladders();
-            if (now > have) {
-                laddersCrafted += now - have;
-                trace("crafted" + now);
-            } else if (target == Items.LADDER) {
+            if (now <= have && target == Items.LADDER) {
                 craftTries++;
                 if (craftTries > 4 && now == 0) {
                     crafting.forcedTarget = null;

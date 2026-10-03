@@ -483,6 +483,9 @@ public final class Storage {
                     return Status.WORKING;
                 }
                 BlockPos home = claimFailed ? null : strayBuilding(bases);
+                if (home == null && !claimFailed) {
+                    claimDebug = "no empty building around";
+                }
                 if (home != null) {
                     claimSpot = home; // a house standing empty nearby: move in instead of building one
                     claimTicks = 0;
@@ -684,6 +687,10 @@ public final class Storage {
     private final Set<BlockPos> badBuildings = new HashSet<>();
     public int buildingsClaimed;
     public String claimDebug = "";
+
+    public int stage() {
+        return stage;
+    }
 
     /** Blocks people build with (not what the ground is made of). */
     private static boolean builtBlock(net.minecraft.world.level.block.state.BlockState st) {

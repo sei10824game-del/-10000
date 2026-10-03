@@ -145,6 +145,7 @@ public final class CreativeHelper {
         if (friend == null) {
             motor.stop();
             motor.land();
+            motor.lookAngles(self.getYRot() + 25f, (now / 40) % 2 == 0 ? 0f : -30f); // turning round, looking out for the others
             debug = "nobody to help";
             return;
         }
