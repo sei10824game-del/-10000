@@ -600,11 +600,18 @@ public final class CreativePlay {
 
     // ------------------------------------------------------------------ over the edge
 
-    /** How far the ground under the mob's feet falls away below the block it stands on. */
+    /** How far the ground under the mob's feet falls away below the block it stands on (a ledge, a bridge: not open ground). */
     private int dropUnder(Entity e) {
         BlockPos support = e.blockPosition().below();
         if (!solid(support)) {
             return 0;
+        }
+        int open = 0;
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            open += solid(support.relative(d)) ? 0 : 1;
+        }
+        if (open < 2) {
+            return 0; // part of the ground all round: breaking it only makes a hole
         }
         int d = 0;
         for (BlockPos p = support.below(); d < 24 && !solid(p) && level().getFluidState(p).isEmpty(); p = p.below()) {
@@ -1016,19 +1023,19 @@ public final class CreativePlay {
                 return true;
             }
         }
-        if (!bases.hasProject(dim, "nether_portal", a, 48) && bases.nearestPortal(dim, Vec3.atCenterOf(a), 48) == null) {
-            BlockPos s = findSite(a, 4, 3, 6, 4);
-            if (s != null) {
-                site = s.offset(0, 0, 1);
-                start(Job.NETHER_PORTAL);
-                return true;
-            }
-        }
         if (!bases.hasProject(dim, "end_portal", a, 48)) {
             BlockPos s = findSite(a, 5, 5, 3, 6);
             if (s != null) {
                 site = s;
                 start(Job.END_PORTAL);
+                return true;
+            }
+        }
+        if (!bases.hasProject(dim, "nether_portal", a, 48) && bases.nearestPortal(dim, Vec3.atCenterOf(a), 48) == null) {
+            BlockPos s = findSite(a, 4, 3, 6, 4);
+            if (s != null) {
+                site = s.offset(0, 0, 1);
+                start(Job.NETHER_PORTAL);
                 return true;
             }
         }
@@ -1174,9 +1181,8 @@ public final class CreativePlay {
             return true;
         }
         if (stage == 1) {
-            // step out of the ring before the eyes go in (the portal opens under whoever stands there)
-            Vec3 outside = Vec3.atBottomCenterOf(site.offset(2, 0, -2)).add(0, 1.5, 0);
-            if (flyTo(outside, 0.8)) {
+            // up out of the ring before the eyes go in (the portal opens under whoever stands there)
+            if (flyTo(middle.add(0, 3, 0), 0.8)) {
                 stage = 2;
             }
             return ticks < 600;
@@ -1195,9 +1201,8 @@ public final class CreativePlay {
             idx++;
             return true;
         }
-        Vec3 out = Consumables.horizontal(Vec3.atCenterOf(p).subtract(Vec3.atCenterOf(site.offset(2, 0, 2))));
-        Vec3 hover = Vec3.atCenterOf(p).add(Math.round(out.x) * 2.0, 1.0, Math.round(out.z) * 2.0); // outside the ring, never over it
-        if (flyTo(hover, 0.7) && hold(Items.ENDER_EYE)) {
+        Vec3 hover = Vec3.atBottomCenterOf(p).add(0, 2.5, 0); // right over the frame, never over the middle
+        if (flyTo(hover, 0.5) && hold(Items.ENDER_EYE)) {
             lookNow(Vec3.atCenterOf(p).add(0, 0.4, 0));
             motor.useOnFace(p, Direction.UP);
         }

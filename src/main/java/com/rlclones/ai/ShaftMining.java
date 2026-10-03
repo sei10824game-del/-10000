@@ -301,8 +301,9 @@ public final class ShaftMining {
             bases().setDirty();
         }
         Vec3 c = new Vec3(s.top.getX() + 0.5, self.getY(), s.top.getZ() + 0.5);
-        if (Motor.horizontalDistance(self.position(), c) > 0.12) {
+        if (Motor.horizontalDistance(self.position(), c) > 0.15) {
             motor.moveToward(c); // dead centre: the ladder goes beside us, the hole right under us
+            motor.sneak(true); // small careful steps
             return Status.WORKING;
         }
         motor.stop();

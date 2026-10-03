@@ -1522,7 +1522,9 @@ public final class CloneController {
         }
         for (Perception.Seen s : perception.visible()) {
             Entity e = s.entity;
-            if ((e instanceof Mob || e instanceof Player) && e.isAlive() && e.distanceTo(self) < 32) {
+            boolean harmless = e instanceof net.minecraft.world.entity.animal.Animal && !(e instanceof net.minecraft.world.entity.NeutralMob)
+                    || e instanceof net.minecraft.world.entity.npc.AbstractVillager;
+            if ((e instanceof Mob || e instanceof Player) && !harmless && e.isAlive() && e.distanceTo(self) < 32) {
                 tells.watch(e, now, brain(), Senses.isHostileTo(e, self));
             }
         }

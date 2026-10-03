@@ -3164,7 +3164,7 @@ public final class CloneGameTests {
         for (int y = 2; y <= 75; y++) {
             h.getLevel().setBlockAndUpdate(base.above(y), Blocks.AIR.defaultBlockState());
         }
-        var stand = new net.minecraft.world.entity.decoration.ArmorStand(h.getLevel(), base.getX() + 0.5, base.getY() + 70, base.getZ() + 0.5);
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(h.getLevel(), base.getX() + 0.5, base.getY() + 70, base.getZ() + 0.9);
         stand.setNoGravity(true);
         stand.setGlowingTag(true);
         h.getLevel().addFreshEntity(stand);
@@ -3225,7 +3225,7 @@ public final class CloneGameTests {
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         c.controller().forcedAction = CombatAction.HOLD;
-        var husk = target(h, 8.5, 7.5, 40f);
+        var husk = slowHusk(h, 8.5, 2, 7.5); // (a mob without AI never steps into the fire)
         boolean[] burnt = {false};
         h.onEachTick(() -> burnt[0] |= husk.isOnFire());
         h.succeedWhen(() -> {
@@ -3244,7 +3244,7 @@ public final class CloneGameTests {
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         c.controller().forcedAction = CombatAction.HOLD;
-        target(h, 8.5, 7.5, 40f);
+        slowHusk(h, 8.5, 2, 7.5);
         h.succeedWhen(() -> {
             var k = c.getCloneBrain().knowledgeIfPresent("minecraft:husk");
             h.assertTrue(c.controller().consumables().websPlaced >= 1 && h.getBlockState(new BlockPos(8, 2, 7)).is(Blocks.COBWEB),
@@ -3320,7 +3320,7 @@ public final class CloneGameTests {
         Vec3 top = h.absoluteVec(new Vec3(11.5, 9, 7.5));
         friend.teleportTo(h.getLevel(), top.x, top.y, top.z, 90f, 0f);
         friend.getFoodData().setFoodLevel(4);
-        ClonePlayer cr = creative(h, 3.5, 7.5, -90f);
+        ClonePlayer cr = creative(h, 1.5, 7.5, -90f);
         double[] maxY = {-1000};
         h.onEachTick(() -> maxY[0] = Math.max(maxY[0], cr.getY()));
         h.succeedWhen(() -> {
