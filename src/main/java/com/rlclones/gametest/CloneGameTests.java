@@ -2494,8 +2494,14 @@ public final class CloneGameTests {
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         portalLoop(h, c);
         h.succeedWhen(() -> {
+            StringBuilder drops = new StringBuilder();
+            for (var it : h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, c.getBoundingBox().inflate(16))) {
+                drops.append(' ').append(it.getItem()).append('@').append(it.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
+            }
             h.assertTrue(c.getInventory().countItem(Items.OBSIDIAN) >= 1, "water on the lava source makes obsidian, mined with the diamond pickaxe ("
-                    + c.controller().portals().debug + " mine=" + c.controller().motor().mineDebug + ")");
+                    + c.controller().portals().debug + " mine=" + c.controller().motor().mineDebug + " made " + c.controller().portals().obsidianMade
+                    + " block " + h.getBlockState(new BlockPos(7, 1, 10)) + " below " + h.getBlockState(new BlockPos(7, 0, 10)) + " drops" + drops
+                    + " clone@" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             h.assertTrue(c.getInventory().countItem(Items.WATER_BUCKET) >= 1, "and the water is scooped back up");
             finish(h, c);
         });

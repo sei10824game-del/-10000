@@ -1244,7 +1244,8 @@ public final class CreativePlay {
                 idx = 0;
                 return true;
             }
-            if (!reach(Vec3.atCenterOf(water))) {
+            // right over the middle, looking straight down into the hole (the bucket pours where one looks)
+            if (!flyTo(new Vec3(water.getX() + 0.5, water.getY() + 2.1, water.getZ() + 0.5), 0.4)) {
                 if (ticks >= 300) {
                     note("could not reach the middle " + water.toShortString() + " from " + self.blockPosition().toShortString());
                 }
@@ -1255,7 +1256,7 @@ public final class CreativePlay {
                 return true;
             }
             if (hold(Items.WATER_BUCKET)) {
-                lookNow(new Vec3(water.getX() + 0.5, water.getY() + 0.02, water.getZ() + 0.5));
+                self.setXRot(90f);
                 motor.useHeldItem(InteractionHand.MAIN_HAND);
             }
             if (tries == 199) {

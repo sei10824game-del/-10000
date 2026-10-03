@@ -539,8 +539,14 @@ public final class Storage {
                     return Status.WORKING;
                 }
                 Vec3 inside = Vec3.atBottomCenterOf(home);
-                if (Motor.horizontalDistance(self.position(), inside) > 0.9 || Math.abs(self.getY() - home.getY()) > 0.9) {
+                double off = Motor.horizontalDistance(self.position(), inside);
+                if (off > 1.0 || Math.abs(self.getY() - home.getY()) > 0.9) {
                     motor.navigate(inside, 0.5, false);
+                    return Status.WORKING;
+                }
+                if (off > 0.25) {
+                    motor.moveToward(inside); // right in the middle: the chest goes beside us, not into us
+                    motor.sneak(true);
                     return Status.WORKING;
                 }
                 motor.stop();
@@ -548,6 +554,7 @@ public final class Storage {
                 if (spot == null) {
                     badBuildings.add(home);
                     claimFailed = true;
+                    claimDebug = "no room for a chest in " + home.toShortString();
                     stage = 0;
                     return Status.WORKING;
                 }
@@ -564,6 +571,7 @@ public final class Storage {
                 } else if (++openTries > 40) {
                     badBuildings.add(home);
                     claimFailed = true;
+                    claimDebug = "the chest would not go down at " + spot.toShortString() + " from " + self.position();
                     stage = 0;
                 }
                 return Status.WORKING;
@@ -779,7 +787,8 @@ public final class Storage {
         for (Direction d : Direction.Plane.HORIZONTAL) {
             BlockPos c = home.relative(d);
             if (!level.getBlockState(c).canBeReplaced() || !level.getBlockState(c.above()).canBeReplaced()
-                    || level.getBlockState(c.below()).getCollisionShape(level, c.below()).isEmpty() || !indoors(level, c)) {
+                    || level.getBlockState(c.below()).getCollisionShape(level, c.below()).isEmpty() || !indoors(level, c)
+                    || self.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(c))) {
                 continue;
             }
             if (!level.getBlockState(c.relative(d)).getCollisionShape(level, c.relative(d)).isEmpty()) {

@@ -284,7 +284,11 @@ public final class Travel {
         }
         Vec3 center = new Vec3(col.getX() + 0.5, self.getY(), col.getZ() + 0.5);
         if (!inColumn) {
-            motor.moveToward(center); // into the bottom of the fall
+            if (Motor.horizontalDistance(self.position(), center) > 1.2) {
+                motor.navigate(Vec3.atBottomCenterOf(col), 0.3, false); // round to the way in
+            } else {
+                motor.moveToward(center); // into the bottom of the fall
+            }
             if (self.horizontalCollision && self.onGround()) {
                 motor.jump();
             }
