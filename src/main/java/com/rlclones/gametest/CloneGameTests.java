@@ -94,6 +94,7 @@ public final class CloneGameTests {
                         manager(h).remove(live, true, Component.literal("test failed"));
                     }
                     h.killAllEntities();
+                    clearAbove(h);
                     // world-wide things a failed test may leave behind: no staircase to lure other tests' clones away
                     com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
                     b.staircases.clear();
@@ -123,6 +124,20 @@ public final class CloneGameTests {
         h.assertTrue(CloneManager.errors() == 0, "clone AI threw " + CloneManager.errors() + " errors (see log)");
         // finished arenas stay in the world (behind see-through barriers): leave no mobs there to distract later tests
         h.killAllEntities();
+        clearAbove(h);
+    }
+
+    /** Whatever a test built higher than the arena (a portal's top, a pillar) would still stand there for the next test. */
+    private static void clearAbove(GameTestHelper h) {
+        for (int x = 0; x <= 14; x++) {
+            for (int z = 0; z <= 14; z++) {
+                for (int y = 6; y <= 12; y++) {
+                    if (!h.getBlockState(new BlockPos(x, y, z)).isAir()) {
+                        h.setBlock(new BlockPos(x, y, z), Blocks.AIR);
+                    }
+                }
+            }
+        }
     }
 
     private static Pig pig(GameTestHelper h, double x, double z) {
@@ -2887,7 +2902,9 @@ public final class CloneGameTests {
             h.assertTrue(pen != null, "a pen built for the cows (" + c.controller().optionLog + " " + c.controller().animals().livestockDebug + " remembered "
                     + c.controller().perception().remembered().size() + " cows " + cow1.isAlive() + "@" + cow1.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
                     + " " + cow2.isAlive() + " clone@" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
-            h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (lured "
+            var gateNow = h.getLevel().getBlockState(pen.origin().offset(pen.size() / 2, 0, 0));
+            h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (gate " + gateNow + " held "
+                    + c.getMainHandItem() + " clone at " + c.blockPosition().subtract(pen.origin()).toShortString() + " lured "
                     + c.controller().animals().lured + " " + c.controller().animals().livestockDebug + " cows at "
                     + cow1.blockPosition().subtract(pen.origin()).toShortString() + " / " + cow2.blockPosition().subtract(pen.origin()).toShortString() + ")");
             var gate = h.getLevel().getBlockState(pen.origin().offset(pen.size() / 2, 0, 0));
@@ -3354,7 +3371,7 @@ public final class CloneGameTests {
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
                 for (int y = -2; y <= 0; y++) {
-                    h.setBlock(new BlockPos(x, y, z), Blocks.OBSIDIAN);
+                    h.setBlock(new BlockPos(x, y, z), Blocks.REINFORCED_DEEPSLATE);
                 }
             }
         }
@@ -3664,7 +3681,8 @@ public final class CloneGameTests {
             com.rlclones.clone.Bases bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
             var base = bases.nearest(h.getLevel().dimension(), c.position(), 32);
             h.assertTrue(st.buildingsClaimed >= 1 && base != null, "the clone moves into the empty house (" + st.claimDebug + " stage " + st.stage()
-                    + " bases " + bases.bases.size() + (base == null ? "" : " at " + base.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()) + ")");
+                    + " bases " + bases.bases.size() + (base == null ? "" : " at " + base.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " by " + base.founder)
+                    + " stages" + st.stageLog + ")");
             BlockPos center = base.center.subtract(h.absolutePos(BlockPos.ZERO));
             h.assertTrue(center.getX() >= 9 && center.getX() <= 11 && center.getZ() >= 5 && center.getZ() <= 8, "the base is inside it: " + center.toShortString());
             BlockPos chest = base.chests.get(0).subtract(h.absolutePos(BlockPos.ZERO));

@@ -832,7 +832,8 @@ public final class CreativePlay {
             if (harmful(level().getBlockState(p))) {
                 var hit = level().clip(new net.minecraft.world.level.ClipContext(eye, Vec3.atCenterOf(p), net.minecraft.world.level.ClipContext.Block.OUTLINE,
                         net.minecraft.world.level.ClipContext.Fluid.NONE, self));
-                if (hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS || hit.getBlockPos().distManhattan(p) <= 1) {
+                if (hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS || hit.getBlockPos().distManhattan(p) <= 1
+                        || harmful(level().getBlockState(hit.getBlockPos()))) {
                     found.add(p.immutable()); // in sight (not behind a wall in somebody else's place)
                 }
             }
@@ -1184,16 +1185,14 @@ public final class CreativePlay {
                 tries = 0;
                 return true;
             }
-            // from over the middle, facing out towards each frame: it is placed facing us, the middle
-            if (self.position().distanceTo(middle.add(0, 1.0, 0)) > 0.6) {
-                motor.fly(middle.add(0, 1.0, 0));
+            // facing out towards each frame (as from the middle): it is placed facing the other way, inwards
+            if (!reach(Vec3.atCenterOf(p))) {
                 if (++tries > 300) {
-                    note("could not get over the middle from " + self.blockPosition().toShortString());
+                    note("could not reach " + p.toShortString() + " from " + self.blockPosition().toShortString());
                     return false;
                 }
                 return true;
             }
-            motor.fly(middle.add(0, 1.0, 0));
             if (hold(Items.END_PORTAL_FRAME)) {
                 Direction out = Direction.getNearest(p.getX() - site.getX() - 2, 0, p.getZ() - site.getZ() - 2);
                 self.setYRot(out.toYRot());
@@ -1246,6 +1245,9 @@ public final class CreativePlay {
                 return true;
             }
             if (!reach(Vec3.atCenterOf(water))) {
+                if (ticks >= 300) {
+                    note("could not reach the middle " + water.toShortString() + " from " + self.blockPosition().toShortString());
+                }
                 return ticks < 300;
             }
             if (!level().getBlockState(water).isAir() && !level().getBlockState(water).is(Blocks.WATER)) {
@@ -1255,6 +1257,10 @@ public final class CreativePlay {
             if (hold(Items.WATER_BUCKET)) {
                 lookNow(new Vec3(water.getX() + 0.5, water.getY() + 0.02, water.getZ() + 0.5));
                 motor.useHeldItem(InteractionHand.MAIN_HAND);
+            }
+            if (tries == 199) {
+                note("no water at " + water.toShortString() + ": " + level().getBlockState(water) + " held " + self.getMainHandItem() + " from "
+                        + self.blockPosition().toShortString());
             }
             return ++tries < 200;
         }

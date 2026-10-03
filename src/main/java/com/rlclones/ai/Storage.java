@@ -469,7 +469,15 @@ public final class Storage {
         });
     }
 
+    /** Stage changes while storing (diagnostics). */
+    public String stageLog = "";
+    private int loggedStage = -1;
+
     private Status storeTick() {
+        if (stage != loggedStage && stageLog.length() < 200) {
+            stageLog += " " + stage;
+            loggedStage = stage;
+        }
         Bases bases = Bases.get(self.getServer());
         switch (stage) {
             case 0 -> {

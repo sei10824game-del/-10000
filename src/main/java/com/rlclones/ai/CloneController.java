@@ -452,6 +452,7 @@ public final class CloneController {
         if (((now + self.getId()) % 10) == 0) {
             checkAlarms(now);
         }
+        waterMoves();
         if (self.isInWater() && !self.isPassenger()) {
             swimTicks = Math.min(3000, swimTicks + 1);
         } else if (swimTicks > 0 && (now & 7) == 0) {
@@ -1515,6 +1516,35 @@ public final class CloneController {
         if (tells.blocking()) {
             tells.tellBlocks++; // raised because we saw it coming
         }
+    }
+
+    private double waterEnterY = Double.NaN;
+    private double airborneFromY = Double.NaN;
+    private boolean wasInWater;
+
+    /**
+     * Water used to change height: up a waterfall / water column (in at the bottom, out on the ground 2.5+ blocks
+     * higher), or a jump from a height that ended in water instead of on the ground.
+     */
+    private void waterMoves() {
+        boolean inWater = self.isInWater();
+        if (self.onGround() && !inWater) {
+            if (!Double.isNaN(waterEnterY) && self.getY() - waterEnterY >= 2.5) {
+                travel.waterClimbs++;
+            }
+            waterEnterY = Double.NaN;
+            airborneFromY = Double.NaN;
+        } else if (!self.onGround() && !inWater && Double.isNaN(airborneFromY)) {
+            airborneFromY = self.getY();
+        }
+        if (inWater && !wasInWater) {
+            if (!Double.isNaN(airborneFromY) && airborneFromY - self.getY() >= 3.0) {
+                travel.waterDrops++; // jumped down into the water
+            }
+            waterEnterY = self.getY();
+            airborneFromY = Double.NaN;
+        }
+        wasInWater = inWater;
     }
 
     /** Watch the enemies in view for the cues that announce their attacks (every other tick). */
