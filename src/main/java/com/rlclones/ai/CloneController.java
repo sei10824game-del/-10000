@@ -1318,7 +1318,28 @@ public final class CloneController {
             | Option.GATHER_WOOD.bit() | Option.MINE.bit() | Option.CRAFT.bit();
 
     /** Options only a clone knows about itself (read from chat / its own plans). */
+    private long extraTick = Long.MIN_VALUE;
+    private int extraInv = -1;
+    private long extraSeen = Long.MIN_VALUE;
+    private int extraCached;
+
+    /**
+     * Options only this clone knows about. Asked by the clone itself and by every clone watching it (imitation), so
+     * the answer is kept for the rest of the tick unless the bag or what it sees changed meanwhile.
+     */
     public int extraOptions(long now) {
+        int inv = self.getInventory().getTimesChanged();
+        if (now == extraTick && inv == extraInv && perception.lastUpdate() == extraSeen) {
+            return extraCached;
+        }
+        extraCached = computeExtraOptions(now);
+        extraTick = now;
+        extraInv = inv;
+        extraSeen = perception.lastUpdate();
+        return extraCached;
+    }
+
+    private int computeExtraOptions(long now) {
         int mask = 0;
         if (hasHelpRequest()) {
             mask |= Option.HELP.bit();
@@ -3405,6 +3426,8 @@ public final class CloneController {
             Option.GATHER_WOOD, Option.SALVAGE, Option.ACHIEVE, Option.DISCOVER);
     private static final net.minecraft.world.item.Item[] PICK_ORDER = {Items.WOODEN_PICKAXE, Items.STONE_PICKAXE, Items.IRON_PICKAXE, Items.DIAMOND_PICKAXE};
 
+    private long lastMaterialPickup = Long.MIN_VALUE / 2;
+
     /** A pickaxe in the bag that breaks {@code st} so that it drops (any pickaxe for null). */
     private boolean hasPickFor(@Nullable BlockState st) {
         for (ItemStack s : self.getInventory().items) {
@@ -3452,7 +3475,14 @@ public final class CloneController {
             return true;
         }
         itemAid.need(goal, 1);
-        if (itemAid.helpComing(goal)) {
+        Entity drop = Senses.nearestItem(perception, self, now(), 16);
+        if (drop instanceof ItemEntity ie && now() - lastMaterialPickup > 200 && (ie.getItem().is(net.minecraft.tags.ItemTags.LOGS)
+                || ie.getItem().is(net.minecraft.tags.ItemTags.PLANKS) || ie.getItem().is(Items.STICK)
+                || ie.getItem().is(net.minecraft.tags.ItemTags.STONE_TOOL_MATERIALS) || ie.getItem().getItem() instanceof net.minecraft.world.item.PickaxeItem)) {
+            lastMaterialPickup = now();
+            nextOption = Option.COLLECT; // the wood (stone, pickaxe) lying right there first
+            toolUpDebug = "pick up " + ie.getItem().getItem();
+        } else if (itemAid.helpComing(goal)) {
             nextOption = Option.REST; // a friend is bringing one: wait here
             toolUpDebug = "waiting for " + ItemAid.key(goal);
         } else if (goal == Items.STONE_PICKAXE && hasPickFor(null) && Senses.nearestBlock(perception, self, Perception.BlockKind.STONE, 16) != null) {

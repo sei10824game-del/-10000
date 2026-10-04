@@ -90,8 +90,27 @@ public final class Crafting {
     // ================================================================== planning
 
     /** Is there anything worth doing at a crafting table / furnace right now? */
+    private long workTick = Long.MIN_VALUE;
+    private int workInv = -1;
+    private long workSeen = Long.MIN_VALUE;
+    private boolean workCached;
+    @Nullable
+    private Item workForced;
+
     public boolean hasWork() {
-        return plan(self) != null || smeltWork() || furnaceReady() || stationToPlace() != null;
+        // asked by this clone and by each clone watching it: worked out once a tick (again if the bag / its view changed)
+        long now = self.level().getGameTime();
+        int inv = self.getInventory().getTimesChanged();
+        long seen = perception.lastUpdate();
+        if (now == workTick && inv == workInv && seen == workSeen && forcedTarget == workForced) {
+            return workCached;
+        }
+        workCached = plan(self) != null || smeltWork() || furnaceReady() || stationToPlace() != null;
+        workForced = forcedTarget;
+        workTick = now;
+        workInv = inv;
+        workSeen = seen;
+        return workCached;
     }
 
     /** A furnace / brewing stand in the bag and none around: put it down so it can be used. */
