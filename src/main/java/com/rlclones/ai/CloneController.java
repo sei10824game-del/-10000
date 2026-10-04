@@ -421,6 +421,9 @@ public final class CloneController {
     /** Why there is no option running (soak diagnostics): what the last controller tick was busy with, and when. */
     public String idleWhy = "";
     public long idleWhyTick;
+    /** The option that ended last and how many ticks it ran (an option that starts and ends in the same tick over and over is churn). */
+    public String endedOption = "";
+    public int endedAfter;
 
     public CombatAction action() {
         return action;
@@ -2117,6 +2120,8 @@ public final class CloneController {
         if (option == null) {
             return;
         }
+        endedOption = option.name();
+        endedAfter = optionTicks;
         if (option == Option.FIGHT || option == Option.HUNT) {
             closeCombatStep(died, died);
             target = null;

@@ -4734,7 +4734,8 @@ public final class CloneGameTests {
                         var o = cc.option();
                         opts.merge(o == null ? "none" : o.name(), 1, Integer::sum);
                         if (o == null) {
-                            nones.merge(live.level().getGameTime() - cc.idleWhyTick > 2 ? "skipped" : cc.idleWhy, 1, Integer::sum);
+                            nones.merge(live.level().getGameTime() - cc.idleWhyTick > 2 ? "skipped" : cc.idleWhy.equals("strategy")
+                                    ? "strategy:" + cc.endedOption + (cc.endedAfter <= 1 ? "<=1" : cc.endedAfter < 20 ? "<20" : "long") : cc.idleWhy, 1, Integer::sum);
                         }
                         if (tick[0] % 2400 == 0) {
                             RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | {}", tick[0], n, o, com.rlclones.ai.Progression.describe(live), cc.crafting().trace(),

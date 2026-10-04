@@ -40,7 +40,9 @@ import net.minecraftforge.common.Tags;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -85,6 +87,12 @@ public final class Crafting {
     public BlockPos lastTable;
     /** When a better pickaxe last made crafting urgent (once in 400 ticks: no loop if it cannot be made after all). */
     private long upgradeAt = Long.MIN_VALUE / 2;
+    /** What a recipe makes -> game time until which it is left alone (it could not be carried out here: no room for a table...). */
+    private final Map<Item, Long> blockedUntil = new HashMap<>();
+    /** Until when no furnace / brewing stand is put down or used (it could not be put down). */
+    private long stationBlockedUntil = Long.MIN_VALUE / 2;
+    public int giveUps;
+    public String placeDebug = "";
 
     public Crafting(ServerPlayer self, Motor motor, Perception perception) {
         this.self = self;
@@ -121,7 +129,7 @@ public final class Crafting {
     /** A furnace / brewing stand in the bag and none around: put it down so it can be used. */
     @Nullable
     private Item stationToPlace() {
-        if (!self.onGround() || self.isInWater()) {
+        if (!self.onGround() || self.isInWater() || self.level().getGameTime() < stationBlockedUntil) {
             return null;
         }
         if (count(self, Items.FURNACE) > 0 && nearest(Perception.BlockKind.FURNACE, 24) == null) {
@@ -244,9 +252,15 @@ public final class Crafting {
     private static final Item[] BOATS = {Items.OAK_BOAT, Items.SPRUCE_BOAT, Items.BIRCH_BOAT, Items.JUNGLE_BOAT, Items.ACACIA_BOAT,
             Items.DARK_OAK_BOAT, Items.MANGROVE_BOAT, Items.CHERRY_BOAT, Items.BAMBOO_RAFT};
 
+    /** A forced pickaxe the player has (or better) by now is not wanted again. */
+    private static boolean satisfied(Player p, @Nullable Item forced) {
+        return forced instanceof PickaxeItem fp && tierOf(p, PickaxeItem.class) >= ((TieredItem) fp).getTier().getLevel();
+    }
+
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
-        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null) {
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null
+                && !satisfied(p, c.controller().crafting().forcedTarget)) {
             out.add(c.controller().crafting().forcedTarget);
         }
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
@@ -413,6 +427,9 @@ public final class Crafting {
     }
 
     public static boolean canCraft(Player p, CraftingRecipe r) {
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().blocked(r)) {
+            return false;
+        }
         StackedContents contents = new StackedContents();
         p.getInventory().fillStackedContents(contents);
         return contents.canCraft(r, null);
@@ -485,6 +502,9 @@ public final class Crafting {
         boolean haveTable = count(p, Items.CRAFTING_TABLE) > 0;
         boolean tableAccess = haveTable || tableNearby(p);
         Item forced = p instanceof com.rlclones.clone.ClonePlayer fc && fc.controller() != null ? fc.controller().crafting().forcedTarget : null;
+        if (satisfied(p, forced)) {
+            forced = null;
+        }
         if (forced instanceof PickaxeItem) {
             wanted = List.of(forced); // a pickaxe for the mining at hand: nothing else may eat up its materials
         } else if (furnaceWanted(p)) {
@@ -654,7 +674,7 @@ public final class Crafting {
         boolean bag = count(self, Items.CRAFTING_TABLE) > 0;
         return "plan=" + (r == null ? "-" : r.getResultItem(self.level().registryAccess()).getItem()) + " up=" + (up == null ? "-" : up)
                 + " forced=" + forcedTarget + " table=" + (bag ? "bag" : tableNearby(self) ? "near" : "no") + " cobble=" + cobble(self)
-                + " planks=" + countTag(self, ItemTags.PLANKS) + " logs=" + countTag(self, ItemTags.LOGS) + " sticks=" + count(self, Items.STICK);
+                + " giveUps=" + giveUps + " place=[" + placeDebug + "]" + " planks=" + countTag(self, ItemTags.PLANKS) + " logs=" + countTag(self, ItemTags.LOGS) + " sticks=" + count(self, Items.STICK);
     }
 
     /** Coal or charcoal and a stick (or the wood for one): a torch can be made in the hand. */
@@ -758,7 +778,7 @@ public final class Crafting {
     }
 
     private boolean smeltWork() {
-        return furnace == null && !smeltables(self).isEmpty() && fuelSlot(self) >= 0
+        return self.level().getGameTime() >= stationBlockedUntil && furnace == null && !smeltables(self).isEmpty() && fuelSlot(self) >= 0
                 && (nearest(Perception.BlockKind.FURNACE, 24) != null || count(self, Items.FURNACE) > 0);
     }
 
@@ -810,8 +830,7 @@ public final class Crafting {
             case 2 -> walkAndOpen();
             case 3 -> workInUi();
             default -> {
-                reset();
-                return Status.DONE;
+                return stage < 0 ? giveUp() : done();
             }
         }
         return Status.WORKING;
@@ -842,7 +861,7 @@ public final class Crafting {
             }
             station = nearest(Perception.BlockKind.TABLE, 24);
             stage = station == null ? (count(self, Items.CRAFTING_TABLE) > 0 ? 1 : -1) : 2;
-            return stage < 0 ? done() : Status.WORKING;
+            return stage < 0 ? giveUp() : Status.WORKING;
         }
         if (smeltWork()) {
             smelting = true;
@@ -854,6 +873,31 @@ public final class Crafting {
     }
 
     private Status done() {
+        reset();
+        return Status.DONE;
+    }
+
+    public boolean blocked(CraftingRecipe r) {
+        if (blockedUntil.isEmpty()) {
+            return false;
+        }
+        Long t = blockedUntil.get(r.getResultItem(self.serverLevel().registryAccess()).getItem());
+        return t != null && self.level().getGameTime() < t;
+    }
+
+    /**
+     * The round could not be carried out here (no room for a table, no way to the one seen): leave that recipe (or the
+     * furnace work) alone for a while instead of starting it again every tick and getting nowhere.
+     */
+    private Status giveUp() {
+        long now = self.level().getGameTime();
+        if (recipe != null && !smelting) {
+            blockedUntil.put(recipe.getResultItem(self.serverLevel().registryAccess()).getItem(), now + 300);
+        }
+        if (smelting || placeOnly) {
+            stationBlockedUntil = now + 300;
+        }
+        giveUps++;
         reset();
         return Status.DONE;
     }
@@ -896,6 +940,12 @@ public final class Crafting {
                 }
             }
         }
+        StringBuilder sb = new StringBuilder("feet=").append(level.getBlockState(feet).getBlock()).append(" below=").append(level.getBlockState(feet.below()).getBlock());
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            BlockPos spot = feet.relative(d);
+            sb.append(' ').append(d.getName().charAt(0)).append('=').append(level.getBlockState(spot).getBlock()).append('/').append(level.getBlockState(spot.below()).getBlock());
+        }
+        placeDebug = sb.toString().replace("Block{minecraft:", "").replace("}", "");
         stage = -1;
     }
 
