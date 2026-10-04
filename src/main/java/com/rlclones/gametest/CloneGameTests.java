@@ -2449,7 +2449,8 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 1200, batch = "perch")
     public static void perchesOnTwoBlocksWhenChased(GameTestHelper h) {
-        ClonePlayer c = clone(h, 4.5, 7.5, 90f, true);
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        h.runAfterDelay(3, () -> wake(h, c)); // it sees the husk coming before it decides anything
         c.getInventory().add(new ItemStack(Items.COBBLESTONE, 16));
         c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));

@@ -503,10 +503,9 @@ public final class Animals {
                     continue;
                 }
                 boolean ok = true;
-                // a big pen for livestock wants room all round: herded cows jam a corridor one block wide
-                int m = penSize > 5 ? 2 : 0;
-                for (int x = -m; x < penSize + m && ok; x++) {
-                    for (int z = -Math.max(1, m); z < penSize + m && ok; z++) {
+                int front = penSize > 5 ? 3 : 1; // room in front of the gate to gather the herd before leading it in
+                for (int x = 0; x < penSize && ok; x++) {
+                    for (int z = -front; z < penSize && ok; z++) {
                         BlockPos g = origin.offset(x, -1, z);
                         ok = level.getFluidState(g).isEmpty() && level.getBlockState(g).isCollisionShapeFullBlock(level, g)
                                 && level.getBlockState(g.above()).canBeReplaced() && level.getFluidState(g.above()).isEmpty()
@@ -711,6 +710,7 @@ public final class Animals {
     }
     @Nullable
     private Livestock livestock;
+    private int frontWait;
     public int livestockPens;
     public int lured;
 
@@ -836,6 +836,48 @@ public final class Animals {
                 // lead them into the pen (walk in slowly, crop held high)
                 Equipment.select(self, slotOf(s -> s.is(ls.crop())));
                 Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(penSize / 2, 0, penSize - 2)); // the far end: they come all the way in
+                Bases.Pen leadPen = Bases.get(self.getServer()).penAt(level.dimension(), Vec3.atCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2)));
+                if (leadPen != null && !leadPen.contains(self.position())) {
+                    // outside still: round to the front of the gate with the crop put away (they would crowd the way round),
+                    // there show it again and wait for them, then straight in through the gate - they come along behind
+                    BlockPos gate = gate();
+                    Vec3 front = Vec3.atBottomCenterOf(gate.north(2));
+                    boolean inGateway = Math.abs(self.getX() - (gate.getX() + 0.5)) < 0.8 && self.getZ() >= gate.getZ() - 2.5 && self.getZ() <= gate.getZ() + 1.5;
+                    if (!inGateway && Motor.horizontalDistance(self.position(), front) > 1.2) {
+                        Vec3 way = Consumables.horizontal(front.subtract(self.position()));
+                        boolean blocked = false;
+                        for (Animal a : ls.animals()) {
+                            Vec3 to = a.position().subtract(self.position());
+                            blocked |= a.isAlive() && to.horizontalDistance() < 2.5 && way.dot(Consumables.horizontal(to)) > 0.4;
+                        }
+                        if (blocked) {
+                            emptyHand(); // one stands in the way: crop away so it stops crowding us, and past it
+                        }
+                        motor.navigate(front, 0.5, false);
+                        frontWait = 0;
+                        livestockDebug += " to the gate";
+                        return ticks > 2400 ? Status.FAILED : Status.WORKING;
+                    }
+                    Animal straggler = null;
+                    for (Animal a : ls.animals()) {
+                        if (a.isAlive() && a.distanceTo(self) > 4.5) {
+                            straggler = a;
+                        }
+                    }
+                    if (straggler != null && !inGateway) {
+                        motor.stop();
+                        motor.lookAt(straggler);
+                        if (++frontWait > 160) {
+                            stage = 4; // it does not come: fetch it
+                            frontWait = 0;
+                        }
+                        livestockDebug += " calling";
+                        return Status.WORKING;
+                    }
+                    motor.moveToward(Vec3.atBottomCenterOf(gate.south(2))); // in through the gate
+                    livestockDebug += " in";
+                    return ticks > 2400 ? Status.FAILED : Status.WORKING;
+                }
                 if (Motor.horizontalDistance(self.position(), center) > 0.6) {
                     motor.navigate(center, 0.4, false);
                     if (Motor.horizontalDistance(self.position(), center) < 2.5) {
