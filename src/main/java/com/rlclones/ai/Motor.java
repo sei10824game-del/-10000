@@ -79,6 +79,8 @@ public final class Motor {
     private Vec3 pathGoal;
     private int repathTimer;
     private int failedPaths;
+    @Nullable
+    private BlockPos failedFrom;
     private Vec3 progressAnchor;
     private int progressTimer;
     private int stuckCount;
@@ -320,8 +322,11 @@ public final class Motor {
             long pp = Prof.t();
             path = computePath(goal, arrive);
             Prof.add(Prof.PATHING, pp);
-            // no way to a goal that has not moved: ask the path finder less and less often (1 s, 2 s, up to 4 s)
-            failedPaths = path == null && pathGoal != null && pathGoal.distanceToSqr(goal) <= 1.0 ? Math.min(failedPaths + 1, 3) : 0;
+            // no way from the same spot to a goal that has not moved: the path finder would only say so again (1 s, 2 s, up to 4 s)
+            BlockPos here = self.blockPosition();
+            failedPaths = path == null && pathGoal != null && pathGoal.distanceToSqr(goal) <= 1.0 && here.equals(failedFrom) ? Math.min(failedPaths + 1, 3)
+                    : path == null ? 1 : 0;
+            failedFrom = path == null ? here : null;
             pathGoal = goal;
             repathTimer = path == null ? 20 << Math.max(0, failedPaths - 1) : 10;
         }

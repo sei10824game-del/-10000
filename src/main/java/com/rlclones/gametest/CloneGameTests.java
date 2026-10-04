@@ -2649,6 +2649,13 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r8pearl")
     public static void pearlsOverALavaMoatWhenThatIsTheOnlyWay(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 5; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.AIR); // nothing left standing from an earlier test
+                }
+            }
+        }
         for (int x = 5; x <= 10; x++) {
             for (int z = 1; z <= 13; z++) {
                 h.setBlock(new BlockPos(x, 0, z), Blocks.OBSIDIAN);

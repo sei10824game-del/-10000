@@ -156,7 +156,10 @@ public final class Travel {
         int g = gapAhead(d);
         debug = "gap=" + g + " dir=" + d;
         if (gapTrace.length() < 300) {
-            gapTrace.append(String.format(java.util.Locale.ROOT, "[%s g%d %s]", self.blockPosition().toShortString(), g, d));
+            BlockPos ahead = self.blockPosition().relative(d);
+            gapTrace.append(String.format(java.util.Locale.ROOT, "[%s g%d %s %s/%s/%s]", self.blockPosition().toShortString(), g, d,
+                    self.level().getBlockState(ahead.above()).getBlock().getName().getString(), self.level().getBlockState(ahead).getBlock().getName().getString(),
+                    self.level().getBlockState(ahead.below()).getBlock().getName().getString()));
         }
         double rise = goal.y - self.getY();
         if (g == 0) {
