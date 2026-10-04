@@ -3498,9 +3498,23 @@ public final class CloneController {
     private long lastMaterialPickup = Long.MIN_VALUE / 2;
     private long toolBlockedUntil = Long.MIN_VALUE;
 
-    /** No pickaxe to be had for a while (nothing to make one from): ores it cannot take are no option meanwhile. */
+    /**
+     * No pickaxe to be had for a while: ores it cannot take are no option meanwhile. Away from the overworld (no trees
+     * to fetch wood from) only when there is wood in the bag or a tree in sight.
+     */
     public boolean toolBlocked() {
-        return now() < toolBlockedUntil;
+        if (now() < toolBlockedUntil) {
+            return true;
+        }
+        if (self.level().dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            return false;
+        }
+        for (ItemStack s : self.getInventory().items) {
+            if (s.is(net.minecraft.tags.ItemTags.LOGS) || s.is(net.minecraft.tags.ItemTags.PLANKS) || s.getItem() instanceof net.minecraft.world.item.PickaxeItem) {
+                return false;
+            }
+        }
+        return Senses.nearestBlock(perception, self, Perception.BlockKind.LOG, 32) == null;
     }
 
     /** A pickaxe in the bag that breaks {@code st} so that it drops (any pickaxe for null). */

@@ -95,6 +95,11 @@ public final class CloneGameTests {
                     }
                     h.killAllEntities();
                     clearAbove(h);
+                    resetArena(h);
+                    com.rlclones.clone.CloneManager m = manager(h);
+                    if (CloneManager.coward()) {
+                        m.setCoward(false);
+                    }
                     // world-wide things a failed test may leave behind: no staircase to lure other tests' clones away
                     com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
                     b.staircases.clear();
@@ -125,6 +130,26 @@ public final class CloneGameTests {
         // finished arenas stay in the world (behind see-through barriers): leave no mobs there to distract later tests
         h.killAllEntities();
         clearAbove(h);
+        resetArena(h);
+    }
+
+    /**
+     * The arena template only holds its stone floor and barrier walls (no air): whatever a test built or dug inside
+     * would still be there for the next test run at the same spot. Floor back to stone, the room above it empty.
+     */
+    private static void resetArena(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 0; y <= 5; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    var want = y == 1 ? Blocks.STONE : Blocks.AIR;
+                    var st = h.getBlockState(p);
+                    if (!st.is(want) || !h.getLevel().getFluidState(h.absolutePos(p)).isEmpty()) {
+                        h.getLevel().setBlock(h.absolutePos(p), want.defaultBlockState(), 2 | 16);
+                    }
+                }
+            }
+        }
     }
 
     /** Whatever a test built higher than the arena (a portal's top, a pillar) would still stand there for the next test. */
@@ -2675,8 +2700,18 @@ public final class CloneGameTests {
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.GATHER_WOOD;
         double farSide = h.absoluteVec(new Vec3(11, 2, 0)).x;
+        StringBuilder where = new StringBuilder();
+        int[] tick = {0};
+        h.onEachTick(() -> {
+            tick[0]++;
+            int gravel = c.getInventory().countItem(Items.GRAVEL);
+            if (where.length() < 300 && (gravel > 0 && where.indexOf("inv") < 0 || h.getBlockState(new BlockPos(5, 1, 7)).is(Blocks.GRAVEL) && where.indexOf("moat") < 0)) {
+                where.append(gravel > 0 && where.indexOf("inv") < 0 ? "inv" : "moat").append("@").append(tick[0]).append(" x")
+                        .append(String.format(Locale.ROOT, "%.1f", c.getX() - h.absoluteVec(Vec3.ZERO).x)).append(" ").append(c.controller().option()).append(' ');
+            }
+        });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().consumables().travelPearls >= 1, "a pearl thrown across (" + c.controller().consumables().pearlDebug + " travel "
+            h.assertTrue(c.controller().consumables().travelPearls >= 1, "a pearl thrown across (" + where + c.controller().consumables().pearlDebug + " travel "
                     + c.controller().travel().debug + " at x " + String.format(Locale.ROOT, "%.1f", c.getX() - h.absoluteVec(Vec3.ZERO).x) + " stuck "
                     + c.controller().motor().stuckCount() + " " + c.controller().travel().guardDebug + " " + c.controller().travel().gapTrace + " " + c.controller().harvestTrace + " "
                     + c.controller().optionLog + ")");
