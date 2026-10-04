@@ -4472,4 +4472,198 @@ public final class CloneGameTests {
             cloud.discard();
         });
     }
+
+    // ------------------------------------------------------------------ soak: how far do clones get on their own?
+
+    /** Game ticks the soak runs (30 minutes of game time). */
+    private static final int SOAK_TICKS = 36000;
+    private static final String[] SOAK_STEPS = {"wood", "table", "wood_pick", "stone_pick", "furnace", "coal", "iron_ingot", "iron_pick", "iron_gear",
+            "diamond", "diamond_pick", "diamond_armor_1", "diamond_armor_2", "diamond_armor_3", "diamond_armor_4"};
+
+    /** The soak only runs when a file named soak.flag lies in the game directory (run/) or the project root. */
+    private static boolean soakWanted() {
+        java.nio.file.Path game = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
+        return java.nio.file.Files.exists(game.resolve("soak.flag")) || game.getParent() != null && java.nio.file.Files.exists(game.getParent().resolve("soak.flag"));
+    }
+
+    private static boolean treesNear(net.minecraft.server.level.ServerLevel level, int x, int z) {
+        int logs = 0;
+        for (int dx = -32; dx <= 32; dx += 4) {
+            for (int dz = -32; dz <= 32; dz += 4) {
+                int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x + dx, z + dz);
+                if (level.getBlockState(new BlockPos(x + dx, y - 1, z + dz)).is(net.minecraft.tags.BlockTags.LOGS)) {
+                    logs++;
+                }
+            }
+        }
+        return logs >= 3;
+    }
+
+    /** Dry land with trees about, well away from the test arenas (which sit underground by the world spawn). */
+    private static BlockPos soakSite(GameTestHelper h) {
+        var level = h.getLevel();
+        BlockPos origin = h.absolutePos(BlockPos.ZERO);
+        int[][] offs = {{3000, 0}, {-3000, 0}, {0, 3000}, {0, -3000}, {6000, 0}, {-6000, 0}, {0, 6000}, {0, -6000}, {4500, 4500}, {-4500, -4500}, {4500, -4500}, {-4500, 4500}};
+        BlockPos fallback = null;
+        for (int[] o : offs) {
+            int x = origin.getX() + o[0];
+            int z = origin.getZ() + o[1];
+            level.getChunk(x >> 4, z >> 4);
+            int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            BlockPos p = new BlockPos(x, y, z);
+            if (fallback == null) {
+                fallback = p;
+            }
+            if (y > 63 && level.getFluidState(p.below()).isEmpty() && treesNear(level, x, z)) {
+                return p;
+            }
+        }
+        return fallback;
+    }
+
+    private static java.util.Set<String> soakReached(ClonePlayer c) {
+        var out = new java.util.LinkedHashSet<String>();
+        var inv = c.getInventory();
+        List<ItemStack> all = new ArrayList<>(inv.items);
+        all.addAll(inv.armor);
+        all.addAll(inv.offhand);
+        int pick = -1;
+        boolean wood = false, table = false, furnace = false, coal = false, iron = false, diamond = false;
+        var diamondSlots = new java.util.HashSet<net.minecraft.world.entity.EquipmentSlot>();
+        for (ItemStack st : all) {
+            if (st.isEmpty()) {
+                continue;
+            }
+            var it = st.getItem();
+            wood |= st.is(net.minecraft.tags.ItemTags.LOGS) || st.is(net.minecraft.tags.ItemTags.PLANKS);
+            table |= it == Items.CRAFTING_TABLE;
+            furnace |= it == Items.FURNACE;
+            coal |= it == Items.COAL || it == Items.CHARCOAL;
+            if (it instanceof net.minecraft.world.item.PickaxeItem pi) {
+                pick = Math.max(pick, pi.getTier().getLevel());
+            }
+            if (it instanceof net.minecraft.world.item.TieredItem ti) {
+                iron |= ti.getTier() == net.minecraft.world.item.Tiers.IRON;
+                diamond |= ti.getTier() == net.minecraft.world.item.Tiers.DIAMOND;
+            }
+            if (it instanceof net.minecraft.world.item.ArmorItem ai) {
+                iron |= ai.getMaterial() == net.minecraft.world.item.ArmorMaterials.IRON;
+                if (ai.getMaterial() == net.minecraft.world.item.ArmorMaterials.DIAMOND) {
+                    diamond = true;
+                    diamondSlots.add(ai.getEquipmentSlot());
+                }
+            }
+            iron |= it == Items.IRON_INGOT;
+            diamond |= it == Items.DIAMOND;
+        }
+        var perception = c.controller().perception();
+        table |= perception.blocks().containsValue(com.rlclones.ai.Perception.BlockKind.TABLE);
+        furnace |= perception.blocks().containsValue(com.rlclones.ai.Perception.BlockKind.FURNACE);
+        for (var e : new Object[][]{{"wood", wood}, {"table", table}, {"wood_pick", pick >= 0}, {"stone_pick", pick >= 1}, {"furnace", furnace}, {"coal", coal},
+                {"iron_ingot", iron}, {"iron_pick", pick >= 2}, {"iron_gear", com.rlclones.ai.StairMining.ironGeared(c)}, {"diamond", diamond},
+                {"diamond_pick", pick >= 3}, {"diamond_armor_1", diamondSlots.size() >= 1}, {"diamond_armor_2", diamondSlots.size() >= 2},
+                {"diamond_armor_3", diamondSlots.size() >= 3}, {"diamond_armor_4", diamondSlots.size() >= 4}}) {
+            if ((Boolean) e[1]) {
+                out.add((String) e[0]);
+            }
+        }
+        return out;
+    }
+
+    private static String soakBag(ClonePlayer c) {
+        var inv = c.getInventory();
+        return "log=" + (inv.countItem(Items.OAK_LOG) + inv.countItem(Items.BIRCH_LOG) + inv.countItem(Items.SPRUCE_LOG)) + " plank=" + (inv.countItem(Items.OAK_PLANKS)
+                + inv.countItem(Items.BIRCH_PLANKS) + inv.countItem(Items.SPRUCE_PLANKS)) + " cobble=" + inv.countItem(Items.COBBLESTONE) + " coal=" + inv.countItem(Items.COAL)
+                + " raw_iron=" + inv.countItem(Items.RAW_IRON) + " iron=" + inv.countItem(Items.IRON_INGOT) + " diamond=" + inv.countItem(Items.DIAMOND)
+                + " food=" + c.getFoodData().getFoodLevel() + " hp=" + (int) c.getHealth() + " y=" + c.getBlockY();
+    }
+
+    /**
+     * Informational (never fails the build): clones at a forest with nothing in their hands, left alone for half an
+     * hour of game time. Logs when each one first reaches each step of the way to full diamond gear ("SOAK ..." lines).
+     */
+    @GameTest(template = ARENA, timeoutTicks = SOAK_TICKS + 600, batch = "zsoak", required = false)
+    public static void soakHowFarCloneGetsOnItsOwn(GameTestHelper h) {
+        if (!soakWanted()) {
+            h.succeed();
+            return;
+        }
+        var level = h.getLevel();
+        var spawning = level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING);
+        if (spawning.get()) {
+            spawning.set(false, level.getServer()); // (the other tests rely on dark arenas staying free of monsters)
+        }
+        BlockPos site = soakSite(h);
+        List<String> names = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            int x = site.getX() + (i % 3) * 3;
+            int z = site.getZ() + (i / 3) * 3;
+            int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            ClonePlayer c = manager(h).summon(null, level, new Vec3(x + 0.5, y, z + 0.5), i * 60f);
+            if (c == null) {
+                continue;
+            }
+            c.setAiEnabled(true);
+            cleanUpOnFailure(h, c);
+            names.add(c.getGameProfile().getName());
+        }
+        RLClones.LOGGER.info("SOAK start at {} with {} clones, {} ticks", site.toShortString(), names.size(), SOAK_TICKS);
+        java.util.Map<String, java.util.Map<String, Integer>> first = new java.util.LinkedHashMap<>();
+        java.util.Map<String, Integer> gone = new java.util.LinkedHashMap<>();
+        java.util.Map<String, Integer> opts = new java.util.TreeMap<>();
+        int[] tick = {0};
+        h.onEachTick(() -> {
+            tick[0]++;
+            try {
+                if (tick[0] % 200 == 0) {
+                    for (String n : names) {
+                        ClonePlayer live = manager(h).byName(n);
+                        if (live == null || !live.isAlive()) {
+                            gone.putIfAbsent(n, tick[0]);
+                            continue;
+                        }
+                        var m = first.computeIfAbsent(n, k -> new java.util.LinkedHashMap<>());
+                        for (String step : soakReached(live)) {
+                            m.putIfAbsent(step, tick[0]);
+                        }
+                        var o = live.controller().option();
+                        opts.merge(o == null ? "none" : o.name(), 1, Integer::sum);
+                    }
+                }
+                if (tick[0] % 3000 == 0 || tick[0] == SOAK_TICKS) {
+                    StringBuilder sb = new StringBuilder("SOAK t=" + tick[0] + " gone=" + gone.keySet() + " reached:");
+                    for (String step : SOAK_STEPS) {
+                        int n = 0;
+                        for (var m : first.values()) {
+                            n += m.containsKey(step) ? 1 : 0;
+                        }
+                        sb.append(' ').append(step).append('=').append(n);
+                    }
+                    RLClones.LOGGER.info(sb.toString());
+                }
+                if (tick[0] == SOAK_TICKS) {
+                    for (String n : names) {
+                        var m = first.getOrDefault(n, java.util.Map.of());
+                        ClonePlayer live = manager(h).byName(n);
+                        RLClones.LOGGER.info("SOAK-CLONE {} steps={} gone@{} | {}", n, m, gone.get(n), live == null ? "-" : soakBag(live));
+                    }
+                    RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
+                    int full = 0;
+                    for (var m : first.values()) {
+                        full += m.containsKey("diamond_armor_4") ? 1 : 0;
+                    }
+                    RLClones.LOGGER.info("SOAK-SUMMARY full_diamond_armor={}/{} errors={}", full, names.size(), CloneManager.errors());
+                    for (String n : names) {
+                        ClonePlayer live = manager(h).byName(n);
+                        if (live != null) {
+                            manager(h).remove(live, true, Component.literal("soak finished"));
+                        }
+                    }
+                    h.succeed();
+                }
+            } catch (RuntimeException e) {
+                RLClones.LOGGER.warn("SOAK sampling failed", e);
+            }
+        });
+    }
 }
