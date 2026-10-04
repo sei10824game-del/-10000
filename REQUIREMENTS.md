@@ -23,14 +23,14 @@
 | R-06 | 水中の遊泳・魚狩り | 修正 | 実装済 | 検証 |
 | R-07 | 不足アイテムをチャットで要求 | 実装 | 実装済 | 検証 |
 | R-08 | 敵処理の多様化(武器攻撃) | 実装 | 実装済 | 検証 |
-| R-09 | AI増加の最適化(思考力不変) | 設計 | 設計待ち | Opusで設計+検証 |
+| R-09 | AI増加の最適化(思考力不変) | 設計 | 計測済み(前後比較のベースライン未整備) | Opusで設計(前後比較ハーネス)+検証 |
 | R-10 | 無行動クローンの修正 | 修正 | 実装済 | 検証 |
 | R-11 | 落下系ブロック埋没からの脱出 | 修正 | 実装済 | 検証 |
 | R-12 | 遠距離攻撃時の遮蔽物対応 | 実装 | 実装済 | 検証 |
 | R-13 | coward(退避)モードのコマンド | 実装 | 実装済 | 検証 |
 | R-14 | バケツ作成と無限水源の構築 | 実装 | 実装済 | 検証 |
-| R-15 | バフ/デバフの強化学習 | 設計 | 要確認 | 観測/報酬の妥当性レビュー |
-| R-16 | 地面に広がる効果残留の認知と学習 | 設計 | 要確認 | 観測/報酬の妥当性レビュー |
+| R-15 | バフ/デバフの強化学習 | 設計 | 部分実装 | 観測空間への統合・報酬への寄与(Opusで設計) |
+| R-16 | 地面に広がる効果残留の認知と学習 | 設計 | 部分実装 | 観測空間への統合・報酬への寄与(Opusで設計) |
 
 ## 受け入れ条件
 
@@ -88,3 +88,85 @@ R-16 効果残留の認知: 地面に広がる効果付き残留を認知し、�
 (2) 実装セッション(Sonnet・グループ単位): 「REQUIREMENTS.md の R-xx, R-yy を実装して。(a) 変更方針を3行で報告 (b) 実装 (c) 受け入れ条件をテスト化 (d) ステータス更新してコミット・push、run IDとURLを報告して終了」
 
 (3) 設計セッション(Opus・plan.mdを作る): 「R-09の設計をして。実装はしない。現状のボトルネックを計測・特定し、『挙動不変』の検証手順(同一シードNエピソードでの報酬分布・行動頻度・達成率の比較)を定義。削除/最適化候補と根拠をまとめ、plan.md に保存してコミット・push」
+
+---
+
+## 検証セッション結果 (実装・テスト対応表)
+
+検証日: 2026-10-04 / コード変更なし・テスト実行なし(照合は静的に実施。CI結果は既存ランの記録のみ参照)
+凡例: `ai/` = `src/main/java/com/rlclones/ai/` / テストはすべて `src/main/java/com/rlclones/gametest/CloneGameTests.java`
+照合結果: 検証済 = テストがあり受け入れ条件を概ね満たす / 不足 = 受け入れ条件の一部にテストなし / 要確認 = 条件と実装に差あり
+注: 上の「ステータス一覧」はR-09/R-15/R-16以外は未更新(更新は人間の確認後)。
+
+### 対応表
+
+| ID | 実装(ファイル: シンボル) | テスト | 照合結果 | 不足・注意 |
+|---|---|---|---|---|
+| R-01 | ai/CloneController: toolUp, hasPickFor, pickMakeableFor, runStrategy(STAIRS/SHAFT開始時の確認), runHarvest / ai/Crafting: makeable, plan(forcedTarget=ツルハシ) | makesAPickaxeBeforeMiningFetchingTheWoodFirst, usesTheCraftingTableNearbyForThePickaxe | 検証済(主経路)・不足あり | 直下掘り/階段掘りの開始経路のテストなし(元の不具合の経路。ただしStairMining/ShaftMiningの `wanted()` は元からツルハシ必須)。石のツルハシ(丸石を採取)分岐のテストなし |
+| R-02 | ai/Crafting: furnaceWanted, plan, urgent, stationToPlace / ai/CloneController: drive(CRAFT pull) | makesAndPutsDownAFurnaceForRawFood | 不足あり | 鉱石(生鉄など)で作る分岐、近くに既存かまどがあれば作らない分岐のテストなし。実装の丸石条件は8個以上(かまどのレシピ数)で、要求の「9個」と1個差 |
+| R-03 | ai/CloneController: judgeHarmfulContact, correctHarmful, onChat("SAFE") / ai/brain/Brain: unlearnHarmful, provenSafe | correctsABlockWronglyThoughtHarmful(学習側は既存の learnsMagmaRemovesItAndTellsOthers, learnsUnknownHarmfulBlock) | 不足あり | 「真に有害な判定は維持」を確かめるテストなし(実際にダメージを受け続ける場合は解除されないこと) |
+| R-04 | ai/CloneController: oreReflex, runHarvest(石掘り中は鉱石を先に), drive(MINE pull) / ai/Senses: nearestBlock | quarryingTakesTheOresFirst, minesAnOreRightInFrontWhileExploring, anOreInSightIsTheFirstThingToDo | 検証済(決定論)・不足あり | 「同距離で鉱石を先に(目安90%以上)」の統計的な検証なし(単一ケースのみ)。R-01の素材不足時の採取との非干渉を直接見るテストなし |
+| R-05 | ai/Farming: Job.SOIL/LIGHT, bank, soilish, needTorch, needDirt / ai/CloneController: runFarm | makesSoilBesideBareWaterAndLightsThePlot | 検証済(主経路)・不足あり | 暗所で石炭がなく仲間に松明を頼む分岐、土がなく仲間に頼む分岐のテストなし。R-14との連携(無限水源→畑)のE2Eなし |
+| R-06 | ai/Motor: swimStroke, swimPitch / ai/CloneController: fishInSight, drive(HUNT 魚), runFight | swimsAcrossInsteadOfBobbing, huntsFishInTheWater(既存 divesDownInWater) | 検証済 | 息が切れそうなときの浮上、岸に上がる最終区間のテストなし |
+| R-07 | ai/ItemAid: need, onChat, helpTick, spare / ai/CloneController: FEEDのマスク統合 / ai/Senses: nearestItem(贈り物の横取り防止) | asksForAPickaxeAndAFriendBringsOne | 検証済(主経路)・不足あり | 「連投しない」(同じ物は1分に1回: ItemAid.lastAsked)のテストなし。複数の頼みの競合、渡す側が足りない場合のテストなし |
+| R-08 | ai/CreativePlay: DUELS, pickDuel, judgeDuel, strikeTick, snipeTick | creativeFightsInDifferentWays(既存 creativeHooksAMonsterFliesUpAndReelsItIn, creativeBreaksTheGroundFromUnderAMonster) | 要確認 | 受け入れ条件は「所持武器・距離に応じて切り替わる」だが、実装は試していない方法を先に・学習値・同じ方法を3回続けない、で選ぶ。距離は rod の可否と視認のみ、所持武器は参照しない(クリエイティブでは武器を生成する)。条件と実装に差あり |
+| R-09 | ai/Prof(計測)。最適化: ai/Perception.update(視認距離で先に絞り込み・距離キー1回計算)、Perception.cachedThreats と Senses.threats(同一tick内キャッシュ)、CloneController.extraOptions と Crafting.hasWork(同一tick内キャッシュ)、ai/Motor(経路なしの再探索を最大4秒まで間引き) | manyClonesThinkWithinBudget(12体×300tick、1体あたり平均2ms未満であること) | 計測済み・比較基準なし | 80〜150µs/tick 程度(CI観測の最大176µs)。同一シードNエピソードの報酬分布・行動頻度・達成率の前後比較の基準(ハーネス)なし。要レビュー: Motorの再探索の間引きは「判断頻度の低下」に当たる恐れがあり、挙動不変の確認が必要 |
+| R-10 | ai/Senses: strategyMask(敵がいる間は REST/FOLLOW を除外) / ai/CloneController: combatTick(HOLD連続の打ち切り) | neverStandsIdleWhileFriendsFight | 不足あり | 受け入れ条件の「一定tick連続で行動が空の状態を検知するテスト」(無行動の検知器)がない。無行動を防ぐ実装はあるが、検知する仕組み自体がない |
+| R-11 | ai/CloneController: buriedReflex | digsItselfOutWhenBuriedByGravel | 検証済(単発)・不足あり | 「脱出成功率8割以上」は未計測(1回の試行のみ)。砂、横に空きのない場合、掘れない硬いブロックのケースのテストなし |
+| R-12 | ai/CloneController: seekVantage, findVantage, clearShot | climbsUpToShootAnEnemyHiddenBehindAWall | 検証済(主経路)・不足あり | 遮蔽物がないときは登らない、という対照テストなし。足場がなくブロックを積んで登る分岐のテストなし |
+| R-13 | clone/CloneManager: coward, setCoward / clone/CloneRoster: coward(保存) / command/CloneCommand: coward / ai/Senses: strategyMask | cowardModeOnlyRunsAndHides | 要確認 | 実際の攻撃回数がゼロであることは見ていない(選択肢にFIGHTが無いことだけ確認)。coward を見ているのは Senses.strategyMask のみで、CreativePlay(R-08の戦闘)、HUNT(動物狩り)、Explosives、Consumables(ポーション投擲)は対象外のまま。「ONの間はR-08/R-12より優先」を満たしていない可能性(R-12は戦闘行動の中なので結果的に無効) |
+| R-14 | ai/WaterSource / ai/Crafting: firstBucketWanted, hasBucket / ai/brain/Brain: フラグ had_bucket | makesItsFirstBucketButOnlyOne, bringsWaterHomeAndMakesASpring | 検証済・不足あり | 受け入れは「水源3ブロック」だが実装は2×2の4ブロック(テストは4を確認)。基準の数値を揃える必要あり。拠点からの距離の閾値は明示的に検証していない |
+| R-15 | ai/EffectSense: sample, bodyChange / ai/brain/Brain: learnEffect, effectValue, knowsEffect(保存・共有あり) / ai/Consumables(学習で悪いと分かった効果を牛乳で消す) | learnsWhatTheEffectsOnItDo | 部分実装 | 下記「R-15/R-16 の不足」を参照 |
+| R-16 | ai/EffectSense: cloudHere, clouds, cloudKey / ai/Perception.update(AreaEffectCloudを知覚の候補に追加) | learnsALingeringCloudIsBadAndKeepsOut | 部分実装 | 下記「R-15/R-16 の不足」を参照。良い雲に入る行動のテストなし |
+
+### R-15/R-16 の不足(部分実装)
+
+実装済み: 効果ごとの価値を経験から学習(効果中の体力・満腹度の変化と、体の変化(速さ・攻撃力・防御・運など)から計算)、残留雲を色で認識して価値を学習、悪い雲から出て近寄らない、良い雲に弱ったときに入る、学習値の保存とクローン間のマージ、悪いと学習した効果を牛乳で消す。
+
+足りないもの:
+1. 観測空間への統合: StrategyState / CombatState に効果情報(種別・残り時間・強度)がない。残留雲の位置・範囲・種別も観測に入っていない(半径は雲のエンティティを直接参照)
+2. 報酬への寄与: 効果の価値は強化学習の報酬(optionReward / stepReward)に入っていない。学習値は2か所の閾値判断(牛乳を飲む / 雲に近寄る・離れる)でだけ使われ、Qテーブルの学習には影響しない。回避・利用行動は学習で発現するのではなく手書きの方針
+3. 正規化: 効果の強度・残り時間の正規化なし
+4. 検証: 学習ログで効果と行動の相関を確認する出力がない
+5. 設計上の注意(Opus): 状態に項目を足すと保存済みのQテーブルとリンク共有脳(clone brain)の互換、状態数の増加、既存性能の劣化(受け入れ条件)に影響する。設計を先に決めてから実装する
+
+### R-09 の記録
+
+計測済み(80〜150µs/tick 程度。CI観測の最大は176µs。内訳は strategy が全体の6〜7割で、経路探索はその内数で全体の約4割)。前後比較のベースラインは未整備。最適化の内容は上の対応表を参照。
+
+### 不足テスト一覧
+
+| ID | 不足しているテスト |
+|---|---|
+| R-01 | 直下掘り/階段掘りの開始経路でツールなしに掘り始めないこと / 石のツルハシ(丸石採取)の分岐 |
+| R-02 | 鉱石でかまどを作る分岐 / 近くに既存かまどがあれば作らないこと |
+| R-03 | 実際に有害なブロックの判定が解除されないこと |
+| R-04 | 同距離で鉱石を先に掘る割合(90%以上)/ 素材不足時の採取との非干渉 |
+| R-05 | 松明を仲間に頼む分岐 / 土を仲間に頼む分岐 / R-14との連携E2E |
+| R-06 | 息継ぎの浮上 / 岸に上がる最終区間 |
+| R-07 | 連投しないこと(1分に1回) / 複数の頼みが重なる場合 |
+| R-08 | 所持武器・距離による切替(仕様の確認が先) |
+| R-09 | 同一シードNエピソードの前後比較(基準の整備から) |
+| R-10 | 一定tick連続で無行動の状態を検知するテスト |
+| R-11 | 脱出成功率(複数試行)/ 砂 / 掘れない硬いブロック / 横に空きがない場合 |
+| R-12 | 遮蔽物がない場合に登らないこと / ブロックを積んで登る分岐 |
+| R-13 | ON中の実際の攻撃回数がゼロであること / クリエイティブ戦闘・狩り・TNT・ポーション投擲の扱い(仕様の確認が先) |
+| R-14 | 拠点からの距離の閾値 / 水源の数の基準(3か4か)の統一 |
+| R-15 | 観測空間・報酬への統合(実装後に追加) |
+| R-16 | 良い雲に入る行動 / 雲の範囲の観測 |
+
+### CI実績(照合時点)
+
+- 全テスト通過: run 37221207689(a5eb9fa・1回目)、run 37222304270(1dfdb0a・1回目)。このとき Round 10 で追加した21件(batch r10*)も全件通過
+- 同じコミットの再実行はどちらも失敗(a5eb9fa: ネザー往復・牛の囲い込み / 1dfdb0a: 溶岩の堀のパール)
+- Round 10 追加テストは 87da8d6 以降の12ラン(再実行を含む。17ce6d0 と c2cbbf3 は失敗テスト名を未確認で除く)で失敗なし
+- 2b9914f(失敗: 牛の囲い込み・板材を建物から取る)、49fbc8b(失敗: TNTを戦闘で使いボタンで起爆・食べ物を頼んで仲間が持ってくる)。いずれも Round 10 追加テスト以外
+
+### 観測された不安定テスト(隔離は未実施・要判断)
+
+「既知のflakyテスト」には溶岩の堀(パール)だけが書かれているが、CIでは他にも失敗が出ている(Round 10 追加テストではない既存テスト)。
+
+- pensCowsWhenWheatPilesUp(最も多い) / visitsTheNetherAndComesBack / crossesWaterByBoat / fightsWhenCorneredInsteadOfHoppingAtWalls / goesForAnAdvancementWhenIdle / takesPlanksFromBuildingsButNotFromBases / usesTntInAFightAndPressesTheButton / asksForFoodAndAFriendBringsSome
+- 上の3つ(takesPlanks…, usesTnt…, asksForFood…)は直近の2ランで初めて出た。Round 10 の変更(食べ物以外のアイテム要求のFEED統合、拾えるアイテムの絞り込み、採掘前のツール準備、再探索の間引き)との関連は未調査。別セッションで確認する
+- Issue は未作成(今回は作成の指示なし)
+
