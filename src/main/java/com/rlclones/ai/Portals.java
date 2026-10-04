@@ -324,6 +324,9 @@ public final class Portals {
                     return count(Items.OBSIDIAN) >= 10 ? Status.DONE : Status.WORKING;
                 }
                 Vec3 to = drops.isEmpty() ? Vec3.atBottomCenterOf(obsidianAt) : drops.get(0).position();
+                if (!drops.isEmpty() && drops.get(0).getY() < self.getY() - 0.4) {
+                    to = Vec3.atBottomCenterOf(drops.get(0).blockPosition()); // down in the hole it left: into the middle of it, or we stand on the rim
+                }
                 motor.navigate(to, 0.3, false);
                 if (Motor.horizontalDistance(self.position(), to) < 1.5) {
                     motor.moveToward(to);

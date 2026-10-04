@@ -1528,10 +1528,11 @@ public final class CloneController {
      */
     private void waterMoves() {
         boolean inWater = self.isInWater();
+        if (!Double.isNaN(waterEnterY) && self.onGround() && self.getY() - waterEnterY >= 2.5) {
+            travel.waterClimbs++; // (out on the ground up there, if still ankle-deep in what runs off the top)
+            waterEnterY = inWater ? self.getY() : Double.NaN;
+        }
         if (self.onGround() && !inWater) {
-            if (!Double.isNaN(waterEnterY) && self.getY() - waterEnterY >= 2.5) {
-                travel.waterClimbs++;
-            }
             waterEnterY = Double.NaN;
             airborneFromY = Double.NaN;
         } else if (!self.onGround() && !inWater && Double.isNaN(airborneFromY)) {
