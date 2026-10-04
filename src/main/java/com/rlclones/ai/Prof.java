@@ -5,8 +5,8 @@ package com.rlclones.ai;
  * boolean check). Shows where the time goes when many clones run at once.
  */
 public final class Prof {
-    public static final String[] NAMES = {"total", "perception", "watcher", "reflexes", "trap", "hazard", "strategy", "motor"};
-    public static final int TOTAL = 0, PERCEPTION = 1, WATCHER = 2, REFLEXES = 3, TRAP = 4, HAZARD = 5, STRATEGY = 6, MOTOR = 7;
+    public static final String[] NAMES = {"total", "perception", "watcher", "reflexes", "trap", "hazard", "strategy", "motor", "decide", "pathing"};
+    public static final int TOTAL = 0, PERCEPTION = 1, WATCHER = 2, REFLEXES = 3, TRAP = 4, HAZARD = 5, STRATEGY = 6, MOTOR = 7, DECIDE = 8, PATHING = 9;
     public static boolean on;
     public static final long[] NANOS = new long[NAMES.length];
     public static long cloneTicks;

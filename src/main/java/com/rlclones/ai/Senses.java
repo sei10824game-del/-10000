@@ -319,8 +319,10 @@ public final class Senses {
             if (d >= bestD || !allowed.test(p)) {
                 continue;
             }
-            if (kind == Perception.BlockKind.ORE && !Equipment.canHarvest(agent, agent.level().getBlockState(p))) {
-                continue;
+            if (kind == Perception.BlockKind.ORE && !Equipment.canHarvest(agent, agent.level().getBlockState(p))
+                    && !(agent instanceof com.rlclones.clone.ClonePlayer && new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE_PICKAXE)
+                    .isCorrectToolForDrops(agent.level().getBlockState(p)))) {
+                continue; // (a clone goes for what its next pickaxe will take: it makes that pickaxe first)
             }
             bestD = d;
             best = p;
@@ -384,6 +386,9 @@ public final class Senses {
             mask |= c.controller().extraOptions(now);
             if (com.rlclones.clone.CloneManager.coward()) {
                 mask &= ~Option.FIGHT.bit(); // /rlclone coward: run and hide, never fight
+                if ((mask & Option.FLEE.bit()) != 0 && !threats(observer, agent, now, 16).isEmpty()) {
+                    mask &= Option.FLEE.bit() | Option.EAT.bit(); // an enemy close by: nothing but getting away
+                }
             }
         }
         if ((mask & Option.FLEE.bit()) != 0) {

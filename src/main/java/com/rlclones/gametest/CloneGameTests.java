@@ -3868,7 +3868,9 @@ public final class CloneGameTests {
         h.setBlock(new BlockPos(11, 2, 7), Blocks.COAL_ORE);
         h.setBlock(new BlockPos(11, 3, 7), Blocks.STONE);
         tree(h, 11, 10);
+        h.killAllEntities();
         ClonePlayer c = clone(h, 7.5, 7.5, -90f, false); // facing the ore and the tree, carrying nothing
+        c.getInventory().clearContent();
         seen(h, c, new BlockPos(11, 2, 7), new BlockPos(11, 2, 10), new BlockPos(11, 3, 10), new BlockPos(11, 4, 10));
         c.controller().forcedOption = opt("MINE");
         c.setAiEnabled(true);
@@ -4076,8 +4078,10 @@ public final class CloneGameTests {
         });
         h.succeedWhen(() -> {
             var m = c.controller().motor();
-            h.assertTrue(reached[0] > 0, "across the pool (x " + String.format(Locale.ROOT, "%.1f", c.getX() - start.x) + ")");
-            h.assertTrue(m.swimStrokes >= 20 && m.swimPoseTicks >= 5, "swimming, not bobbing: strokes " + m.swimStrokes + " pose " + m.swimPoseTicks);
+            String diag = String.format(Locale.ROOT, "x %.1f y %.2f swimming=%s pose=%s v=%s strokes %d pose %d stalls %d air %d", c.getX() - start.x,
+                    c.getY() - start.y, c.isSwimming(), c.getPose(), c.getDeltaMovement(), m.swimStrokes, m.swimPoseTicks, m.swimStalls, c.getAirSupply());
+            h.assertTrue(reached[0] > 0, "across the pool (" + diag + ")");
+            h.assertTrue(m.swimStrokes >= 20 && m.swimPoseTicks >= 5 && m.swimStalls == 0, "swimming, not bobbing (" + diag + ")");
             finish(h, c);
         });
     }
@@ -4174,7 +4178,12 @@ public final class CloneGameTests {
         ClonePlayer ally = clone(h, 7.5, 7.5, -90f, false);
         ally.getInventory().add(new ItemStack(Items.IRON_SWORD));
         ally.controller().forcedOption = opt("FIGHT");
-        ally.controller().forcedAction = CombatAction.HOLD;
+        h.onEachTick(() -> {
+            // a policy that would only look on: the clone itself must break that off
+            for (var en : ally.getCloneBrain().combatTable("minecraft:husk").entries()) {
+                en.getValue().q[CombatAction.HOLD.ordinal()] = 1000f;
+            }
+        });
         ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
         c.controller().forcedOption = opt("REST");
         ally.setAiEnabled(true);
@@ -4223,7 +4232,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "r10vantage")
     public static void climbsUpToShootAnEnemyHiddenBehindAWall(GameTestHelper h) {
         clearBases(h);
-        var husk = slowHusk(h, 9.5, 2, 7.5);
+        var husk = slowHusk(h, 11.5, 2, 7.5);
         // steps up to a ledge two high, behind the clone
         h.setBlock(new BlockPos(3, 2, 9), Blocks.STONE);
         h.setBlock(new BlockPos(3, 2, 10), Blocks.STONE);
@@ -4245,7 +4254,8 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var cc = c.controller();
             h.assertTrue(cc.vantageClimbs >= 1, "out of sight behind the wall: up the steps for a look (" + cc.vantageDebug + " " + cc.optionLog + ")");
-            h.assertTrue(husk.getHealth() < start[0] || !husk.isAlive(), "and shot from up there (" + husk.getHealth() + ")");
+            h.assertTrue(husk.getHealth() < start[0] || !husk.isAlive(), "and shot from up there (" + husk.getHealth() + " / " + start[0] + " arrows "
+                    + cc.arrowsLoosed + " " + cc.vantageDebug + " | " + cc.shootDebug + ")");
             finish(h, c);
         });
     }
@@ -4289,12 +4299,22 @@ public final class CloneGameTests {
         seen(h, c, new BlockPos(8, 2, 9));
         c.getInventory().add(new ItemStack(Items.IRON_INGOT, 6));
         c.setAiEnabled(true);
+        int[] madeAt = {-1};
+        int[] t = {0};
+        h.onEachTick(() -> {
+            t[0]++;
+            if (madeAt[0] < 0 && c.getInventory().countItem(Items.BUCKET) + c.getInventory().countItem(Items.WATER_BUCKET) > 0) {
+                madeAt[0] = t[0];
+            }
+        });
         h.succeedWhen(() -> {
             var inv = c.getInventory();
             int buckets = inv.countItem(Items.BUCKET) + inv.countItem(Items.WATER_BUCKET);
-            h.assertTrue(buckets == 1, "a bucket made: " + buckets + " (" + c.controller().optionLog + " " + c.controller().crafting().debug() + ")");
+            h.assertTrue(madeAt[0] > 0 && c.controller().urgentCrafts >= 1, "a bucket made right away (" + c.controller().optionLog + " "
+                    + c.controller().crafting().debug() + ")");
             h.assertTrue(c.getCloneBrain().hasFlag("had_bucket"), "remembered: it has had a bucket");
-            h.assertTrue(inv.countItem(Items.IRON_INGOT) == 3, "and no second one (iron left " + inv.countItem(Items.IRON_INGOT) + ")");
+            h.assertTrue(t[0] - madeAt[0] >= 400, "(time to make another)");
+            h.assertTrue(buckets == 1, "but only the one: " + buckets + " (iron left " + inv.countItem(Items.IRON_INGOT) + ")");
             finish(h, c);
         });
     }
@@ -4316,6 +4336,7 @@ public final class CloneGameTests {
         baseAt(h, new BlockPos(3, 2, 3));
         ClonePlayer c = clone(h, 6.5, 6.5, 45f, false);
         c.getInventory().add(new ItemStack(Items.BUCKET));
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
             var w = c.controller().water();
@@ -4325,8 +4346,8 @@ public final class CloneGameTests {
                     sources++;
                 }
             }
-            h.assertTrue(w.springsMade >= 1 && sources >= 4, "an endless spring of 4 sources next to the base (" + sources + " " + w.debug + " "
-                    + c.controller().optionLog + ")");
+            h.assertTrue(w.springsMade >= 1 && sources >= 4, "an endless spring of 4 sources next to the base (" + sources + " " + w.debug + " | "
+                    + w.trace + " | " + c.controller().optionLog + ")");
             h.assertTrue(w.bucketsFilled >= 2, "filled twice at the lake: " + w.bucketsFilled);
             finish(h, c);
             clearBases(h);
@@ -4361,17 +4382,22 @@ public final class CloneGameTests {
     public static void learnsALingeringCloudIsBadAndKeepsOut(GameTestHelper h) {
         clearBases(h);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        h.runAfterDelay(70, () -> c.teleportTo(h.getLevel(), h.absoluteVec(new Vec3(7.5, 2, 7.5)).x, h.absoluteVec(new Vec3(7.5, 2, 7.5)).y,
+                h.absoluteVec(new Vec3(7.5, 2, 7.5)).z, 0f, 0f)); // (spawn protection over: back into the middle)
         Vec3 at = h.absoluteVec(new Vec3(7.5, 2, 7.5));
         var cloud = new net.minecraft.world.entity.AreaEffectCloud(h.getLevel(), at.x, at.y, at.z);
-        cloud.setRadius(2.5f);
+        cloud.setRadius(3.5f);
         cloud.setDuration(1200);
         cloud.setWaitTime(0);
         cloud.setRadiusPerTick(0);
         cloud.setPotion(net.minecraft.world.item.alchemy.Potions.STRONG_POISON);
-        h.getLevel().addFreshEntity(cloud);
+        h.runAfterDelay(70, () -> h.getLevel().addFreshEntity(cloud));
         String key = com.rlclones.ai.EffectSense.cloudKey(cloud);
         long[] outSince = {-1};
         h.onEachTick(() -> {
+            if (!cloud.isAddedToWorld()) {
+                return;
+            }
             boolean out = Math.hypot(c.getX() - at.x, c.getZ() - at.z) > cloud.getRadius() + 0.3;
             if (!out) {
                 outSince[0] = -1;

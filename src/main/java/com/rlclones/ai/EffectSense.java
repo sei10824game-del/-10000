@@ -42,6 +42,10 @@ public final class EffectSense {
     private final Set<String> lastEffects = new HashSet<>();
     @Nullable
     private AreaEffectCloud fleeing;
+    /** The cloud we were last standing in, and when (what happens just after still counts for it). */
+    @Nullable
+    private AreaEffectCloud lastCloud;
+    private long lastCloudTick = Long.MIN_VALUE / 2;
     @Nullable
     private AreaEffectCloud seeking;
 
@@ -118,13 +122,20 @@ public final class EffectSense {
 
     /** Every tick. Returns true while it has the clone busy (stepping out of a bad cloud / into a good one). */
     public boolean tick(long now, boolean threatened) {
+        if ((now & 1) == 0) {
+            AreaEffectCloud c = cloudHere();
+            if (c != null) {
+                lastCloud = c;
+                lastCloudTick = now;
+            }
+        }
         if (((now + self.getId()) % PERIOD) == 0) {
-            sample();
+            sample(now);
         }
         return clouds(now, threatened);
     }
 
-    private void sample() {
+    private void sample(long tick) {
         Brain b = self.getCloneBrain();
         float health = self.getHealth() + self.getAbsorptionAmount();
         int food = self.getFoodData().getFoodLevel();
@@ -149,14 +160,12 @@ public final class EffectSense {
             }
             samples++;
         }
-        AreaEffectCloud c = cloudHere();
+        AreaEffectCloud c = lastCloud != null && tick - lastCloudTick <= 40 ? lastCloud : null;
         if (c != null) {
-            // what standing in it did: the effects it put on us (their learned worth) and what happened meanwhile
+            // what standing in it (or just after) did: the effects on us (their worth so far) and what happened meanwhile
             float worth = r - baseline;
             for (String id : now) {
-                if (!lastEffects.contains(id) || b.knowsEffect(id)) {
-                    worth += b.knowsEffect(id) ? b.effectValue(id) : 0;
-                }
+                worth += b.effectValue(id);
             }
             b.learnEffect(cloudKey(c), worth);
             debug = cloudKey(c) + " worth " + String.format(java.util.Locale.ROOT, "%.2f", worth) + " v=" + b.effectValue(cloudKey(c));

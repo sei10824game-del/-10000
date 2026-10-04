@@ -61,6 +61,12 @@ public final class Motor {
     /** Ticks spent swimming properly (sprint-swimming under the surface) / in the swimming pose (diagnostics, tests). */
     public int swimStrokes;
     public int swimPoseTicks;
+    /** Times a stroke made no headway and the clone went back to plain swimming for a while (diagnostics). */
+    public int swimStalls;
+    private int strokeTicks;
+    @Nullable
+    private Vec3 strokeFrom;
+    private long strokeOffUntil = Long.MIN_VALUE;
     /** Where the path leads next / the destination, while in water (this tick's navigate call). */
     @Nullable
     private Vec3 swimSteer;
@@ -310,12 +316,14 @@ public final class Motor {
         }
         boolean goalMoved = pathGoal == null || pathGoal.distanceToSqr(goal) > 4.0;
         if ((path == null || path.isDone() || goalMoved) && repathTimer <= 0 && (self.onGround() || self.isInWater())) {
+            long pp = Prof.t();
             path = computePath(goal, arrive);
+            Prof.add(Prof.PATHING, pp);
             pathGoal = goal;
             repathTimer = path == null ? 20 : 10;
         }
         Vec3 steer = goal;
-        if (path != null && !path.isDone()) {
+        if (path != null && !path.isDone() && !(self.isInWater() && !path.canReach())) { // (in open water: straight for the goal)
             while (!path.isDone()) {
                 Node n = path.getNextNode();
                 Vec3 c = new Vec3(n.x + 0.5, n.y, n.z + 0.5);
@@ -735,7 +743,7 @@ public final class Motor {
      */
     private boolean swimStroke() {
         if (swimSteer == null || swimGoal == null || moveDir == null || !self.isInWater() || self.isPassenger() || self.isInLava() || sneak
-                || self.isUsingItem() || self.getAbilities().flying) {
+                || self.isUsingItem() || self.getAbilities().flying || self.level().getGameTime() < strokeOffUntil) {
             return false;
         }
         if (self.getFoodData().getFoodLevel() <= 6 && !self.getAbilities().mayfly) {
@@ -856,9 +864,22 @@ public final class Motor {
         } else if (self.isInWater()) {
             if (stroke) {
                 jump = false; // the stroke carries us (the body follows the look)
+                if (!self.isSwimming() && !self.isUnderWater()) {
+                    // head still above the surface: duck under first (swimming starts with the eyes in the water)
+                    self.setDeltaMovement(self.getDeltaMovement().add(0, -0.04, 0));
+                }
                 swimStrokes++;
                 if (self.isSwimming()) {
                     swimPoseTicks++;
+                }
+                // no headway for two seconds (snagged on something): swim the plain way for a while
+                if (strokeFrom == null || ++strokeTicks >= 40) {
+                    if (strokeFrom != null && horizontalDistance(strokeFrom, self.position()) < 1.0) {
+                        swimStalls++;
+                        strokeOffUntil = self.level().getGameTime() + 80;
+                    }
+                    strokeFrom = self.position();
+                    strokeTicks = 0;
                 }
             } else if (dive && self.getAirSupply() > self.getMaxAirSupply() * 0.3) {
                 // sink on purpose (what holding the sneak key does for a player in water)

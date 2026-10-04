@@ -398,6 +398,9 @@ public final class CreativePlay {
         }
         if (now - lastDuel > 20) {
             for (LivingEntity e : enemies(20)) {
+                if (!e.onGround() && !flies(e) && !e.isInWater()) {
+                    continue; // still falling / jumping: see where it lands (a ledge to break, a rod to cast)
+                }
                 Job j = pickDuel(e);
                 if (j != null) {
                     foe = e;

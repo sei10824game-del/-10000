@@ -1849,7 +1849,9 @@ public final class CloneController {
 
     private void runStrategy(long now) {
         if (option == null) {
+            long pd = Prof.t();
             startOption(now);
+            Prof.add(Prof.DECIDE, pd);
             if (option == null) {
                 return;
             }
@@ -2265,7 +2267,7 @@ public final class CloneController {
             int s = Senses.combatState(self, target, k, sinceEnemyAttack(target), Senses.crowd(perception, self));
             int mask = Senses.combatMask(self) & ~uselessActions();
             holdStreak = action == CombatAction.HOLD ? holdStreak + 1 : 0;
-            if (holdStreak >= 2 && (mask & ~CombatAction.HOLD.bit()) != 0) {
+            if (holdStreak >= 2 && forcedAction != CombatAction.HOLD && (mask & ~CombatAction.HOLD.bit()) != 0) {
                 mask &= ~CombatAction.HOLD.bit(); // looked on long enough: do something (strike, step, shoot, back off)
                 holdBreaks++;
             }
@@ -2595,6 +2597,10 @@ public final class CloneController {
                 } else if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
                     if (arrowClearsFriends(self.getTicksUsingItem())) {
                         offhandShots += self.getUsedItemHand() == InteractionHand.OFF_HAND ? 1 : 0;
+                        arrowsLoosed++;
+                        if (self.getY() > vantageFromY + 0.5) {
+                            vantageDebug += " shot@" + String.format(java.util.Locale.ROOT, "%.1f/%d", self.getY() - vantageFromY, (int) self.getXRot());
+                        }
                         self.releaseUsingItem();
                     } else {
                         self.stopUsingItem();
@@ -2607,6 +2613,7 @@ public final class CloneController {
 
     /** Times the clone climbed up somewhere to get a shot at an enemy hidden behind something (tests). */
     public int vantageClimbs;
+    public int arrowsLoosed;
     @Nullable
     private Vec3 vantage;
     private double vantageFromY;

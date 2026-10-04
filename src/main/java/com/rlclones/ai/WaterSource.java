@@ -44,6 +44,15 @@ public final class WaterSource {
     public int springsMade;
     public int bucketsFilled;
     public String debug = "";
+    /** What happened, briefly (diagnostics, tests). */
+    public final StringBuilder trace = new StringBuilder();
+    private int tracedStage = -1;
+
+    private void trace(String s) {
+        if (trace.length() < 500) {
+            trace.append(s).append(' ');
+        }
+    }
 
     public WaterSource(ClonePlayer self, Motor motor) {
         this.self = self;
@@ -266,6 +275,10 @@ public final class WaterSource {
         Bases.Base home = home();
         if (home == null) {
             return Status.FAILED;
+        }
+        if (stage != tracedStage || ticks % 200 == 0) {
+            tracedStage = stage;
+            trace("s" + stage + "@" + ticks + (stage == 1 ? "/" + motor.mineDebug : "") + (stuck > 0 ? " stuck" + stuck : ""));
         }
         switch (stage) {
             case 0 -> {
