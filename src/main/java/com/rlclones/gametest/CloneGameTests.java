@@ -1092,7 +1092,7 @@ public final class CloneGameTests {
                     planted++;
                 }
             }
-            h.assertTrue(work[0], "soil next to water + hoe + seeds = work");
+            h.assertTrue(work[0], "soil next to water + hoe + seeds = work (" + c.controller().farming().diag() + ")");
             h.assertTrue(planted >= 4, "clone should till the soil by the water with the hoe and plant seeds (" + planted + ") "
                     + c.controller().farming().debug());
             finish(h, c);
@@ -1281,7 +1281,8 @@ public final class CloneGameTests {
         });
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().motor().boating().rodeBoat, "clone should put its boat on the water and ride it");
-            h.assertTrue(c.position().distanceTo(goal) < 2.0 && !c.isPassenger(), "and get out on the other side");
+            h.assertTrue(c.position().distanceTo(goal) < 2.0 && !c.isPassenger(), "and get out on the other side (at "
+                    + c.position().subtract(h.absoluteVec(Vec3.ZERO)) + " riding " + c.isPassenger() + " " + c.controller().motor().boating().state() + ")");
             h.assertTrue(com.rlclones.ai.Boating.boatSlot(c) >= 0, "the boat is broken back into an item and taken along");
             finish(h, c);
         });
@@ -3278,7 +3279,8 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var k = c.getCloneBrain().knowledgeIfPresent("minecraft:husk");
             h.assertTrue(c.controller().consumables().websPlaced >= 1 && h.getBlockState(new BlockPos(8, 2, 7)).is(Blocks.COBWEB),
-                    "a cobweb goes down where the husk stands (" + c.controller().consumables().trapDebug + ")");
+                    "a cobweb goes down where the husk stands (" + c.controller().consumables().trapDebug + " / " + c.controller().consumables().trapWhy
+                    + " options " + c.controller().optionLog + ")");
             h.assertTrue(k != null && k.traits.getInt("effect:web") >= 1, "and it is learned that it holds it fast");
             finish(h, c);
         });

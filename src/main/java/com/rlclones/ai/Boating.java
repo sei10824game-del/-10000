@@ -52,6 +52,11 @@ public final class Boating {
         return -1;
     }
 
+    /** Diagnostics. */
+    public String state() {
+        return state + " trips " + trips + " stuck " + stuck + " cooldown " + cooldown + (boat == null ? "" : " boat " + boat.isAlive());
+    }
+
     public boolean busy() {
         return state != State.NONE || self.getVehicle() instanceof Boat;
     }

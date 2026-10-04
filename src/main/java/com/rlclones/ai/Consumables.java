@@ -802,6 +802,8 @@ public final class Consumables {
     public int websPlaced;
     public int trapsJudged;
     public String trapDebug = "";
+    /** Why the last chance for a trap was let go (diagnostics). */
+    public String trapWhy = "";
 
     private static boolean useless(@Nullable com.rlclones.ai.brain.EnemyKnowledge k, String method) {
         return k != null && AttackLearning.useless(k, method);
@@ -815,16 +817,19 @@ public final class Consumables {
     private boolean feetTrap(Entity enemy, long now) {
         if (!(enemy instanceof net.minecraft.world.entity.LivingEntity le) || now - lastTrap < 60 || trapTarget != null
                 || enemy.getY() - enemy.blockPosition().getY() > 0.2) {
+            trapWhy = "not now";
             return false;
         }
         double d = enemy.distanceTo(self);
         if (d < 2.0 || d > 4.6) {
+            trapWhy = "distance " + String.format(java.util.Locale.ROOT, "%.1f", d);
             return false;
         }
         ServerLevel level = self.serverLevel();
         BlockPos spot = enemy.blockPosition();
         BlockPos ground = spot.below();
         if (level.getBlockState(ground).getCollisionShape(level, ground).isEmpty() || !level.getBlockState(spot).isAir() || !level.getFluidState(spot).isEmpty()) {
+            trapWhy = "no ground / not free";
             return false;
         }
         var k = self.getCloneBrain() == null ? null : self.getCloneBrain().knowledgeIfPresent(Perception.typeId(enemy));
@@ -840,10 +845,12 @@ public final class Consumables {
             slot = fire;
         }
         if (method == null) {
+            trapWhy = "nothing to use (web " + web + " fire " + fire + ")";
             return false;
         }
         Vec3 aim = new Vec3(ground.getX() + 0.5, ground.getY() + 1.0, ground.getZ() + 0.5);
         if (self.getEyePosition().distanceTo(aim) > 4.4) {
+            trapWhy = "out of reach";
             return false;
         }
         BlockHitResult los = level.clip(new ClipContext(self.getEyePosition(), aim.subtract(0, 0.05, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
