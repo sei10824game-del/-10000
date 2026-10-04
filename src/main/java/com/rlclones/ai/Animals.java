@@ -900,7 +900,11 @@ public final class Animals {
                         inside++;
                     }
                 }
-                if (inside >= ls.animals().size()) {
+                boolean deep = true;
+                for (Animal a : ls.animals()) {
+                    deep &= a.getZ() >= penOrigin.getZ() + 2; // well away from the gate, behind us when we turn back to shut it
+                }
+                if (inside >= ls.animals().size() && deep) {
                     lured = inside;
                     stage = 7; // crop still in hand: they follow us to the gate, staying inside behind us
                     ticks = 0;
@@ -914,9 +918,6 @@ public final class Animals {
                 // still inside: shut the gate first (they stay at the back where they followed us), then slip out
                 BlockPos gate = penOrigin.offset(penSize / 2, 0, 0);
                 Vec3 inner = Vec3.atBottomCenterOf(gate.south());
-                if (ticks == 1) {
-                    emptyHand(); // crop away first: they stop following and stay at the back, not at our heels in the gateway
-                }
                 Bases.Pen inPen = Bases.get(self.getServer()).penAt(level.dimension(), Vec3.atCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2)));
                 int stillIn = 0;
                 for (Animal a : ls.animals()) {

@@ -1746,6 +1746,8 @@ public final class CloneController {
             if (!th.isEmpty()) {
                 why = ":" + th.get(0).typeId + "@" + (int) th.get(0).pos.distanceTo(self.position());
             }
+        } else if (optionLog.size() < 3) {
+            why = "(v" + perception.visible().size() + " r" + perception.remembered().size() + ")"; // what it knew when it chose (diagnostics)
         }
         optionLog.add(option.name() + why);
         if (optionLog.size() > 30) {
