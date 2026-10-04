@@ -78,6 +78,7 @@ public final class Motor {
     private Path path;
     private Vec3 pathGoal;
     private int repathTimer;
+    private int failedPaths;
     private Vec3 progressAnchor;
     private int progressTimer;
     private int stuckCount;
@@ -319,8 +320,10 @@ public final class Motor {
             long pp = Prof.t();
             path = computePath(goal, arrive);
             Prof.add(Prof.PATHING, pp);
+            // no way to a goal that has not moved: ask the path finder less and less often (1 s, 2 s, up to 4 s)
+            failedPaths = path == null && pathGoal != null && pathGoal.distanceToSqr(goal) <= 1.0 ? Math.min(failedPaths + 1, 3) : 0;
             pathGoal = goal;
-            repathTimer = path == null ? 20 : 10;
+            repathTimer = path == null ? 20 << Math.max(0, failedPaths - 1) : 10;
         }
         Vec3 steer = goal;
         if (path != null && !path.isDone() && !(self.isInWater() && !path.canReach())) { // (in open water: straight for the goal)

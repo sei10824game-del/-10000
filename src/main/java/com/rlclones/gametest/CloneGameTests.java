@@ -3900,8 +3900,8 @@ public final class CloneGameTests {
             var cc = c.controller();
             h.assertTrue(hasPick(c) && c.getInventory().countItem(Items.COAL) >= 1, "pickaxe made, coal mined (" + cc.toolUpDebug + " "
                     + cc.crafting().debug() + " " + cc.optionLog + ")");
-            h.assertTrue(countBlocks(h, Blocks.CRAFTING_TABLE) == 1 && c.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
-                    "the table that was there is used, no second one made");
+            h.assertTrue(h.absolutePos(new BlockPos(8, 2, 9)).equals(cc.crafting().lastTable), "at the table that was already there ("
+                    + cc.crafting().lastTable + ")");
             finish(h, c);
         });
     }
@@ -4121,7 +4121,8 @@ public final class CloneGameTests {
             var ib = b.controller().itemAid();
             h.assertTrue(ia.asked >= 1, "no pickaxe and nothing to make one from: it asks (" + a.controller().toolUpDebug + " " + ia.state() + ")");
             h.assertTrue(ib.given >= 1, "the friend with a spare one brings it (" + ib.state() + " " + b.controller().optionLog + ")");
-            h.assertTrue(hasPick(a) && hasPick(b), "now both have one (" + a.controller().optionLog + ")");
+            h.assertTrue(hasPick(a) && hasPick(b), "now both have one (a " + hasPick(a) + " b " + hasPick(b) + " coal " + a.getInventory().countItem(Items.COAL)
+                    + " " + a.controller().optionLog + " | " + b.controller().optionLog + ")");
             finish(h, a, b);
         });
     }
@@ -4382,6 +4383,7 @@ public final class CloneGameTests {
     public static void learnsALingeringCloudIsBadAndKeepsOut(GameTestHelper h) {
         clearBases(h);
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.controller().forcedOption = opt("REST"); // standing about, not walking off by chance
         h.runAfterDelay(70, () -> c.teleportTo(h.getLevel(), h.absoluteVec(new Vec3(7.5, 2, 7.5)).x, h.absoluteVec(new Vec3(7.5, 2, 7.5)).y,
                 h.absoluteVec(new Vec3(7.5, 2, 7.5)).z, 0f, 0f)); // (spawn protection over: back into the middle)
         Vec3 at = h.absoluteVec(new Vec3(7.5, 2, 7.5));

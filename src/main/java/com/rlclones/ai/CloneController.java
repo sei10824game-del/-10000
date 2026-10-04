@@ -2641,8 +2641,9 @@ public final class CloneController {
                     || level.getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.FenceBlock) {
                 continue;
             }
-            if (clearShot(new Vec3(p.getX() + 0.5, p.getY() + self.getEyeHeight(), p.getZ() + 0.5), at)) {
-                spots.add(p.immutable());
+            Vec3 eye = new Vec3(p.getX() + 0.5, p.getY() + self.getEyeHeight(), p.getZ() + 0.5);
+            if (clearShot(eye, at) && clearShot(eye.add(0, -0.1, 0), at.add(0, -0.4, 0))) {
+                spots.add(p.immutable()); // (with room to spare: the arrow leaves a little below the eye)
             }
         }
         spots.sort(java.util.Comparator.comparingDouble(p -> p.distSqr(feet)));
@@ -2664,7 +2665,9 @@ public final class CloneController {
     private boolean seekVantage(Entity t) {
         boolean ranged = Equipment.rangedKind(self.getMainHandItem()) != Equipment.RangedKind.NONE || Equipment.offhandRanged(self)
                 || Equipment.rangedSlot(self) >= 0;
-        if (!ranged || perception.canSee(t)) {
+        Vec3 mid = t.position().add(0, t.getBbHeight() * 0.5, 0);
+        boolean shotClear = clearShot(self.getEyePosition().add(0, -0.1, 0), mid) || clearShot(self.getEyePosition().add(0, -0.1, 0), t.getEyePosition());
+        if (!ranged || perception.canSee(t) && shotClear) {
             if (vantage != null || vantagePillars > 0) {
                 if (self.getY() > vantageFromY + 0.5 && perception.canSee(t)) {
                     vantageClimbs++;
@@ -3507,9 +3510,23 @@ public final class CloneController {
         return true;
     }
 
-    /** An ore within reach while doing something else: mined on the spot. Returns true while at it. */
+    @Nullable
+    private BlockPos reflexCollect;
+    private int reflexCollectTicks;
+
+    /** An ore within reach while doing something else: mined on the spot (and what it dropped picked up). Returns true while at it. */
     private boolean oreReflex(long now) {
         ServerLevel level = self.serverLevel();
+        if (reflexCollect != null) {
+            Vec3 at = Vec3.atBottomCenterOf(reflexCollect);
+            boolean dropThere = !level.getEntitiesOfClass(ItemEntity.class, new AABB(reflexCollect).inflate(1.5)).isEmpty();
+            if (--reflexCollectTicks <= 0 || !dropThere || motor.stuckCount() > 3) {
+                reflexCollect = null;
+                return false;
+            }
+            motor.navigate(at, 0.3, false);
+            return true;
+        }
         if (reflexOre == null) {
             if (((now + self.getId()) & 7) != 0 || self.onClimbable() || !self.onGround() || self.isInWater() || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
                 return false;
@@ -3553,6 +3570,8 @@ public final class CloneController {
             BlockPos done = reflexOre;
             perception.forgetBlock(done);
             reflexOre = null;
+            reflexCollect = done;
+            reflexCollectTicks = 40;
             for (BlockPos p : BlockPos.betweenClosed(done.offset(-1, -1, -1), done.offset(1, 1, 1))) {
                 if (Perception.classify(level.getBlockState(p)) == Perception.BlockKind.ORE) {
                     perception.noteBlock(p); // the rest of the vein

@@ -80,6 +80,9 @@ public final class Crafting {
     /** Something a higher-level task needs right now (a chest for the base, a hoe for the field...); crafted first. */
     @Nullable
     public Item forcedTarget;
+    /** Where the last thing that needed a crafting table was made (diagnostics, tests). */
+    @Nullable
+    public BlockPos lastTable;
 
     public Crafting(ServerPlayer self, Motor motor, Perception perception) {
         this.self = self;
@@ -921,6 +924,9 @@ public final class Crafting {
         if (!result.isEmpty()) {
             menu.clicked(0, 0, ClickType.QUICK_MOVE, self);
             crafted++;
+            if (menu instanceof CraftingMenu && station != null) {
+                lastTable = station;
+            }
             if (self instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null) {
                 c.controller().discovery().watchInventory(); // study what was just made
             }

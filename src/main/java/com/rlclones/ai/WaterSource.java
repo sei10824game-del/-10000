@@ -47,6 +47,8 @@ public final class WaterSource {
     /** What happened, briefly (diagnostics, tests). */
     public final StringBuilder trace = new StringBuilder();
     private int tracedStage = -1;
+    @Nullable
+    private BlockPos lastStand;
 
     private void trace(String s) {
         if (trace.length() < 500) {
@@ -258,6 +260,7 @@ public final class WaterSource {
                 }
             }
         }
+        lastStand = stand;
         motor.navigate(stand != null ? Vec3.atBottomCenterOf(stand) : Vec3.atCenterOf(target), stand != null ? 0.4 : 2.5, false);
         if (motor.stuckCount() > 6) {
             stuck++;
@@ -326,9 +329,17 @@ public final class WaterSource {
                     debug = "no water to fill from";
                     return src == null && ticks > 200 ? Status.FAILED : Status.WORKING;
                 }
+                if (ticks % 100 == 50) {
+                    trace(String.format(java.util.Locale.ROOT, "[d%.1f w%s st%s src%s at%s]", self.getEyePosition().distanceTo(Vec3.atCenterOf(src)), self.isInWater(),
+                            lastStand == null ? "-" : lastStand.subtract(src).toShortString(), src.toShortString(), self.blockPosition().subtract(src).toShortString()));
+                }
                 if (reach(src, Motor.BLOCK_REACH - 0.5)) {
                     hold(Items.BUCKET);
-                    if (useBucket(Vec3.atCenterOf(src)) && hasBucket(self, true)) {
+                    boolean used = useBucket(Vec3.atCenterOf(src));
+                    if (ticks % 50 == 0) {
+                        trace("use=" + used + "/" + self.getMainHandItem().getItem());
+                    }
+                    if (used && hasBucket(self, true)) {
                         bucketsFilled++;
                         debug = "filled at " + src.toShortString();
                         stage = 3;
