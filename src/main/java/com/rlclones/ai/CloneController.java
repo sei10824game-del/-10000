@@ -1930,7 +1930,7 @@ public final class CloneController {
         }
         if ((mask & Option.MINE.bit()) != 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
                 && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24, p -> harvestable(Perception.BlockKind.ORE, p)
-                && (now >= toolBlockedUntil || hasPickFor(self.level().getBlockState(p)))) != null) {
+                && (hasPickFor(self.level().getBlockState(p)) || pickMakeableFor(self.level().getBlockState(p)))) != null) {
             orePulls++;
             return Option.MINE; // ore in sight: nothing else comes close (a pickaxe is made first if need be)
         }
@@ -3515,6 +3515,16 @@ public final class CloneController {
             }
         }
         return Senses.nearestBlock(perception, self, Perception.BlockKind.LOG, 32) == null;
+    }
+
+    /** A pickaxe that takes {@code st} can be made right now from what is in the bag. */
+    private boolean pickMakeableFor(BlockState st) {
+        for (net.minecraft.world.item.Item pick : PICK_ORDER) {
+            if (new ItemStack(pick).isCorrectToolForDrops(st) && Crafting.makeable(self, pick)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A pickaxe in the bag that breaks {@code st} so that it drops (any pickaxe for null). */

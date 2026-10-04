@@ -2676,7 +2676,7 @@ public final class CloneGameTests {
     public static void pearlsOverALavaMoatWhenThatIsTheOnlyWay(GameTestHelper h) {
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
-                for (int y = 2; y <= 24; y++) {
+                for (int y = 2; y <= 64; y++) {
                     if (!h.getBlockState(new BlockPos(x, y, z)).isAir()) {
                         h.setBlock(new BlockPos(x, y, z), Blocks.AIR); // nothing left from an earlier test (gravel up there would fall into the moat)
                     }
@@ -2689,6 +2689,8 @@ public final class CloneGameTests {
                 h.setBlock(new BlockPos(x, 1, z), Blocks.LAVA);
             }
         }
+        h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.FallingBlockEntity.class, new net.minecraft.world.phys.AABB(h.absolutePos(BlockPos.ZERO))
+                .inflate(40, 120, 40)).forEach(net.minecraft.world.entity.Entity::discard); // anything already on its way down
         for (int y = 2; y <= 4; y++) {
             h.setBlock(new BlockPos(13, y, 7), Blocks.OAK_LOG);
         }
