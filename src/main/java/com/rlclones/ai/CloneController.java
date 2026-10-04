@@ -1519,6 +1519,7 @@ public final class CloneController {
     }
 
     private double waterEnterY = Double.NaN;
+    private long lastInWater = Long.MIN_VALUE / 2;
     private double airborneFromY = Double.NaN;
     private boolean wasInWater;
 
@@ -1528,21 +1529,30 @@ public final class CloneController {
      */
     private void waterMoves() {
         boolean inWater = self.isInWater();
+        long now = now();
+        // up: the lowest point of a swim (in the water, or just out of it) and later on the ground 2.5+ blocks higher
+        if (inWater) {
+            lastInWater = now;
+            if (Double.isNaN(waterEnterY) || self.getY() < waterEnterY) {
+                waterEnterY = self.getY();
+            }
+        } else if (now - lastInWater > 20) {
+            waterEnterY = Double.NaN;
+        }
         if (!Double.isNaN(waterEnterY) && self.onGround() && self.getY() - waterEnterY >= 2.5) {
-            travel.waterClimbs++; // (out on the ground up there, if still ankle-deep in what runs off the top)
+            travel.waterClimbs++;
             waterEnterY = inWater ? self.getY() : Double.NaN;
         }
+        // down: a jump from a height that ended in the water
         if (self.onGround() && !inWater) {
-            waterEnterY = Double.NaN;
             airborneFromY = Double.NaN;
         } else if (!self.onGround() && !inWater && Double.isNaN(airborneFromY)) {
             airborneFromY = self.getY();
         }
         if (inWater && !wasInWater) {
             if (!Double.isNaN(airborneFromY) && airborneFromY - self.getY() >= 3.0) {
-                travel.waterDrops++; // jumped down into the water
+                travel.waterDrops++;
             }
-            waterEnterY = self.getY();
             airborneFromY = Double.NaN;
         }
         wasInWater = inWater;
