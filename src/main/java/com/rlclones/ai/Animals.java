@@ -711,6 +711,7 @@ public final class Animals {
     @Nullable
     private Livestock livestock;
     private int frontWait;
+    private long hideUntil;
     private int loggedStage = -1;
     /** Stage changes of the livestock job, with where the clone stood relative to the pen (diagnostics). */
     public String livestockLog = "";
@@ -854,7 +855,9 @@ public final class Animals {
             }
             case 5 -> {
                 // lead them into the pen (walk in slowly, crop held high)
-                Equipment.select(self, slotOf(s -> s.is(ls.crop())));
+                if (level.getGameTime() >= hideUntil) {
+                    Equipment.select(self, slotOf(s -> s.is(ls.crop()))); // (not flicking it in and out: each time it vanishes they lose interest)
+                }
                 Vec3 center = Vec3.atBottomCenterOf(penOrigin.offset(penSize / 2, 0, penSize - 2)); // the far end: they come all the way in
                 Bases.Pen leadPen = Bases.get(self.getServer()).penAt(level.dimension(), Vec3.atCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2)));
                 if (leadPen != null && !leadPen.contains(self.position())) {
@@ -870,8 +873,11 @@ public final class Animals {
                             Vec3 to = a.position().subtract(self.position());
                             blocked |= a.isAlive() && to.horizontalDistance() < 2.5 && way.dot(Consumables.horizontal(to)) > 0.4;
                         }
-                        if (blocked) {
+                        if (blocked || level.getGameTime() < hideUntil) {
                             emptyHand(); // one stands in the way: crop away so it stops crowding us, and past it
+                            if (blocked) {
+                                hideUntil = level.getGameTime() + 40;
+                            }
                         }
                         motor.navigate(front, 0.5, false);
                         frontWait = 0;

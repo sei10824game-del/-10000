@@ -591,6 +591,13 @@ public final class Portals {
             motor.moveDirection(self.getLookAngle());
             return true;
         }
+        if (level().dimension() == Level.NETHER && arrivedAt != null && !returning && now <= stayUntil && !threatened
+                && self.position().distanceTo(Vec3.atCenterOf(arrivedAt)) > 10) {
+            // a first look round the Nether: never so far from the way home that it cannot be found again
+            motor.navigate(Vec3.atBottomCenterOf(arrivedAt), 3.0, false);
+            debug = "keeping near the portal " + arrivedAt.toShortString();
+            return true;
+        }
         if (level().dimension() == Level.NETHER && arrivedAt != null
                 && (returning || now > stayUntil || threatened || self.getHealth() < self.getMaxHealth() * 0.5f)) {
             if (!returning && events.length() < 600) {
