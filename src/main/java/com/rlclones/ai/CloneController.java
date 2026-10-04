@@ -3498,6 +3498,11 @@ public final class CloneController {
     private long lastMaterialPickup = Long.MIN_VALUE / 2;
     private long toolBlockedUntil = Long.MIN_VALUE;
 
+    /** No pickaxe to be had for a while (nothing to make one from): ores it cannot take are no option meanwhile. */
+    public boolean toolBlocked() {
+        return now() < toolBlockedUntil;
+    }
+
     /** A pickaxe in the bag that breaks {@code st} so that it drops (any pickaxe for null). */
     private boolean hasPickFor(@Nullable BlockState st) {
         for (ItemStack s : self.getInventory().items) {

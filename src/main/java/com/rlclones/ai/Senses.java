@@ -320,8 +320,8 @@ public final class Senses {
                 continue;
             }
             if (kind == Perception.BlockKind.ORE && !Equipment.canHarvest(agent, agent.level().getBlockState(p))
-                    && !(agent instanceof com.rlclones.clone.ClonePlayer && new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE_PICKAXE)
-                    .isCorrectToolForDrops(agent.level().getBlockState(p)))) {
+                    && !(agent instanceof com.rlclones.clone.ClonePlayer cp && cp.controller() != null && !cp.controller().toolBlocked()
+                    && new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE_PICKAXE).isCorrectToolForDrops(agent.level().getBlockState(p)))) {
                 continue; // (a clone goes for what its next pickaxe will take: it makes that pickaxe first)
             }
             bestD = d;

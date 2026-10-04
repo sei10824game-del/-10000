@@ -34,6 +34,8 @@ public final class Travel {
     public int bridges;
     public int blocksBridged;
     public String debug = "";
+    /** Gap checks made (diagnostics, tests). */
+    public final StringBuilder gapTrace = new StringBuilder();
 
     public Travel(ClonePlayer self, Motor motor, Consumables consumables) {
         this.self = self;
@@ -153,6 +155,9 @@ public final class Travel {
         Direction d = Direction.getNearest(goal.x - self.getX(), 0, goal.z - self.getZ());
         int g = gapAhead(d);
         debug = "gap=" + g + " dir=" + d;
+        if (gapTrace.length() < 300) {
+            gapTrace.append(String.format(java.util.Locale.ROOT, "[%s g%d %s]", self.blockPosition().toShortString(), g, d));
+        }
         double rise = goal.y - self.getY();
         if (g == 0) {
             if (threatened) {

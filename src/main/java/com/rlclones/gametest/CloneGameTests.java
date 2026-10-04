@@ -2669,7 +2669,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().consumables().travelPearls >= 1, "a pearl thrown across (" + c.controller().consumables().pearlDebug + " travel "
                     + c.controller().travel().debug + " at x " + String.format(Locale.ROOT, "%.1f", c.getX() - h.absoluteVec(Vec3.ZERO).x) + " stuck "
-                    + c.controller().motor().stuckCount() + " " + c.controller().travel().guardDebug + " " + c.controller().harvestTrace + " "
+                    + c.controller().motor().stuckCount() + " " + c.controller().travel().guardDebug + " " + c.controller().travel().gapTrace + " " + c.controller().harvestTrace + " "
                     + c.controller().optionLog + ")");
             h.assertTrue(c.getX() >= farSide && c.isAlive(), "and the clone is on the far side");
             finish(h, c);
@@ -3876,14 +3876,15 @@ public final class CloneGameTests {
         seen(h, c, new BlockPos(11, 2, 7), new BlockPos(11, 2, 10), new BlockPos(11, 3, 10), new BlockPos(11, 4, 10));
         c.controller().forcedOption = opt("MINE");
         c.setAiEnabled(true);
+        boolean[] wood = {false};
+        h.onEachTick(() -> wood[0] |= c.controller().option() == opt("GATHER_WOOD"));
         h.succeedWhen(() -> {
             var cc = c.controller();
             h.assertTrue(cc.toolUps >= 1, "no pickaxe: it sets out to get one first (" + cc.toolUpDebug + " " + cc.optionLog + ")");
-            h.assertTrue(cc.optionLog.contains("GATHER_WOOD") || cc.optionLog.stream().anyMatch(o -> o.startsWith("GATHER_WOOD")),
-                    "nothing to make it from: wood first (" + cc.optionLog + ")");
+            h.assertTrue(wood[0], "nothing to make it from: wood first (" + cc.toolUpDebug + " " + cc.optionLog + ")");
             h.assertTrue(hasPick(c), "a pickaxe made (" + cc.toolUpDebug + " " + cc.crafting().debug() + " " + cc.optionLog + ")");
             h.assertTrue(countBlocks(h, Blocks.CRAFTING_TABLE) == 1, "at a crafting table it put down: " + countBlocks(h, Blocks.CRAFTING_TABLE));
-            h.assertTrue(c.getInventory().countItem(Items.COAL) >= 1, "and then the coal mined with it (" + cc.harvestTrace + ")");
+            h.assertTrue(c.getInventory().countItem(Items.COAL) >= 1, "and then the coal mined with it (" + cc.harvestTrace + " " + cc.harvestDebug + ")");
             finish(h, c);
         });
     }
