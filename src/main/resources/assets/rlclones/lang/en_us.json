@@ -44,6 +44,7 @@
   "rlclones.chat.cancel": "[Cancelled] X:%s Y:%s Z:%s - I went down, don't come here.",
   "rlclones.chat.hazard": "Careful: %s hurts! (%s)",
   "rlclones.chat.hazard_learned": "%s hurt me - remembering it as a harmful block and removing it.",
+  "rlclones.chat.hazard_safe": "%s is harmless after all",
   "rlclones.chat.loot": "Looted the chest at X:%s Y:%s Z:%s: %s",
   "rlclones.chat.withdraw": "Took from the base chest at X:%s Y:%s Z:%s: %s",
   "rlclones.chat.deposit": "Stored in the base chest at X:%s Y:%s Z:%s: %s",
@@ -97,10 +98,14 @@
   "rlclones.msg.breeding_off": "Breeding OFF",
   "rlclones.msg.chat_on": "Clone chat shown",
   "rlclones.msg.chat_off": "Clone chat hidden (clones still talk to each other)",
+  "rlclones.msg.coward_on": "Coward mode ON: clones only flee and hide from enemies",
+  "rlclones.msg.coward_off": "Coward mode OFF: clones fight again",
   "rlclones.msg.born": "%s was born to %s and %s",
   "rlclones.msg.born_you": "%s was born to you and %s",
   "rlclones.msg.breed_need": "Both parents need a full food bar and at least %s food items",
   "rlclones.chat.food": "I'm starving and have nothing to eat! Please bring me some food (%s %s %s)",
+  "rlclones.chat.need": "Does anyone have %s to spare? (need %s)",
+  "rlclones.chat.give": "Bringing %s some %s",
   "rlclones.cmd.gave_item": "%s got %s x%s",
   "rlclones.cmd.gave_items": "Gave %s clone(s) a random usable item each (no two the same)"
 }

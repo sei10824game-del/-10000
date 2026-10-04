@@ -388,7 +388,7 @@ public final class Consumables {
     private boolean drinkForSituation(@Nullable Entity enemy) {
         float hp = self.getHealth() / self.getMaxHealth();
         for (MobEffect bad : BAD) {
-            if (self.hasEffect(bad)) {
+            if (self.hasEffect(bad) || bad == MobEffects.POISON && EffectSense.learnedBadOn(self)) {
                 int milk = slotOf(s -> s.is(Items.MILK_BUCKET));
                 if (milk >= 0) {
                     Equipment.select(self, milk);

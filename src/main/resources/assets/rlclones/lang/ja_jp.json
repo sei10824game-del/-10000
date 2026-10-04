@@ -44,6 +44,7 @@
   "rlclones.chat.cancel": "【取消】X:%s Y:%s Z:%s の救援要請は取り消し（やられた）。来ないで！",
   "rlclones.chat.hazard": "気をつけて、%s は有害なブロックだ！（%s）",
   "rlclones.chat.hazard_learned": "%s でダメージを受けた。有害なブロックとして覚えて壊しておく",
+  "rlclones.chat.hazard_safe": "%sは無害だった（訂正）",
   "rlclones.chat.loot": "X:%s Y:%s Z:%s のチェストを漁った: %s",
   "rlclones.chat.withdraw": "拠点チェスト X:%s Y:%s Z:%s から取り出した: %s",
   "rlclones.chat.deposit": "拠点チェスト X:%s Y:%s Z:%s に納品した: %s",
@@ -97,10 +98,14 @@
   "rlclones.msg.breeding_off": "交配オフ",
   "rlclones.msg.chat_on": "クローンのチャットを表示",
   "rlclones.msg.chat_off": "クローンのチャットを非表示（クローン同士の会話は続きます）",
+  "rlclones.msg.coward_on": "臆病モード ON：クローンは敵から逃げる・隠れることしかしません",
+  "rlclones.msg.coward_off": "臆病モード OFF：クローンは再び戦います",
   "rlclones.msg.born": "%2$s と %3$s の間に %1$s が生まれました",
   "rlclones.msg.born_you": "あなたと %2$s の間に %1$s が生まれました",
   "rlclones.msg.breed_need": "親になるには2人とも満腹で、食べ物を%s個以上持っている必要があります",
   "rlclones.chat.food": "お腹がすいて食べ物がありません！食べ物をください (%s %s %s)",
+  "rlclones.chat.need": "%sを持っていたら分けてください！（%s個）",
+  "rlclones.chat.give": "%sに%sを持っていくよ",
   "rlclones.cmd.gave_item": "%s に %s を %s 個渡しました",
   "rlclones.cmd.gave_items": "%s 体のクローンにそれぞれ違うランダムな使えるアイテムを渡しました"
 }

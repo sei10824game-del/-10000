@@ -53,7 +53,10 @@ import java.util.List;
  * its bookshelves, a farm by the base, farm animals and an iron golem.
  */
 public final class CreativePlay {
-    public enum Job {NONE, TNT_CROWD, POTION, CLIFF, ROD_LAUNCH, TNT_HAZARD, ENCHANTING, NETHER_PORTAL, END_PORTAL, FARM, MOBS, GOLEM}
+    public enum Job {NONE, TNT_CROWD, POTION, CLIFF, ROD_LAUNCH, TNT_HAZARD, ENCHANTING, NETHER_PORTAL, END_PORTAL, FARM, MOBS, GOLEM, STRIKE, SNIPE}
+
+    /** The ways of taking on a single enemy; which one is learned (and varied) by how well each went. */
+    private static final Job[] DUELS = {Job.ROD_LAUNCH, Job.STRIKE, Job.SNIPE};
 
     private final ClonePlayer self;
     private final Motor motor;
@@ -78,7 +81,6 @@ public final class CreativePlay {
     private long lastTnt = Long.MIN_VALUE / 2;
     private long lastPotion = Long.MIN_VALUE / 2;
     private long lastCliff = Long.MIN_VALUE / 2;
-    private long lastRod = Long.MIN_VALUE / 2;
     private long lastHazard = Long.MIN_VALUE / 2;
     private long lastBuild = Long.MIN_VALUE / 2;
     private long lastThink = Long.MIN_VALUE / 2;
@@ -95,6 +97,13 @@ public final class CreativePlay {
     public int farmsMade;
     public int mobsSpawned;
     public int golemsBuilt;
+    public int strikes;
+    public int snipes;
+    /** Every way of fighting used so far, in order (tests, diagnostics). */
+    public final List<Job> duelLog = new ArrayList<>();
+    /** Per way of fighting: {summed reward, times}. */
+    private final java.util.Map<Job, float[]> duelStats = new java.util.EnumMap<>(Job.class);
+    private long lastDuel = Long.MIN_VALUE / 2;
     public String lastPotionThrown = "";
     public String debug = "";
     public String log = "";
@@ -310,10 +319,15 @@ public final class CreativePlay {
                 case FARM -> farmTick();
                 case MOBS -> mobsTick();
                 case GOLEM -> golemTick();
+                case STRIKE -> strikeTick();
+                case SNIPE -> snipeTick();
                 default -> false;
             };
             if (!more || ticks > 1600) {
                 note(more ? "timeout" : "done");
+                if (java.util.Arrays.asList(DUELS).contains(job)) {
+                    judgeDuel(now);
+                }
                 job = Job.NONE;
                 lastThink = now;
                 motor.land();
@@ -382,13 +396,15 @@ public final class CreativePlay {
                 }
             }
         }
-        if (now - lastRod > 300) {
+        if (now - lastDuel > 20) {
             for (LivingEntity e : enemies(20)) {
-                if (!flies(e) && e.onGround() && !e.isInWater() && e.getBbHeight() < 3) {
+                Job j = pickDuel(e);
+                if (j != null) {
                     foe = e;
                     startY = e.getY();
                     startHealth = e.getHealth();
-                    start(Job.ROD_LAUNCH);
+                    start(j);
+                    duelLog.add(j);
                     return true;
                 }
             }
@@ -803,6 +819,153 @@ public final class CreativePlay {
                 return ++idx < 80;
             }
         }
+    }
+
+    // ------------------------------------------------------------------ one enemy: rod, blade or bow (learned, varied)
+
+    private boolean rodFits(LivingEntity e) {
+        return !flies(e) && e.onGround() && !e.isInWater() && e.getBbHeight() < 3;
+    }
+
+    /**
+     * How to take this one on: a way not tried yet first (rod, then blade, then bow), otherwise the one that has gone
+     * best so far - now and then another one, and never the same one three times running while others are open.
+     */
+    @Nullable
+    private Job pickDuel(LivingEntity e) {
+        List<Job> open = new ArrayList<>();
+        for (Job j : DUELS) {
+            if (j == Job.ROD_LAUNCH && !rodFits(e) || j == Job.SNIPE && !perception.canSee(e)) {
+                continue;
+            }
+            open.add(j);
+        }
+        if (open.isEmpty()) {
+            return null;
+        }
+        for (Job j : open) {
+            if (!duelStats.containsKey(j)) {
+                return j;
+            }
+        }
+        int n = duelLog.size();
+        Job last = n > 0 ? duelLog.get(n - 1) : null;
+        boolean twice = n > 1 && duelLog.get(n - 2) == last;
+        List<Job> pool = new ArrayList<>(open);
+        if (twice && pool.size() > 1) {
+            pool.remove(last);
+        }
+        if (self.getRandom().nextFloat() < 0.2f) {
+            return pool.get(self.getRandom().nextInt(pool.size()));
+        }
+        Job best = pool.get(0);
+        for (Job j : pool) {
+            if (duelValue(j) > duelValue(best)) {
+                best = j;
+            }
+        }
+        return best;
+    }
+
+    private float duelValue(Job j) {
+        float[] v = duelStats.get(j);
+        return v == null || v[1] == 0 ? 0 : v[0] / v[1];
+    }
+
+    /** How well the fight went: the share of its health taken (a kill counts extra), per second spent. */
+    private void judgeDuel(long now) {
+        lastDuel = now;
+        LivingEntity t = foe;
+        float max = t == null ? 20 : Math.max(1, t.getMaxHealth());
+        float dealt = t == null ? 0 : (t.isAlive() ? Math.max(0, startHealth - t.getHealth()) : startHealth) / max + (t != null && !t.isAlive() ? 1f : 0f);
+        float reward = dealt / Math.max(1f, ticks / 20f) * 10f;
+        float[] v = duelStats.computeIfAbsent(job, k -> new float[2]);
+        v[0] += reward;
+        v[1]++;
+        if (log.length() < 600) {
+            log += String.format(java.util.Locale.ROOT, " %s=%.2f", job, reward);
+        }
+    }
+
+    /** A blade no monster stands up to for long: netherite, Sharpness V, Fire Aspect II. */
+    private static ItemStack strongBlade() {
+        ItemStack s = new ItemStack(Items.NETHERITE_SWORD);
+        s.enchant(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS, 5);
+        s.enchant(net.minecraft.world.item.enchantment.Enchantments.FIRE_ASPECT, 2);
+        return s;
+    }
+
+    /** A bow with Power V and Flame (no arrows needed in creative). */
+    private static ItemStack strongBow() {
+        ItemStack s = new ItemStack(Items.BOW);
+        s.enchant(net.minecraft.world.item.enchantment.Enchantments.POWER_ARROWS, 5);
+        s.enchant(net.minecraft.world.item.enchantment.Enchantments.FLAMING_ARROWS, 1);
+        return s;
+    }
+
+    /** Fly in beside it and cut it down with a blade nothing survives long. */
+    private boolean strikeTick() {
+        LivingEntity t = foe;
+        if (t == null || !t.isAlive() || ticks > 400) {
+            return false;
+        }
+        if (!hold(strongBlade())) {
+            return false;
+        }
+        Vec3 aim = t.position().add(0, t.getBbHeight() * 0.6, 0);
+        if (self.distanceTo(t) > 2.6) {
+            Vec3 from = Consumables.horizontal(self.position().subtract(t.position()));
+            flyTo(t.position().add(from.scale(1.8)).add(0, 0.3, 0), 0.5);
+            lookNow(aim);
+            return true;
+        }
+        motor.fly(self.position());
+        lookNow(aim);
+        if (self.getAttackStrengthScale(0.5f) >= 0.95f && motor.canHit(t)) {
+            motor.attack(t);
+            strikes++;
+            note("strike");
+        }
+        return true;
+    }
+
+    /** Hover off at a safe distance and shoot it down with a strong bow. */
+    private boolean snipeTick() {
+        LivingEntity t = foe;
+        if (t == null || !t.isAlive() || ticks > 500) {
+            if (self.isUsingItem()) {
+                self.stopUsingItem();
+            }
+            return false;
+        }
+        if (!self.isUsingItem() && !hold(strongBow())) {
+            return false;
+        }
+        Vec3 from = Consumables.horizontal(self.position().subtract(t.position()));
+        if (from.lengthSqr() < 0.01) {
+            from = new Vec3(1, 0, 0);
+        }
+        Vec3 post = t.position().add(from.scale(9)).add(0, 3, 0);
+        if (self.position().distanceTo(post) > 2.5) {
+            motor.fly(post);
+        } else {
+            motor.fly(self.position());
+        }
+        double dist = self.getEyePosition().distanceTo(t.getEyePosition());
+        // aim a little above it for the drop over that distance (a fully drawn arrow flies ~3 blocks a tick)
+        Vec3 aim = t.position().add(0, t.getBbHeight() * 0.6 + dist * dist * 0.0018, 0);
+        lookNow(aim);
+        if (!perception.canSee(t)) {
+            return true;
+        }
+        if (!self.isUsingItem()) {
+            motor.useHeldItem(InteractionHand.MAIN_HAND);
+        } else if (self.getTicksUsingItem() >= 22) {
+            self.releaseUsingItem();
+            snipes++;
+            note("shot");
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------ TNT on harmful ground

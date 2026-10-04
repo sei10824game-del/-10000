@@ -50,6 +50,45 @@ public final class Brain {
 
     public void learnHarmful(String blockId) {
         harmfulBlocks.mergeInt(blockId, 1, Integer::sum);
+        safeBlocks.remove(blockId);
+    }
+
+    /** Blocks once thought harmful that were touched for a long while without any harm: corrected, and not believed again on hearsay. */
+    private final Set<String> safeBlocks = new java.util.HashSet<>();
+
+    public void unlearnHarmful(String blockId) {
+        harmfulBlocks.removeInt(blockId);
+        safeBlocks.add(blockId);
+    }
+
+    public boolean provenSafe(String blockId) {
+        return safeBlocks.contains(blockId);
+    }
+
+    // ---------------------------------------------------------------- effects on ourselves (learned from experience)
+
+    /** Effect id (or "cloud:<colour>") -> learned value: how much better (+) or worse (-) things went while it was on us. */
+    private final it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap<String> effectValues = new it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap<>();
+    private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> effectSamples = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
+
+    public void learnEffect(String id, float reward) {
+        int n = effectSamples.getInt(id) + 1;
+        effectSamples.put(id, n);
+        float v = effectValues.getFloat(id);
+        effectValues.put(id, v + (reward - v) * Math.max(0.1f, 1f / n));
+    }
+
+    public float effectValue(String id) {
+        return effectValues.getFloat(id);
+    }
+
+    public int effectSamples(String id) {
+        return effectSamples.getInt(id);
+    }
+
+    /** Learned well enough (a few samples) to act on. */
+    public boolean knowsEffect(String id) {
+        return effectSamples.getInt(id) >= 3;
     }
 
     public Set<String> harmfulBlocks() {
@@ -448,6 +487,15 @@ public final class Brain {
         CompoundTag hb = new CompoundTag();
         harmfulBlocks.object2IntEntrySet().forEach(e -> hb.putInt(e.getKey(), e.getIntValue()));
         tag.put("harmfulBlocks", hb);
+        net.minecraft.nbt.ListTag sb = new net.minecraft.nbt.ListTag();
+        safeBlocks.forEach(f -> sb.add(net.minecraft.nbt.StringTag.valueOf(f)));
+        tag.put("safeBlocks", sb);
+        CompoundTag ev = new CompoundTag();
+        effectValues.object2FloatEntrySet().forEach(e -> ev.putFloat(e.getKey(), e.getFloatValue()));
+        tag.put("effectValues", ev);
+        CompoundTag es = new CompoundTag();
+        effectSamples.object2IntEntrySet().forEach(e -> es.putInt(e.getKey(), e.getIntValue()));
+        tag.put("effectSamples", es);
         CompoundTag ki = new CompoundTag();
         knownItems.object2IntEntrySet().forEach(e -> ki.putInt(e.getKey(), e.getIntValue()));
         tag.put("knownItems", ki);
@@ -520,6 +568,18 @@ public final class Brain {
         CompoundTag hb = tag.getCompound("harmfulBlocks");
         for (String k : hb.getAllKeys()) {
             b.harmfulBlocks.put(k, hb.getInt(k));
+        }
+        net.minecraft.nbt.ListTag sb = tag.getList("safeBlocks", net.minecraft.nbt.Tag.TAG_STRING);
+        for (int i = 0; i < sb.size(); i++) {
+            b.safeBlocks.add(sb.getString(i));
+        }
+        CompoundTag ev = tag.getCompound("effectValues");
+        for (String k : ev.getAllKeys()) {
+            b.effectValues.put(k, ev.getFloat(k));
+        }
+        CompoundTag es = tag.getCompound("effectSamples");
+        for (String k : es.getAllKeys()) {
+            b.effectSamples.put(k, es.getInt(k));
         }
         CompoundTag ki = tag.getCompound("knownItems");
         for (String k : ki.getAllKeys()) {
@@ -612,6 +672,12 @@ public final class Brain {
         deaths += b.deaths;
         members += b.members;
         b.harmfulBlocks.object2IntEntrySet().forEach(e -> harmfulBlocks.mergeInt(e.getKey(), e.getIntValue(), Integer::sum));
+        b.effectSamples.object2IntEntrySet().forEach(e -> {
+            int mine = effectSamples.getInt(e.getKey());
+            int theirs = e.getIntValue();
+            effectValues.put(e.getKey(), (effectValues.getFloat(e.getKey()) * mine + b.effectValues.getFloat(e.getKey()) * theirs) / Math.max(1, mine + theirs));
+            effectSamples.put(e.getKey(), mine + theirs);
+        });
         b.knownItems.object2IntEntrySet().forEach(e -> knownItems.mergeInt(e.getKey(), e.getIntValue(), Math::min));
         b.itemFacts.forEach(itemFacts::putIfAbsent);
         knownBlocks.addAll(b.knownBlocks);

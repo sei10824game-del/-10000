@@ -21,6 +21,8 @@ public class CloneRoster extends SavedData {
     public boolean breeding;
     /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
     public boolean chatHidden;
+    /** /rlclone coward: clones never fight, they only run and hide. */
+    public boolean coward;
     public boolean linked;
     public boolean respawn;
     public int nextIndex = 1;
@@ -31,6 +33,7 @@ public class CloneRoster extends SavedData {
         r.respawn = tag.getBoolean("respawn");
         r.breeding = tag.getBoolean("breeding");
         r.chatHidden = tag.getBoolean("chatHidden");
+        r.coward = tag.getBoolean("coward");
         r.nextIndex = Math.max(1, tag.getInt("nextIndex"));
         ListTag list = tag.getList("clones", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -64,6 +67,7 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("respawn", respawn);
         tag.putBoolean("breeding", breeding);
         tag.putBoolean("chatHidden", chatHidden);
+        tag.putBoolean("coward", coward);
         tag.putInt("nextIndex", nextIndex);
         ListTag list = new ListTag();
         profiles.forEach((id, profile) -> {

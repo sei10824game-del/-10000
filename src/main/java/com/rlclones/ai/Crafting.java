@@ -292,8 +292,12 @@ public final class Crafting {
         if (!hasItem(p, Items.FLINT_AND_STEEL) && hasItem(p, Items.IRON_INGOT) && hasItem(p, Items.FLINT) && count(p, Items.OBSIDIAN) >= 10) {
             out.add(Items.FLINT_AND_STEEL); // to light the portal frame
         }
-        if (count(p, Items.IRON_INGOT) >= 3 && !hasItem(p, Items.BUCKET) && !hasItem(p, Items.WATER_BUCKET)) {
-            out.add(Items.BUCKET);
+        if (count(p, Items.IRON_INGOT) >= 3 && !hasBucket(p)) {
+            if (firstBucketWanted(p)) {
+                out.add(0, Items.BUCKET); // never had one: the bucket first (water for a field, putting out fire...)
+            } else {
+                out.add(Items.BUCKET);
+            }
         }
         return out;
     }
@@ -456,6 +460,28 @@ public final class Crafting {
         List<Item> wanted = wanted(p);
         boolean haveTable = count(p, Items.CRAFTING_TABLE) > 0;
         boolean tableAccess = haveTable || tableNearby(p);
+        Item forced = p instanceof com.rlclones.clone.ClonePlayer fc && fc.controller() != null ? fc.controller().crafting().forcedTarget : null;
+        if (forced instanceof PickaxeItem) {
+            wanted = List.of(forced); // a pickaxe for the mining at hand: nothing else may eat up its materials
+        } else if (furnaceWanted(p)) {
+            // raw meat / ore in the bag and the stone for a furnace: the furnace comes before anything else made of stone
+            if (tableAccess) {
+                CraftingRecipe r = craftable(p, s -> s.is(Items.FURNACE));
+                if (r != null) {
+                    return r;
+                }
+            } else if (countTag(p, ItemTags.PLANKS) >= 4) {
+                CraftingRecipe r = craftable(p, s -> s.is(Items.CRAFTING_TABLE));
+                if (r != null) {
+                    return r;
+                }
+            } else if (countTag(p, ItemTags.LOGS) > 0) {
+                CraftingRecipe r = craftable(p, s -> s.is(ItemTags.PLANKS));
+                if (r != null) {
+                    return r;
+                }
+            }
+        }
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
             // a boat first: keep the wood for it (5 planks + a table) instead of spending it on other things
             for (Item boat : BOATS) {
@@ -554,6 +580,67 @@ public final class Crafting {
             return c.controller().crafting().curiosity(tableAccess);
         }
         return null;
+    }
+
+    /** No furnace anywhere near, the cobblestone for one (8) and something worth smelting in the bag. */
+    public static boolean furnaceWanted(Player p) {
+        return count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && !furnaceNearby(p) && !smeltables(p).isEmpty();
+    }
+
+    /** Can this pickaxe be made right now from what is in the bag (sticks, the head material, a table here or in the bag)? */
+    public static boolean makeable(Player p, Item pick) {
+        int wood = countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4;
+        int need = (count(p, Items.STICK) >= 2 ? 0 : 2) + (count(p, Items.CRAFTING_TABLE) > 0 || tableNearby(p) ? 0 : 4);
+        if (pick == Items.WOODEN_PICKAXE) {
+            need += 3;
+        } else if (pick == Items.STONE_PICKAXE) {
+            if (cobble(p) < 3) {
+                return false;
+            }
+        } else if (pick == Items.IRON_PICKAXE) {
+            if (count(p, Items.IRON_INGOT) < 3) {
+                return false;
+            }
+        } else if (pick == Items.DIAMOND_PICKAXE) {
+            if (count(p, Items.DIAMOND) < 3) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        return wood >= need;
+    }
+
+    /** Coal or charcoal and a stick (or the wood for one): a torch can be made in the hand. */
+    public static boolean torchMakeable(Player p) {
+        return count(p, Items.COAL) + count(p, Items.CHARCOAL) > 0
+                && (count(p, Items.STICK) > 0 || countTag(p, ItemTags.PLANKS) >= 2 || countTag(p, ItemTags.LOGS) > 0);
+    }
+
+    /** Any kind of bucket in the bag (one is enough: never a second). */
+    public static boolean hasBucket(Player p) {
+        for (ItemStack s : p.getInventory().items) {
+            if (s.getItem() instanceof net.minecraft.world.item.BucketItem || s.getItem() instanceof net.minecraft.world.item.MilkBucketItem
+                    || s.getItem() instanceof net.minecraft.world.item.SolidBucketItem) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Never had a bucket yet and the iron for one. */
+    public static boolean firstBucketWanted(Player p) {
+        return !hasBucket(p) && count(p, Items.IRON_INGOT) >= 3 && p instanceof com.rlclones.clone.ClonePlayer c && c.getCloneBrain() != null
+                && !c.getCloneBrain().hasFlag("had_bucket");
+    }
+
+    /** Crafting that should not wait for the policy to get round to it (a furnace for the raw food/ore, the first bucket, a pickaxe for mining). */
+    public boolean urgent() {
+        if (forcedTarget instanceof PickaxeItem) {
+            return true;
+        }
+        boolean tableAccess = count(self, Items.CRAFTING_TABLE) > 0 || tableNearby(self) || countTag(self, ItemTags.PLANKS) + countTag(self, ItemTags.LOGS) * 4 >= 4;
+        return tableAccess && (furnaceWanted(self) || firstBucketWanted(self)) || stationToPlace() == Items.FURNACE;
     }
 
     // Perception is per clone; the static planner only knows about stations the player can see right now.

@@ -8,6 +8,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
+import javax.annotation.Nullable;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffects;
@@ -57,6 +58,14 @@ public final class Motor {
     private boolean atEdge;
     private int atEdgeTicks;
     public int dives;
+    /** Ticks spent swimming properly (sprint-swimming under the surface) / in the swimming pose (diagnostics, tests). */
+    public int swimStrokes;
+    public int swimPoseTicks;
+    /** Where the path leads next / the destination, while in water (this tick's navigate call). */
+    @Nullable
+    private Vec3 swimSteer;
+    @Nullable
+    private Vec3 swimGoal;
 
     // path following
     private PathProxyEntity proxy;
@@ -327,6 +336,10 @@ public final class Motor {
         }
         moveToward(steer);
         sprint(run);
+        if (self.isInWater()) {
+            swimSteer = steer;
+            swimGoal = goal;
+        }
         if (steer.y > pos.y + 0.5 && self.isInWater()) {
             jump();
         }
@@ -711,8 +724,52 @@ public final class Motor {
 
     // ------------------------------------------------------------------ apply
 
+    private boolean water(BlockPos p) {
+        return self.level().getFluidState(p).is(net.minecraft.tags.FluidTags.WATER);
+    }
+
+    /**
+     * Swim like a player rather than bob at the surface: in open water with somewhere to go, sprint-swim just under
+     * the surface (or down towards a goal below), the body following where it looks. Up for air when it runs low,
+     * and the old way (head up, jumping) for the last stretch onto a shore.
+     */
+    private boolean swimStroke() {
+        if (swimSteer == null || swimGoal == null || moveDir == null || !self.isInWater() || self.isPassenger() || self.isInLava() || sneak
+                || self.isUsingItem() || self.getAbilities().flying) {
+            return false;
+        }
+        if (self.getFoodData().getFoodLevel() <= 6 && !self.getAbilities().mayfly) {
+            return false; // too hungry to sprint
+        }
+        if (self.getAirSupply() < self.getMaxAirSupply() * 0.3 && !self.hasEffect(MobEffects.WATER_BREATHING) && !self.canBreatheUnderwater()) {
+            return false; // up for air
+        }
+        if (horizontalDistance(self.position(), swimGoal) < 3.0 && swimGoal.y > self.getY() - 0.5) {
+            return false; // nearly there and it is up on the shore: climb out
+        }
+        if (swimSteer.y > self.getY() + 0.5 && horizontalDistance(self.position(), swimSteer) < 1.5) {
+            return false; // the path climbs out right here
+        }
+        BlockPos feet = self.blockPosition();
+        return water(feet) && (water(feet.below()) || water(feet.above()));
+    }
+
+    /** Pitch for a swimming stroke: towards the goal when it is below, else to stay a little under the surface. */
+    private float swimPitch() {
+        BlockPos feet = self.blockPosition();
+        int top = feet.getY();
+        while (top < feet.getY() + 6 && water(new BlockPos(feet.getX(), top + 1, feet.getZ()))) {
+            top++;
+        }
+        double wantY = swimGoal.y < self.getY() - 0.8 ? Math.max(swimSteer.y, swimGoal.y) : top + 1 - 1.4;
+        double dy = wantY - self.getY();
+        double horiz = Math.max(1.0, horizontalDistance(self.position(), swimSteer));
+        return (float) Mth.clamp(-Math.toDegrees(Math.atan2(dy, horiz)), -40, 50);
+    }
+
     public void tick() {
         flight();
+        boolean stroke = swimStroke();
         // rotation
         float yaw = self.getYRot();
         float pitch = self.getXRot();
@@ -731,7 +788,7 @@ public final class Motor {
             targetPitch = wantPitch;
         } else if (moveDir != null) {
             targetYaw = (float) Math.toDegrees(Mth.atan2(moveDir.z, moveDir.x)) - 90.0F;
-            targetPitch = 0f;
+            targetPitch = stroke ? swimPitch() : 0f;
         }
         float dyaw = Mth.clamp(Mth.wrapDegrees(targetYaw - yaw), -MAX_YAW_STEP, MAX_YAW_STEP);
         float dpitch = Mth.clamp(targetPitch - pitch, -MAX_PITCH_STEP, MAX_PITCH_STEP);
@@ -778,6 +835,9 @@ public final class Motor {
             zza *= 0.3f;
             xxa *= 0.3f;
         }
+        if (stroke) {
+            sprint = true; // swimming is sprinting in water
+        }
         boolean canSprint = sprint && zza >= 0.8f && !using && !sneak && !self.hasEffect(MobEffects.BLINDNESS)
                 && (self.getFoodData().getFoodLevel() > 6 || self.getAbilities().mayfly);
         if (self.isSprinting() != canSprint) {
@@ -794,7 +854,13 @@ public final class Motor {
         if (self.isInLava()) {
             jump = true;
         } else if (self.isInWater()) {
-            if (dive && self.getAirSupply() > self.getMaxAirSupply() * 0.3) {
+            if (stroke) {
+                jump = false; // the stroke carries us (the body follows the look)
+                swimStrokes++;
+                if (self.isSwimming()) {
+                    swimPoseTicks++;
+                }
+            } else if (dive && self.getAirSupply() > self.getMaxAirSupply() * 0.3) {
                 // sink on purpose (what holding the sneak key does for a player in water)
                 jump = false;
                 self.setDeltaMovement(self.getDeltaMovement().add(0, -0.04, 0));
@@ -829,6 +895,8 @@ public final class Motor {
         sneak = false;
         dive = false;
         flyGoal = null;
+        swimSteer = null;
+        swimGoal = null;
         noHop = false;
         daring = false;
         if (!moving) {

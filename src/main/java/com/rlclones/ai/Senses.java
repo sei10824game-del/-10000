@@ -174,6 +174,16 @@ public final class Senses {
     // ------------------------------------------------------------------ strategy
 
     public static List<Perception.Seen> threats(Perception observer, Player agent, long now, double radius) {
+        List<Perception.Seen> cached = observer.cachedThreats(agent, now, radius);
+        if (cached != null) {
+            return cached; // asked several times a tick: worked out once
+        }
+        List<Perception.Seen> out = computeThreats(observer, agent, now, radius);
+        observer.cacheThreats(agent, now, radius, out);
+        return out;
+    }
+
+    private static List<Perception.Seen> computeThreats(Perception observer, Player agent, long now, double radius) {
         List<Perception.Seen> out = new ArrayList<>();
         for (Perception.Seen s : observer.remembered()) {
             if (now - s.lastSeen > 60 || !s.alive() || s.entity == agent) {
@@ -372,6 +382,13 @@ public final class Senses {
         }
         if (agent instanceof com.rlclones.clone.ClonePlayer c) {
             mask |= c.controller().extraOptions(now);
+            if (com.rlclones.clone.CloneManager.coward()) {
+                mask &= ~Option.FIGHT.bit(); // /rlclone coward: run and hide, never fight
+            }
+        }
+        if ((mask & Option.FLEE.bit()) != 0) {
+            // enemies about: fight, flee or get on with work - never stand around resting or trail after a friend
+            mask &= ~(Option.REST.bit() | Option.FOLLOW.bit());
         }
         return mask;
     }

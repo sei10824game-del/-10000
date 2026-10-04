@@ -83,6 +83,11 @@ public final class CloneController {
     private final AttackLearning attacks = new AttackLearning(this::brain);
     private boolean lookedAround;
     private final FoodAid foodAid;
+    private final ItemAid itemAid;
+    private final WaterSource water;
+    private boolean farmWater;
+    private boolean wantWater;
+    private final EffectSense effects;
     private final Breeding breeding;
     private final Achievements achievements;
     private final StairMining stairs;
@@ -181,6 +186,9 @@ public final class CloneController {
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
         this.foodAid = new FoodAid(self, motor);
+        this.itemAid = new ItemAid(self, motor);
+        this.water = new WaterSource(self, motor);
+        this.effects = new EffectSense(self, motor, perception);
         this.breeding = new Breeding(self, motor);
         this.achievements = new Achievements(self, motor, perception, this::brain, crafting);
         this.stairs = new StairMining(self, motor);
@@ -272,6 +280,18 @@ public final class CloneController {
 
     public FoodAid foodAid() {
         return foodAid;
+    }
+
+    public ItemAid itemAid() {
+        return itemAid;
+    }
+
+    public WaterSource water() {
+        return water;
+    }
+
+    public EffectSense effects() {
+        return effects;
     }
 
     public Breeding breeding() {
@@ -418,14 +438,31 @@ public final class CloneController {
     // ------------------------------------------------------------------ main loop
 
     public void tick() {
+        long p0 = Prof.t();
+        tickInner();
+        if (Prof.on) {
+            Prof.add(Prof.TOTAL, p0);
+            Prof.cloneTicks++;
+        }
+    }
+
+    /** Ticks this clone's mind has run (since it was summoned / respawned). */
+    private long ticksLived;
+
+    private void tickInner() {
+        ticksLived++;
         long now = now();
         trackRewards();
         attacks.tick(now);
         if (((now + self.getId()) & 3) == 0 || !lookedAround) {
             lookedAround = true; // a first look around before the very first decision
+            long p = Prof.t();
             perception.update(now);
             observeWorld(now);
+            Prof.add(Prof.PERCEPTION, p);
+            p = Prof.t();
             watcher.update(now);
+            Prof.add(Prof.WATCHER, p);
         }
         if (self.isCreative()) {
             // creative: nothing to play for any more - only helping the others
@@ -460,6 +497,13 @@ public final class CloneController {
         }
         if (((now + self.getId()) % 20) == 0) {
             discovery.watchInventory();
+            if (farming.needDirt) {
+                farming.needDirt = false;
+                itemAid.need(Items.DIRT, 4); // water to farm by, nothing to make soil from
+            }
+            if (brain() != null && !brain().hasFlag("had_bucket") && Crafting.hasBucket(self)) {
+                brain().setFlag("had_bucket"); // the first bucket: from now on one is enough
+            }
         }
         if (((now + self.getId()) % 100) == 50) {
             discovery.share(now);
@@ -471,8 +515,10 @@ public final class CloneController {
         if (threatened) {
             lastThreatSeen = now;
         }
+        long pr = Prof.t();
         watchTells(now);
-        boolean itemBusy = tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
+        boolean itemBusy = buriedReflex(now) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
@@ -492,6 +538,8 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE && ((now + self.getId()) % 20) == 7 && !self.isUsingItem()) {
             itemBusy = lighting.tick(); // a torch where monsters could spawn
         }
+        Prof.add(Prof.REFLEXES, pr);
+        long pt = Prof.t();
         // look once a second, but only while standing (a hop out of a stuck walk must not hide the hole we are in)
         boolean trapCheck = !escaping && !itemBusy && now - lastTrapCheck >= 20 && self.onGround();
         if (trapCheck) {
@@ -510,7 +558,11 @@ public final class CloneController {
                 escape.start(motor.recentGoal());
             }
         }
+        Prof.add(Prof.TRAP, pt);
+        long ph = Prof.t();
         hazardTick(now);
+        Prof.add(Prof.HAZARD, ph);
+        long ps = Prof.t();
         if (itemBusy) {
             // drinking / scooping water / waiting for a pearl: nothing else this tick
         } else if (escaping) {
@@ -527,13 +579,16 @@ public final class CloneController {
         } else {
             runStrategy(now);
         }
+        Prof.add(Prof.STRATEGY, ps);
         if (lookBackTicks > 0) {
             lookBackTicks--;
             if (!motor.hasLookIntent() && lookBack != null) {
                 motor.lookAt(lookBack);
             }
         }
+        long pm = Prof.t();
         motor.tick();
+        Prof.add(Prof.MOTOR, pm);
     }
 
     /**
@@ -839,14 +894,24 @@ public final class CloneController {
             String[] parts = t.split(" ");
             if (parts.length >= 3 && parts[2].startsWith("to=")
                     && java.util.Arrays.asList(parts[2].substring(3).split(",")).contains(self.getGameProfile().getName())) {
-                if (!brain().isHarmful(parts[1])) {
+                if (!brain().isHarmful(parts[1]) && !brain().provenSafe(parts[1])) {
                     brain().learnHarmful(parts[1]);
                     hazardsReceived++;
                 }
             }
             return;
         }
+        if (t.startsWith("SAFE ")) {
+            String id = t.substring(5).trim();
+            if (brain().isHarmful(id)) {
+                correctHarmful(id, false); // a friend stood on it for a long time unhurt
+            }
+            return;
+        }
         if (expedition.onChat(sender, t, now)) {
+            return;
+        }
+        if (itemAid.onChat(sender, t, now)) {
             return;
         }
         if (foodAid.onChat(sender, t, now)) {
@@ -1052,9 +1117,70 @@ public final class CloneController {
         return !level.getBlockState(below).isAir() || !self.getBoundingBox().inflate(0.3, 1, 0.3).intersects(new net.minecraft.world.phys.AABB(p));
     }
 
+    /** Seconds of touching a block believed harmful without getting hurt (block id -> samples). */
+    private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> harmlessContact = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
+    /** Harmful-block beliefs corrected after long harmless contact (diagnostics, tests). */
+    public int hazardsCorrected;
+    private static final int HARMLESS_SAMPLES = 6;
+
+    /**
+     * A block thought harmful that the clone keeps standing on / touching without ever getting hurt was a mistake:
+     * after a few seconds of harmless contact the belief is dropped (and the others are told).
+     */
+    private void judgeHarmfulContact(long now) {
+        if (ticksLived < 100 || self.isCreative() || self.isSpectator() || self.hasEffect(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE)
+                || self.hasEffect(net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE) && self.getEffect(net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE).getAmplifier() >= 4) {
+            return; // protected: no harm proves nothing
+        }
+        if (now - lastEnvHurt <= 40) {
+            harmlessContact.clear(); // it did hurt
+            return;
+        }
+        ServerLevel level = self.serverLevel();
+        java.util.Set<String> touched = new java.util.HashSet<>();
+        BlockPos floor = self.getOnPos();
+        for (BlockPos p : touching()) {
+            if (p.equals(floor) && (self.isSteppingCarefully() || !self.onGround())) {
+                continue; // sneaking over it (magma does nothing then) / not really on it
+            }
+            String id = Perception.blockId(level.getBlockState(p));
+            if (brain().isHarmful(id)) {
+                touched.add(id);
+            }
+        }
+        for (String id : touched) {
+            if (harmlessContact.addTo(id, 1) + 1 >= HARMLESS_SAMPLES) {
+                harmlessContact.removeInt(id);
+                correctHarmful(id, true);
+            }
+        }
+    }
+
+    private void correctHarmful(String id, boolean tell) {
+        brain().unlearnHarmful(id);
+        hazardsCorrected++;
+        java.util.List<BlockPos> stale = new java.util.ArrayList<>();
+        for (var e : perception.blocks().entrySet()) {
+            if (e.getValue() == Perception.BlockKind.HARMFUL && Perception.blockId(self.level().getBlockState(e.getKey())).equals(id)) {
+                stale.add(e.getKey());
+            }
+        }
+        stale.forEach(perception::forgetBlock);
+        if (cleanTarget != null && Perception.blockId(self.level().getBlockState(cleanTarget)).equals(id)) {
+            cleanTarget = null;
+        }
+        if (tell) {
+            net.minecraft.world.level.block.Block block = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getValue(new net.minecraft.resources.ResourceLocation(id));
+            Chat.say(self, Component.translatable("rlclones.chat.hazard_safe", block == null ? Component.literal(id) : block.getName()), "SAFE " + id);
+        }
+    }
+
     /** Harmful-block housekeeping: remember safe ground, remove hazards in sight, tell nearby clones what hurts. */
     private void hazardTick(long now) {
         long phase = now + self.getId();
+        if (phase % 20 == 10 && !brain().harmfulBlocks().isEmpty()) {
+            judgeHarmfulContact(now);
+        }
         if (phase % 20 == 0 && self.onGround() && now - lastEnvHurt > 60 && safeGround.size() < 512) {
             safeGround.addTo(Perception.blockId(self.level().getBlockState(self.getOnPos())), 1);
         }
@@ -1208,8 +1334,8 @@ public final class CloneController {
                 mask |= Option.LOOT.bit();
             }
         }
-        if (farming.hasWork()) {
-            mask |= Option.FARM.bit();
+        if (farming.hasWork() || water.hasWork()) {
+            mask |= Option.FARM.bit(); // a field to work, or water to bring home for one
         }
         if (expedition.isLeading() || (expedition.canLead(now) && othersOnline())) {
             mask |= Option.EXPEDITION.bit();
@@ -1239,8 +1365,8 @@ public final class CloneController {
         if (self.onGround() && portals.hasWork()) {
             mask |= Option.PORTAL.bit();
         }
-        if (foodAid.canHelp()) {
-            mask |= Option.FEED.bit();
+        if (foodAid.canHelp() || itemAid.canHelp()) {
+            mask |= Option.FEED.bit(); // food for the starving, or what a friend asked for
         }
         if (breeding.canStart()) {
             mask |= Option.BREED.bit();
@@ -1280,9 +1406,25 @@ public final class CloneController {
     }
 
     private boolean runFarm() {
-        int before = farming.tilled + farming.planted + farming.harvested;
+        if (farmWater) {
+            WaterSource.Status ws = water.tick();
+            if (ws == WaterSource.Status.DONE) {
+                optionReward += 5f; // water by the base for good
+            }
+            return ws != WaterSource.Status.WORKING;
+        }
+        int before = farming.tilled + farming.planted + farming.harvested + farming.soilMade + farming.torchesPlaced;
         Farming.Status st = farming.tick();
-        optionReward += (farming.tilled + farming.planted + farming.harvested - before) * 0.5f;
+        optionReward += (farming.tilled + farming.planted + farming.harvested + farming.soilMade + farming.torchesPlaced - before) * 0.5f;
+        if (farming.needTorch) {
+            farming.needTorch = false;
+            if (Crafting.torchMakeable(self)) {
+                crafting.forcedTarget = Items.TORCH; // too dark for crops: a torch first
+                nextOption = Option.CRAFT;
+                return true;
+            }
+            itemAid.need(Items.TORCH, 4);
+        }
         return st != Farming.Status.WORKING;
     }
 
@@ -1577,6 +1719,67 @@ public final class CloneController {
     }
 
     /** A known tell is showing and the blow is due: shield up, facing it (a reflex, like a player who sees the bow drawn). */
+    /** Times the clone got itself out after being buried by falling gravel / sand (tests). */
+    public int digOuts;
+    private boolean buried;
+    private int buriedTicks;
+
+    private boolean suffocates(BlockPos p) {
+        ServerLevel level = self.serverLevel();
+        BlockState st = level.getBlockState(p);
+        return !st.isAir() && st.isSuffocating(level, p) && st.isCollisionShapeFullBlock(level, p);
+    }
+
+    /**
+     * Buried (gravel or sand came down on us): like a player - step out sideways where there is room, otherwise dig
+     * the block out of the face, then the one at the feet, again as more comes down, until the head is free.
+     */
+    private boolean buriedReflex(long now) {
+        if (self.isCreative() || self.isSpectator() || self.isPassenger()) {
+            return false;
+        }
+        BlockPos feet = self.blockPosition();
+        BlockPos head = BlockPos.containing(self.getEyePosition());
+        boolean inHead = suffocates(head);
+        boolean inFeet = !head.equals(feet) && suffocates(feet);
+        if (!inHead && !inFeet) {
+            if (buried) {
+                buried = false;
+                digOuts++;
+                motor.resetMining();
+            }
+            return false;
+        }
+        if (!buried) {
+            buried = true;
+            buriedTicks = 0;
+            if (option != null) {
+                finishOption(false);
+            }
+        }
+        buriedTicks++;
+        ServerLevel level = self.serverLevel();
+        // room beside us (both blocks free, something to stand on): just walk out
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            BlockPos f = feet.relative(d);
+            if (level.getBlockState(f).getCollisionShape(level, f).isEmpty() && level.getBlockState(f.above()).getCollisionShape(level, f.above()).isEmpty()
+                    && !level.getBlockState(f.below()).getCollisionShape(level, f.below()).isEmpty()) {
+                motor.moveToward(Vec3.atBottomCenterOf(f));
+                return true;
+            }
+        }
+        BlockPos dig = inHead ? head : feet;
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || level.getBlockState(dig).getDestroySpeed(level, dig) < 0) {
+            return false;
+        }
+        if ((buriedTicks & 7) == 1) {
+            Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(dig)));
+        }
+        motor.stop();
+        motor.mine(dig);
+        return true;
+    }
+
     private boolean tellReflex(long now) {
         Entity due = Equipment.hasShield(self) ? tells.blockNow(now) : null;
         if (due != null) {
@@ -1630,6 +1833,14 @@ public final class CloneController {
                 return;
             }
         }
+        if ((option == Option.STAIRS || option == Option.SHAFT) && !hasPickFor(null) && toolUp(null)) {
+            finishOption(false); // digging down by hand: a pickaxe first
+            return;
+        }
+        if (ORE_REFLEX.contains(option) && oreReflex(now)) {
+            optionTicks++;
+            return; // an ore right in front of us comes first
+        }
         boolean done = switch (option) {
             case FIGHT -> runFight(now, false);
             case HUNT -> runFight(now, true);
@@ -1654,7 +1865,7 @@ public final class CloneController {
             case FISH -> fishing.tick() != Fishing.Status.WORKING;
             case SALVAGE -> runHarvest(Perception.BlockKind.WOOD) || !needWood() && blocksDone >= 2;
             case PORTAL -> portals.tick() != Portals.Status.WORKING;
-            case FEED -> foodAid.helpTick() != FoodAid.Status.WORKING;
+            case FEED -> feedingItems ? itemAid.helpTick() != ItemAid.Status.WORKING : foodAid.helpTick() != FoodAid.Status.WORKING;
             case BREED -> breeding.tick() != Breeding.Status.WORKING;
             case ACHIEVE -> achievements.tick() != Achievements.Status.WORKING;
             case STAIRS -> stairs.tick() != StairMining.Status.WORKING;
@@ -1685,6 +1896,24 @@ public final class CloneController {
         if ((mask & Option.ANIMALS.bit()) != 0 && (animals.tameCandidate() != null || animals.livestockPending()) && random.nextFloat() < 0.7f) {
             return Option.ANIMALS; // it could be ours: tame it / pen it
         }
+        wantWater = false;
+        if ((mask & Option.FARM.bit()) != 0 && water.hasWork() && random.nextFloat() < 0.8f) {
+            wantWater = true;
+            return Option.FARM; // a bucket and no water at home: make a spring there for the fields
+        }
+        if ((mask & Option.CRAFT.bit()) != 0 && crafting.urgent()) {
+            urgentCrafts++;
+            return Option.CRAFT; // a furnace for the raw food / ore, the first bucket
+        }
+        if ((mask & Option.MINE.bit()) != 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
+                && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24, p -> harvestable(Perception.BlockKind.ORE, p)) != null) {
+            orePulls++;
+            return Option.MINE; // ore in sight: nothing else comes close (a pickaxe is made first if need be)
+        }
+        if ((mask & Option.HUNT.bit()) != 0 && FoodAid.foodItems(self) < 16 && fishInSight(16) != null && random.nextFloat() < 0.85f) {
+            huntFish = true;
+            return Option.HUNT; // fish swimming about: food for the taking
+        }
         Player fav = foodAid.favourite(64);
         if ((mask & Option.FOLLOW.bit()) != 0 && fav != null && fav.distanceTo(self) > 6
                 && random.nextFloat() < Math.min(0.6f, 0.12f * foodAid.gratitude(fav.getUUID()))) {
@@ -1696,6 +1925,30 @@ public final class CloneController {
 
     /** FOLLOW options started because of gratitude (diagnostics, tests). */
     public int followDrives;
+    /** Urgent crafting / ore / fish pulls taken (diagnostics, tests). */
+    public int urgentCrafts;
+    public int orePulls;
+    public int fishHunts;
+    private boolean huntFish;
+    private boolean feedingItems;
+
+    /** The nearest fish we could catch for food, seen lately. */
+    @Nullable
+    private Entity fishInSight(double radius) {
+        long now = now();
+        Entity best = null;
+        double bestD = radius;
+        for (Perception.Seen s : perception.remembered()) {
+            if (s.entity instanceof net.minecraft.world.entity.animal.AbstractFish && now - s.lastSeen <= 40 && Senses.isFoodAnimal(s.entity)) {
+                double d = s.entity.distanceTo(self);
+                if (d < bestD) {
+                    bestD = d;
+                    best = s.entity;
+                }
+            }
+        }
+        return best;
+    }
     @Nullable
     private Entity followTarget;
     /** Who the last FOLLOW went after (diagnostics, tests). */
@@ -1726,7 +1979,12 @@ public final class CloneController {
         }
         int o;
         Option committed = expedition.isLeading() ? Option.EXPEDITION : expedition.joinedOffer() != null ? Option.JOIN : null;
-        if (forcedOption != null && (mask & forcedOption.bit()) != 0) {
+        Option planned = nextOption;
+        nextOption = null;
+        huntFish = false;
+        if (planned != null && (mask & planned.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
+            o = planned.ordinal(); // our own plan: the tool before the job
+        } else if (forcedOption != null && (mask & forcedOption.bit()) != 0) {
             o = forcedOption.ordinal();
         } else if (now < forceFightUntil && (mask & Option.FIGHT.bit()) != 0) {
             o = Option.FIGHT.ordinal(); // no way out: fight
@@ -1774,13 +2032,24 @@ public final class CloneController {
             case STORE -> storage.begin(Storage.Mode.STORE);
             case FETCH -> storage.begin(Storage.Mode.FETCH);
             case LOOT -> storage.begin(Storage.Mode.LOOT);
-            case FARM -> farming.reset();
+            case FARM -> {
+                farming.reset();
+                water.reset();
+                farmWater = water.hasWork() && (wantWater || !farming.hasWork());
+            }
             case DISCOVER -> discovery.begin();
             case BREW -> brewing.begin();
             case ANIMALS -> animals.begin();
             case FISH -> fishing.begin();
             case PORTAL -> portals.begin();
-            case FEED -> foodAid.begin();
+            case FEED -> {
+                feedingItems = !foodAid.canHelp() && itemAid.canHelp();
+                if (feedingItems) {
+                    itemAid.begin();
+                } else {
+                    foodAid.begin();
+                }
+            }
             case BREED -> breeding.begin();
             case ACHIEVE -> achievements.begin();
             case STAIRS -> stairs.begin();
@@ -1834,12 +2103,19 @@ public final class CloneController {
         brain().learn(Brain.STRATEGY, optionState, option.ordinal(), optionReward, s2, died, gamma, mask2, 1f, false);
         if (option == Option.CRAFT) {
             crafting.reset();
+            if (crafting.forcedTarget instanceof net.minecraft.world.item.PickaxeItem) {
+                crafting.forcedTarget = null; // made (or not: the mining will ask again)
+            }
         }
         if (option == Option.STORE || option == Option.FETCH || option == Option.LOOT) {
             storage.reset();
         }
         if (option == Option.FARM) {
             farming.reset();
+            water.reset();
+        }
+        if (option == Option.CRAFT && crafting.forcedTarget == Items.TORCH) {
+            crafting.forcedTarget = null;
         }
         if (option == Option.BREW) {
             brewing.reset();
@@ -1898,7 +2174,7 @@ public final class CloneController {
             return false;
         }
         Perception.Seen s = perception.get(e);
-        if (s == null || now - s.lastSeen > 60) {
+        if (s == null || now - s.lastSeen > (e == target && (vantage != null || vantageBase != null) ? 200 : 60)) {
             return false;
         }
         return hunt ? Senses.isFoodAnimal(e) : Senses.isHostileTo(e, self);
@@ -1938,7 +2214,11 @@ public final class CloneController {
         }
         if (target == null) {
             Perception.Seen animal = hunt ? Senses.nearestAnimal(perception, self, now, 24) : null;
-            target = hunt ? (animal == null ? null : animal.entity) : pickHostile(now);
+            Entity fish = hunt && huntFish ? fishInSight(24) : null;
+            target = hunt ? (fish != null ? fish : animal == null ? null : animal.entity) : pickHostile(now);
+            if (fish != null && target == fish) {
+                fishHunts++;
+            }
             if (target == null) {
                 return true;
             }
@@ -1954,11 +2234,20 @@ public final class CloneController {
         return false;
     }
 
+    /** Consecutive HOLD decisions / times a long HOLD was broken off (diagnostics, tests). */
+    private int holdStreak;
+    public int holdBreaks;
+
     private void combatTick() {
         if (action == null || actionDone || actionTicks >= action.duration) {
             EnemyKnowledge k = brain().knowledge(targetType);
             int s = Senses.combatState(self, target, k, sinceEnemyAttack(target), Senses.crowd(perception, self));
             int mask = Senses.combatMask(self) & ~uselessActions();
+            holdStreak = action == CombatAction.HOLD ? holdStreak + 1 : 0;
+            if (holdStreak >= 2 && (mask & ~CombatAction.HOLD.bit()) != 0) {
+                mask &= ~CombatAction.HOLD.bit(); // looked on long enough: do something (strike, step, shoot, back off)
+                holdBreaks++;
+            }
             if (action != null && combatState >= 0) {
                 brain().learn(targetType, combatState, action.ordinal(), stepReward, s, false,
                         (float) Config.get(Config.DISCOUNT, 0.9), mask, 1f, false);
@@ -2142,7 +2431,11 @@ public final class CloneController {
                 }
             }
             case HOLD -> motor.lookAt(t);
-            case SHOOT -> shoot(t, gap);
+            case SHOOT -> {
+                if (!seekVantage(t)) {
+                    shoot(t, gap);
+                }
+            }
             case USE_ITEM -> useLearned(t);
             case PILLAR -> pillar();
         }
@@ -2289,6 +2582,127 @@ public final class CloneController {
                 }
             }
         }
+    }
+
+    /** Times the clone climbed up somewhere to get a shot at an enemy hidden behind something (tests). */
+    public int vantageClimbs;
+    @Nullable
+    private Vec3 vantage;
+    private double vantageFromY;
+    private int vantageTicks;
+    private int vantagePillars;
+    @Nullable
+    private BlockPos vantageBase;
+    public String vantageDebug = "";
+
+    /** From {@code eye}, would an arrow fly clear to {@code at}? */
+    private boolean clearShot(Vec3 eye, Vec3 at) {
+        return self.level().clip(new ClipContext(eye, at, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self)).getType() == HitResult.Type.MISS;
+    }
+
+    /** A higher spot close by (a step, a ledge) from which where the enemy was last seen is in plain view. */
+    @Nullable
+    private Vec3 findVantage(Vec3 at) {
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        List<BlockPos> spots = new ArrayList<>();
+        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-5, 1, -5), feet.offset(5, 3, 5))) {
+            BlockPos below = p.below();
+            if (level.getBlockState(below).getCollisionShape(level, below).isEmpty() || !level.getBlockState(p).getCollisionShape(level, p).isEmpty()
+                    || !level.getBlockState(p.above()).getCollisionShape(level, p.above()).isEmpty()
+                    || level.getBlockState(below).getBlock() instanceof net.minecraft.world.level.block.FenceBlock) {
+                continue;
+            }
+            if (clearShot(new Vec3(p.getX() + 0.5, p.getY() + self.getEyeHeight(), p.getZ() + 0.5), at)) {
+                spots.add(p.immutable());
+            }
+        }
+        spots.sort(java.util.Comparator.comparingDouble(p -> p.distSqr(feet)));
+        for (int i = 0; i < Math.min(3, spots.size()); i++) {
+            Vec3 v = Vec3.atBottomCenterOf(spots.get(i));
+            net.minecraft.world.level.pathfinder.Path path = motor.pathTo(v);
+            if (path != null && path.canReach()) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The enemy we mean to shoot has slipped out of sight behind something: rather than stand there with the bow drawn,
+     * climb up a step or a ledge nearby that looks over the cover - or put a block or two under our feet - and look again.
+     * Returns true while busy getting up there.
+     */
+    private boolean seekVantage(Entity t) {
+        boolean ranged = Equipment.rangedKind(self.getMainHandItem()) != Equipment.RangedKind.NONE || Equipment.offhandRanged(self)
+                || Equipment.rangedSlot(self) >= 0;
+        if (!ranged || perception.canSee(t)) {
+            if (vantage != null || vantagePillars > 0) {
+                if (self.getY() > vantageFromY + 0.5 && perception.canSee(t)) {
+                    vantageClimbs++;
+                    vantageDebug += " seen from +" + String.format(java.util.Locale.ROOT, "%.1f", self.getY() - vantageFromY);
+                }
+                vantage = null;
+                vantagePillars = 0;
+                vantageBase = null;
+            }
+            vantageTicks = 0;
+            return false;
+        }
+        if (actionTicks < 4 && vantage == null && vantageBase == null) {
+            return false; // a moment for it to show itself again
+        }
+        Perception.Seen seen = perception.get(t);
+        Vec3 last = (seen == null ? t.position() : seen.pos).add(0, t.getBbHeight() * 0.5, 0);
+        if (++vantageTicks > 160) {
+            return false; // nothing better to be had
+        }
+        actionTicks = Math.min(actionTicks, 10); // keep at it across decisions
+        if (vantage == null && vantageBase == null) {
+            vantageFromY = self.getY();
+            vantage = findVantage(last);
+            vantageDebug += " find=" + (vantage == null ? "none" : BlockPos.containing(vantage).toShortString());
+            if (vantage == null && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && self.onGround()) {
+                vantageBase = self.blockPosition(); // no ledge about: build one under our feet
+            }
+            if (vantage == null && vantageBase == null) {
+                vantageTicks = 1000;
+                return false;
+            }
+        }
+        if (self.isUsingItem()) {
+            self.stopUsingItem(); // bow down while climbing
+        }
+        if (vantage != null) {
+            motor.lookAt(last);
+            if (Motor.horizontalDistance(self.position(), vantage) < 0.45 && Math.abs(self.getY() - vantage.y) < 0.6) {
+                motor.stop();
+                return false; // up here: draw and wait for it to show
+            }
+            motor.navigate(vantage, 0.3, false);
+            if (motor.stuckCount() > 4) {
+                vantage = null;
+                vantageTicks = 1000;
+            }
+            return true;
+        }
+        // pillar: jump and set a block under our feet, up to two high
+        if (vantagePillars >= 2) {
+            return false;
+        }
+        motor.lookAngles(self.getYRot(), 90f);
+        if (self.onGround() && self.getY() < vantageBase.getY() + 0.5) {
+            motor.jump();
+        } else if (self.getY() >= vantageBase.getY() + 1.0 && self.level().getBlockState(vantageBase).canBeReplaced()) {
+            if (!Equipment.isPillarBlock(self.getMainHandItem())) {
+                Equipment.select(self, Equipment.pillarBlockSlot(self));
+            }
+            if (motor.useOnTopFace(vantageBase.below())) {
+                vantagePillars++;
+                vantageBase = vantageBase.above();
+            }
+        }
+        return true;
     }
 
     /** Shots fired with a firework loaded in the crossbow / with the weapon held in the off hand (tests). */
@@ -2970,19 +3384,184 @@ public final class CloneController {
         return best;
     }
 
+    // ------------------------------------------------------------------ tools for the job, ores first
+
+    /** A decision the clone's own plans took for it (a pickaxe before the mining, wood before the pickaxe...): taken next. */
+    @Nullable
+    private Option nextOption;
+    /** Times the clone found it had no pickaxe for the mining it was about to do and went to make / get one (tests). */
+    public int toolUps;
+    public String toolUpDebug = "";
+    /** Ores mined on the spot because they were right in front of the clone while it did something else (tests). */
+    public int oreReflexes;
+    /** Ores taken in place of the plain stone that was being quarried (tests). */
+    public int oresBeforeStone;
+    @Nullable
+    private BlockPos reflexOre;
+    private int reflexTicks;
+    @Nullable
+    private Perception.BlockKind harvestKind;
+    private static final java.util.Set<Option> ORE_REFLEX = java.util.EnumSet.of(Option.STAIRS, Option.SHAFT, Option.QUARRY, Option.EXPLORE,
+            Option.GATHER_WOOD, Option.SALVAGE, Option.ACHIEVE, Option.DISCOVER);
+    private static final net.minecraft.world.item.Item[] PICK_ORDER = {Items.WOODEN_PICKAXE, Items.STONE_PICKAXE, Items.IRON_PICKAXE, Items.DIAMOND_PICKAXE};
+
+    /** A pickaxe in the bag that breaks {@code st} so that it drops (any pickaxe for null). */
+    private boolean hasPickFor(@Nullable BlockState st) {
+        for (ItemStack s : self.getInventory().items) {
+            if (s.getItem() instanceof net.minecraft.world.item.PickaxeItem && (st == null || s.isCorrectToolForDrops(st))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * About to mine without a pickaxe that can do it: make one first (at the crafting table nearby, or one put down
+     * right here), or - with nothing to make it from - go for the materials (wood, stone for a stone pick) and ask the
+     * friends for one. Returns true when the current option should give way (the next one is already chosen).
+     */
+    private boolean toolUp(@Nullable BlockState st) {
+        if (self.isCreative() || hasPickFor(st) || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            return false;
+        }
+        net.minecraft.world.item.Item goal = null;
+        net.minecraft.world.item.Item make = null;
+        for (net.minecraft.world.item.Item pick : PICK_ORDER) {
+            if (st != null && !new ItemStack(pick).isCorrectToolForDrops(st)) {
+                continue;
+            }
+            if (goal == null) {
+                goal = pick;
+            }
+            if (Crafting.makeable(self, pick)) {
+                make = pick;
+                break;
+            }
+        }
+        if (goal == null) {
+            return false; // no pickaxe does it
+        }
+        if (make == null && !hasPickFor(null) && goal != Items.WOODEN_PICKAXE && Crafting.makeable(self, Items.WOODEN_PICKAXE)) {
+            make = Items.WOODEN_PICKAXE; // the first step up
+        }
+        toolUps++;
+        if (make != null) {
+            crafting.forcedTarget = make;
+            nextOption = Option.CRAFT;
+            toolUpDebug = "craft " + ItemAid.key(make);
+            return true;
+        }
+        itemAid.need(goal, 1);
+        if (itemAid.helpComing(goal)) {
+            nextOption = Option.REST; // a friend is bringing one: wait here
+            toolUpDebug = "waiting for " + ItemAid.key(goal);
+        } else if (goal == Items.STONE_PICKAXE && hasPickFor(null) && Senses.nearestBlock(perception, self, Perception.BlockKind.STONE, 16) != null) {
+            nextOption = Option.QUARRY;
+            toolUpDebug = "stone for " + ItemAid.key(goal);
+        } else if (goal == Items.WOODEN_PICKAXE || !hasPickFor(null)) {
+            nextOption = Senses.nearestBlock(perception, self, Perception.BlockKind.LOG, 32) != null ? Option.GATHER_WOOD
+                    : needWood() && Senses.nearestBlock(perception, self, Perception.BlockKind.WOOD, 24, p -> harvestable(Perception.BlockKind.WOOD, p)) != null
+                    ? Option.SALVAGE : Option.EXPLORE;
+            toolUpDebug = "wood: " + nextOption;
+        } else {
+            toolUpDebug = "cannot make " + ItemAid.key(goal);
+            return false;
+        }
+        return true;
+    }
+
+    /** An ore within reach while doing something else: mined on the spot. Returns true while at it. */
+    private boolean oreReflex(long now) {
+        ServerLevel level = self.serverLevel();
+        if (reflexOre == null) {
+            if (((now + self.getId()) & 7) != 0 || self.onClimbable() || !self.onGround() || self.isInWater() || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+                return false;
+            }
+            Vec3 eye = self.getEyePosition();
+            double bestD = (Motor.BLOCK_REACH - 0.3) * (Motor.BLOCK_REACH - 0.3);
+            for (var e : perception.blocks().entrySet()) {
+                if (e.getValue() != Perception.BlockKind.ORE) {
+                    continue;
+                }
+                double d = Vec3.atCenterOf(e.getKey()).distanceToSqr(eye);
+                BlockState st = level.getBlockState(e.getKey());
+                if (d < bestD && !skipBlocks.containsKey(e.getKey()) && Perception.classify(st) == Perception.BlockKind.ORE && hasPickFor(st)
+                        && safeToDig(e.getKey())) {
+                    bestD = d;
+                    reflexOre = e.getKey();
+                }
+            }
+            if (reflexOre == null) {
+                return false;
+            }
+            reflexTicks = 0;
+            oreReflexes++;
+            traceHarvest("reflex" + reflexOre.toShortString());
+        }
+        BlockState st = level.getBlockState(reflexOre);
+        if (Perception.classify(st) != Perception.BlockKind.ORE || ++reflexTicks > 160) {
+            if (reflexTicks > 160) {
+                skipBlocks.put(reflexOre.immutable(), now);
+            }
+            perception.forgetBlock(reflexOre);
+            reflexOre = null;
+            motor.resetMining();
+            return false;
+        }
+        if ((reflexTicks & 7) == 1) {
+            Equipment.select(self, Equipment.bestToolSlot(self, st));
+        }
+        motor.stop();
+        if (motor.mine(reflexOre)) {
+            BlockPos done = reflexOre;
+            perception.forgetBlock(done);
+            reflexOre = null;
+            for (BlockPos p : BlockPos.betweenClosed(done.offset(-1, -1, -1), done.offset(1, 1, 1))) {
+                if (Perception.classify(level.getBlockState(p)) == Perception.BlockKind.ORE) {
+                    perception.noteBlock(p); // the rest of the vein
+                }
+            }
+        }
+        return true;
+    }
+
     private boolean runHarvest(Perception.BlockKind kind) {
         ServerLevel level = self.serverLevel();
-        if (blockTarget != null && perception.kindAt(blockTarget) != kind) {
+        if (blockTarget != null && perception.kindAt(blockTarget) != (harvestKind != null ? harvestKind : kind)) {
             perception.forgetBlock(blockTarget);
             blockTarget = null;
         }
         if (blockTarget == null) {
             long at = now();
             skipBlocks.values().removeIf(t -> at - t > 1200);
-            blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24, p -> harvestable(kind, p));
+            harvestKind = kind;
+            blockTarget = null;
+            if (kind == Perception.BlockKind.STONE) {
+                // quarrying: an ore in sight is worth far more than plain stone - it goes first
+                blockTarget = Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 16,
+                        p -> harvestable(Perception.BlockKind.ORE, p) && hasPickFor(level.getBlockState(p)) && safeToDig(p));
+                if (blockTarget != null) {
+                    harvestKind = Perception.BlockKind.ORE;
+                    oresBeforeStone++;
+                }
+            }
+            if (blockTarget == null) {
+                blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24, p -> harvestable(kind, p));
+            }
             blockTicks = 0;
             if (blockTarget == null) {
                 return true;
+            }
+            if ((kind == Perception.BlockKind.ORE || kind == Perception.BlockKind.STONE) && !hasPickFor(level.getBlockState(blockTarget))) {
+                if (toolUp(level.getBlockState(blockTarget))) {
+                    blockTarget = null;
+                    return true; // the pickaxe first (or the wood for it)
+                }
+                harvestDebug = "no tool " + blockTarget.toShortString();
+                skipBlocks.put(blockTarget.immutable(), now()); // nothing we can get that breaks this one
+                perception.forgetBlock(blockTarget);
+                blockTarget = null;
+                return false;
             }
             if (kind == Perception.BlockKind.WOOD
                     && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(blockTarget), 12) != null) {
@@ -3000,7 +3579,7 @@ public final class CloneController {
             }
             harvestDebug = "target " + blockTarget.toShortString();
             traceHarvest("t" + blockTarget.toShortString());
-            if (perception.kindAt(blockTarget) != kind) {
+            if (perception.kindAt(blockTarget) != harvestKind) {
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
                 return false;
@@ -3032,14 +3611,14 @@ public final class CloneController {
         if (motor.mine(blockTarget)) {
             traceHarvest("mined");
             blocksDone++;
-            if (kind == Perception.BlockKind.STONE) {
+            if (kind == Perception.BlockKind.STONE && harvestKind == Perception.BlockKind.STONE) {
                 quarried++;
             }
             BlockPos done = blockTarget;
             perception.forgetBlock(done);
             blockTarget = null;
             for (BlockPos p : BlockPos.betweenClosed(done.offset(-1, -1, -1), done.offset(1, 2, 1))) {
-                if (Perception.classify(level.getBlockState(p)) == kind) {
+                if (Perception.classify(level.getBlockState(p)) == harvestKind) {
                     perception.noteBlock(p);
                 }
             }
@@ -3049,6 +3628,10 @@ public final class CloneController {
     }
 
     private boolean runRest() {
+        if ((optionTicks & 7) == 0 && itemAid.deliveryNear()) {
+            nextOption = Option.COLLECT; // what a friend brought us lies right here
+            return true;
+        }
         motor.stop();
         lookTick();
         return optionTicks >= 60;

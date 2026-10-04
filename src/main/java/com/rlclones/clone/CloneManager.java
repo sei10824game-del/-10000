@@ -191,6 +191,16 @@ public final class CloneManager {
         roster().setDirty();
     }
 
+    /** /rlclone coward: no fighting at all - clones only flee and hide from enemies. */
+    public static boolean coward() {
+        return instance != null && instance.roster().coward;
+    }
+
+    public void setCoward(boolean on) {
+        roster().coward = on;
+        roster().setDirty();
+    }
+
     public static void shutdown() {
         instance = null;
         AgentEvents.clear();

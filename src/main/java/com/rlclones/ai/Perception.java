@@ -122,14 +122,31 @@ public final class Perception {
 
     public void update(long now) {
         lastUpdate = now;
+        threatTick = Long.MIN_VALUE;
         visible.clear();
         double range = maxRange();
         Level level = self.level();
         AABB box = self.getBoundingBox().inflate(range);
-        List<Entity> candidates = level.getEntities(self, box, e -> e.isAlive() && !e.isSpectator()
-                && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || isRetrievable(e)));
         Vec3 eye = self.getEyePosition();
-        candidates.sort(Comparator.comparingDouble(e -> e.distanceToSqr(eye)));
+        double range2 = range * range;
+        // (nothing further than the view range can pass canSee: those are left out before sorting)
+        List<Entity> candidates = level.getEntities(self, box, e -> e.isAlive() && !e.isSpectator()
+                && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
+                || isRetrievable(e)) && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2);
+        if (candidates.size() > 1) {
+            double[] keys = new double[candidates.size()];
+            Integer[] order = new Integer[keys.length];
+            for (int i = 0; i < keys.length; i++) {
+                keys[i] = candidates.get(i).distanceToSqr(eye);
+                order[i] = i;
+            }
+            java.util.Arrays.sort(order, (a, b) -> Double.compare(keys[a], keys[b]));
+            List<Entity> sorted = new java.util.ArrayList<>(keys.length);
+            for (Integer i : order) {
+                sorted.add(candidates.get(i));
+            }
+            candidates = sorted;
+        }
         int checked = 0;
         for (Entity e : candidates) {
             if (checked++ >= 64) {
@@ -413,6 +430,26 @@ public final class Perception {
     }
 
     /** Remember a block the clone is looking at directly (e.g. the block it just mined next to). */
+    private long threatTick = Long.MIN_VALUE;
+    @javax.annotation.Nullable
+    private Entity threatAgent;
+    private final it.unimi.dsi.fastutil.doubles.Double2ObjectOpenHashMap<List<Seen>> threatCache = new it.unimi.dsi.fastutil.doubles.Double2ObjectOpenHashMap<>();
+
+    /** Threat lists already worked out this tick (same agent, same radius). */
+    @javax.annotation.Nullable
+    public List<Seen> cachedThreats(Entity agent, long now, double radius) {
+        return now == threatTick && agent == threatAgent ? threatCache.get(radius) : null;
+    }
+
+    public void cacheThreats(Entity agent, long now, double radius, List<Seen> list) {
+        if (now != threatTick || agent != threatAgent) {
+            threatCache.clear();
+            threatTick = now;
+            threatAgent = agent;
+        }
+        threatCache.put(radius, list);
+    }
+
     public void noteBlock(BlockPos pos) {
         BlockKind kind = kindOf(pos);
         if (kind != null) {

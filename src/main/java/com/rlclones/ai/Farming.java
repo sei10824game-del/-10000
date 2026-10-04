@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
 public final class Farming {
     public enum Status {WORKING, DONE, FAILED}
 
-    private enum Job {HARVEST, PLANT, TILL, SEEDS}
+    private enum Job {HARVEST, PLANT, TILL, SEEDS, LIGHT, SOIL}
 
     private static final int RADIUS = 6;
 
@@ -49,6 +49,13 @@ public final class Farming {
     public int tilled;
     public int planted;
     public int harvested;
+    /** Bank blocks beside water turned into soil / torches put up so crops can grow (diagnostics, tests). */
+    public int soilMade;
+    public int torchesPlaced;
+    /** The plot by the water is dark and there is no torch in the bag (the controller makes one / asks for one). */
+    public boolean needTorch;
+    /** Water with no soil beside it, and no dirt in the bag to make some. */
+    public boolean needDirt;
     private String last = "";
 
     /** State for diagnostics. */
@@ -133,6 +140,54 @@ public final class Farming {
         return -1;
     }
 
+    private static boolean soilish(BlockState st) {
+        return st.is(Blocks.GRASS_BLOCK) || st.is(Blocks.DIRT) || st.is(Blocks.DIRT_PATH) || st.is(Blocks.COARSE_DIRT) || st.is(Blocks.ROOTED_DIRT);
+    }
+
+    private int dirtSlot() {
+        Inventory inv = self.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (s.is(net.minecraft.world.item.Items.DIRT) || s.is(net.minecraft.world.item.Items.GRASS_BLOCK) || s.is(net.minecraft.world.item.Items.COARSE_DIRT)
+                    || s.is(net.minecraft.world.item.Items.ROOTED_DIRT)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int torchSlot() {
+        Inventory inv = self.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            if (inv.items.get(i).is(net.minecraft.world.item.Items.TORCH)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean waterBeside(ServerLevel level, BlockPos pos) {
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            if (level.getFluidState(pos.relative(d)).is(FluidTags.WATER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A plain bank block right beside the water (stone, sand, gravel...) that could be swapped for soil. */
+    private boolean bank(ServerLevel level, BlockPos pos) {
+        BlockState st = level.getBlockState(pos);
+        if (st.isAir() || soilish(st) || st.getBlock() instanceof FarmBlock || !level.getFluidState(pos).isEmpty() || st.hasBlockEntity()
+                || !level.getBlockState(pos.above()).isAir() || !st.isCollisionShapeFullBlock(level, pos)) {
+            return false;
+        }
+        float hard = st.getDestroySpeed(level, pos);
+        return hard >= 0 && hard < 3 && (st.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_PICKAXE) || st.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_SHOVEL))
+                && waterBeside(level, pos) && !level.getBlockState(pos.below()).getCollisionShape(level, pos.below()).isEmpty()
+                && self.mayInteract(level, pos);
+    }
+
     private boolean tillable(ServerLevel level, BlockPos pos) {
         BlockState st = level.getBlockState(pos);
         if (!(st.is(Blocks.GRASS_BLOCK) || st.is(Blocks.DIRT) || st.is(Blocks.DIRT_PATH) || st.is(Blocks.COARSE_DIRT) || st.is(Blocks.ROOTED_DIRT))) {
@@ -210,6 +265,46 @@ public final class Farming {
                 out[0] = j;
             }
         }
+        if ((best == null || out[0] == Job.SEEDS) && seeds && hoe && breaking) {
+            // water but no soil to work beside it (or too dark for crops): make soil from the bank, light the plot
+            boolean dirt = dirtSlot() >= 0;
+            boolean placing = Config.get(Config.ALLOW_BLOCK_PLACING, true);
+            BlockPos plot = null;
+            Job plotJob = null;
+            double plotD = Double.MAX_VALUE;
+            boolean wantDirt = false;
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-RADIUS, -2, -RADIUS), feet.offset(RADIUS, 1, RADIUS))) {
+                BlockState st = level.getBlockState(p);
+                boolean darkSoil = soilish(st) && level.getBlockState(p.above()).isAir() && nearWater(level, p) && !bright(level, p.above());
+                boolean bankSpot = !darkSoil && bank(level, p);
+                if (!darkSoil && !bankSpot) {
+                    continue;
+                }
+                Long f = failed.get(p);
+                if (f != null && self.level().getGameTime() - f < 1200) {
+                    continue;
+                }
+                boolean lit = bright(level, p.above());
+                if (bankSpot && lit && !dirt) {
+                    wantDirt = true;
+                    continue;
+                }
+                if (!placing) {
+                    continue;
+                }
+                double d = p.distSqr(feet);
+                if (d < plotD && visible(level, p, bankSpot)) {
+                    plotD = d;
+                    plot = p.immutable();
+                    plotJob = lit ? Job.SOIL : Job.LIGHT;
+                }
+            }
+            needDirt = wantDirt && plot == null;
+            if (plot != null) {
+                out[0] = plotJob;
+                return plot;
+            }
+        }
         return best;
     }
 
@@ -263,6 +358,8 @@ public final class Farming {
             case PLANT -> st.getBlock() instanceof FarmBlock && level.getBlockState(target.above()).isAir() && seedSlot(self) >= 0;
             case TILL -> tillable(level, target) && hoeSlot(self) >= 0 && seedSlot(self) >= 0;
             case SEEDS -> isGrass(st);
+            case LIGHT -> !bright(level, target.above()) && (soilish(st) || bank(level, target));
+            case SOIL -> dirtSlot() >= 0 && (bank(level, target) || st.canBeReplaced() && !level.getBlockState(target.below()).getCollisionShape(level, target.below()).isEmpty());
         };
         if (!stillValid) {
             target = null;
@@ -281,12 +378,62 @@ public final class Farming {
             return Status.WORKING;
         }
         motor.stop();
-        if (++tries > 60) {
+        if (++tries > (job == Job.SOIL ? 400 : 60)) {
             failed.put(target, level.getGameTime());
             target = null;
             return Status.WORKING;
         }
         switch (job) {
+            case LIGHT -> {
+                int torch = torchSlot();
+                if (torch < 0) {
+                    needTorch = true; // the controller makes one (or asks a friend)
+                    last = "no torch for " + target.toShortString();
+                    target = null;
+                    return Status.FAILED;
+                }
+                needTorch = false;
+                Equipment.select(self, torch);
+                BlockPos spot = null;
+                double bestD = Double.MAX_VALUE;
+                for (BlockPos q : BlockPos.betweenClosed(target.offset(-2, 1, -2), target.offset(2, 1, 2))) {
+                    BlockPos under = q.below();
+                    if (q.equals(target.above()) || !level.getBlockState(q).isAir() || !level.getFluidState(q).isEmpty()
+                            || self.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(q)) || bank(level, under)
+                            || !level.getBlockState(under).isFaceSturdy(level, under, net.minecraft.core.Direction.UP) || soilish(level.getBlockState(under))
+                            || under.equals(target) || level.getBlockState(under).getBlock() instanceof FarmBlock) {
+                        continue;
+                    }
+                    double d = Vec3.atCenterOf(q).distanceTo(self.getEyePosition());
+                    if (d < Motor.BLOCK_REACH - 0.3 && d < bestD) {
+                        bestD = d;
+                        spot = q.immutable();
+                    }
+                }
+                if (spot != null && motor.placeBlockAt(spot)) {
+                    torchesPlaced++;
+                    last = "torch at " + spot.toShortString();
+                    target = null; // light now: soil / till next
+                } else if (spot == null) {
+                    failed.put(target, level.getGameTime());
+                    target = null;
+                }
+            }
+            case SOIL -> {
+                BlockState cur = level.getBlockState(target);
+                if (bank(level, target)) {
+                    Equipment.select(self, Equipment.bestToolSlot(self, cur));
+                    motor.mine(target); // the bank block out...
+                } else {
+                    Equipment.select(self, dirtSlot());
+                    if (motor.placeBlockAt(target)) {
+                        soilMade++; // ...and soil in its place
+                        last = "soil at " + target.toShortString();
+                        job = Job.TILL;
+                        tries = 0;
+                    }
+                }
+            }
             case SEEDS -> {
                 Equipment.select(self, -1);
                 if (motor.mine(target)) {
