@@ -83,6 +83,8 @@ public final class Crafting {
     /** Where the last thing that needed a crafting table was made (diagnostics, tests). */
     @Nullable
     public BlockPos lastTable;
+    /** When a better pickaxe last made crafting urgent (once in 400 ticks: no loop if it cannot be made after all). */
+    private long upgradeAt = Long.MIN_VALUE / 2;
 
     public Crafting(ServerPlayer self, Motor motor, Perception perception) {
         this.self = self;
@@ -633,6 +635,28 @@ public final class Crafting {
         return wood >= need;
     }
 
+    /** The best pickaxe better than the one in the bag that can be made right now (null = none). */
+    @Nullable
+    public static Item pickaxeUpgrade(Player p) {
+        int have = tierOf(p, PickaxeItem.class);
+        for (Item it : PICKAXES) {
+            if (((TieredItem) it).getTier().getLevel() > have && makeable(p, it)) {
+                return it;
+            }
+        }
+        return null;
+    }
+
+    /** One line for the soak log: what crafting would do now and why it may not. */
+    public String trace() {
+        Item up = pickaxeUpgrade(self);
+        CraftingRecipe r = plan(self);
+        boolean bag = count(self, Items.CRAFTING_TABLE) > 0;
+        return "plan=" + (r == null ? "-" : r.getResultItem(self.level().registryAccess()).getItem()) + " up=" + (up == null ? "-" : up)
+                + " forced=" + forcedTarget + " table=" + (bag ? "bag" : tableNearby(self) ? "near" : "no") + " cobble=" + cobble(self)
+                + " planks=" + countTag(self, ItemTags.PLANKS) + " logs=" + countTag(self, ItemTags.LOGS) + " sticks=" + count(self, Items.STICK);
+    }
+
     /** Coal or charcoal and a stick (or the wood for one): a torch can be made in the hand. */
     public static boolean torchMakeable(Player p) {
         return count(p, Items.COAL) + count(p, Items.CHARCOAL) > 0
@@ -659,6 +683,16 @@ public final class Crafting {
     /** Crafting that should not wait for the policy to get round to it (a furnace for the raw food/ore, the first bucket, a pickaxe for mining). */
     public boolean urgent() {
         if (forcedTarget instanceof PickaxeItem) {
+            return true;
+        }
+        Item up = pickaxeUpgrade(self);
+        long now = self.level().getGameTime();
+        if (up != null && now - upgradeAt >= 400) {
+            // a better pickaxe can be made right now: nothing else may eat its wood / stone first
+            upgradeAt = now;
+            if (forcedTarget == null) {
+                forcedTarget = up;
+            }
             return true;
         }
         boolean tableAccess = count(self, Items.CRAFTING_TABLE) > 0 || tableNearby(self) || countTag(self, ItemTags.PLANKS) + countTag(self, ItemTags.LOGS) * 4 >= 4;

@@ -33,7 +33,7 @@
 ### P-01 進行段階 `ai/Progression.java`(新規)
 - `static int tier(Player)`: 0=なし / 1=木のツルハシ / 2=石のツルハシ / 3=鉄のツルハシ / 4=鉄装備(`StairMining.ironGeared`) / 5=ダイヤのツルハシ / 6=ダイヤ全部(ツルハシ・剣・防具4)
 - `static Need need(Player)`: `WOOD`(木のツルハシ無し)/ `STONE`(石のツルハシ無し)/ `IRON`(石以上のツルハシ有り かつ `ironShort>0`)/ `DIAMOND`(鉄以上のツルハシ有り かつ `diamondShort>0`)/ `NONE`
-- `ironShort`: 鉄以上を持っていない物の鉄の必要数の合計(ツルハシ3・剣2・兜5・胴8・脚7・靴4・盾1)−(鉄インゴット+原石の鉄)。`diamondShort`: 同じ考えでダイヤ(ツルハシ3・剣2・兜5・胴8・脚7・靴4)−ダイヤ数
+- `ironShort`: 鉄以上を持っていない物の鉄の必要数の合計(ツルハシ3・剣2・兜5・胴8・脚7・靴4。盾は `ironGeared` に合わせて数えない)−(鉄インゴット+原石の鉄)。`diamondShort`: 同じ考えでダイヤ(ツルハシ3・剣2・兜5・胴8・脚7・靴4)−ダイヤ数
 - `static int digTargetY(Need)`: IRON→16、DIAMOND→-58(1.18以降のダイヤが一番多い高さ。岩盤 -64〜-60 の上)
 - `static boolean digWanted(Player)`: need が IRON か DIAMOND、かつブロック破壊が許可されている
 - 持ち物が変わったときだけ計算し直す(`Crafting.hasWork` と同じキャッシュの仕方: `getTimesChanged()`)
@@ -130,7 +130,7 @@
 ## 5. 実装の順番(1セッション3〜4項目)
 | セッション | 項目 | 終わったら |
 |---|---|---|
-| S1 | P-09(計測+urgent)、P-10(計測)、P-01、P-12 | テスト `knowsWhatToProgressTo` `craftsStonePickaxeWhenCobbleInBag` `oldBrainsStillLoad`。push してソークの run ID を報告 |
+| S1(実装済み) | P-09(計測+urgent)、P-10(計測)、P-01、P-12 | テスト `knowsWhatToProgressTo` `craftsAStonePickaxeWhenCobbleAndWoodAreInTheBag` `oldBrainsStillLoad`(今のキー配置の固定。prog桁を足す S3 でも通ること)。push してソークの run ID を報告 |
 | S2 | P-02、P-03、P-04、P-06(P-11 は P-03 に含む) | テスト `digsForIron…` `keepsDigging…` `staysHome…`。ソーク |
 | S3 | P-05、P-07、P-08 | テスト `tunnelsSideways…`。ソーク(AC 判定) |
 | S4 | ソーク結果での調整(報酬の値・ドライバの条件) | AC 未達で原因が分からなければ Opus に切り替えて分析 |

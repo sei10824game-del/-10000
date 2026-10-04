@@ -418,6 +418,10 @@ public final class CloneController {
         return option;
     }
 
+    /** Why there is no option running (soak diagnostics): what the last controller tick was busy with, and when. */
+    public String idleWhy = "";
+    public long idleWhyTick;
+
     public CombatAction action() {
         return action;
     }
@@ -563,9 +567,12 @@ public final class CloneController {
         hazardTick(now);
         Prof.add(Prof.HAZARD, ph);
         long ps = Prof.t();
+        idleWhyTick = now;
         if (itemBusy) {
             // drinking / scooping water / waiting for a pearl: nothing else this tick
+            idleWhy = "item";
         } else if (escaping) {
+            idleWhy = "escape";
             Escape.Status st = escape.tick();
             if (st != Escape.Status.WORKING) {
                 escaping = false;
@@ -575,8 +582,10 @@ public final class CloneController {
                 }
             }
         } else if (cleanTarget != null) {
+            idleWhy = "clean";
             cleanUp();
         } else {
+            idleWhy = "strategy";
             runStrategy(now);
         }
         Prof.add(Prof.STRATEGY, ps);
@@ -2019,6 +2028,7 @@ public final class CloneController {
             o = pull != null ? pull.ordinal() : brain().chooseStrategy(s, mask);
         }
         if (o < 0) {
+            idleWhy = mask == 0 ? "choose:mask0" : "choose:none";
             return;
         }
         option = Option.VALUES[o];

@@ -1,6 +1,7 @@
 package com.rlclones.gametest;
 
 import com.rlclones.RLClones;
+import com.rlclones.ai.Progression;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.brain.EnemyKnowledge;
 import com.rlclones.ai.brain.QTable;
@@ -22,6 +23,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.monster.Husk;
 import net.minecraft.world.item.ItemStack;
@@ -4473,10 +4475,92 @@ public final class CloneGameTests {
         });
     }
 
+    // ------------------------------------------------------------------ progression towards full diamond gear (plan.md)
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1progress")
+    public static void knowsWhatToProgressTo(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var inv = c.getInventory();
+        inv.clearContent();
+        h.assertTrue(Progression.tier(c) == 0 && Progression.need(c) == Progression.Need.WOOD
+                && !Progression.digWanted(c), "bare hands: wood first (" + Progression.describe(c) + ")");
+        inv.add(new ItemStack(Items.WOODEN_PICKAXE));
+        h.assertTrue(Progression.tier(c) == 1 && Progression.need(c) == Progression.Need.STONE
+                && !Progression.digWanted(c), "wooden pickaxe: stone next (" + Progression.describe(c) + ")");
+        inv.add(new ItemStack(Items.STONE_PICKAXE));
+        h.assertTrue(Progression.tier(c) == 2 && Progression.need(c) == Progression.Need.IRON
+                && Progression.ironNeed(c) == 29 && Progression.ironShort(c) == 29 && Progression.digWanted(c)
+                && Progression.digTargetY(Progression.need(c)) == 16, "stone pickaxe: iron next, 29 short (" + Progression.describe(c) + ")");
+        inv.add(new ItemStack(Items.IRON_INGOT, 9));
+        inv.add(new ItemStack(Items.RAW_IRON, 1));
+        h.assertTrue(Progression.ironShort(c) == 19, "ingots and raw iron count off the iron still to find (" + Progression.describe(c) + ")");
+        inv.clearContent();
+        inv.add(new ItemStack(Items.GOLDEN_PICKAXE));
+        c.setItemSlot(EquipmentSlot.FEET, new ItemStack(Items.GOLDEN_BOOTS));
+        h.assertTrue(Progression.need(c) == Progression.Need.STONE && Progression.ironNeed(c) == 29,
+                "gold counts for nothing (" + Progression.describe(c) + ")");
+        inv.clearContent();
+        inv.add(new ItemStack(Items.IRON_PICKAXE));
+        inv.add(new ItemStack(Items.IRON_SWORD));
+        c.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        c.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+        c.setItemSlot(EquipmentSlot.LEGS, new ItemStack(Items.IRON_LEGGINGS));
+        inv.add(new ItemStack(Items.IRON_BOOTS)); // in the bag counts too (it will be put on)
+        h.assertTrue(Progression.tier(c) == 4 && Progression.ironShort(c) == 0
+                && Progression.need(c) == Progression.Need.DIAMOND && Progression.diamondNeed(c) == 29
+                && Progression.digWanted(c) && Progression.digTargetY(Progression.need(c)) == -58,
+                "iron gear: diamonds next, dig down to -58 (" + Progression.describe(c) + ")");
+        inv.add(new ItemStack(Items.DIAMOND, 10));
+        h.assertTrue(Progression.diamondShort(c) == 19, "diamonds in the bag count off (" + Progression.describe(c) + ")");
+        inv.clearContent();
+        for (var it : List.of(Items.DIAMOND_PICKAXE, Items.DIAMOND_SWORD, Items.DIAMOND_HELMET, Items.DIAMOND_CHESTPLATE, Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS)) {
+            inv.add(new ItemStack(it));
+        }
+        h.assertTrue(Progression.tier(c) == 6 && Progression.need(c) == Progression.Need.NONE
+                && !Progression.digWanted(c), "all diamond: nothing left to dig for (" + Progression.describe(c) + ")");
+        inv.clearContent();
+        finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1progress")
+    public static void oldBrainsStillLoad(GameTestHelper h) {
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.encode(0, 0, 0, false, false, false, false, false, false, false) == 0, "the lowest state is key 0");
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.encode(2, 2, 2, true, true, true, true, true, true, true) == 3455, "the highest state is key 3455 (3*3*3*2^7 states)");
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.encode(1, 2, 0, true, false, true, false, true, false, true) == ((((((((1 * 3 + 2) * 3 + 0) * 2 + 1) * 2 + 0) * 2 + 1) * 2 + 0) * 2 + 1) * 2 + 0) * 2 + 1,
+                "keys are laid out as they always were (a saved Q table stays valid)");
+        java.util.Random r = new java.util.Random(7);
+        for (int i = 0; i < 200; i++) {
+            int[] v = {r.nextInt(3), r.nextInt(3), r.nextInt(3), r.nextInt(2), r.nextInt(2), r.nextInt(2), r.nextInt(2), r.nextInt(2), r.nextInt(2), r.nextInt(2)};
+            int key = com.rlclones.ai.strategy.StrategyState.encode(v[0], v[1], v[2], v[3] == 1, v[4] == 1, v[5] == 1, v[6] == 1, v[7] == 1, v[8] == 1, v[9] == 1);
+            h.assertTrue(java.util.Arrays.equals(v, com.rlclones.ai.strategy.StrategyState.decode(key)), "decode(encode(x)) == x for " + java.util.Arrays.toString(v));
+        }
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "p1stonepick")
+    public static void craftsAStonePickaxeWhenCobbleAndWoodAreInTheBag(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 6));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 3));
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var cc = c.controller();
+            h.assertTrue(c.getInventory().countItem(Items.STONE_PICKAXE) >= 1, "cobble, planks and logs in the bag: a stone pickaxe is made (" + cc.crafting().trace() + " "
+                    + cc.optionLog + " idle=" + cc.idleWhy + ")");
+            finish(h, c);
+        });
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
-    /** Game ticks the soak runs (30 minutes of game time). */
-    private static final int SOAK_TICKS = 36000;
+    /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
+    private static final int SOAK_TICKS = 72000;
+    /** The most a soak.flag may ask for (the test's time limit). */
+    private static final int SOAK_MAX_TICKS = 300000;
     private static final String[] SOAK_STEPS = {"wood", "table", "wood_pick", "stone_pick", "furnace", "coal", "iron_ingot", "iron_pick", "iron_gear",
             "diamond", "diamond_pick", "diamond_armor_1", "diamond_armor_2", "diamond_armor_3", "diamond_armor_4"};
 
@@ -4484,6 +4568,24 @@ public final class CloneGameTests {
     private static boolean soakWanted() {
         java.nio.file.Path game = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
         return java.nio.file.Files.exists(game.resolve("soak.flag")) || game.getParent() != null && java.nio.file.Files.exists(game.getParent().resolve("soak.flag"));
+    }
+
+    private static int soakTicks() {
+        java.nio.file.Path game = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
+        for (java.nio.file.Path dir : new java.nio.file.Path[]{game, game.getParent()}) {
+            if (dir == null || !java.nio.file.Files.exists(dir.resolve("soak.flag"))) {
+                continue;
+            }
+            try {
+                for (String line : java.nio.file.Files.readAllLines(dir.resolve("soak.flag"))) {
+                    if (line.trim().matches("\\d{3,7}")) {
+                        return Math.max(600, Math.min(SOAK_MAX_TICKS, Integer.parseInt(line.trim())));
+                    }
+                }
+            } catch (java.io.IOException | RuntimeException ignored) {
+            }
+        }
+        return SOAK_TICKS;
     }
 
     private static boolean treesNear(net.minecraft.server.level.ServerLevel level, int x, int z) {
@@ -4582,7 +4684,7 @@ public final class CloneGameTests {
      * Informational (never fails the build): clones at a forest with nothing in their hands, left alone for half an
      * hour of game time. Logs when each one first reaches each step of the way to full diamond gear ("SOAK ..." lines).
      */
-    @GameTest(template = ARENA, timeoutTicks = SOAK_TICKS + 600, batch = "zsoak", required = false)
+    @GameTest(template = ARENA, timeoutTicks = SOAK_MAX_TICKS + 600, batch = "zsoak", required = false)
     public static void soakHowFarCloneGetsOnItsOwn(GameTestHelper h) {
         if (!soakWanted()) {
             h.succeed();
@@ -4593,6 +4695,7 @@ public final class CloneGameTests {
         if (spawning.get()) {
             spawning.set(false, level.getServer()); // (the other tests rely on dark arenas staying free of monsters)
         }
+        final int total = soakTicks();
         BlockPos site = soakSite(h);
         List<String> names = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
@@ -4607,10 +4710,11 @@ public final class CloneGameTests {
             cleanUpOnFailure(h, c);
             names.add(c.getGameProfile().getName());
         }
-        RLClones.LOGGER.info("SOAK start at {} with {} clones, {} ticks", site.toShortString(), names.size(), SOAK_TICKS);
+        RLClones.LOGGER.info("SOAK start at {} with {} clones, {} ticks", site.toShortString(), names.size(), total);
         java.util.Map<String, java.util.Map<String, Integer>> first = new java.util.LinkedHashMap<>();
         java.util.Map<String, Integer> gone = new java.util.LinkedHashMap<>();
         java.util.Map<String, Integer> opts = new java.util.TreeMap<>();
+        java.util.Map<String, Integer> nones = new java.util.TreeMap<>();
         int[] tick = {0};
         h.onEachTick(() -> {
             tick[0]++;
@@ -4626,11 +4730,19 @@ public final class CloneGameTests {
                         for (String step : soakReached(live)) {
                             m.putIfAbsent(step, tick[0]);
                         }
-                        var o = live.controller().option();
+                        var cc = live.controller();
+                        var o = cc.option();
                         opts.merge(o == null ? "none" : o.name(), 1, Integer::sum);
+                        if (o == null) {
+                            nones.merge(live.level().getGameTime() - cc.idleWhyTick > 2 ? "skipped" : cc.idleWhy, 1, Integer::sum);
+                        }
+                        if (tick[0] % 2400 == 0) {
+                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | {}", tick[0], n, o, com.rlclones.ai.Progression.describe(live), cc.crafting().trace(),
+                                    soakBag(live));
+                        }
                     }
                 }
-                if (tick[0] % 3000 == 0 || tick[0] == SOAK_TICKS) {
+                if (tick[0] % 3000 == 0 || tick[0] == total) {
                     StringBuilder sb = new StringBuilder("SOAK t=" + tick[0] + " gone=" + gone.keySet() + " reached:");
                     for (String step : SOAK_STEPS) {
                         int n = 0;
@@ -4641,18 +4753,28 @@ public final class CloneGameTests {
                     }
                     RLClones.LOGGER.info(sb.toString());
                 }
-                if (tick[0] == SOAK_TICKS) {
+                if (tick[0] == total) {
                     for (String n : names) {
                         var m = first.getOrDefault(n, java.util.Map.of());
                         ClonePlayer live = manager(h).byName(n);
                         RLClones.LOGGER.info("SOAK-CLONE {} steps={} gone@{} | {}", n, m, gone.get(n), live == null ? "-" : soakBag(live));
                     }
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
+                    RLClones.LOGGER.info("SOAK-NONE (what the clone was busy with when no option ran) {}", nones);
                     int full = 0;
                     for (var m : first.values()) {
                         full += m.containsKey("diamond_armor_4") ? 1 : 0;
                     }
-                    RLClones.LOGGER.info("SOAK-SUMMARY full_diamond_armor={}/{} errors={}", full, names.size(), CloneManager.errors());
+                    java.util.Map<String, Integer> reached = new java.util.LinkedHashMap<>();
+                    for (String step : SOAK_STEPS) {
+                        int n = 0;
+                        for (var m : first.values()) {
+                            n += m.containsKey(step) ? 1 : 0;
+                        }
+                        reached.put(step, n);
+                    }
+                    RLClones.LOGGER.info("SOAK-SUMMARY ticks={} clones={} gone={} full_diamond_armor={}/{} errors={} reached={}", total, names.size(), gone.size(), full, names.size(),
+                            CloneManager.errors(), reached);
                     for (String n : names) {
                         ClonePlayer live = manager(h).byName(n);
                         if (live != null) {
