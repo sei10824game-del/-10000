@@ -2706,6 +2706,11 @@ public final class CloneGameTests {
         int[] tick = {0};
         h.onEachTick(() -> {
             tick[0]++;
+            if (c.isInLava() && where.indexOf("lava") < 0) {
+                where.append(String.format(Locale.ROOT, "lava@%d x%.1f z%.1f v%s %s shift=%s ground=%s path=%s ", tick[0], c.getX() - h.absoluteVec(Vec3.ZERO).x,
+                        c.getZ() - h.absoluteVec(Vec3.ZERO).z, c.getDeltaMovement(), c.controller().option(), c.isShiftKeyDown(), c.onGround(),
+                        c.controller().motor().recentGoal()));
+            }
             int gravel = c.getInventory().countItem(Items.GRAVEL);
             if (where.length() < 300 && (gravel > 0 && where.indexOf("inv") < 0 || h.getBlockState(new BlockPos(5, 1, 7)).is(Blocks.GRAVEL) && where.indexOf("moat") < 0)) {
                 where.append(gravel > 0 && where.indexOf("inv") < 0 ? "inv" : "moat").append("@").append(tick[0]).append(" x")
