@@ -2651,8 +2651,10 @@ public final class CloneGameTests {
     public static void pearlsOverALavaMoatWhenThatIsTheOnlyWay(GameTestHelper h) {
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
-                for (int y = 2; y <= 5; y++) {
-                    h.setBlock(new BlockPos(x, y, z), Blocks.AIR); // nothing left standing from an earlier test
+                for (int y = 2; y <= 24; y++) {
+                    if (!h.getBlockState(new BlockPos(x, y, z)).isAir()) {
+                        h.setBlock(new BlockPos(x, y, z), Blocks.AIR); // nothing left from an earlier test (gravel up there would fall into the moat)
+                    }
                 }
             }
         }
