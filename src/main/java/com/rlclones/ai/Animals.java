@@ -503,9 +503,10 @@ public final class Animals {
                     continue;
                 }
                 boolean ok = true;
-                // room all round (a corridor one block wide in front of the gate gets jammed by the animals following us)
-                for (int x = -1; x <= penSize && ok; x++) {
-                    for (int z = -2; z <= penSize && ok; z++) {
+                // a big pen for livestock wants room all round: herded cows jam a corridor one block wide
+                int m = penSize > 5 ? 2 : 0;
+                for (int x = -m; x < penSize + m && ok; x++) {
+                    for (int z = -Math.max(1, m); z < penSize + m && ok; z++) {
                         BlockPos g = origin.offset(x, -1, z);
                         ok = level.getFluidState(g).isEmpty() && level.getBlockState(g).isCollisionShapeFullBlock(level, g)
                                 && level.getBlockState(g.above()).canBeReplaced() && level.getFluidState(g.above()).isEmpty()
