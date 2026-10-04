@@ -424,16 +424,21 @@ public final class Achievements {
         return Status.FAILED;
     }
 
+    /** How filling a bucket went last (diagnostics, tests). */
+    public String fillDebug = "";
+
     private Status fillTick(Fluid f) {
         if (spot == null || !self.level().getFluidState(spot).isSource()) {
             spot = fluidNear(f);
             if (spot == null) {
+                fillDebug = "no " + f + " near";
                 return Status.FAILED;
             }
         }
         Vec3 c = Vec3.atCenterOf(spot);
         if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 1.0) {
             motor.navigate(Vec3.atBottomCenterOf(spot.above()), 2.0, false);
+            fillDebug = String.format(java.util.Locale.ROOT, "to %s d%.1f stuck%d", spot.toShortString(), self.getEyePosition().distanceTo(c), motor.stuckCount());
             return motor.stuckCount() > 8 ? Status.FAILED : Status.WORKING;
         }
         motor.stop();
@@ -444,7 +449,10 @@ public final class Achievements {
                 ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, self));
         if (hit.getType() == HitResult.Type.BLOCK && level.getFluidState(hit.getBlockPos()).is(f == Fluids.LAVA ? FluidTags.LAVA : FluidTags.WATER)) {
             Equipment.select(self, self.getInventory().findSlotMatchingItem(new ItemStack(Items.BUCKET)));
-            motor.useHeldItem(InteractionHand.MAIN_HAND);
+            fillDebug = "use=" + motor.useHeldItem(InteractionHand.MAIN_HAND) + " hand=" + self.getMainHandItem().getItem();
+        } else {
+            fillDebug = "aim " + hit.getType() + (hit.getType() == HitResult.Type.BLOCK ? " " + level.getBlockState(hit.getBlockPos()).getBlock() : "") + " pitch "
+                    + (int) self.getXRot();
         }
         return Status.WORKING;
     }

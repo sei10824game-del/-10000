@@ -1929,7 +1929,8 @@ public final class CloneController {
             return Option.CRAFT; // a furnace for the raw food / ore, the first bucket
         }
         if ((mask & Option.MINE.bit()) != 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
-                && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24, p -> harvestable(Perception.BlockKind.ORE, p)) != null) {
+                && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24, p -> harvestable(Perception.BlockKind.ORE, p)
+                && (now >= toolBlockedUntil || hasPickFor(self.level().getBlockState(p)))) != null) {
             orePulls++;
             return Option.MINE; // ore in sight: nothing else comes close (a pickaxe is made first if need be)
         }
@@ -2616,7 +2617,7 @@ public final class CloneController {
     public int arrowsLoosed;
     @Nullable
     private Vec3 vantage;
-    private double vantageFromY;
+    private double vantageFromY = -1e10;
     private int vantageTicks;
     private int vantagePillars;
     @Nullable
@@ -2669,6 +2670,9 @@ public final class CloneController {
         Vec3 from = self.getEyePosition().add(0, -0.1, 0);
         boolean shotClear = clearShot(from, mid) && clearShot(from, mid.add(0, -0.3, 0));
         if (!ranged || perception.canSee(t) && shotClear) {
+            if (ranged && self.getY() > vantageFromY + 0.5 && vantageFromY > -1e9) {
+                motor.sneak(true); // crouched up on the ledge: no slipping off while drawing
+            }
             if (vantage != null || vantagePillars > 0) {
                 if (self.getY() > vantageFromY + 0.5 && perception.canSee(t)) {
                     vantageClimbs++;
@@ -2707,8 +2711,9 @@ public final class CloneController {
         }
         if (vantage != null) {
             motor.lookAt(last);
-            if (Motor.horizontalDistance(self.position(), vantage) < 0.45 && Math.abs(self.getY() - vantage.y) < 0.6) {
+            if (Motor.horizontalDistance(self.position(), vantage) < 0.3 && Math.abs(self.getY() - vantage.y) < 0.6) {
                 motor.stop();
+                motor.sneak(true);
                 if (perception.canSee(t) && !shotClear) {
                     vantage = null; // seen from here, but an arrow would catch the edge: somewhere higher still
                     vantageDebug += " edge";
@@ -2716,7 +2721,10 @@ public final class CloneController {
                 }
                 return false; // up here: draw and wait for it to show
             }
-            motor.navigate(vantage, 0.3, false);
+            motor.navigate(vantage, 0.15, false);
+            if (Motor.horizontalDistance(self.position(), vantage) < 0.8 && Math.abs(self.getY() - vantage.y) < 0.6) {
+                motor.sneak(true); // the last step onto a narrow ledge: carefully
+            }
             if (motor.stuckCount() > 4) {
                 vantage = null;
                 vantageTicks = 1000;
@@ -3443,6 +3451,7 @@ public final class CloneController {
     private static final net.minecraft.world.item.Item[] PICK_ORDER = {Items.WOODEN_PICKAXE, Items.STONE_PICKAXE, Items.IRON_PICKAXE, Items.DIAMOND_PICKAXE};
 
     private long lastMaterialPickup = Long.MIN_VALUE / 2;
+    private long toolBlockedUntil = Long.MIN_VALUE;
 
     /** A pickaxe in the bag that breaks {@code st} so that it drops (any pickaxe for null). */
     private boolean hasPickFor(@Nullable BlockState st) {
@@ -3491,6 +3500,7 @@ public final class CloneController {
             return true;
         }
         itemAid.need(goal, 1);
+        toolBlockedUntil = now() + 600; // no pickaxe to be had right now: the ore does not pull us back for a while
         Entity drop = Senses.nearestItem(perception, self, now(), 16);
         if (drop instanceof ItemEntity ie && now() - lastMaterialPickup > 200 && (ie.getItem().is(net.minecraft.tags.ItemTags.LOGS)
                 || ie.getItem().is(net.minecraft.tags.ItemTags.PLANKS) || ie.getItem().is(Items.STICK)

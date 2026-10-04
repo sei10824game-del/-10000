@@ -2945,7 +2945,7 @@ public final class CloneGameTests {
             String fact = c.getCloneBrain().advancementFact("minecraft:story/lava_bucket");
             h.assertTrue(fact != null && fact.contains("obtain minecraft:lava_bucket"), "it read what the advancement needs: " + fact);
             h.assertTrue(c.getAdvancements().getOrStartProgress(adv).isDone(), "and went for it with nothing else to do ("
-                    + c.controller().achievements().debug + " " + c.controller().optionLog + ")");
+                    + c.controller().achievements().debug + " | " + c.controller().achievements().fillDebug + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
