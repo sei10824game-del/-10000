@@ -2110,6 +2110,7 @@ public final class CloneController {
         if (option == Option.FIGHT || option == Option.HUNT) {
             closeCombatStep(died, died);
             target = null;
+            dropVantage();
         }
         if (option == Option.SHAFT && (crafting.forcedTarget == Items.LADDER || crafting.forcedTarget == Items.STICK)) {
             crafting.forcedTarget = null;
@@ -2235,6 +2236,7 @@ public final class CloneController {
         if (target != null && !validTarget(target, hunt, now)) {
             closeCombatStep(true, false);
             target = null;
+            dropVantage();
         }
         if (target == null) {
             Perception.Seen animal = hunt ? Senses.nearestAnimal(perception, self, now, 24) : null;
@@ -2599,7 +2601,7 @@ public final class CloneController {
                     if (arrowClearsFriends(self.getTicksUsingItem())) {
                         offhandShots += self.getUsedItemHand() == InteractionHand.OFF_HAND ? 1 : 0;
                         arrowsLoosed++;
-                        if (self.getY() > vantageFromY + 0.5) {
+                        if (vantageFromY > -1e9 && self.getY() > vantageFromY + 0.5 && vantageDebug.length() < 400) {
                             vantageDebug += " shot@" + String.format(java.util.Locale.ROOT, "%.1f/%d", self.getY() - vantageFromY, (int) self.getXRot());
                         }
                         self.releaseUsingItem();
@@ -2666,70 +2668,92 @@ public final class CloneController {
     private boolean seekVantage(Entity t) {
         boolean ranged = Equipment.rangedKind(self.getMainHandItem()) != Equipment.RangedKind.NONE || Equipment.offhandRanged(self)
                 || Equipment.rangedSlot(self) >= 0;
+        if (!ranged) {
+            return false;
+        }
         Vec3 mid = t.getBoundingBox().getCenter(); // where the arrow is aimed
         Vec3 from = self.getEyePosition().add(0, -0.1, 0);
         boolean shotClear = clearShot(from, mid) && clearShot(from, mid.add(0, -0.3, 0));
-        if (!ranged || perception.canSee(t) && shotClear) {
-            if (ranged && self.getY() > vantageFromY + 0.5 && vantageFromY > -1e9) {
-                motor.sneak(true); // crouched up on the ledge: no slipping off while drawing
-            }
-            if (vantage != null || vantagePillars > 0) {
-                if (self.getY() > vantageFromY + 0.5 && perception.canSee(t)) {
-                    vantageClimbs++;
-                    vantageDebug += " seen from +" + String.format(java.util.Locale.ROOT, "%.1f", self.getY() - vantageFromY);
+        boolean seeNow = perception.canSee(t) && shotClear;
+        Perception.Seen seen = perception.get(t);
+        Vec3 last = (seen == null ? t.position() : seen.pos).add(0, t.getBbHeight() * 0.5, 0);
+        if (vantage != null) {
+            boolean arrived = Motor.horizontalDistance(self.position(), vantage) < 0.3 && Math.abs(self.getY() - vantage.y) < 0.6 && self.onGround();
+            if (!arrived) {
+                if (self.isUsingItem()) {
+                    self.stopUsingItem(); // bow down while climbing
                 }
-                vantage = null;
-                vantagePillars = 0;
-                vantageBase = null;
+                actionTicks = Math.min(actionTicks, 10); // keep at it across decisions
+                motor.lookAt(last);
+                motor.navigate(vantage, 0.15, false);
+                if (Motor.horizontalDistance(self.position(), vantage) < 0.8 && Math.abs(self.getY() - vantage.y) < 0.6) {
+                    motor.sneak(true); // the last step onto a narrow ledge: carefully
+                }
+                if (motor.stuckCount() > 4 || ++vantageTicks > 200) {
+                    vantage = null;
+                    vantageTicks = 1000;
+                }
+                return true;
             }
+            // up there: stay put, crouched (no slipping off a narrow ledge), and shoot from here
+            motor.stop();
+            motor.sneak(true);
+            if (seeNow) {
+                countVantage();
+                vantageWait = 0;
+                return false;
+            }
+            if (perception.canSee(t)) {
+                // seen from here, but an arrow would catch the edge: somewhere higher still
+                Vec3 higher = findVantage(last);
+                vantageDebug += " edge" + (higher == null ? "" : "->" + BlockPos.containing(higher).toShortString());
+                if (higher != null) {
+                    vantage = higher;
+                    return true;
+                }
+                return false;
+            }
+            if (++vantageWait > 60) {
+                vantage = null; // it moved out of view from here: look for another way
+                vantageWait = 0;
+            }
+            return false;
+        }
+        if (seeNow) {
+            if (vantageBase != null) {
+                countVantage(); // built up high enough
+            }
+            vantageBase = null;
+            vantagePillars = 0;
             vantageTicks = 0;
             return false;
         }
-        if (actionTicks < 4 && vantage == null && vantageBase == null) {
+        if (actionTicks < 4 && vantageBase == null) {
             return false; // a moment for it to show itself again
         }
-        Perception.Seen seen = perception.get(t);
-        Vec3 last = (seen == null ? t.position() : seen.pos).add(0, t.getBbHeight() * 0.5, 0);
         if (++vantageTicks > 160) {
             return false; // nothing better to be had
         }
         actionTicks = Math.min(actionTicks, 10); // keep at it across decisions
-        if (vantage == null && vantageBase == null) {
+        if (vantageBase == null) {
             vantageFromY = self.getY();
+            vantageCounted = false;
             vantage = findVantage(last);
-            vantageDebug += " find=" + (vantage == null ? "none" : BlockPos.containing(vantage).toShortString());
-            if (vantage == null && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && self.onGround()) {
-                vantageBase = self.blockPosition(); // no ledge about: build one under our feet
+            if (vantageDebug.length() < 400) {
+                vantageDebug += " find=" + (vantage == null ? "none" : BlockPos.containing(vantage).toShortString());
             }
-            if (vantage == null && vantageBase == null) {
+            if (vantage != null) {
+                return true;
+            }
+            if (Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && self.onGround()) {
+                vantageBase = self.blockPosition(); // no ledge about: build one under our feet
+            } else {
                 vantageTicks = 1000;
                 return false;
             }
         }
         if (self.isUsingItem()) {
-            self.stopUsingItem(); // bow down while climbing
-        }
-        if (vantage != null) {
-            motor.lookAt(last);
-            if (Motor.horizontalDistance(self.position(), vantage) < 0.3 && Math.abs(self.getY() - vantage.y) < 0.6) {
-                motor.stop();
-                motor.sneak(true);
-                if (perception.canSee(t) && !shotClear) {
-                    vantage = null; // seen from here, but an arrow would catch the edge: somewhere higher still
-                    vantageDebug += " edge";
-                    return true;
-                }
-                return false; // up here: draw and wait for it to show
-            }
-            motor.navigate(vantage, 0.15, false);
-            if (Motor.horizontalDistance(self.position(), vantage) < 0.8 && Math.abs(self.getY() - vantage.y) < 0.6) {
-                motor.sneak(true); // the last step onto a narrow ledge: carefully
-            }
-            if (motor.stuckCount() > 4) {
-                vantage = null;
-                vantageTicks = 1000;
-            }
-            return true;
+            self.stopUsingItem();
         }
         // pillar: jump and set a block under our feet, up to two high
         if (vantagePillars >= 2) {
@@ -2748,6 +2772,27 @@ public final class CloneController {
             }
         }
         return true;
+    }
+
+    private int vantageWait;
+    private boolean vantageCounted;
+
+    /** It is in plain view (and in reach of an arrow) from up here: one climb that paid off. */
+    private void countVantage() {
+        if (!vantageCounted && self.getY() > vantageFromY + 0.5) {
+            vantageCounted = true;
+            vantageClimbs++;
+            vantageDebug += " seen from +" + String.format(java.util.Locale.ROOT, "%.1f", self.getY() - vantageFromY);
+        }
+    }
+
+    /** The fight is over / a new target: no more climbing for the old one. */
+    private void dropVantage() {
+        vantage = null;
+        vantageBase = null;
+        vantagePillars = 0;
+        vantageTicks = 0;
+        vantageWait = 0;
     }
 
     /** Shots fired with a firework loaded in the crossbow / with the weapon held in the off hand (tests). */
