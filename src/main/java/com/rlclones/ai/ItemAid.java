@@ -276,13 +276,13 @@ public final class ItemAid {
             }
         }
         if (worst >= 0) {
-            self.drop(inv.items.get(worst).split(1), false, true);
+            gift(self.drop(inv.items.get(worst).split(1), false, true), a.from);
         } else {
             for (int i = 0; i < inv.items.size() && give > 0; i++) {
                 ItemStack s = inv.items.get(i);
                 if (matches(s, a.item)) {
                     int n = Math.min(give, s.getCount());
-                    self.drop(s.split(n), false, true);
+                    gift(self.drop(s.split(n), false, true), a.from);
                     give -= n;
                 }
             }
@@ -295,6 +295,25 @@ public final class ItemAid {
         asks.remove(a);
         helping = null;
         return Status.DONE;
+    }
+
+    /** Items tossed to a friend (entity id -> who it is for): nobody else picks them up (the giver least of all). */
+    private static final Map<Integer, UUID> GIFTS = new HashMap<>();
+
+    private static void gift(@Nullable ItemEntity e, UUID to) {
+        if (e != null) {
+            e.setTarget(to);
+            if (GIFTS.size() > 256) {
+                GIFTS.clear();
+            }
+            GIFTS.put(e.getId(), to);
+        }
+    }
+
+    /** Is this item on the ground meant for somebody else? */
+    public static boolean giftForOther(net.minecraft.world.entity.Entity e, Player p) {
+        UUID to = GIFTS.get(e.getId());
+        return to != null && !to.equals(p.getUUID());
     }
 
     public String state() {

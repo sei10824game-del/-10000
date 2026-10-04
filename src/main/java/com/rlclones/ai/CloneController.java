@@ -2665,8 +2665,9 @@ public final class CloneController {
     private boolean seekVantage(Entity t) {
         boolean ranged = Equipment.rangedKind(self.getMainHandItem()) != Equipment.RangedKind.NONE || Equipment.offhandRanged(self)
                 || Equipment.rangedSlot(self) >= 0;
-        Vec3 mid = t.position().add(0, t.getBbHeight() * 0.5, 0);
-        boolean shotClear = clearShot(self.getEyePosition().add(0, -0.1, 0), mid) || clearShot(self.getEyePosition().add(0, -0.1, 0), t.getEyePosition());
+        Vec3 mid = t.getBoundingBox().getCenter(); // where the arrow is aimed
+        Vec3 from = self.getEyePosition().add(0, -0.1, 0);
+        boolean shotClear = clearShot(from, mid) && clearShot(from, mid.add(0, -0.3, 0));
         if (!ranged || perception.canSee(t) && shotClear) {
             if (vantage != null || vantagePillars > 0) {
                 if (self.getY() > vantageFromY + 0.5 && perception.canSee(t)) {

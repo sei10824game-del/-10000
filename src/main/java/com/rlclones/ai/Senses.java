@@ -247,7 +247,7 @@ public final class Senses {
         Entity best = null;
         double bestD = radius;
         for (Perception.Seen s : observer.remembered()) {
-            boolean pickable = s.entity instanceof ItemEntity item ? !item.hasPickUpDelay() : Perception.isRetrievable(s.entity);
+            boolean pickable = s.entity instanceof ItemEntity item ? !item.hasPickUpDelay() && !ItemAid.giftForOther(item, agent) : Perception.isRetrievable(s.entity);
             if (pickable && !s.entity.isRemoved() && now - s.lastSeen <= 100) {
                 Entity item = s.entity;
                 double d = s.pos.distanceTo(agent.position());

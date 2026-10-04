@@ -333,9 +333,9 @@ public final class WaterSource {
                     trace(String.format(java.util.Locale.ROOT, "[d%.1f w%s st%s src%s at%s]", self.getEyePosition().distanceTo(Vec3.atCenterOf(src)), self.isInWater(),
                             lastStand == null ? "-" : lastStand.subtract(src).toShortString(), src.toShortString(), self.blockPosition().subtract(src).toShortString()));
                 }
-                if (reach(src, Motor.BLOCK_REACH - 0.5)) {
+                if (reach(src, 2.8)) {
                     hold(Items.BUCKET);
-                    boolean used = useBucket(Vec3.atCenterOf(src));
+                    boolean used = useBucket(Vec3.atCenterOf(src).add(0, 0.3, 0)); // at the surface, from close by
                     if (ticks % 50 == 0) {
                         trace("use=" + used + "/" + self.getMainHandItem().getItem());
                     }
@@ -360,7 +360,7 @@ public final class WaterSource {
                     stage = 2;
                     return Status.WORKING;
                 }
-                if (reach(corner, Motor.BLOCK_REACH - 0.5)) {
+                if (reach(corner, 3.0)) {
                     hold(Items.WATER_BUCKET);
                     if (useBucket(new Vec3(corner.getX() + 0.5, corner.getY() + 0.02, corner.getZ() + 0.5)) && source(corner)) {
                         pours++;
