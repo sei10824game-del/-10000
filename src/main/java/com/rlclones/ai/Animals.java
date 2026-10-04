@@ -711,6 +711,9 @@ public final class Animals {
     @Nullable
     private Livestock livestock;
     private int frontWait;
+    private int loggedStage = -1;
+    /** Stage changes of the livestock job, with where the clone stood relative to the pen (diagnostics). */
+    public String livestockLog = "";
     public int livestockPens;
     public int lured;
 
@@ -762,6 +765,10 @@ public final class Animals {
             return Status.FAILED;
         }
         livestockDebug = "stage " + stage + " t=" + ticks;
+        if (stage != loggedStage && livestockLog.length() < 400) {
+            loggedStage = stage;
+            livestockLog += " " + stage + (penOrigin == null ? "" : "@" + self.blockPosition().subtract(penOrigin).toShortString());
+        }
         switch (stage) {
             case 0 -> {
                 penOrigin = findPenSite();

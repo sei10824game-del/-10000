@@ -2919,7 +2919,7 @@ public final class CloneGameTests {
                     + " " + cow2.isAlive() + " clone@" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             var gateNow = h.getLevel().getBlockState(pen.origin().offset(pen.size() / 2, 0, 0));
             h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (gate " + gateNow + " held "
-                    + c.getMainHandItem() + " clone at " + c.blockPosition().subtract(pen.origin()).toShortString() + " lured "
+                    + c.getMainHandItem() + " clone at " + c.blockPosition().subtract(pen.origin()).toShortString() + " pens " + bases.pens.size() + " log" + c.controller().animals().livestockLog + " lured "
                     + c.controller().animals().lured + " " + c.controller().animals().livestockDebug + " cows at "
                     + cow1.blockPosition().subtract(pen.origin()).toShortString() + " / " + cow2.blockPosition().subtract(pen.origin()).toShortString() + ")");
             var gate = h.getLevel().getBlockState(pen.origin().offset(pen.size() / 2, 0, 0));
