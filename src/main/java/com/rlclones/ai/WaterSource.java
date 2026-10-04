@@ -49,6 +49,52 @@ public final class WaterSource {
     private int tracedStage = -1;
     @Nullable
     private BlockPos lastStand;
+    private int waitFrom;
+
+    /** Which of the four cells are springs (diagnostics). */
+    private String springs() {
+        StringBuilder sb = new StringBuilder("[");
+        for (BlockPos c : cells) {
+            sb.append(source(c) ? 'S' : level().getFluidState(c).is(FluidTags.WATER) ? 'w' : level().getBlockState(c).isAir() ? '.' : '#');
+        }
+        return sb.append(']').toString();
+    }
+
+    /**
+     * Stand on the rim right beside {@code cell} (sharing a side with it): from there the bucket aims down into it
+     * clear of the rim. True once there.
+     */
+    private boolean pourFrom(BlockPos cell) {
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            BlockPos rim = cell.relative(d);
+            BlockPos stand = rim.above();
+            if (cells.contains(rim) || !solid(rim) || !level().getBlockState(stand).isAir() || !level().getBlockState(stand.above()).isAir()) {
+                continue;
+            }
+            double dd = stand.distSqr(self.blockPosition());
+            if (dd < bestD) {
+                bestD = dd;
+                best = stand;
+            }
+        }
+        if (best == null) {
+            return reach(cell, 3.0);
+        }
+        Vec3 at = Vec3.atBottomCenterOf(best);
+        if (Motor.horizontalDistance(self.position(), at) < 0.3 && Math.abs(self.getY() - at.y) < 0.5 && self.onGround()) {
+            motor.stop();
+            return true;
+        }
+        lastStand = best;
+        motor.navigate(at, 0.2, false);
+        if (motor.stuckCount() > 6) {
+            stuck++;
+            motor.resetStuck();
+        }
+        return false;
+    }
 
     private void trace(String s) {
         if (trace.length() < 500) {
@@ -347,25 +393,32 @@ public final class WaterSource {
                 }
             }
             case 3 -> {
-                // pour into one corner, then the opposite one
-                BlockPos corner = pours == 0 ? cells.get(0) : cells.get(3);
-                if (source(corner)) {
-                    pours++;
-                    if (pours >= 2 || source(cells.get(0)) && source(cells.get(3))) {
-                        stage = 4;
+                // pour into a corner that is not a spring yet (opposite corners first), from right beside it
+                BlockPos corner = null;
+                for (int k : new int[]{0, 3, 1, 2}) {
+                    if (!source(cells.get(k))) {
+                        corner = cells.get(k);
+                        break;
                     }
+                }
+                if (corner == null || source(cells.get(0)) && source(cells.get(3))) {
+                    stage = 4;
+                    waitFrom = ticks;
                     return Status.WORKING;
                 }
                 if (!hasBucket(self, true)) {
                     stage = 2;
                     return Status.WORKING;
                 }
-                if (reach(corner, 3.0)) {
+                if (pourFrom(corner)) {
                     hold(Items.WATER_BUCKET);
-                    if (useBucket(new Vec3(corner.getX() + 0.5, corner.getY() + 0.02, corner.getZ() + 0.5)) && source(corner)) {
+                    boolean used = useBucket(new Vec3(corner.getX() + 0.5, corner.getY() + 0.02, corner.getZ() + 0.5));
+                    if (used) {
                         pours++;
                         debug = "poured " + pours + " at " + corner.toShortString();
-                        stage = pours >= 2 ? 4 : 2;
+                        trace("pour" + cells.indexOf(corner) + (source(corner) ? "+" : "-") + springs());
+                        stage = source(cells.get(0)) && source(cells.get(3)) ? 4 : 2;
+                        waitFrom = ticks;
                     }
                 }
             }
@@ -376,11 +429,17 @@ public final class WaterSource {
                         sources++;
                     }
                 }
-                if (sources < 4 && ticks < 2900) {
-                    return Status.WORKING; // the other two corners fill in a moment
+                if (sources < 4) {
+                    if (ticks - waitFrom < 60) {
+                        return Status.WORKING; // the other two corners fill in a moment
+                    }
+                    if (ticks < 2900) {
+                        stage = 2; // not yet: another bucket
+                        return Status.WORKING;
+                    }
                 }
                 Bases.get(self.getServer()).addProject(self.level().dimension(), "water", site);
-                springsMade++;
+                springsMade += sources >= 4 ? 1 : 0;
                 debug = "spring at " + site.toShortString() + " (" + sources + " sources)";
                 cachedWork = false;
                 abandon();

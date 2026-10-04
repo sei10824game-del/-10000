@@ -2709,6 +2709,11 @@ public final class CloneController {
             motor.lookAt(last);
             if (Motor.horizontalDistance(self.position(), vantage) < 0.45 && Math.abs(self.getY() - vantage.y) < 0.6) {
                 motor.stop();
+                if (perception.canSee(t) && !shotClear) {
+                    vantage = null; // seen from here, but an arrow would catch the edge: somewhere higher still
+                    vantageDebug += " edge";
+                    return true;
+                }
                 return false; // up here: draw and wait for it to show
             }
             motor.navigate(vantage, 0.3, false);

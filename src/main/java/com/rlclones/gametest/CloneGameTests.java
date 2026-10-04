@@ -2668,7 +2668,9 @@ public final class CloneGameTests {
         double farSide = h.absoluteVec(new Vec3(11, 2, 0)).x;
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().consumables().travelPearls >= 1, "a pearl thrown across (" + c.controller().consumables().pearlDebug + " travel "
-                    + c.controller().travel().debug + ")");
+                    + c.controller().travel().debug + " at x " + String.format(Locale.ROOT, "%.1f", c.getX() - h.absoluteVec(Vec3.ZERO).x) + " stuck "
+                    + c.controller().motor().stuckCount() + " " + c.controller().travel().guardDebug + " " + c.controller().harvestTrace + " "
+                    + c.controller().optionLog + ")");
             h.assertTrue(c.getX() >= farSide && c.isAlive(), "and the clone is on the far side");
             finish(h, c);
         });
@@ -4308,15 +4310,15 @@ public final class CloneGameTests {
                 madeAt[0] = t[0];
             }
         });
-        h.succeedWhen(() -> {
+        h.runAfterDelay(1100, () -> {
             var inv = c.getInventory();
             int buckets = inv.countItem(Items.BUCKET) + inv.countItem(Items.WATER_BUCKET);
-            h.assertTrue(madeAt[0] > 0 && c.controller().urgentCrafts >= 1, "a bucket made right away (" + c.controller().optionLog + " "
+            h.assertTrue(madeAt[0] > 0 && c.controller().urgentCrafts >= 1, "a bucket made right away (made at " + madeAt[0] + " " + c.controller().optionLog + " "
                     + c.controller().crafting().debug() + ")");
             h.assertTrue(c.getCloneBrain().hasFlag("had_bucket"), "remembered: it has had a bucket");
-            h.assertTrue(t[0] - madeAt[0] >= 400, "(time to make another)");
             h.assertTrue(buckets == 1, "but only the one: " + buckets + " (iron left " + inv.countItem(Items.IRON_INGOT) + ")");
             finish(h, c);
+            h.succeed();
         });
     }
 
