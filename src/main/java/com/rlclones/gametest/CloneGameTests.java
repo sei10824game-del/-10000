@@ -2164,7 +2164,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "arc")
     public static void lobsArrowsOverAFriend(GameTestHelper h) {
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
-        h.runAfterDelay(10, () -> wake(h, c)); // once it has had a look at who is where
+        StringBuilder atWake = new StringBuilder();
         c.getInventory().add(new ItemStack(Items.BOW));
         c.getInventory().add(new ItemStack(Items.ARROW, 64));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
@@ -2172,6 +2172,11 @@ public final class CloneGameTests {
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
         ClonePlayer friend = clone(h, 6.5, 7.5, 90f, false);
         Husk husk = dummy(h, 11.5, 7.5);
+        h.runAfterDelay(10, () -> {
+            wake(h, c); // once it has had a look at who is where
+            atWake.append("husk ").append(c.controller().perception().canSee(husk)).append(" friend ").append(c.controller().perception().canSee(friend))
+                    .append(" remembered ").append(c.controller().perception().remembered().size()).append(" | ").append(c.controller().perception().explain(husk));
+        });
         float[] lowest = {20f};
         boolean[] hit = {false};
         StringBuilder hurt = new StringBuilder();
@@ -2186,7 +2191,7 @@ public final class CloneGameTests {
         });
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + " "
-                    + c.controller().shootDebug + " options " + c.controller().optionLog + ")");
+                    + c.controller().shootDebug + " options " + c.controller().optionLog + " at wake: " + atWake + ")");
             h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + hurt + " held " + c.controller().heldShots + ")");
             h.assertTrue(hit[0], "and the arrows come down on the enemy");
             finish(h, c, friend);
