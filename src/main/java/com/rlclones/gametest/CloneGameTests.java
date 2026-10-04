@@ -3255,7 +3255,8 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9fire")
     public static void setsTheGroundUnderTheEnemyAlight(GameTestHelper h) {
-        ClonePlayer c = clone(h, 4.5, 7.5, -90f, true);
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        h.runAfterDelay(5, () -> wake(h, c)); // its first decision taken with the husk in view
         c.getInventory().add(new ItemStack(Items.FLINT_AND_STEEL));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 6000, 0));
@@ -3275,7 +3276,8 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9web")
     public static void putsACobwebAtTheEnemysFeet(GameTestHelper h) {
-        ClonePlayer c = clone(h, 4.5, 7.5, -90f, true);
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        h.runAfterDelay(5, () -> wake(h, c)); // its first decision taken with the husk in view
         c.getInventory().add(new ItemStack(Items.COBWEB, 4));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
