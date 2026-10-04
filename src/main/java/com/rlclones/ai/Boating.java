@@ -54,7 +54,7 @@ public final class Boating {
 
     /** Diagnostics. */
     public String state() {
-        return state + " trips " + trips + " stuck " + stuck + " cooldown " + cooldown + (boat == null ? "" : " boat " + boat.isAlive());
+        return state + " trips " + trips + " stuck " + stuck + " cooldown " + cooldown + (boat == null ? "" : " boat " + boat.isAlive()) + " " + tripLog;
     }
 
     public boolean busy() {
@@ -64,6 +64,9 @@ public final class Boating {
     /**
      * Called by {@link Motor#navigate} every tick. Returns true when boating took care of the movement this tick.
      */
+    /** Where each ride ended and why (diagnostics, tests). */
+    public final StringBuilder tripLog = new StringBuilder();
+
     public boolean handle(Vec3 goal, double arrive) {
         if (cooldown > 0) {
             cooldown--;
@@ -148,6 +151,9 @@ public final class Boating {
         stuck = noProgress ? stuck + 1 : 0;
         // reached the goal, or ran onto the shore: get out
         if (dist <= arrive + 1.0 || stuck > 10) {
+            if (tripLog.length() < 300) {
+                tripLog.append(String.format(java.util.Locale.ROOT, "[out %.1f,%.1f d%.1f %s]", b.getX(), b.getZ(), dist, stuck > 10 ? "stuck" : "there"));
+            }
             b.setPaddleState(false, false);
             self.stopRiding();
             boat = b;

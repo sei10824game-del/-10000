@@ -827,6 +827,19 @@ public final class Animals {
             case 4 -> {
                 // fetch them: crop in hand, close enough for them to notice
                 Equipment.select(self, slotOf(s -> s.is(ls.crop())));
+                Bases.Pen pen4 = Bases.get(self.getServer()).penAt(level.dimension(), Vec3.atCenterOf(penOrigin.offset(penSize / 2, 0, penSize / 2)));
+                if (pen4 != null && pen4.contains(self.position())) {
+                    boolean left = false;
+                    for (Animal a : ls.animals()) {
+                        left |= a.isAlive() && !pen4.contains(a.position());
+                    }
+                    if (left) {
+                        // we are inside, some are not (behind the fence they cannot get through): out to the gate to lead them round
+                        motor.navigate(Vec3.atBottomCenterOf(gate().north(2)), 0.6, false);
+                        livestockDebug += " out";
+                        return ticks > 2400 ? Status.FAILED : Status.WORKING;
+                    }
+                }
                 Animal far = null;
                 for (Animal a : ls.animals()) {
                     if (a.isAlive() && a.distanceTo(self) > 4 && (far == null || a.distanceTo(self) > far.distanceTo(self))) {
