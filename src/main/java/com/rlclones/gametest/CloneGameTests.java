@@ -1801,14 +1801,16 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 3000, batch = "fish")
     public static void fishesWithARod(GameTestHelper h) {
-        for (int x = 5; x <= 9; x++) {
-            for (int z = 9; z <= 12; z++) {
+        for (int x = 4; x <= 10; x++) {
+            for (int z = 9; z <= 13; z++) {
                 h.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
                 h.setBlock(new BlockPos(x, 1, z), Blocks.WATER);
             }
         }
         ClonePlayer c = clone(h, 7.5, 6.5, 0f, false);
-        c.getInventory().add(new ItemStack(Items.FISHING_ROD));
+        ItemStack rod = new ItemStack(Items.FISHING_ROD);
+        rod.enchant(net.minecraft.world.item.enchantment.Enchantments.FISHING_SPEED, 3); // (fish bite slowly down here under the rock)
+        c.getInventory().add(rod);
         int before = c.getInventory().items.stream().mapToInt(ItemStack::getCount).sum();
         boolean[] active = {false};
         h.onEachTick(() -> {
