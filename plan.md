@@ -191,3 +191,53 @@
   4. 石のツルハシが 5000〜46000tick と幅が大きいことと、MINE の空回り
 - 実装の入口: `StairMining.tick`(stage 0 = 上端へ歩く、1 = 階段を下る、2 = 掘る)、`CloneController.trapCheck`(escape の開始。STAIRS/SHAFT は除外済み)、`Escape.isTrapped`
 - 受け入れ(ソーク、S3 の前に): STAIRS の掘った段数が、1体あたり 40 段以上(y=16 まで約 50 段)。escape の回数が 1体あたり 50 以下。死亡 0
+
+## 11. 設計: 掘りの足回りの立て直し(S2.5・S2.6。S3 より先にやる)
+### 根本原因(コードで確認済み)
+- R1 **階段の記録と実物がずれる**: `StairMining.digTick` は「次の段」を足元基準で掘る(`feet.relative(dir).below()`)。一方で再開(stage 0・1)は記録上の直線(`top.relative(dir,i).below(i)`、`stepIndex`)で歩く。`s.end` の更新は「足元が今の end より低く、マンハッタン距離 2 以内」なら何でも受け入れる(2ブロック落ちただけでも end になる)。そのため記録がずれる。例: top 3040,64 → end 3044,58(横4・縦6)。再開すると直線上の段(実物は石)へ向かって進めない
+- R2 **「進まない」検出が効かない**: stage 0・1・2 の `stuck` は「足元が同じブロックのままのtick数」。ジャンプや左右の往復で毎回リセットされるので、`stuck > 80`/`> 60` に届かない。3000tick の時間切れまで続く
+- R3 **壊れた階段を何度も再開する**: 失敗(FAILED・時間切れ)しても階段に印が付かない。`nearestStaircase` は 64 ブロック以内の未完了の階段を返すので、同じ壊れた階段を全員が繰り返し再開する(Clone260・262 が同じ 3040,64,122)
+- R4 **escape の無限ループ**: `Escape.tick` は「元のマスを出て、はまっていない」ですぐ DONE。そのあと MINE(穴の中の鉱石に引かれる)などで同じ穴へ戻り、また escape(Clone263 で 900 回)
+- R5 **MINE の空回り**: 鉱石の引き(`drive` の `pickMakeableFor`)と実行(`runHarvest` → `toolUp` → `nextOption = CRAFT`)の条件が食い違う。作れない(作業台が置けない、`giveUp` で作り方が見送り中)と CRAFT がマスクに無く、MINE がまた引かれ、同じtickで終わる(`strategy:MINE<=1` が 52)
+
+### 変更(D-1〜D-7)
+- **D-1 階段は直線でだけ伸ばす**(`StairMining.digTick`)
+  - 次に掘る段は記録基準: `next = s.end.relative(s.dir).below()`。足元が `s.end` でなく、2ブロック以内なら、まず `s.end` へ歩く
+  - `s.end` の更新は `feet.equals(s.end.relative(s.dir).below())` のときだけ(`stepsDug++`)
+  - 足元が `s.end` より低いのに直線上にいない(落ちた・押された)とき: その階段を `finished = true` にして `stairs = null`。次のtickで今の足元から新しい階段を掘る(`addStaircase`)。もう下にいるので、深さは失わない
+- **D-2 進み具合で打ち切る**(`StairMining.tick`)
+  - `bestProgress` と `lastProgressTick` を持つ。stage 0 = 上端までの距離(小さいほど良い)、stage 1 = 段の番号 i(大きいほど良い)、stage 2 = `s.end` の y(低いほど良い)
+  - stage 0・1 は 300tick、stage 2 は 400tick 良くならなければ FAILED。理由は `debug` に残す。今の `stuck` による判定は残す
+  - stage 1 で直線上にいない(`i < 0`)かつ上端より 2 以上低い(上端の近くの穴に落ちた): 上端へ跳ぶのをやめる。今の足元から新しい階段を掘る(stage 2、`stairs = null`)
+- **D-3 壊れた階段を使わない**
+  - `Bases.Staircase` に一時的な `int failures`(保存しない)を足す。stage 0・1 の FAILED と時間切れで `failures++`。2 回で `finished = true`
+  - 失敗した階段はそのクローンでは 12000tick 使わない(`StairMining` に `Map<BlockPos, Long> avoid`)。`Bases.nearestStaircase` に `Predicate<Staircase>` を取る版を足し、`begin()` と `wanted()` で避ける
+- **D-4 オプションの空回り止め(汎用)**(`CloneController.finishOption`・`startOption`)
+  - 1tick 以内に、報酬 0 で終わったオプションを数える(同じオプションが続けて3回なら)。そのオプションを 600tick マスクから外す(`optionCooldown[Option]`)。`forcedOption` には効かせない
+  - `toolUp`: `crafting.forcedTarget` を入れたあと `crafting.hasWork()` が偽なら CRAFT を予定しない。`toolBlockedUntil = now + 600` にして false を返す(R5 の直接の修正)
+- **D-5 死因の記録**(`CloneController.onDeath`): `lastDeath = source.getMsgId() + " y=" + y + " opt=" + option` を持つ。ソークの `SOAK-CLONE` の gone@ に付ける(前回の死亡2体の原因が不明なため)
+- **D-6 escape のループを切る**(`CloneController` の trapCheck の所)
+  - escape の開始位置を覚える(位置 → 直近2400tickの回数)。同じ場所(3ブロック以内)で 3 回目なら次の2つを行う
+    - (a) その場所の 6 ブロック以内の鉱石を `skipBlocks` に 2400tick 入れる(鉱石に引かれて戻らない)
+    - (b) `Escape.start(goal, minLeave)` で、DONE の条件を「元のマスから水平 6 ブロック以上、または 3 段以上高い」に厳しくする
+- **D-7 石の段階を速くする**(`need=STONE` = 木のツルハシだけ)
+  - `homeBody` に `need == STONE` を足す(石のツルハシまで新しい遠征・JOIN に出ない)
+  - `drive` で、`need == STONE` かつ石が 24 ブロック以内に見えるなら QUARRY を引く。QUARRY のマスクも、この場合は 24 ブロックまで見る
+
+### テスト(必須)
+- `staircaseGrowsOnlyAlongItsLine`: 石の塊を掘らせたあと、`s.end == s.top.relative(dir, steps).below(steps)`
+- `startsANewStaircaseWhenTheOldOneIsBroken`: `Bases` に「end が直線から外れた」階段を登録する。クローンを上端より 3 低い穴に置く(石のツルハシ・`assumeSurface`・`targetY` を下に)。古い階段が `finished`、新しい階段ができ、`stepsDug >= 2`
+- `givesUpAStaircaseItCannotFollow`: 途中を石で塞いだ既存の階段で、stage 1 が 300tick 進まないと FAILED。2 回で `finished`
+- `coolsDownAnOptionThatEndsAtOnce`: `noteOptionEnd(Option.MINE, 0 ticks, 0 reward)` を3回 → MINE が 600tick マスクから外れる(controller に test 用の公開メソッド)
+- `leavesAPitItKeepsFallingInto`: `noteEscapeStart(pos)` を3回 → その近くの鉱石が `skipBlocks` に入る。`Escape` の DONE 条件が厳しくなる
+- 既存の `digsAStaircaseDownWhenThereIsNothingElseToDo`・`carriesOnDownAStaircaseAlreadyStarted`(top 4,5,7 → end 6,3,7 で直線上)・`digsForIronEvenWhenOtherWorkIsAround` が通ること
+
+### 受け入れ(ソーク、S3 に進む条件)
+- 掘った段数(`stairs=`)が 40 段以上の個体が 3/6 以上、鉄インゴット 1/6 以上、escape は 1体あたり 50 回以下、死亡 0、`strategy:<OPT><=1` の合計が 10 以下、石のツルハシ 6/6 が 20000tick 以内
+
+### 実装の順番
+| セッション | 項目 |
+|---|---|
+| S2.5 | D-1、D-2、D-3、D-5(階段の立て直しと死因の記録) |
+| S2.6 | D-4、D-6、D-7(空回り・escape ループ・石の段階) |
+| S3 | P-05 横掘り、P-07 観測、P-08 報酬(S2.6 のソークが受け入れを満たしてから) |
