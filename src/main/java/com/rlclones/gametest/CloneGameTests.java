@@ -1,6 +1,7 @@
 package com.rlclones.gametest;
 
 import com.rlclones.RLClones;
+import com.rlclones.ai.Motor;
 import com.rlclones.ai.Progression;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.brain.EnemyKnowledge;
@@ -5092,6 +5093,95 @@ public final class CloneGameTests {
                 + inv.countItem(Items.BIRCH_PLANKS) + inv.countItem(Items.SPRUCE_PLANKS)) + " cobble=" + inv.countItem(Items.COBBLESTONE) + " coal=" + inv.countItem(Items.COAL)
                 + " raw_iron=" + inv.countItem(Items.RAW_IRON) + " iron=" + inv.countItem(Items.IRON_INGOT) + " diamond=" + inv.countItem(Items.DIAMOND)
                 + " food=" + c.getFoodData().getFoodLevel() + " hp=" + (int) c.getHealth() + " y=" + c.getBlockY();
+    }
+
+    // ------------------------------------------------------------------ Round 11 (S11-1): water
+
+    /** R-24: a sealed U of water (ceiling on): pushing straight at the wall must turn into swimming round it, not drowning. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r11water")
+    public static void getsOutOfAnUnderwaterCorner(GameTestHelper h) {
+        for (int x = 3; x <= 11; x++) {
+            for (int z = 3; z <= 11; z++) {
+                for (int y = 1; y <= 5; y++) {
+                    boolean legA = z == 4 && x >= 4 && x <= 9;
+                    boolean legB = x == 9 && z >= 4 && z <= 8;
+                    boolean legC = z == 8 && x >= 4 && x <= 9;
+                    boolean wet = (legA || legB || legC) && (y == 2 || y == 3);
+                    h.setBlock(new BlockPos(x, y, z), wet ? Blocks.WATER : Blocks.STONE);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 4.5, 4.5, 0f, false);
+        Vec3 goal = h.absoluteVec(new Vec3(4.5, 2, 8.5));
+        h.onEachTick(() -> {
+            c.controller().motor().moveToward(goal);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.isAlive() && c.getHealth() > 0, "not drowned");
+            h.assertTrue(c.controller().motor().waterEscapes >= 1, "tried another way out of the corner");
+            h.assertTrue(Motor.horizontalDistance(c.position(), goal) < 1.5, "got round the wall to the goal");
+            finish(h, c);
+        });
+    }
+
+    /** R-23: deep water, little air: a door goes down, the clone breathes in it, breaks it and has it back. */
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r11water")
+    public static void breathesInADoorUnderwater(GameTestHelper h) {
+        for (int x = 4; x <= 10; x++) {
+            for (int z = 4; z <= 10; z++) {
+                for (int y = 1; y <= 14; y++) {
+                    boolean shell = x == 4 || x == 10 || z == 4 || z == 10 || y == 1 || y == 14;
+                    h.setBlock(new BlockPos(x, y, z), shell ? Blocks.STONE : Blocks.WATER);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_DOOR));
+        c.setAirSupply((int) (c.getMaxAirSupply() * 0.25));
+        int[] maxAir = {0};
+        h.onEachTick(() -> {
+            c.controller().doorBreath().tick(h.getLevel().getGameTime());
+            c.controller().motor().tick();
+            maxAir[0] = Math.max(maxAir[0], c.getAirSupply());
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().doorBreath().doorsPlaced >= 1, "a door was put down");
+            h.assertTrue(maxAir[0] >= c.getMaxAirSupply() * 0.9, "air back to nearly full (max " + maxAir[0] + ")");
+            h.assertTrue(!c.controller().doorBreath().busy() && c.getInventory().countItem(Items.OAK_DOOR) == 1, "and the door is back in the bag");
+            finish(h, c);
+        });
+    }
+
+    /** R-22: a block on the bank while standing in shallow water: it comes ashore first, then digs. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r11water")
+    public static void stepsOutOfTheWaterToMine(GameTestHelper h) {
+        for (int x = 4; x <= 8; x++) {
+            for (int z = 4; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 2, z), Blocks.WATER);
+            }
+        }
+        BlockPos dirt = new BlockPos(10, 2, 6);
+        h.setBlock(dirt, Blocks.DIRT);
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        BlockPos abs = h.absolutePos(dirt);
+        boolean[] wetWhenDone = {true};
+        boolean[] done = {false};
+        h.onEachTick(() -> {
+            if (!done[0]) {
+                boolean wet = c.isInWater();
+                if (c.controller().motor().mine(abs)) {
+                    done[0] = true;
+                    wetWhenDone[0] = wet;
+                }
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(done[0], "the block was dug");
+            h.assertTrue(!wetWhenDone[0], "from dry footing, not out of the water");
+            finish(h, c);
+        });
     }
 
     /**

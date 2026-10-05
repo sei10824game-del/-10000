@@ -79,6 +79,7 @@ public final class CloneController {
     private final Perch perch;
     private final BoatTrap boatTrap;
     private final Lighting lighting;
+    private final DoorBreath doorBreath;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
     private boolean lookedAround;
@@ -183,6 +184,7 @@ public final class CloneController {
         this.perch = new Perch(self, motor, perception);
         this.boatTrap = new BoatTrap(self, motor);
         this.lighting = new Lighting(self, motor);
+        this.doorBreath = new DoorBreath(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
         this.foodAid = new FoodAid(self, motor);
@@ -320,6 +322,10 @@ public final class CloneController {
 
     public BoatTrap boatTrap() {
         return boatTrap;
+    }
+
+    public DoorBreath doorBreath() {
+        return doorBreath;
     }
 
     public Lighting lighting() {
@@ -549,7 +555,7 @@ public final class CloneController {
         long pr = Prof.t();
         watchTells(now);
         boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
-        boolean itemBusy = buriedReflex(now) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }

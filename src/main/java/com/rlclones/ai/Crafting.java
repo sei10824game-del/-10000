@@ -273,6 +273,10 @@ public final class Crafting {
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
             out.addAll(List.of(BOATS)); // lots of swimming lately: a boat would help
         }
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot()
+                && countTag(p, ItemTags.PLANKS) >= 6 && countTag(p, ItemTags.WOODEN_DOORS) == 0) {
+            out.add(Items.OAK_DOOR); // R-23: somewhere to breathe under water
+        }
         if (tierOf(p, HoeItem.class) < 0 && (Farming.seedSlot(p) >= 0 || tierOf(p, PickaxeItem.class) >= 0)) {
             // a field feeds us for good: the hoe comes right after the first pickaxe, before weapons and other tools
             out.add(Items.STONE_HOE);
