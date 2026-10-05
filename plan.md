@@ -454,3 +454,4 @@
 - R-23: 新規 `DoorBreath`(空気40%未満・水面が遠い・ドア所持 → 隣のセルにドアを置く→入って息継ぎ→空気90%で内側から壊して回収)。水中で壊すと5倍遅いので内側から壊す。`Motor.diveHard`(空気が少なくても潜る)。`Crafting.wanted` に swamALot+板6枚以上でドア
 - R-22: `Motor.mine` が水中なら `dryFootingFor`(届く乾いた足場へ移る。無ければ底へ沈む。80tickで諦めて掘る)。対象選びの後回し(2.)は未実装
 - テスト: `getsOutOfAnUnderwaterCorner` / `breathesInADoorUnderwater` / `stepsOutOfTheWaterToMine`(batch r11water)。ローカルはオフラインでコンパイル不可、検証はCI
+- run 37333868601(S11-1): 新規3テストは通過。必須の失敗3件: `carriesOnDownAStaircaseAlreadyStarted`(既存・実装前から)、`usesTntInAFight...`・`visitsTheNetherAndComesBack`(今回初。水中と無関係で、不安定の疑い。次のrunで再現するか確認)。次は S11-2(R-18・R-21・R-25・R-26)
