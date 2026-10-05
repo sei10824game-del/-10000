@@ -29,6 +29,8 @@ public final class WaterSource {
     private final ClonePlayer self;
     private final Motor motor;
     @Nullable
+    /** Fewest blocks (either axis) between the base centre and a new spring. */
+    private static final int SITE_GAP = 6;
     private BlockPos spring;
     private long springAt = -1000;
     private long checkedAt = -1000;
@@ -231,11 +233,11 @@ public final class WaterSource {
     private BlockPos pickSite(BlockPos c) {
         BlockPos best = null;
         double bestD = Double.MAX_VALUE;
-        for (BlockPos p : BlockPos.betweenClosed(c.offset(-7, -2, -7), c.offset(6, 2, 6))) {
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-12, -2, -12), c.offset(11, 2, 11))) {
             int dx = Math.abs(p.getX() - c.getX());
             int dz = Math.abs(p.getZ() - c.getZ());
-            if (Math.max(dx, dz) < 3) {
-                continue; // not inside the base itself
+            if (Math.max(dx, dz) < SITE_GAP) {
+                continue; // R-28: well clear of the house and its chests (they got in the way of the field)
             }
             boolean ok = true;
             for (int x = -1; x <= 2 && ok; x++) {

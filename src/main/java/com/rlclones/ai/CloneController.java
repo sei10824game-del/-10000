@@ -2006,6 +2006,9 @@ public final class CloneController {
 
     // ------------------------------------------------------------------ strategy layer
 
+    /** R-30: until then, no pickaxe in the bag means no digging options (the tool-up route above still runs). */
+    private long noPickUntil = Long.MIN_VALUE;
+
     private void runStrategy(long now) {
         if (option == null) {
             long pd = Prof.t();
@@ -2017,6 +2020,14 @@ public final class CloneController {
         }
         if ((option == Option.STAIRS || option == Option.SHAFT) && !hasPickFor(null) && toolUp(null)) {
             finishOption(false); // digging down by hand: a pickaxe first
+            return;
+        }
+        if ((option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY) && !hasPickFor(null) && !self.isCreative()
+                && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && noPickUntil < now) {
+            if (!toolUp(null)) {
+                noPickUntil = now + 1200; // R-30: no pickaxe and none to be made: food and the like for a while, not digging by hand
+            }
+            finishOption(false); // (toolUp true: it chose crafting / wood as the next option)
             return;
         }
         if (ORE_REFLEX.contains(option) && oreReflex(now)) {
@@ -2160,6 +2171,9 @@ public final class CloneController {
     private void startOption(long now) {
         int s = Senses.strategyState(perception, self, self, brain(), now);
         int mask = Senses.strategyMask(perception, self, self, now);
+        if (now < noPickUntil && !hasPickFor(null) && !self.isCreative()) {
+            mask &= ~(Option.MINE.bit() | Option.QUARRY.bit() | Option.STAIRS.bit() | Option.SHAFT.bit());
+        }
         if ((mask & BUSY_OPTIONS) != 0) {
             int idle = Option.STAIRS.bit() | Option.ACHIEVE.bit() | Option.SHAFT.bit();
             if (digPending(now)) {

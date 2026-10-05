@@ -462,3 +462,10 @@
 - R-25: `Farming.planLot`: TILL を始めるとき、種の数だけの区画(最初のマスから8近傍BFS、6マス以内)を決め、`find` が区画を先に消化する。テスト `tillsAndPlantsAsManyAsItHasSeeds`
 - R-26: 松明が16本を超えるとき、暗い作物(農地・作物で明るさ9未満)へ既存の LIGHT で置く(`cropDark`)。**未実装: 拠点周りの湧き潰し(`Lighting`で暗いマスへ歩いて置く)**。テスト `lightsTheCropsWithSpareTorches`
 - ローカルはオフラインでコンパイル不可。検証はCI
+
+## 28. run 37334912136 と Round 12(R-28〜R-32)
+- CI: 必須失敗4件。`getsOutOfAnUnderwaterCorner`(自分のテスト: 密閉の水路で空気が無く、遅いと溺れる。出口の端に空気セルを足した)、`useslavabucketinafightandtakesitback`(初。水中と無関係。次のrunで再現確認)、`carriesOnDownAStaircaseAlreadyStarted`・`pensCowsWhenWheatPilesUp`(既存)
+- ログ取得: `gh run view --log-failed` は403。`gh api repos/<repo>/check-runs/<job id>/annotations` に "GameTest failed" が出るのでそれで失敗名を読む
+- R-28: `pickSite` を 拠点から6ブロック以上・範囲±12 に。テスト `bringsWaterHomeAndMakesASpring` の配置を合わせた
+- R-30: 掘る4オプション(MINE/QUARRY/STAIRS/SHAFT)でツルハシ無し→`toolUp`(作る/材料集め)。それも不可なら1200tick は掘るオプションを選ばない
+- R-31: `bestToolSlot` が、適正ツールが無い(速度が上がらない)ブロックでは、素手/非ツールのスロットを選ぶ

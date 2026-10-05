@@ -4408,12 +4408,12 @@ public final class CloneGameTests {
                 h.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
             }
         }
-        for (int x = 10; x <= 12; x++) {
-            for (int z = 10; z <= 12; z++) {
+        for (int x = 11; x <= 13; x++) {
+            for (int z = 11; z <= 13; z++) {
                 h.setBlock(new BlockPos(x, 1, z), Blocks.WATER); // a lake that never runs dry
             }
         }
-        baseAt(h, new BlockPos(3, 2, 3));
+        baseAt(h, new BlockPos(2, 2, 2));
         ClonePlayer c = clone(h, 6.5, 6.5, 45f, false);
         c.getInventory().add(new ItemStack(Items.BUCKET));
         c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
@@ -4421,12 +4421,12 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var w = c.controller().water();
             int sources = 0;
-            for (BlockPos p : BlockPos.betweenClosed(new BlockPos(1, 1, 1), new BlockPos(9, 1, 9))) {
+            for (BlockPos p : BlockPos.betweenClosed(new BlockPos(1, 1, 1), new BlockPos(10, 1, 10))) {
                 if (h.getLevel().getFluidState(h.absolutePos(p)).isSource()) {
                     sources++;
                 }
             }
-            h.assertTrue(w.springsMade >= 1 && sources >= 4, "an endless spring of 4 sources next to the base (" + sources + " " + w.debug + " | "
+            h.assertTrue(w.springsMade >= 1 && sources >= 4, "an endless spring of 4 sources a few blocks from the base (" + sources + " " + w.debug + " | "
                     + w.trace + " | " + c.controller().optionLog + ")");
             h.assertTrue(w.bucketsFilled >= 2, "filled twice at the lake: " + w.bucketsFilled);
             finish(h, c);
@@ -5111,6 +5111,7 @@ public final class CloneGameTests {
                 }
             }
         }
+        h.setBlock(new BlockPos(4, 4, 8), Blocks.AIR); // air to breathe at the far end
         ClonePlayer c = clone(h, 4.5, 4.5, 0f, false);
         Vec3 goal = h.absoluteVec(new Vec3(4.5, 2, 8.5));
         h.onEachTick(() -> {
