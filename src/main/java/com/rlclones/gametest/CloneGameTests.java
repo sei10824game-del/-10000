@@ -163,6 +163,12 @@ public final class CloneGameTests {
                         h.setBlock(new BlockPos(x, y, z), Blocks.AIR);
                     }
                 }
+                // gravel / sand hanging above the cleared space would drop into the arena (and smother whatever stands there)
+                for (int y = 13; y <= 28; y++) {
+                    if (h.getBlockState(new BlockPos(x, y, z)).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
+                        h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                    }
+                }
             }
         }
     }
@@ -3207,6 +3213,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r9tells")
     public static void learnsTheSignsOfAnAttackAndRaisesTheShieldInTime(GameTestHelper h) {
         // what announces an attack: a creeper swelling (synced entity data, as modded bosses animate theirs), a bow drawn
+        clearAbove(h); // (gravel overhead fell onto the skeleton and smothered it: no damage, no source)
         String[] cells = {""};
         for (int dy = 1; dy <= 4; dy++) {
             cells[0] += " y" + dy + "=" + h.getBlockState(new BlockPos(10, dy, 7)).getBlock().getDescriptionId().replace("block.minecraft.", "");
@@ -4960,6 +4967,25 @@ public final class CloneGameTests {
         return SOAK_TICKS;
     }
 
+    /** Mob spawning is off for the arenas' sake, which also stops the animals coming back: one grazing animal near each clone now and then. */
+    private static void soakAnimal(net.minecraft.server.level.ServerLevel level, ClonePlayer c, int n) {
+        EntityType<?>[] kinds = {EntityType.COW, EntityType.PIG, EntityType.SHEEP, EntityType.CHICKEN};
+        var rnd = level.getRandom();
+        for (int tries = 0; tries < 16; tries++) {
+            int x = c.getBlockX() + (rnd.nextBoolean() ? 1 : -1) * (14 + rnd.nextInt(18));
+            int z = c.getBlockZ() + (rnd.nextBoolean() ? 1 : -1) * (14 + rnd.nextInt(18));
+            if (!level.hasChunk(x >> 4, z >> 4)) {
+                continue;
+            }
+            int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            BlockPos pos = new BlockPos(x, y, z);
+            if (level.getBlockState(pos.below()).is(Blocks.GRASS_BLOCK) && level.getBlockState(pos).isAir()) {
+                kinds[Math.floorMod(n, kinds.length)].spawn(level, pos, net.minecraft.world.entity.MobSpawnType.NATURAL);
+                return;
+            }
+        }
+    }
+
     private static boolean treesNear(net.minecraft.server.level.ServerLevel level, int x, int z) {
         int logs = 0;
         for (int dx = -32; dx <= 32; dx += 4) {
@@ -5096,6 +5122,15 @@ public final class CloneGameTests {
         h.onEachTick(() -> {
             tick[0]++;
             try {
+                if (tick[0] % 1200 == 0) {
+                    int k = 0;
+                    for (String n : names) {
+                        ClonePlayer live = manager(h).byName(n);
+                        if (live != null && live.isAlive()) {
+                            soakAnimal(level, live, tick[0] / 1200 + k++);
+                        }
+                    }
+                }
                 if (tick[0] % 200 == 0) {
                     for (String n : names) {
                         ClonePlayer live = manager(h).byName(n);
