@@ -238,6 +238,14 @@
 ### 実装の順番
 | セッション | 項目 |
 |---|---|
-| S2.5 | D-1、D-2、D-3、D-5(階段の立て直しと死因の記録) |
+| S2.5(実装済み) | D-1、D-2、D-3、D-5(階段の立て直しと死因の記録) |
 | S2.6 | D-4、D-6、D-7(空回り・escape ループ・石の段階) |
 | S3 | P-05 横掘り、P-07 観測、P-08 報酬(S2.6 のソークが受け入れを満たしてから) |
+
+## 12. S2.5 の実装メモ
+- `StairMining`: 階段は `s.end.relative(dir).below()` の段にだけ伸びる(`feet` がそこに着地したときだけ `end` 更新・`stepsDug++`)。空中(段を降りる途中)は着地を待つ。着地した足元が `end` より低く線上にもいなければ `abandonStairs(broken=true)` → 階段を `finished` にして今の足元から新しい階段を掘る。`end` から4ブロック以上離れたら stage 0 へ戻る
+- 進み具合: stage 0 = 上端までの距離、stage 1 = 段の番号、stage 2 = `end` の y。300(stage 0・1)/400(stage 2)tick 良くならなければ `failStairs`。時間切れも stage 0・1 なら失敗扱い
+- 失敗した階段: そのクローンは 12000tick 使わない(`avoid`)。`Bases.Staircase.failures`(保存しない)が2で `finished`。上端の近くの穴に落ちた(stage 1 で線の外、上端より2以上低い)ときは `abandonStairs(broken=false)`
+- `Bases.nearestStaircase(dim, pos, radius, predicate)` を足した
+- `SOAK-TRACE` の `stairs=` に `<段数>g<失敗数>a<見限った数>` を出す。死亡は `CLONE-DEATH`(ログ)に原因・場所・option・満腹度を出す
+- 未実装(S2.6): D-4 空回り止め、D-6 escape のループ、D-7 石の段階

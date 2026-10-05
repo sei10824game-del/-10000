@@ -136,6 +136,8 @@ public class Bases extends SavedData {
         public final net.minecraft.core.Direction dir;
         public BlockPos end;
         public boolean finished;
+        /** Times a clone failed to follow it (not saved): two and it is given up. */
+        public int failures;
 
         public Staircase(ResourceKey<Level> dimension, BlockPos top, net.minecraft.core.Direction dir, BlockPos end, boolean finished) {
             this.dimension = dimension;
@@ -236,11 +238,16 @@ public class Bases extends SavedData {
     /** The nearest staircase not yet dug to the bottom (where a clone would carry on digging). */
     @Nullable
     public Staircase nearestStaircase(ResourceKey<Level> dim, Vec3 pos, double radius) {
+        return nearestStaircase(dim, pos, radius, s -> true);
+    }
+
+    @Nullable
+    public Staircase nearestStaircase(ResourceKey<Level> dim, Vec3 pos, double radius, java.util.function.Predicate<Staircase> ok) {
         Staircase best = null;
         double bestD = radius;
         for (Staircase s : staircases) {
             double d = Vec3.atCenterOf(s.top).distanceTo(pos);
-            if (s.dimension == dim && !s.finished && d < bestD) {
+            if (s.dimension == dim && !s.finished && d < bestD && ok.test(s)) {
                 bestD = d;
                 best = s;
             }

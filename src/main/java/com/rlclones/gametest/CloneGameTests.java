@@ -4678,6 +4678,98 @@ public final class CloneGameTests {
         });
     }
 
+    private static void learnStoneBlocks(ClonePlayer c) {
+        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock", "minecraft:furnace")) {
+            c.getCloneBrain().learnBlock(b);
+        }
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "p25line")
+    public static void staircaseGrowsOnlyAlongItsLine(GameTestHelper h) {
+        clearBases(h);
+        stoneMass(h);
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        Vec3 top = h.absoluteVec(new Vec3(4.5, 5, 7.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
+        stairsKit(h, c);
+        learnStoneBlocks(c);
+        c.controller().stairs().assumeSurface = true;
+        c.controller().stairs().targetY = (int) top.y - 40;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+            h.assertTrue(c.controller().stairs().stepsDug >= 3 && !bases.staircases.isEmpty(), "a staircase dug (" + c.controller().stairs().stepsDug + " "
+                    + c.controller().stairs().debug + ")");
+            for (var st : bases.staircases) {
+                int n = st.steps();
+                h.assertTrue(st.end.equals(st.top.relative(st.dir, n).below(n)), "the end lies on the line from the top: top " + st.top + " " + st.dir + " end " + st.end);
+            }
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "p25broken")
+    public static void startsANewStaircaseWhenTheOldOneIsBroken(GameTestHelper h) {
+        clearBases(h);
+        stoneMass(h);
+        for (int x = 3; x <= 11; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = 5; y <= 6; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
+        // a pit in the stone, and a staircase on record that was never dug (or was filled in): it cannot be followed from down here
+        h.setBlock(new BlockPos(8, 3, 7), Blocks.AIR);
+        h.setBlock(new BlockPos(8, 4, 7), Blocks.AIR);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var old = bases.addStaircase(h.getLevel().dimension(), h.absolutePos(new BlockPos(4, 7, 7)), Direction.EAST);
+        old.end = h.absolutePos(new BlockPos(5, 6, 7));
+        ClonePlayer c = clone(h, 8.5, 7.5, 90f, false);
+        Vec3 pit = h.absoluteVec(new Vec3(8.5, 3, 7.5));
+        c.teleportTo(h.getLevel(), pit.x, pit.y, pit.z, 90f, 0f);
+        stairsKit(h, c);
+        learnStoneBlocks(c);
+        c.controller().stairs().assumeSurface = true;
+        c.controller().stairs().targetY = (int) pit.y - 40;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.STAIRS;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var st = c.controller().stairs();
+            h.assertTrue(old.failures >= 1 || old.finished, "the old staircase is given up (" + st.debug + " | " + st.trace + ")");
+            h.assertTrue(bases.staircases.size() >= 2 && st.stepsDug >= 1, "and a new one dug from the pit (" + bases.staircases.size() + " " + st.stepsDug + " "
+                    + st.debug + " | " + st.recent + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "p25giveup")
+    public static void givesUpAStaircaseItCannotFollow(GameTestHelper h) {
+        clearBases(h);
+        stoneMass(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var old = bases.addStaircase(h.getLevel().dimension(), h.absolutePos(new BlockPos(4, 5, 7)), Direction.EAST);
+        old.end = h.absolutePos(new BlockPos(7, 2, 7)); // three steps on record, none of them dug
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        Vec3 top = h.absoluteVec(new Vec3(4.5, 5, 7.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
+        stairsKit(h, c);
+        learnStoneBlocks(c);
+        c.controller().stairs().assumeSurface = true;
+        c.controller().stairs().targetY = (int) top.y - 40;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.STAIRS;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var st = c.controller().stairs();
+            h.assertTrue(st.giveUps >= 1 && (old.failures >= 1 || old.finished), "it could not follow the old staircase and said so (" + st.giveUps + " " + st.debug + " | " + st.trace + ")");
+            h.assertTrue(bases.staircases.size() >= 2 && st.stepsDug >= 1, "and dug a new one (" + bases.staircases.size() + " " + st.stepsDug + " | " + st.recent + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
@@ -4862,7 +4954,7 @@ public final class CloneGameTests {
                         }
                         if (tick[0] % 2400 == 0) {
                             RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | esc={}[{}] dig={} stairs={}/{}/{} shaft={}/{} | {}", tick[0], n, o, Progression.describe(live), cc.crafting().trace(),
-                                    cc.escapeStarts, cc.escapeWhy, cc.digDrives, cc.stairs().stepsDug, cc.stairs().debug,
+                                    cc.escapeStarts, cc.escapeWhy, cc.digDrives, cc.stairs().stepsDug + "g" + cc.stairs().giveUps + "a" + cc.stairs().abandoned, cc.stairs().debug,
                                     cc.stairs().recent,
                                     cc.shafts().levelsDug, cc.shafts().debug, soakBag(live));
                         }

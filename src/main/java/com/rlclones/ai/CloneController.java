@@ -1908,7 +1908,8 @@ public final class CloneController {
     public String lastDeath = "";
 
     public void onDeath(DamageSource source) {
-        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option;
+        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel();
+        com.rlclones.RLClones.LOGGER.info("CLONE-DEATH {} {} t={}", self.getGameProfile().getName(), lastDeath, self.level().getGameTime());
         if (option != null) {
             finishOption(true);
         }

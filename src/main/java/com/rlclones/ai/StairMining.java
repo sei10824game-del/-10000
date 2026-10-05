@@ -35,6 +35,13 @@ public final class StairMining {
     private int ticks;
     private int stuck;
     private BlockPos lastFeet;
+    /** Progress in the current stage (best value so far, when it was reached): no progress for long = the staircase is given up. */
+    private int bestMetric = Integer.MIN_VALUE;
+    private int progressTick;
+    /** Staircases this clone failed to follow: not used again before the game time given. */
+    private final java.util.Map<BlockPos, Long> avoid = new java.util.HashMap<>();
+    public int abandoned;
+    public int giveUps;
 
     /** Dig down to here; unset (MIN_VALUE) = what the next step needs (iron: 16, diamonds: -58), see {@link Progression}. */
     public int targetY = Integer.MIN_VALUE;
@@ -122,25 +129,82 @@ public final class StairMining {
             return false;
         }
         boolean surface = assumeSurface || self.level().canSeeSky(self.blockPosition().above());
-        Bases.Staircase known = bases().nearestStaircase(self.level().dimension(), self.position(), 64);
+        Bases.Staircase known = bases().nearestStaircase(self.level().dimension(), self.position(), 64, this::usable);
         return (surface || known != null) && self.getBlockY() > target();
+    }
+
+    private boolean usable(Bases.Staircase s) {
+        Long t = avoid.get(s.top);
+        return t == null || self.level().getGameTime() >= t;
+    }
+
+    private void toStage(int n) {
+        stage = n;
+        bestMetric = Integer.MIN_VALUE;
+        progressTick = ticks;
+    }
+
+    private void progress(int metric) {
+        if (metric > bestMetric) {
+            bestMetric = metric;
+            progressTick = ticks;
+        }
+    }
+
+    private boolean stalled(int limit) {
+        return ticks - progressTick > limit;
+    }
+
+    /** The staircase could not be followed: avoid it for a long while; the second failure gives it up for everybody. */
+    private Status failStairs(String why) {
+        debug = why;
+        trace("fail:" + why);
+        giveUps++;
+        Bases.Staircase s = stairs;
+        if (s != null) {
+            avoid.put(s.top, self.level().getGameTime() + 12000);
+            if (++s.failures >= 2) {
+                s.finished = true;
+                bases().setDirty();
+            }
+        }
+        return Status.FAILED;
+    }
+
+    /** Off the line of the staircase (fallen, pushed): leave it and dig a new one from where we stand. */
+    private void abandonStairs(String why, boolean broken) {
+        BlockPos feet = self.blockPosition();
+        debug = "abandon " + why + " at " + feet.toShortString();
+        trace("abandon:" + why);
+        abandoned++;
+        Bases.Staircase s = stairs;
+        if (s != null) {
+            avoid.put(s.top, self.level().getGameTime() + 12000);
+            if (broken || ++s.failures >= 2) {
+                s.finished = true;
+                bases().setDirty();
+            }
+        }
+        stairs = null;
+        toStage(2);
     }
 
     public void begin() {
         trace("begin@" + self.blockPosition().toShortString());
-        stairs = bases().nearestStaircase(self.level().dimension(), self.position(), 64);
-        stage = stairs == null ? 2 : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig
+        stairs = bases().nearestStaircase(self.level().dimension(), self.position(), 64, this::usable);
+        int first = stairs == null ? 2 : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig
         if (stairs != null) {
             resumed++;
             BlockPos feet = self.blockPosition();
             if (feet.distManhattan(stairs.end) <= 2) {
-                stage = 2; // already down at the bottom
+                first = 2; // already down at the bottom
             } else if (feet.distManhattan(stairs.top) <= 2 || onStairs(feet)) {
-                stage = 1;
+                first = 1;
             }
-            debug = "resume " + stairs.top.toShortString() + " -> " + stairs.end.toShortString() + " from stage " + stage;
+            debug = "resume " + stairs.top.toShortString() + " -> " + stairs.end.toShortString() + " from stage " + first;
         }
         ticks = 0;
+        toStage(first);
         stuck = 0;
         lastFeet = self.blockPosition();
         motor.resetStuck();
@@ -204,7 +268,7 @@ public final class StairMining {
 
     public Status tick() {
         if (++ticks > 3000) {
-            return Status.DONE;
+            return stage < 2 && stairs != null ? failStairs("timed out in stage " + stage) : Status.DONE;
         }
         BlockPos feet = self.blockPosition();
         if (feet.equals(lastFeet)) {
@@ -220,15 +284,18 @@ public final class StairMining {
             case 0 -> {
                 Bases.Staircase s = stairs;
                 if (s == null) {
-                    stage = 2;
+                    toStage(2);
                     return Status.WORKING;
                 }
+                progress(-feet.distManhattan(s.top));
+                if (stalled(300)) {
+                    return failStairs("no nearer the top " + s.top.toShortString() + " from " + feet.toShortString());
+                }
                 if (motor.navigate(Vec3.atBottomCenterOf(s.top), 1.0, false) || stepIndex(feet) >= 0) {
-                    stage = 1;
+                    toStage(1);
                     motor.resetStuck();
                 } else if (motor.stuckCount() > 8) {
-                    debug = "cannot reach the top " + s.top.toShortString() + " from " + feet.toShortString();
-                    return Status.FAILED;
+                    return failStairs("cannot reach the top " + s.top.toShortString() + " from " + feet.toShortString());
                 }
             }
             case 1 -> {
@@ -238,28 +305,35 @@ public final class StairMining {
                     return Status.FAILED;
                 }
                 int i = stepIndex(feet);
+                if (stalled(300)) {
+                    return failStairs("no further down at " + feet.toShortString() + " (step " + i + " of " + s.steps() + ")");
+                }
                 if (i < 0) {
+                    if (feet.getY() <= s.top.getY() - 2 && feet.distManhattan(s.top) <= 6) {
+                        abandonStairs("fell into a hole by the top", false); // jumping back up at the top does not work from down here
+                        return Status.WORKING;
+                    }
                     if (feet.distManhattan(s.top) <= 3) {
                         // right by the top step: onto it
                         motor.moveToward(Vec3.atBottomCenterOf(s.top));
                         if (s.top.getY() > feet.getY() && self.onGround()) {
                             motor.jump();
                         }
-                        return stuck > 80 ? Status.FAILED : Status.WORKING;
+                        return stuck > 80 ? failStairs("stuck by the top at " + feet.toShortString()) : Status.WORKING;
                     }
-                    stage = 0; // not on the stairs (any more): to the top first
+                    toStage(0); // not on the stairs (any more): to the top first
                     return Status.WORKING;
                 }
+                progress(i);
                 if (i >= s.steps()) {
-                    stage = 2;
+                    toStage(2);
                     return Status.WORKING;
                 }
                 if (self.onGround()) {
                     motor.moveToward(Vec3.atBottomCenterOf(s.top.relative(s.dir, i + 1).below(i + 1)));
                 }
                 if (stuck > 80) {
-                    debug = "stuck on step " + i + " of " + s.steps() + " at " + feet.toShortString();
-                    return Status.FAILED;
+                    return failStairs("stuck on step " + i + " of " + s.steps() + " at " + feet.toShortString());
                 }
             }
             default -> {
@@ -280,18 +354,38 @@ public final class StairMining {
             trace("new@" + feet.toShortString() + d);
         }
         Bases.Staircase s = stairs;
-        if (self.onGround() && feet.getY() < s.end.getY() && feet.distManhattan(s.end) <= 2) {
-            stepsDug++; // stepped down onto the new step
+        progress(-s.end.getY());
+        if (stalled(400)) {
+            return failStairs("no progress digging at " + feet.toShortString());
+        }
+        if (self.onGround() && feet.equals(s.end.relative(s.dir).below())) {
+            stepsDug++; // stepped down onto the new step: the staircase grows along its line only
             s.end = feet.immutable();
             bases().setDirty();
+        } else if (!feet.equals(s.end)) {
+            if (!self.onGround()) {
+                return Status.WORKING; // in the air (stepping down): see where we land
+            }
+            if (feet.getY() < s.end.getY()) {
+                abandonStairs("off the line below the end", true); // fell / was pushed down: the record no longer fits the stone
+                return Status.WORKING;
+            }
+            if (feet.distManhattan(s.end) > 3) {
+                toStage(0); // away from the bottom: back down the stairs
+                return Status.WORKING;
+            }
+            if (self.onGround()) {
+                motor.moveToward(Vec3.atBottomCenterOf(s.end));
+            }
+            return stuck > 60 ? failStairs("cannot get to the end " + s.end.toShortString() + " from " + feet.toShortString()) : Status.WORKING;
         }
         if (feet.getY() <= target()) {
             s.finished = true;
             bases().setDirty();
             return Status.DONE;
         }
-        // the next step: one ahead, one down; head room for walking down into it
-        BlockPos next = feet.relative(s.dir).below();
+        // the next step: one ahead, one down from the end; head room for walking down into it
+        BlockPos next = s.end.relative(s.dir).below();
         BlockPos[] clear = {next.above(2), next.above(), next};
         for (BlockPos p : clear) {
             if (solid(p)) {
@@ -323,8 +417,7 @@ public final class StairMining {
         // step down
         motor.moveToward(Vec3.atBottomCenterOf(next));
         if (stuck > 60) {
-            debug = "cannot step down to " + next.toShortString() + " from " + feet.toShortString();
-            return Status.FAILED;
+            return failStairs("cannot step down to " + next.toShortString() + " from " + feet.toShortString());
         }
         return Status.WORKING;
     }
