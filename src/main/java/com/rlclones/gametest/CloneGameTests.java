@@ -3234,10 +3234,18 @@ public final class CloneGameTests {
         sk.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
         sk.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6000, 255));
         sk.setPersistenceRequired();
+        String[] death = {""};
+        h.onEachTick(() -> {
+            if (death[0].isEmpty() && !sk.isAlive()) {
+                var src = sk.getLastDamageSource();
+                death[0] = "t" + h.getTick() + " " + (src == null ? "no source" : src.getMsgId() + " by " + src.getEntity() + " direct " + src.getDirectEntity())
+                        + " removal " + sk.getRemovalReason() + " clone at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " option " + c.controller().option();
+            }
+        });
         h.succeedWhen(() -> {
             EnemyKnowledge k = c.getCloneBrain().knowledgeIfPresent("minecraft:skeleton");
             String traits = k == null ? "none" : k.traits.toString();
-            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + " | skeleton " + (sk.isAlive() ? "alive" : "dead by " + (sk.getLastDamageSource() == null ? "-" : sk.getLastDamageSource().getMsgId() + " " + sk.getLastDamageSource().getEntity()) + " dmg " + sk.getLastHurtByMob()) + " " + sk.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
+            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + " | skeleton " + (sk.isAlive() ? "alive" : "died " + death[0] + " | dead by " + (sk.getLastDamageSource() == null ? "-" : sk.getLastDamageSource().getMsgId() + " " + sk.getLastDamageSource().getEntity()) + " dmg " + sk.getLastHurtByMob()) + " " + sk.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
                     + " hp " + (int) c.getHealth() + " " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " " + c.controller().optionLog + " " + c.controller().tells().debug + ")");
             h.assertTrue(c.controller().tells().tellBlocks >= 2, "and the shield comes up in time to catch the arrows (" + c.controller().tells().tellBlocks
                     + " " + c.controller().tells().debug + ")");
@@ -4888,6 +4896,29 @@ public final class CloneGameTests {
                 "but the cobblestone is kept (two stacks) and the iron and the pickaxe (cobble " + inv.countItem(Items.COBBLESTONE) + ")");
         finish(h, c);
         h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "p4brake")
+    public static void doesNotWalkStraightIntoFire(GameTestHelper h) {
+        for (int z = 6; z <= 8; z++) {
+            h.setBlock(new BlockPos(8, 1, z), Blocks.NETHERRACK); // (burns for ever: no spreading, no going out)
+            h.setBlock(new BlockPos(8, 2, z), Blocks.FIRE);
+        }
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        Vec3 goal = h.absoluteVec(new Vec3(11.5, 2, 7.5));
+        double wall = h.absoluteVec(new Vec3(8.0, 2, 7.5)).x;
+        boolean[] burned = {false};
+        h.onEachTick(() -> {
+            c.controller().motor().moveToward(goal);
+            c.controller().motor().tick();
+            burned[0] |= c.isOnFire() || c.getX() > wall - 0.3;
+        });
+        h.runAfterDelay(120, () -> {
+            h.assertTrue(!burned[0], "it never stepped into the fire (x " + c.getX() + ", wall " + wall + ", brakes " + c.controller().motor().hazardBrakes + ")");
+            h.assertTrue(c.getX() > h.absoluteVec(new Vec3(6.0, 2, 7.5)).x && c.controller().motor().hazardBrakes > 0, "but walked right up to it (x " + c.getX() + ")");
+            finish(h, c);
+            h.succeed();
+        });
     }
 
     // ------------------------------------------------------------------ soak: how far do clones get on their own?

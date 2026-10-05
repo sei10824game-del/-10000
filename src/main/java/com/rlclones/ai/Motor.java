@@ -54,6 +54,7 @@ public final class Motor {
     private boolean dive;
     /** Times the clone crouched on its own at a dangerous edge. */
     public int edgeSneaks;
+    public int hazardBrakes;
     /** Crouched at a deadly edge recently. */
     private boolean atEdge;
     private int atEdgeTicks;
@@ -175,6 +176,30 @@ public final class Motor {
             }
         }
         return 64;
+    }
+
+    /** Lava (flowing over the floor too) or fire in the cell we are about to walk into, or the one above it. */
+    private boolean hazardAhead(float yaw, float zza, float xxa) {
+        double rad = Math.toRadians(yaw);
+        double mx = -Math.sin(rad) * zza + Math.cos(rad) * xxa;
+        double mz = Math.cos(rad) * zza + Math.sin(rad) * xxa;
+        double len = Math.sqrt(mx * mx + mz * mz);
+        if (len < 1e-4) {
+            return false;
+        }
+        mx /= len;
+        mz /= len;
+        ServerLevel level = self.serverLevel();
+        for (double ahead : new double[]{0.6, 1.1}) {
+            BlockPos feet = BlockPos.containing(self.getX() + mx * ahead, self.getY() + 0.01, self.getZ() + mz * ahead);
+            for (int dy = 0; dy <= 1; dy++) {
+                BlockPos p = feet.above(dy);
+                if (level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(p).is(BlockTags.FIRE)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean deadlyDropAhead(float yaw, float zza, float xxa) {
@@ -835,6 +860,11 @@ public final class Motor {
         if (using) {
             zza *= 0.2f;
             xxa *= 0.2f;
+        }
+        if (!daring && !self.isInLava() && !self.isOnFire() && (Math.abs(zza) > 0.05f || Math.abs(xxa) > 0.05f) && hazardAhead(newYaw, zza, xxa)) {
+            zza = 0f; // lava or fire in the next step: not that way (the path planner steers round; this is for the straight walks)
+            xxa = 0f;
+            hazardBrakes++;
         }
         if (!sneak && !daring && self.onGround() && !self.isInWater() && (Math.abs(zza) > 0.05f || Math.abs(xxa) > 0.05f)
                 && deadlyDropAhead(newYaw, zza, xxa)) {
