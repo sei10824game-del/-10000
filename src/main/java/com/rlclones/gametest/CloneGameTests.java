@@ -5184,6 +5184,115 @@ public final class CloneGameTests {
         });
     }
 
+    // ------------------------------------------------------------------ Round 11 (S11-2)
+
+    /** R-18: a 7-high trunk: the top logs are out of reach from the ground, so it pillars up beside it and cuts them all. */
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r11goods")
+    public static void cutsATallTreeToTheTop(GameTestHelper h) {
+        for (int y = 2; y <= 8; y++) {
+            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG);
+        }
+        for (int x = 8; x <= 10; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 9, z), Blocks.OAK_LEAVES);
+            }
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.DIRT, 16));
+        c.controller().forcedOption = opt("GATHER_WOOD");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(countBlocks(h, Blocks.OAK_LOG) == 0, "every log of the tree cut, " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
+                    + c.controller().scaffoldsPlaced + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-25: 10 cells of soil by a channel, 6 seeds: exactly the plot of 6 is tilled and sown, one after the other. */
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r11goods")
+    public static void tillsAndPlantsAsManyAsItHasSeeds(GameTestHelper h) {
+        for (int x = 3; x <= 12; x++) {
+            h.setBlock(new BlockPos(x, 0, 10), Blocks.STONE);
+            h.setBlock(new BlockPos(x, 1, 10), Blocks.WATER);
+            h.setBlock(new BlockPos(x, 1, 11), Blocks.GRASS_BLOCK);
+        }
+        h.setBlock(new BlockPos(7, 2, 13), Blocks.GLOWSTONE);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
+        c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 6));
+        boolean[] work = {false};
+        h.onEachTick(() -> {
+            if (!work[0]) {
+                work[0] = c.controller().farming().hasWork();
+                return;
+            }
+            c.controller().farming().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int planted = 0;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(3, 1, 11)), h.absolutePos(new BlockPos(12, 1, 12)))) {
+                if (h.getLevel().getBlockState(p).is(Blocks.FARMLAND) && h.getLevel().getBlockState(p.above()).is(Blocks.WHEAT)) {
+                    planted++;
+                }
+            }
+            h.assertTrue(planted == 6, "6 cells tilled and sown, got " + planted + " (" + c.controller().farming().debug() + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-26: 30 torches, a dark field with crops: torches go up beside the crops and 16 are kept. */
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r11goods")
+    public static void lightsTheCropsWithSpareTorches(GameTestHelper h) {
+        for (int x = 3; x <= 11; x++) {
+            for (int z = 3; z <= 11; z++) {
+                boolean wall = x == 3 || x == 11 || z == 3 || z == 11;
+                for (int y = 2; y <= 4; y++) {
+                    h.setBlock(new BlockPos(x, y, z), wall ? Blocks.STONE : Blocks.AIR);
+                }
+                h.setBlock(new BlockPos(x, 5, z), Blocks.STONE);
+            }
+        }
+        h.setBlock(new BlockPos(6, 1, 5), Blocks.WATER);
+        for (int x = 5; x <= 7; x++) {
+            for (int z = 6; z <= 7; z++) {
+                h.setBlock(new BlockPos(x, 1, z), Blocks.FARMLAND);
+                h.setBlock(new BlockPos(x, 2, z), Blocks.WHEAT);
+            }
+        }
+        ClonePlayer c = clone(h, 4.5, 8.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.TORCH, 30));
+        h.onEachTick(() -> {
+            c.controller().farming().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().farming().torchesPlaced >= 1, "a torch put up by the crops (" + c.controller().farming().debug() + ")");
+            h.assertTrue(c.getInventory().countItem(Items.TORCH) >= 16, "and 16 or more kept");
+            finish(h, c);
+        });
+    }
+
+    /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "r11goods")
+    public static void makesCharcoalFromSpareLogs(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.FURNACE));
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 12));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        c.getInventory().add(new ItemStack(Items.RAW_IRON, 3));
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.CHARCOAL) + c.getInventory().countItem(Items.IRON_INGOT) >= 1
+                    && c.getInventory().countItem(Items.OAK_LOG) >= 8, "charcoal from the spare logs, 8 logs kept (" + c.controller().crafting().debug() + ")");
+            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 3, "and the iron smelted with it (" + c.controller().crafting().smeltTrace() + ")");
+            finish(h, c);
+        });
+    }
+
     /**
      * Informational (never fails the build): clones at a forest with nothing in their hands, left alone for half an
      * hour of game time. Logs when each one first reaches each step of the way to full diamond gear ("SOAK ..." lines).

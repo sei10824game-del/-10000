@@ -768,7 +768,13 @@ public final class Crafting {
         Inventory inv = p.getInventory();
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
-            if (s.isEmpty() || s.is(ItemTags.LOGS)) {
+            if (s.is(ItemTags.LOGS)) {
+                if (spareLogs(p) > 0 && out.stream().noneMatch(j -> inv.items.get(j).is(ItemTags.LOGS))) {
+                    out.add(i); // R-21: charcoal from spare logs (nothing else to burn)
+                }
+                continue;
+            }
+            if (s.isEmpty()) {
                 continue;
             }
             Optional<SmeltingRecipe> r = level.getRecipeManager().getRecipeFor(RecipeType.SMELTING, new SimpleContainer(s.copy()), level);
@@ -777,6 +783,14 @@ public final class Crafting {
             }
         }
         return out;
+    }
+
+    /** Logs beyond the 8 kept for tables / tools / ladders, when there is no coal or charcoal (at most 8). */
+    private static int spareLogs(Player p) {
+        if (count(p, Items.COAL) + count(p, Items.CHARCOAL) > 0) {
+            return 0;
+        }
+        return Math.min(8, countTag(p, ItemTags.LOGS) - 8);
     }
 
     private static int fuelSlot(Player p) {
@@ -1083,7 +1097,9 @@ public final class Crafting {
         // 2) load new input + fuel with shift-clicks from the inventory part of the screen
         if (inputEmpty) {
             List<Integer> todo = smeltables(self);
-            if (!todo.isEmpty()) {
+            if (!todo.isEmpty() && self.getInventory().items.get(todo.get(0)).is(ItemTags.LOGS)) {
+                loadSpareLogs(menu, todo.get(0), spareLogs(self));
+            } else if (!todo.isEmpty()) {
                 shiftClickInventorySlot(menu, todo.get(0));
                 int fuel = fuelSlot(self);
                 if (fuel >= 0 && menu.getSlot(1).getItem().isEmpty()) {
@@ -1099,6 +1115,28 @@ public final class Crafting {
             furnace = null;
         }
         self.closeContainer();
+    }
+
+    /** Put {@code n} logs of an inventory slot into the furnace input (pick the stack up, right-click them in one by one, put the rest back). */
+    private void loadSpareLogs(AbstractContainerMenu menu, int inventoryIndex, int n) {
+        Slot from = null;
+        for (Slot slot : menu.slots) {
+            if (slot.container == self.getInventory() && slot.getContainerSlot() == inventoryIndex) {
+                from = slot;
+            }
+        }
+        if (from == null || n <= 0) {
+            return;
+        }
+        n = Math.min(n, from.getItem().getCount());
+        menu.clicked(from.index, 0, ClickType.PICKUP, self);
+        for (int i = 0; i < n; i++) {
+            menu.clicked(0, 1, ClickType.PICKUP, self);
+        }
+        menu.clicked(from.index, 0, ClickType.PICKUP, self);
+        if (!menu.getCarried().isEmpty()) {
+            menu.clicked(from.index, 0, ClickType.QUICK_MOVE, self); // the rest of a stack that would not go back
+        }
     }
 
     private void shiftClickInventorySlot(AbstractContainerMenu menu, int inventoryIndex) {

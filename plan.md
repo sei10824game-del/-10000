@@ -455,3 +455,10 @@
 - R-22: `Motor.mine` が水中なら `dryFootingFor`(届く乾いた足場へ移る。無ければ底へ沈む。80tickで諦めて掘る)。対象選びの後回し(2.)は未実装
 - テスト: `getsOutOfAnUnderwaterCorner` / `breathesInADoorUnderwater` / `stepsOutOfTheWaterToMine`(batch r11water)。ローカルはオフラインでコンパイル不可、検証はCI
 - run 37333868601(S11-1): 新規3テストは通過。必須の失敗3件: `carriesOnDownAStaircaseAlreadyStarted`(既存・実装前から)、`usesTntInAFight...`・`visitsTheNetherAndComesBack`(今回初。水中と無関係で、不安定の疑い。次のrunで再現するか確認)。次は S11-2(R-18・R-21・R-25・R-26)
+
+## 27. S11-2 実装(R-18・R-21・R-25・R-26)
+- R-21: `Crafting.smeltables` が、石炭・木炭が無く原木が8本を超えるとき原木を入れる(`spareLogs`、最大8)。炉には余りだけ右クリックで1本ずつ入れる(`loadSpareLogs`)。燃料は既存どおり板。テスト `makesCharcoalFromSpareLogs`(原木12・板8・生の鉄3)
+- R-18: `runHarvest(LOG)`: 切った原木の周り(3×3×上2)にまだ原木があれば上限を 24 に(`moreTree`)。腕が届かない高い原木は、幹の脇で足場を積んで登る(`scaffoldStep`、最大8段、`Equipment.pillarBlockSlot`のブロック)。切り終えたら足元の足場を上から壊して降りる(`climbDown`)。テスト `cutsATallTreeToTheTop`
+- R-25: `Farming.planLot`: TILL を始めるとき、種の数だけの区画(最初のマスから8近傍BFS、6マス以内)を決め、`find` が区画を先に消化する。テスト `tillsAndPlantsAsManyAsItHasSeeds`
+- R-26: 松明が16本を超えるとき、暗い作物(農地・作物で明るさ9未満)へ既存の LIGHT で置く(`cropDark`)。**未実装: 拠点周りの湧き潰し(`Lighting`で暗いマスへ歩いて置く)**。テスト `lightsTheCropsWithSpareTorches`
+- ローカルはオフラインでコンパイル不可。検証はCI

@@ -3862,8 +3862,76 @@ public final class CloneController {
         return true;
     }
 
+    /** R-18: blocks put down to reach the top of a tree (taken up again from the top once it is cut), and the pillar being built. */
+    private final java.util.ArrayDeque<BlockPos> scaffold = new java.util.ArrayDeque<>();
+    private BlockPos scafBase;
+    private boolean scafPlaced;
+    private int scafTicks;
+    private int scafFails;
+    /** Scaffold blocks put down to reach high logs (tests). */
+    public int scaffoldsPlaced;
+
+    /** One tick of pillaring up beside a tree. False when it cannot (no block / jump blocked too often). */
+    private boolean scaffoldStep() {
+        ServerLevel level = self.serverLevel();
+        if (scafBase == null) {
+            scafBase = self.blockPosition();
+            scafPlaced = false;
+            scafTicks = 0;
+        }
+        scafTicks++;
+        if (!scafPlaced) {
+            if (scafTicks <= 1 && self.onGround()) {
+                motor.jump();
+            }
+            if (self.getY() >= scafBase.getY() + 1.0 && level.getBlockState(scafBase).canBeReplaced()) {
+                Equipment.select(self, Equipment.pillarBlockSlot(self));
+                if (motor.useOnTopFace(scafBase.below())) {
+                    scafPlaced = true;
+                    scaffold.addLast(scafBase);
+                    scaffoldsPlaced++;
+                } else {
+                    scafBase = null;
+                    return ++scafFails < 3;
+                }
+            } else if (scafTicks > 14) {
+                scafBase = null;
+                return ++scafFails < 6;
+            }
+        } else if (self.onGround()) {
+            scafBase = null;
+        }
+        return true;
+    }
+
+    /** Take the scaffold down again, topmost first (the block under our feet; we drop onto the next one). True while at it. */
+    private boolean climbDown() {
+        BlockPos top = scaffold.peekLast();
+        ServerLevel level = self.serverLevel();
+        if (top == null) {
+            return false;
+        }
+        if (level.getBlockState(top).isAir() || level.getBlockState(top).canBeReplaced()) {
+            scaffold.pollLast();
+            return !scaffold.isEmpty();
+        }
+        if (self.blockPosition().getY() <= top.getY() || ++scafTicks > 400) {
+            scaffold.clear(); // not on it any more: leave it
+            motor.resetMining();
+            return false;
+        }
+        Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(top)));
+        if (motor.mine(top)) {
+            scaffold.pollLast();
+        }
+        return true;
+    }
+
     private boolean runHarvest(Perception.BlockKind kind) {
         ServerLevel level = self.serverLevel();
+        if (kind == Perception.BlockKind.LOG && blockTarget == null && climbDown()) {
+            return false;
+        }
         if (blockTarget != null && perception.kindAt(blockTarget) != (harvestKind != null ? harvestKind : kind)) {
             perception.forgetBlock(blockTarget);
             blockTarget = null;
@@ -3936,6 +4004,17 @@ public final class CloneController {
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3) {
+            if (kind == Perception.BlockKind.LOG && center.y - self.getEyeY() > 0.5 && Motor.horizontalDistance(self.position(), center) < 3.0
+                    && scaffold.size() < 8 && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && !self.isInWater()) {
+                if (scaffoldStep()) {
+                    return false; // a high log: pillar up beside the trunk
+                }
+                scafFails = 0;
+                skipBlocks.put(blockTarget.immutable(), now());
+                perception.forgetBlock(blockTarget);
+                blockTarget = null;
+                return false;
+            }
             motor.navigate(kind == Perception.BlockKind.LOG ? center : motor.approachPoint(blockTarget), kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
             if (motor.stuckCount() > 3) {
                 traceHarvest("stuck " + self.blockPosition().toShortString());
@@ -3959,7 +4038,9 @@ public final class CloneController {
                     perception.noteBlock(p);
                 }
             }
-            return blocksDone >= 8;
+            boolean moreTree = kind == Perception.BlockKind.LOG && harvestKind == Perception.BlockKind.LOG
+                    && BlockPos.betweenClosedStream(done.offset(-1, 0, -1), done.offset(1, 2, 1)).anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS));
+            return blocksDone >= (moreTree ? 24 : 8); // R-18: a tree half cut is cut to the top
         }
         return false;
     }
