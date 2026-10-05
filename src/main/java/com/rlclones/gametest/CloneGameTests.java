@@ -4555,6 +4555,129 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 700, batch = "p2tunnel")
+    public static void craftsInATunnelWithNoFlatGroundBesideIt(GameTestHelper h) {
+        clearBases(h);
+        // a one-wide cell: stone to the north, south and west and overhead; open to the east, where the floor is missing too
+        for (int y = 2; y <= 3; y++) {
+            h.setBlock(new BlockPos(6, y, 7), Blocks.STONE);
+            for (int x = 7; x <= 8; x++) {
+                h.setBlock(new BlockPos(x, y, 6), Blocks.STONE);
+                h.setBlock(new BlockPos(x, y, 8), Blocks.STONE);
+            }
+        }
+        h.setBlock(new BlockPos(7, 4, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(8, 4, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(8, 1, 7), Blocks.AIR);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 6));
+        c.getInventory().add(new ItemStack(Items.STICK, 2));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var cc = c.controller();
+            h.assertTrue(c.getInventory().countItem(Items.STONE_PICKAXE) >= 1, "a table put down against the wall and a stone pickaxe made (" + cc.crafting().trace()
+                    + " " + cc.optionLog + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "p2dig")
+    public static void digsForIronEvenWhenOtherWorkIsAround(GameTestHelper h) {
+        clearBases(h);
+        stoneMass(h);
+        ClonePlayer friend = clone(h, 2.5, 3.5, 0f, false); // somebody to go on a trip with: a trip is always possible
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, false);
+        c.controller().expedition().readyToLead();
+        Vec3 top = h.absoluteVec(new Vec3(4.5, 5, 7.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
+        stairsKit(h, c);
+        for (String b : List.of("minecraft:stone", "minecraft:deepslate", "minecraft:cobblestone", "minecraft:tuff", "minecraft:bedrock", "minecraft:furnace")) {
+            c.getCloneBrain().learnBlock(b);
+        }
+        c.controller().stairs().assumeSurface = true;
+        c.controller().stairs().targetY = (int) top.y - 40;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var cc = c.controller();
+            h.assertTrue(cc.digDrives >= 1 && cc.optionLog.stream().anyMatch(o -> o.startsWith("STAIRS")), "iron is what is missing: digging is pulled in ("
+                    + cc.digDrives + " " + cc.optionLog + ")");
+            h.assertTrue(cc.optionLog.stream().noneMatch(o -> o.startsWith("EXPEDITION") || o.startsWith("JOIN")), "and no trip (" + cc.optionLog + ")");
+            h.assertTrue(cc.stairs().stepsDug >= 3, "dug down step by step: " + cc.stairs().stepsDug + " " + cc.stairs().debug);
+            finish(h, c, friend);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p2diamond")
+    public static void keepsDiggingForDiamondsWhenIronGeared(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var inv = c.getInventory();
+        inv.clearContent();
+        inv.add(new ItemStack(Items.STONE_PICKAXE));
+        var st = c.controller().stairs();
+        var sh = c.controller().shafts();
+        h.assertTrue(st.target() == 16 && sh.target() == 16, "iron is the aim at first: dig to 16 (" + st.target() + " " + sh.target() + ")");
+        inv.clearContent();
+        inv.add(new ItemStack(Items.IRON_PICKAXE));
+        inv.add(new ItemStack(Items.IRON_SWORD));
+        inv.add(new ItemStack(Items.IRON_HELMET));
+        inv.add(new ItemStack(Items.IRON_CHESTPLATE));
+        inv.add(new ItemStack(Items.IRON_LEGGINGS));
+        inv.add(new ItemStack(Items.IRON_BOOTS));
+        st.assumeSurface = true;
+        h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) && st.target() == -58 && sh.target() == -58, "iron gear: diamonds are the aim, dig to -58 ("
+                + st.target() + " " + sh.target() + ")");
+        st.targetY = c.getBlockY() - 5; // (the arena lies below the real depth)
+        h.assertTrue(st.wanted(), "iron gear and no diamonds: still digging down");
+        inv.clearContent();
+        for (var it : List.of(Items.DIAMOND_PICKAXE, Items.DIAMOND_SWORD, Items.DIAMOND_HELMET, Items.DIAMOND_CHESTPLATE, Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS)) {
+            inv.add(new ItemStack(it));
+        }
+        h.assertTrue(!st.wanted(), "all of it diamond: nothing left to dig for");
+        inv.clearContent();
+        finish(h, c);
+        h.succeed();
+    }
+
+    private static int strategyMask(GameTestHelper h, ClonePlayer c) {
+        return com.rlclones.ai.Senses.strategyMask(c.controller().perception(), c, c, h.getLevel().getGameTime());
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 80, batch = "p2home")
+    public static void staysHomeToDigAndWhenHungry(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer friend = clone(h, 3.5, 3.5, 0f, false); // somebody to go on a trip with
+        c.controller().expedition().readyToLead();
+        int trip = opt("EXPEDITION").bit();
+        int[] mask = new int[4];
+        h.runAfterDelay(5, () -> mask[0] = strategyMask(h, c)); // bare hands, fed: a trip is possible
+        h.runAfterDelay(10, () -> {
+            c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+            c.controller().stairs().targetY = c.getBlockY() - 40;
+        });
+        h.runAfterDelay(15, () -> mask[1] = strategyMask(h, c)); // iron to dig for: no trip
+        h.runAfterDelay(20, () -> {
+            c.getInventory().clearContent();
+            c.controller().stairs().targetY = Integer.MIN_VALUE;
+            c.getFoodData().setFoodLevel(4);
+        });
+        h.runAfterDelay(25, () -> mask[2] = strategyMask(h, c)); // hungry with nothing to eat: no trip
+        h.runAfterDelay(30, () -> c.getFoodData().setFoodLevel(20));
+        h.runAfterDelay(35, () -> {
+            mask[3] = strategyMask(h, c);
+            h.assertTrue((mask[0] & trip) != 0, "bare hands and fed: a trip is on offer");
+            h.assertTrue((mask[1] & trip) == 0, "a stone pickaxe and iron still to find: stays to dig");
+            h.assertTrue((mask[2] & trip) == 0, "hungry and nothing to eat: stays");
+            h.assertTrue((mask[3] & trip) != 0, "fed again: a trip is on offer again");
+            finish(h, c, friend);
+            h.succeed();
+        });
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
@@ -4738,8 +4861,8 @@ public final class CloneGameTests {
                                     ? "strategy:" + cc.endedOption + (cc.endedAfter <= 1 ? "<=1" : cc.endedAfter < 20 ? "<20" : "long") : cc.idleWhy, 1, Integer::sum);
                         }
                         if (tick[0] % 2400 == 0) {
-                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | {}", tick[0], n, o, com.rlclones.ai.Progression.describe(live), cc.crafting().trace(),
-                                    soakBag(live));
+                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | esc={}[{}] dig={} | {}", tick[0], n, o, Progression.describe(live), cc.crafting().trace(),
+                                    cc.escapeStarts, cc.escapeWhy, cc.digDrives, soakBag(live));
                         }
                     }
                 }

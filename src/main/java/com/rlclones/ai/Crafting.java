@@ -655,6 +655,11 @@ public final class Crafting {
         return wood >= need;
     }
 
+    /** Planks, counting each log as four. */
+    public static int woodUnits(Player p) {
+        return countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4;
+    }
+
     /** The best pickaxe better than the one in the bag that can be made right now (null = none). */
     @Nullable
     public static Item pickaxeUpgrade(Player p) {
@@ -926,16 +931,17 @@ public final class Crafting {
                     && !level.getBlockState(spot.below()).getCollisionShape(level, spot.below()).isEmpty()) {
                 motor.lookAt(Vec3.atCenterOf(spot));
                 if (motor.useOnTopFace(spot.below())) {
-                    perception.noteBlock(spot);
-                    station = spot;
-                    stage = 2;
-                    if (placeOnly) {
-                        placeOnly = false;
-                        placeItem = null;
-                        stage = 0;
-                        return;
-                    }
-                    Equipment.manage(self, true);
+                    placed(spot);
+                    return;
+                }
+            }
+        }
+        // no flat ground beside us (a tunnel, a pit): a table needs no support, so any free spot next to a solid face will do
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            for (int up = 0; up <= 1; up++) {
+                BlockPos spot = feet.relative(d).above(up);
+                if (level.getBlockState(spot).canBeReplaced() && motor.placeBlockAt(spot)) {
+                    placed(spot);
                     return;
                 }
             }
@@ -947,6 +953,19 @@ public final class Crafting {
         }
         placeDebug = sb.toString().replace("Block{minecraft:", "").replace("}", "");
         stage = -1;
+    }
+
+    private void placed(BlockPos spot) {
+        perception.noteBlock(spot);
+        station = spot;
+        stage = 2;
+        if (placeOnly) {
+            placeOnly = false;
+            placeItem = null;
+            stage = 0;
+            return;
+        }
+        Equipment.manage(self, true);
     }
 
     private void walkAndOpen() {

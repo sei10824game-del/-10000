@@ -36,8 +36,8 @@ public final class StairMining {
     private int stuck;
     private BlockPos lastFeet;
 
-    /** Dig down to here (iron is common below it). */
-    public int targetY = 16;
+    /** Dig down to here; unset (MIN_VALUE) = what the next step needs (iron: 16, diamonds: -58), see {@link Progression}. */
+    public int targetY = Integer.MIN_VALUE;
     /** Tests: treat the arena (underground) as the surface. */
     public boolean assumeSurface;
     public int stepsDug;
@@ -104,14 +104,19 @@ public final class StairMining {
         return best;
     }
 
-    /** On the surface (sky overhead), carrying a pickaxe, missing iron gear, not deep enough yet. */
+    /** How deep to dig now. */
+    public int target() {
+        return targetY != Integer.MIN_VALUE ? targetY : Progression.digTargetY(Progression.need(self));
+    }
+
+    /** On the surface (sky overhead), carrying a pickaxe, still missing iron or diamond gear, not deep enough yet. */
     public boolean wanted() {
-        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || pickTier() < 0 || ironGeared(self) || self.isInWater()) {
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || pickTier() < 0 || ironGeared(self) && !Progression.digWanted(self) || self.isInWater()) {
             return false;
         }
         boolean surface = assumeSurface || self.level().canSeeSky(self.blockPosition().above());
         Bases.Staircase known = bases().nearestStaircase(self.level().dimension(), self.position(), 64);
-        return (surface || known != null) && self.getBlockY() > targetY;
+        return (surface || known != null) && self.getBlockY() > target();
     }
 
     public void begin() {
@@ -273,7 +278,7 @@ public final class StairMining {
             s.end = feet.immutable();
             bases().setDirty();
         }
-        if (feet.getY() <= targetY) {
+        if (feet.getY() <= target()) {
             s.finished = true;
             bases().setDirty();
             return Status.DONE;

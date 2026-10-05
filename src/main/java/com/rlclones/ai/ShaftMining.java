@@ -41,8 +41,8 @@ public final class ShaftMining {
     private int lastLadders;
     private BlockPos lastFeet = BlockPos.ZERO;
 
-    /** Dig down to here at most. */
-    public int targetY = -50;
+    /** Dig down to here at most; unset (MIN_VALUE) = what the next step needs (iron: 16, diamonds: -58), see {@link Progression}. */
+    public int targetY = Integer.MIN_VALUE;
     /** Tests: treat the arena (underground) as the surface. */
     public boolean assumeSurface;
     public int laddersCrafted;
@@ -95,10 +95,15 @@ public final class ShaftMining {
         return false;
     }
 
-    /** A pickaxe, ladders (or what they are made of), no iron gear yet, up on the surface or near a shaft to carry on. */
+    /** How deep to dig now. */
+    public int target() {
+        return targetY != Integer.MIN_VALUE ? targetY : Progression.digTargetY(Progression.need(self));
+    }
+
+    /** A pickaxe, ladders (or what they are made of), no iron / diamond gear yet, up on the surface or near a shaft to carry on. */
     public boolean wanted() {
-        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || !hasPickaxe() || StairMining.ironGeared(self) || self.isInWater()
-                || self.getBlockY() <= targetY) {
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || !hasPickaxe() || StairMining.ironGeared(self) && !Progression.digWanted(self) || self.isInWater()
+                || self.getBlockY() <= target()) {
             return false;
         }
         if (ladders() == 0 && !craftable(Items.LADDER) && !craftable(Items.STICK)) {
@@ -345,7 +350,7 @@ public final class ShaftMining {
             return Status.WORKING;
         }
         BlockPos below = feet.below();
-        if (feet.getY() <= targetY || !diggable(below) || !solid(below.below()) && !self.level().getBlockState(below.below()).isAir()
+        if (feet.getY() <= target() || !diggable(below) || !solid(below.below()) && !self.level().getBlockState(below.below()).isAir()
                 || self.level().getBlockState(below.below()).isAir() && !solid(below.below(2))) {
             s.finished = true; // bedrock, liquid, a cave under us: this shaft ends here
             bases().setDirty();

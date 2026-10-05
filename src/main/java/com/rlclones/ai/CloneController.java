@@ -424,6 +424,16 @@ public final class CloneController {
     /** The option that ended last and how many ticks it ran (an option that starts and ends in the same tick over and over is churn). */
     public String endedOption = "";
     public int endedAfter;
+    /** Digging for iron / diamonds (plan.md P-03): when the next dig may start, how often in a row one got nowhere, where the last began. */
+    private long digBackoffUntil;
+    private long lastDigEnd = Long.MIN_VALUE / 2;
+    private int digFails;
+    private int digStartY;
+    private int digStartShort;
+    public int digDrives;
+    /** Falls into holes (soak diagnostics): how often the escape began and what it began on. */
+    public int escapeStarts;
+    public String escapeWhy = "";
 
     public CombatAction action() {
         return action;
@@ -562,6 +572,8 @@ public final class CloneController {
                 // nothing to build with and walls we cannot dig through: an ender pearl over the edge
             } else {
                 escaping = true;
+                escapeStarts++;
+                escapeWhy = self.level().getBlockState(self.blockPosition().below()).getBlock() + " y=" + self.getBlockY();
                 escape.start(motor.recentGoal());
             }
         }
@@ -1314,6 +1326,59 @@ public final class CloneController {
 
     // ------------------------------------------------------------------ extra options (chests, farming, expeditions)
 
+    /** Hungry and nothing to eat: no trips, no digging, food first. */
+    private boolean hungryNoFood() {
+        return !self.isCreative() && self.getFoodData().getFoodLevel() < 8 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
+    }
+
+    /** Iron / diamonds are still to be found, there is depth left to dig for them, and the last digs did not all get nowhere. */
+    private boolean digPending(long now) {
+        return now >= digBackoffUntil && Progression.digWanted(self) && self.getBlockY() > stairs.target();
+    }
+
+    private void markDigStart() {
+        digStartY = self.getBlockY();
+        digStartShort = Progression.ironShort(self) + Progression.diamondShort(self);
+    }
+
+    private void noteDigEnd(long now, boolean died) {
+        lastDigEnd = now;
+        if (died) {
+            return;
+        }
+        boolean progress = digStartY - self.getBlockY() >= 4 || digStartShort - (Progression.ironShort(self) + Progression.diamondShort(self)) > 0;
+        if (progress) {
+            digFails = 0;
+        } else if (++digFails >= 3) {
+            digFails = 0;
+            digBackoffUntil = now + 6000; // three digs in a row got nowhere: other things for a while
+        }
+    }
+
+    /**
+     * Iron or diamonds are what is missing and there is depth left: go and dig (a staircase, or a shaft), unless it is
+     * not the time (hurt, hungry, no wood for a table): then what is missing first. Null = nothing to pull.
+     */
+    @Nullable
+    private Option digDrive(long now, int mask) {
+        boolean stairsOk = (mask & Option.STAIRS.bit()) != 0;
+        boolean shaftOk = (mask & Option.SHAFT.bit()) != 0;
+        if (!(stairsOk || shaftOk) || !digPending(now) || now - lastDigEnd < 1200 || self.getHealth() < self.getMaxHealth() * 0.7f) {
+            return null;
+        }
+        if (self.getFoodData().getFoodLevel() < 14 && FoodAid.foodItems(self) < 4) {
+            if ((mask & Option.HUNT.bit()) != 0) {
+                return Option.HUNT;
+            }
+            return (mask & Option.FARM.bit()) != 0 ? Option.FARM : null;
+        }
+        if (Crafting.woodUnits(self) < 4 && (mask & Option.GATHER_WOOD.bit()) != 0) {
+            return Option.GATHER_WOOD; // a table, sticks, ladders: from wood
+        }
+        digDrives++;
+        return stairsOk ? Option.STAIRS : Option.SHAFT;
+    }
+
     private boolean othersOnline() {
         for (net.minecraft.server.level.ServerPlayer p : self.getServer().getPlayerList().getPlayers()) {
             if (p != self && p.isAlive() && p.level() == self.level() && !p.isSpectator()) {
@@ -1370,10 +1435,11 @@ public final class CloneController {
         if (farming.hasWork() || water.hasWork()) {
             mask |= Option.FARM.bit(); // a field to work, or water to bring home for one
         }
-        if (expedition.isLeading() || (expedition.canLead(now) && othersOnline())) {
+        boolean homeBody = digPending(now) || hungryNoFood(); // iron / diamonds to dig for, or no food for a trip: no new trips
+        if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline())) {
             mask |= Option.EXPEDITION.bit();
         }
-        if (expedition.joinedOffer() != null || expedition.canJoin(now)) {
+        if (expedition.joinedOffer() != null || (!homeBody && expedition.canJoin(now))) {
             mask |= Option.JOIN.bit();
         }
         if (Config.get(Config.ALLOW_BLOCK_BREAKING, true) && Crafting.stoneNeeded(self) > 0
@@ -1404,11 +1470,11 @@ public final class CloneController {
         if (breeding.canStart()) {
             mask |= Option.BREED.bit();
         }
-        if (stairs.wanted()) {
-            mask |= Option.STAIRS.bit(); // (only when idle: see startOption)
+        if (!hungryNoFood() && stairs.wanted()) {
+            mask |= Option.STAIRS.bit(); // (when idle, or while iron / diamonds are to be had: see startOption)
         }
-        if (shafts.wanted()) {
-            mask |= Option.SHAFT.bit(); // the other way down (also only when idle)
+        if (!hungryNoFood() && shafts.wanted()) {
+            mask |= Option.SHAFT.bit(); // the other way down (same)
         }
         if (achievements.hasGoal(now)) {
             mask |= Option.ACHIEVE.bit();
@@ -1946,6 +2012,10 @@ public final class CloneController {
             orePulls++;
             return Option.MINE; // ore in sight: nothing else comes close (a pickaxe is made first if need be)
         }
+        Option dig = digDrive(now, mask);
+        if (dig != null) {
+            return dig;
+        }
         if ((mask & Option.HUNT.bit()) != 0 && FoodAid.foodItems(self) < 16 && fishInSight(16) != null && random.nextFloat() < 0.85f) {
             huntFish = true;
             return Option.HUNT; // fish swimming about: food for the taking
@@ -2008,6 +2078,9 @@ public final class CloneController {
         int mask = Senses.strategyMask(perception, self, self, now);
         if ((mask & BUSY_OPTIONS) != 0) {
             int idle = Option.STAIRS.bit() | Option.ACHIEVE.bit() | Option.SHAFT.bit();
+            if (digPending(now)) {
+                idle &= ~(Option.STAIRS.bit() | Option.SHAFT.bit()); // iron / diamonds are still to be had: digging is real work
+            }
             if (forcedOption != null) {
                 idle &= ~forcedOption.bit();
             }
@@ -2089,8 +2162,14 @@ public final class CloneController {
             }
             case BREED -> breeding.begin();
             case ACHIEVE -> achievements.begin();
-            case STAIRS -> stairs.begin();
-            case SHAFT -> shafts.begin();
+            case STAIRS -> {
+                markDigStart();
+                stairs.begin();
+            }
+            case SHAFT -> {
+                markDigStart();
+                shafts.begin();
+            }
             case FOLLOW -> followTarget = pickFollowTarget(now);
             case EXPEDITION -> {
                 if (!expedition.isLeading()) {
@@ -2131,6 +2210,9 @@ public final class CloneController {
             crafting.forcedTarget = null;
         }
         long now = now();
+        if (option == Option.STAIRS || option == Option.SHAFT) {
+            noteDigEnd(now, died);
+        }
         if (died) {
             optionReward -= 30f;
         }

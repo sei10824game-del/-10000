@@ -131,7 +131,7 @@
 | セッション | 項目 | 終わったら |
 |---|---|---|
 | S1(実装済み・CI全緑 run 37243370058) | P-09(計測+urgent)、P-10(計測)、P-01、P-12 | テスト `knowsWhatToProgressTo` `craftsAStonePickaxeWhenCobbleAndWoodAreInTheBag` `oldBrainsStillLoad`(今のキー配置の固定。prog桁を足す S3 でも通ること)。push してソークの run ID を報告 |
-| S2 | P-02、P-03、P-04、P-06(P-11 は P-03 に含む) | テスト `digsForIron…` `keepsDigging…` `staysHome…`。ソーク |
+| S2(実装済み: P-02〜P-04・P-06・P-11・P-13〜P-15) | P-02、P-03、P-04、P-06(P-11 は P-03 に含む) | テスト `digsForIron…` `keepsDigging…` `staysHome…`。ソーク |
 | S3 | P-05、P-07、P-08 | テスト `tunnelsSideways…`。ソーク(AC 判定) |
 | S4 | ソーク結果での調整(報酬の値・ドライバの条件) | AC 未達で原因が分からなければ Opus に切り替えて分析 |
 - 各セッションは CLAUDE.md のルール通り(push前に `./gradlew test` を試す/CI は待たない/CI失敗の修正は1回まで)
@@ -157,3 +157,10 @@
   - P-14 空腹の優先: 満腹度 < 8 で食べ物が無いときは、遠征・JOIN・掘りに出ず、HUNT/FARM を先にする(P-03 の準備条件に含めるだけでなく、`Expedition.canLead` と JOIN のマスクにも入れる)
   - P-15 escape の調査: `SOAK-TRACE` に escape の開始回数と開始時の足元のブロックを足す
 - ソークの受け入れ基準「石のツルハシ 6/6、全員 12000tick 以内」は未達。P-13 のあとで再判定する
+
+## 8. S2 の実装メモ
+- 掘りの駆動は `CloneController.digDrive`(`drive()` の鉱石 MINE のあと)。`digPending` = `Progression.digWanted` かつ掘る余地(`stairs.target()` より上)あり、かつ連続3回空振りの休み(6000tick)中でない。`digPending` の間は STAIRS/SHAFT を遊び扱いで外さず、新しい遠征・JOIN をマスクから外す(`homeBody`)。満腹度<8 で食べ物なしも同じく遠征・掘りを外す(`hungryNoFood`)
+- 掘る前の準備: 満腹度<14 かつ食べ物<4 なら HUNT、なければ FARM。木が4板分未満で木が見えていれば GATHER_WOOD
+- `StairMining.targetY` / `ShaftMining.targetY` は未設定(MIN_VALUE)なら `target()` が `Progression.digTargetY(need)`(鉄16・ダイヤ-58)。鉄装備でもダイヤが足りなければ掘る(`ironGeared && !digWanted` のときだけ止まる)。テストが `targetY` を直接入れる使い方はそのまま
+- P-13: `Crafting.placeStation` は平地が無いとき、隣の空き(足元と頭の高さ)に `Motor.placeBlockAt` で壁・床の面から置く
+- 未実装(S3): P-05 横掘り(目標の深さに着いたあと)。それまで、深さに着くと掘りは止まる(`digPending` も偽になり遠征は戻る)

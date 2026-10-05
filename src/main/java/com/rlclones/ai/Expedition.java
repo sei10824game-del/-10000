@@ -169,6 +169,11 @@ public final class Expedition {
         return !committed() && now - lastLed >= COOLDOWN && self.getHealth() >= self.getMaxHealth() * 0.9f;
     }
 
+    /** Tests: the first-trip delay is over (a trip may be led now). */
+    public void readyToLead() {
+        lastLed = self.level().getGameTime() - COOLDOWN;
+    }
+
     public boolean canJoin(long now) {
         Offer o = offer;
         return o != null && !committed() && now - o.tick() < GATHER_TICKS && o.dimension() == self.level().dimension()
