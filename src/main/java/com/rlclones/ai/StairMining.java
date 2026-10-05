@@ -10,6 +10,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ArmorMaterials;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.PickaxeItem;
 import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.TieredItem;
@@ -471,6 +472,43 @@ public final class StairMining {
         return Status.WORKING;
     }
 
+    private static final java.util.Set<net.minecraft.world.item.Item> JUNK = java.util.Set.of(Items.GRANITE, Items.DIORITE, Items.ANDESITE, Items.TUFF,
+            Items.DIRT, Items.COARSE_DIRT, Items.GRAVEL, Items.COBBLED_DEEPSLATE, Items.DEEPSLATE, Items.CALCITE, Items.SMOOTH_BASALT, Items.DRIPSTONE_BLOCK);
+
+    /**
+     * The bag fills up with stone nobody wants after a stretch of tunnel (granite, tuff, dirt, a mountain of cobblestone): with
+     * few free slots left, throw the lot away (keeping cobblestone for 96) instead of walking home to a chest with it.
+     */
+    public void dropJunk() {
+        var inv = self.getInventory();
+        int free = 0;
+        for (ItemStack s : inv.items) {
+            if (s.isEmpty()) {
+                free++;
+            }
+        }
+        if (free > 6) {
+            return;
+        }
+        int cobble = 0;
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (s.isEmpty()) {
+                continue;
+            }
+            if (JUNK.contains(s.getItem())) {
+                inv.setItem(i, ItemStack.EMPTY);
+            } else if (s.is(Items.COBBLESTONE)) {
+                if (cobble >= 96) {
+                    inv.setItem(i, ItemStack.EMPTY);
+                } else {
+                    cobble += s.getCount();
+                }
+            }
+        }
+        trace("junk");
+    }
+
     /** No liquid in the cell or next to it. */
     private boolean dry(BlockPos p) {
         ServerLevel level = self.serverLevel();
@@ -534,6 +572,9 @@ public final class StairMining {
         progress(s.tunnelLen);
         if (stalled(300)) {
             return failStairs("no progress in the tunnel at " + feet.toShortString());
+        }
+        if (ticks % 100 == 0) {
+            dropJunk();
         }
         BlockPos tip = s.tunnelEnd != null ? s.tunnelEnd : s.end;
         Direction d = s.tunnelDir != null ? s.tunnelDir : s.dir;

@@ -4863,6 +4863,32 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p3junk")
+    public static void throwsAwayTunnelJunkWhenTheBagIsFull(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var inv = c.getInventory();
+        inv.clearContent();
+        inv.add(new ItemStack(Items.STONE_PICKAXE));
+        inv.add(new ItemStack(Items.RAW_IRON, 7));
+        for (int i = 0; i < 4; i++) {
+            inv.add(new ItemStack(Items.COBBLESTONE, 64));
+        }
+        for (var it : List.of(Items.GRANITE, Items.DIORITE, Items.ANDESITE, Items.TUFF, Items.DIRT, Items.GRAVEL, Items.COBBLED_DEEPSLATE, Items.DEEPSLATE,
+                Items.CALCITE, Items.SMOOTH_BASALT, Items.DRIPSTONE_BLOCK, Items.COARSE_DIRT)) {
+            inv.add(new ItemStack(it, 40));
+        }
+        for (var it : List.of(Items.POPPY, Items.DANDELION, Items.OAK_SAPLING, Items.BIRCH_SAPLING, Items.SPRUCE_SAPLING, Items.CLAY_BALL, Items.BRICK, Items.SNOWBALL,
+                Items.FEATHER, Items.STRING, Items.BONE, Items.FLINT, Items.EGG)) {
+            inv.add(new ItemStack(it, 3)); // fill the rest: few slots free
+        }
+        c.controller().stairs().dropJunk();
+        h.assertTrue(inv.countItem(Items.GRANITE) == 0 && inv.countItem(Items.TUFF) == 0 && inv.countItem(Items.DIRT) == 0, "granite, tuff and dirt thrown away");
+        h.assertTrue(inv.countItem(Items.COBBLESTONE) == 128 && inv.countItem(Items.RAW_IRON) == 7 && inv.countItem(Items.STONE_PICKAXE) == 1,
+                "but the cobblestone is kept (two stacks) and the iron and the pickaxe (cobble " + inv.countItem(Items.COBBLESTONE) + ")");
+        finish(h, c);
+        h.succeed();
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
@@ -5071,7 +5097,8 @@ public final class CloneGameTests {
                         RLClones.LOGGER.info("SOAK-CLONE {} steps={} gone@{} | {}", n, m, gone.get(n), live == null ? "-" : soakBag(live) + " | " + Progression.describe(live)
                                 + " stairs=" + live.controller().stairs().stepsDug + "g" + live.controller().stairs().giveUps + "a" + live.controller().stairs().abandoned
                                 + " tunnel=" + live.controller().stairs().tunnelDug + " esc=" + live.controller().escapeStarts + " cd=" + live.controller().churnCooldowns
-                                + " dig=" + live.controller().digDrives + " | " + live.controller().stairs().debug);
+                                + " dig=" + live.controller().digDrives + " | " + live.controller().stairs().debug + " | " + live.controller().crafting().smeltTrace()
+                                + " store=" + live.controller().storage().deposits + "/" + live.controller().storage().withdrawals + " food=" + com.rlclones.ai.FoodAid.foodItems(live));
                     }
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
                     RLClones.LOGGER.info("SOAK-NONE (what the clone was busy with when no option ran) {}", nones);

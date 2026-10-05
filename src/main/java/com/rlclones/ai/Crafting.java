@@ -87,6 +87,8 @@ public final class Crafting {
     public BlockPos lastTable;
     /** When a better pickaxe last made crafting urgent (once in 400 ticks: no loop if it cannot be made after all). */
     private long upgradeAt = Long.MIN_VALUE / 2;
+    /** When smelting (or taking out what was smelted) last made crafting urgent. */
+    private long smeltUrgentAt = Long.MIN_VALUE / 2;
     /** What a recipe makes -> game time until which it is left alone (it could not be carried out here: no room for a table...). */
     private final Map<Item, Long> blockedUntil = new HashMap<>();
     /** Until when no furnace / brewing stand is put down or used (it could not be put down). */
@@ -720,8 +722,19 @@ public final class Crafting {
             }
             return true;
         }
+        if ((smeltWork() || furnaceReady()) && now - smeltUrgentAt >= 400) {
+            smeltUrgentAt = now; // raw iron / raw meat in the bag and a furnace to use (or a batch waiting in it): not left to chance
+            return true;
+        }
         boolean tableAccess = count(self, Items.CRAFTING_TABLE) > 0 || tableNearby(self) || countTag(self, ItemTags.PLANKS) + countTag(self, ItemTags.LOGS) * 4 >= 4;
         return tableAccess && (furnaceWanted(self) || firstBucketWanted(self)) || stationToPlace() == Items.FURNACE;
+    }
+
+    /** For the soak log: why smelting does or does not happen. */
+    public String smeltTrace() {
+        return "smelt[work=" + smeltWork() + " ready=" + furnaceReady() + " items=" + smeltables(self).size() + " fuel=" + fuelSlot(self)
+                + " near=" + (nearest(Perception.BlockKind.FURNACE, 24) != null) + " bag=" + count(self, Items.FURNACE) + " at=" + furnace
+                + " blocked=" + (self.level().getGameTime() < stationBlockedUntil) + "]";
     }
 
     // Perception is per clone; the static planner only knows about stations the player can see right now.
