@@ -509,7 +509,28 @@ public final class Equipment {
                 best = i;
             }
         }
+        if (best < 0 && !needsTool) {
+            return bareSlot(p); // R-31: no tool helps here: dig with a hand / a non-tool, not a pickaxe that only wears down
+        }
         return best;
+    }
+
+    /** A slot whose item takes no wear from digging: the held one if it is such, else an empty slot, else a block / food. */
+    private static int bareSlot(Player p) {
+        Inventory inv = p.getInventory();
+        int found = -1;
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (s.isEmpty() || !s.isDamageableItem() && !(s.getItem() instanceof net.minecraft.world.item.TieredItem)) {
+                if (i == inv.selected) {
+                    return i;
+                }
+                if (found < 0 || s.isEmpty() && !inv.items.get(found).isEmpty()) {
+                    found = i;
+                }
+            }
+        }
+        return found;
     }
 
     public static boolean canHarvest(Player p, BlockState state) {

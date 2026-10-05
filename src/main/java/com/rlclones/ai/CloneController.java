@@ -6,6 +6,7 @@ import com.rlclones.ai.brain.EnemyKnowledge;
 import com.rlclones.ai.combat.CombatAction;
 import com.rlclones.ai.observe.AgentWatcher;
 import com.rlclones.ai.strategy.Option;
+import com.rlclones.ai.strategy.StrategyState;
 import com.rlclones.clone.ClonePlayer;
 import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -49,6 +50,7 @@ public final class CloneController {
     private final ClonePlayer self;
     private final Perception perception;
     private final Motor motor;
+    private final PitSafety pitSafety;
     private final AgentWatcher watcher;
     private final Crafting crafting;
     private final Escape escape;
@@ -70,6 +72,7 @@ public final class CloneController {
     private final Farming farming;
     private final Expedition expedition;
     private final Discovery discovery;
+    private final com.rlclones.clone.StructureMemory structureMemory;
     private final Consumables consumables;
     private final Brewing brewing;
     private final Animals animals;
@@ -79,6 +82,7 @@ public final class CloneController {
     private final Perch perch;
     private final BoatTrap boatTrap;
     private final Lighting lighting;
+    private final DoorBreath doorBreath;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
     private boolean lookedAround;
@@ -96,7 +100,7 @@ public final class CloneController {
     private final CreativeHelper creative;
     /** What can be done riding a horse (anything else: get off first). */
     private static final java.util.Set<Option> ON_HORSEBACK = java.util.EnumSet.of(Option.EXPLORE, Option.EXPEDITION, Option.JOIN, Option.FOLLOW,
-            Option.FLEE, Option.HELP, Option.REST, Option.FIGHT, Option.HUNT, Option.ANIMALS);
+            Option.FLEE, Option.HELP, Option.REST, Option.FIGHT, Option.HUNT, Option.ANIMALS, Option.RETURN);
 
     /** Test hook: always pick this option when it is possible. */
     public Option forcedOption;
@@ -128,6 +132,8 @@ public final class CloneController {
     private final Int2LongOpenHashMap enemyLastAttack = new Int2LongOpenHashMap();
     private final Int2LongOpenHashMap enemyLastShot = new Int2LongOpenHashMap();
     private final LongOpenHashSet visitedChunks = new LongOpenHashSet();
+    private final java.util.Map<Long, Integer> visitedChunkVisits = new java.util.HashMap<>();
+    private long lastVisitedChunk = Long.MIN_VALUE;
     private final Random random = new Random();
 
     // strategy
@@ -135,6 +141,13 @@ public final class CloneController {
     private int optionState = -1;
     private int optionTicks;
     private float optionReward;
+    private boolean optionFailed;
+    private String optionStartDimension;
+    private int optionStartChunkX;
+    private int optionStartChunkZ;
+    private double lastReturnDistance = Double.NaN;
+    /** Team roles occupied and place experience at the decision point; part of the learned transition. */
+    private int rolesAtOptionStart;
 
     // combat
     private Entity target;
@@ -150,6 +163,10 @@ public final class CloneController {
     // task scratch
     private Vec3 goal;
     private int goalTimer;
+    @Nullable
+    private String exploringSiteKey;
+    @Nullable
+    private BlockPos exploringWaypoint;
     private int calmTicks;
     private BlockPos blockTarget;
     private int blockTicks;
@@ -169,11 +186,13 @@ public final class CloneController {
         this.motor = new Motor(self);
         this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
         this.crafting = new Crafting(self, motor, perception);
+        this.pitSafety = new PitSafety(self, motor, crafting);
         this.escape = new Escape(self, motor);
         this.storage = new Storage(self, motor, perception, crafting);
         this.farming = new Farming(self, motor);
         this.expedition = new Expedition(self, motor);
         this.discovery = new Discovery(self, motor, perception);
+        this.structureMemory = com.rlclones.clone.StructureMemory.get(self.getServer());
         this.consumables = new Consumables(self, motor, perception);
         this.brewing = new Brewing(self, motor, perception);
         this.animals = new Animals(self, motor, perception);
@@ -183,6 +202,7 @@ public final class CloneController {
         this.perch = new Perch(self, motor, perception);
         this.boatTrap = new BoatTrap(self, motor);
         this.lighting = new Lighting(self, motor);
+        this.doorBreath = new DoorBreath(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
         this.foodAid = new FoodAid(self, motor);
@@ -210,8 +230,21 @@ public final class CloneController {
             Brain b = self.getCloneBrain();
             return b != null && b.isHarmful(id);
         });
+        perception.setStructureObserver(this::observeStructureBlock);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
+    }
+
+    private void observeStructureBlock(BlockPos pos, BlockState state) {
+        if (self.isCreative()) {
+            return;
+        }
+        var site = structureMemory.observe(self.serverLevel(), pos, state, now());
+        if (site != null && structureMemory.markAnnounced(site)) {
+            BlockPos center = site.center();
+            Chat.say(self, Component.literal("Noted a structure at " + center.toShortString()),
+                    "STRUCT " + site.id + " " + center.getX() + " " + center.getY() + " " + center.getZ());
+        }
     }
 
     private Brain brain() {
@@ -224,6 +257,10 @@ public final class CloneController {
 
     public Motor motor() {
         return motor;
+    }
+
+    public PitSafety pitSafety() {
+        return pitSafety;
     }
 
     public Escape escape() {
@@ -320,6 +357,10 @@ public final class CloneController {
 
     public BoatTrap boatTrap() {
         return boatTrap;
+    }
+
+    public DoorBreath doorBreath() {
+        return doorBreath;
     }
 
     public Lighting lighting() {
@@ -549,7 +590,7 @@ public final class CloneController {
         long pr = Prof.t();
         watchTells(now);
         boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
-        boolean itemBusy = buriedReflex(now) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
@@ -624,6 +665,7 @@ public final class CloneController {
                 motor.lookAt(lookBack);
             }
         }
+        pitSafety.tick(option, motor.recentGoal(), this::oftenVisited);
         long pm = Prof.t();
         motor.tick();
         Prof.add(Prof.MOTOR, pm);
@@ -928,6 +970,18 @@ public final class CloneController {
             responders.computeIfAbsent(t.substring(4).trim(), k -> new java.util.HashSet<>()).add(sender.getUUID());
             return;
         }
+        if (t.startsWith("STRUCT ")) {
+            String[] parts = t.split("\\s+");
+            if (parts.length >= 5 && sender.level() instanceof ServerLevel level) {
+                try {
+                    structureMemory.rememberReported(level, parts[1], new BlockPos(Integer.parseInt(parts[2]), Integer.parseInt(parts[3]),
+                            Integer.parseInt(parts[4])), now);
+                } catch (NumberFormatException ignored) {
+                    // malformed reports do not become exploration targets
+                }
+            }
+            return;
+        }
         if (t.startsWith("HAZARD ")) {
             String[] parts = t.split(" ");
             if (parts.length >= 3 && parts[2].startsWith("to=")
@@ -1032,7 +1086,7 @@ public final class CloneController {
             }
         }
         if (self.position().distanceTo(r.pos()) <= 5) {
-            optionReward += 1.0f; // arrived to help: team reward
+            optionReward += 1.0f * self.personality().cooperationReward; // arrived to help: individual social preference
             requests.remove(r);
             answering = null;
             return true;
@@ -1075,6 +1129,15 @@ public final class CloneController {
      * on the block that caused it right away; unknown damage (e.g. infection blocks from mods) on the block that was
      * touched every time it happened and never while standing around unhurt.
      */
+    /** Learn a place-specific negative outcome from any meaningful damage event (mob or environment). */
+    public void onHurt(DamageSource source, float amount) {
+        if (self.isCreative() || amount < 0.5f) {
+            return;
+        }
+        brain().learnSiteExperience(self.level().dimension().location().toString(), self.getBlockX() >> 4, self.getBlockZ() >> 4,
+                -1, -amount * self.personality().injuryPenalty, "hurt:" + source.getMsgId(), now());
+    }
+
     public void onEnvironmentDamage(DamageSource source) {
         long now = now();
         lastEnvHurt = now;
@@ -1465,7 +1528,7 @@ public final class CloneController {
     private static final int BUSY_OPTIONS = Option.HELP.bit() | Option.STORE.bit() | Option.FETCH.bit() | Option.LOOT.bit() | Option.FARM.bit()
             | Option.EXPEDITION.bit() | Option.JOIN.bit() | Option.QUARRY.bit() | Option.BREW.bit() | Option.ANIMALS.bit() | Option.SALVAGE.bit()
             | Option.PORTAL.bit() | Option.FEED.bit() | Option.BREED.bit() | Option.FIGHT.bit() | Option.FLEE.bit() | Option.EAT.bit()
-            | Option.GATHER_WOOD.bit() | Option.MINE.bit() | Option.CRAFT.bit();
+            | Option.GATHER_WOOD.bit() | Option.MINE.bit() | Option.CRAFT.bit() | Option.RETURN.bit();
 
     /** Options only a clone knows about itself (read from chat / its own plans). */
     private long extraTick = Long.MIN_VALUE;
@@ -1509,7 +1572,10 @@ public final class CloneController {
             mask |= Option.FARM.bit(); // a field to work, or water to bring home for one
         }
         // iron / diamonds to dig for, a stone pickaxe still to make, or no food for a trip: no new trips
-        boolean homeBody = digPending(now) || hungryNoFood() || Progression.need(self) == Progression.Need.STONE;
+        boolean homeBody = digPending(now) || hungryNoFood() || Progression.need(self) == Progression.Need.STONE || expedition.returnPending();
+        if (expedition.returnPending()) {
+            mask |= Option.RETURN.bit();
+        }
         if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline())) {
             mask |= Option.EXPEDITION.bit();
         }
@@ -1619,8 +1685,8 @@ public final class CloneController {
         if (lastHealth >= 0) {
             float dh = hp - lastHealth;
             if (dh < 0) {
-                stepReward += dh * 1.5f;
-                optionReward += dh;
+                stepReward += dh * 1.5f * self.personality().injuryPenalty;
+                optionReward += dh * self.personality().injuryPenalty;
                 LivingEntity attacker = self.getLastHurtByMob();
                 if (attacker != null && !perception.isVisible(attacker) && attacker.distanceTo(self) < 32) {
                     // feel where the hit came from and turn around, like a player reacting to the damage tilt
@@ -1635,12 +1701,25 @@ public final class CloneController {
         int food = self.getFoodData().getFoodLevel();
         if (lastFood >= 0 && food > lastFood) {
             optionReward += (food - lastFood) * (lastFood <= 14 ? 1.0f : 0.2f);
+        } else if (lastFood >= 0 && food < lastFood) {
+            optionReward -= (lastFood - food) * 0.05f * self.personality().hungerPenalty;
         }
         lastFood = food;
         long chunk = ChunkPos.asLong(self.getBlockX() >> 4, self.getBlockZ() >> 4);
         if (visitedChunks.size() < 4096 && visitedChunks.add(chunk)) {
-            optionReward += 0.3f;
+            optionReward += 0.3f * self.personality().curiosityReward;
         }
+        if (chunk != lastVisitedChunk) {
+            if (visitedChunkVisits.size() < 4096 || visitedChunkVisits.containsKey(chunk)) {
+                visitedChunkVisits.merge(chunk, 1, Integer::sum);
+            }
+            lastVisitedChunk = chunk;
+        }
+    }
+
+    private boolean oftenVisited(BlockPos pos) {
+        long chunk = ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4);
+        return visitedChunkVisits.getOrDefault(chunk, 0) >= 3;
     }
 
     // ------------------------------------------------------------------ learning from sightings
@@ -1983,6 +2062,8 @@ public final class CloneController {
 
     public void onDeath(DamageSource source) {
         lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel();
+        brain().learnSiteExperience(self.level().dimension().location().toString(), self.getBlockX() >> 4, self.getBlockZ() >> 4,
+                -1, -30f * self.personality().deathPenalty, "death:" + source.getMsgId(), now());
         com.rlclones.RLClones.LOGGER.info("CLONE-DEATH {} {} t={}", self.getGameProfile().getName(), lastDeath, self.level().getGameTime());
         if (option != null) {
             finishOption(true);
@@ -2000,6 +2081,9 @@ public final class CloneController {
 
     // ------------------------------------------------------------------ strategy layer
 
+    /** R-30: until then, no pickaxe in the bag means no digging options (the tool-up route above still runs). */
+    private long noPickUntil = Long.MIN_VALUE;
+
     private void runStrategy(long now) {
         if (option == null) {
             long pd = Prof.t();
@@ -2012,6 +2096,17 @@ public final class CloneController {
         if ((option == Option.STAIRS || option == Option.SHAFT) && !hasPickFor(null) && toolUp(null)) {
             finishOption(false); // digging down by hand: a pickaxe first
             return;
+        }
+        if ((option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY) && !hasPickFor(null) && !self.isCreative()
+                && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && noPickUntil < now) {
+            if (!toolUp(null)) {
+                noPickUntil = now + 1200; // R-30: no pickaxe and none to be made: food and the like for a while, not digging by hand
+            }
+            finishOption(false); // (toolUp true: it chose crafting / wood as the next option)
+            return;
+        }
+        if ((option == Option.STAIRS || option == Option.SHAFT) && optionTicks % 600 == 1) {
+            itemAid.announceDigging(); // R-27
         }
         if (ORE_REFLEX.contains(option) && oreReflex(now)) {
             optionTicks++;
@@ -2034,6 +2129,23 @@ public final class CloneController {
             case FARM -> runFarm();
             case EXPEDITION -> expedition.leadTick() != Expedition.Status.WORKING;
             case JOIN -> expedition.followTick() != Expedition.Status.WORKING;
+            case RETURN -> {
+                BlockPos returnTarget = expedition.returnTarget();
+                if (returnTarget != null) {
+                    double distance = self.distanceTo(Vec3.atBottomCenterOf(returnTarget));
+                    if (Double.isFinite(lastReturnDistance) && lastReturnDistance - distance > 0.05) {
+                        // Give the long return option credit for actual progress; its completion remains an RL-learned reward.
+                        optionReward += (float) Math.min(0.5, (lastReturnDistance - distance) * 0.03) * self.personality().homeReward;
+                    }
+                    lastReturnDistance = distance;
+                }
+                Expedition.Status result = expedition.returnTick();
+                if (result == Expedition.Status.FAILED) {
+                    optionFailed = true;
+                    optionReward -= self.personality().failurePenalty;
+                }
+                yield result != Expedition.Status.WORKING;
+            }
             case QUARRY -> runHarvest(Perception.BlockKind.STONE) || Crafting.stoneNeeded(self) == 0;
             case DISCOVER -> discovery.tick();
             case BREW -> brewing.tick(now) != Brewing.Status.WORKING;
@@ -2049,7 +2161,12 @@ public final class CloneController {
         };
         optionTicks++;
         optionReward -= 0.005f;
-        if (option != null && (done || optionTicks >= option.maxTicks || shouldInterrupt(now))) {
+        boolean timedOut = option != null && !done && optionTicks >= option.maxTicks;
+        if (timedOut) {
+            optionFailed = true;
+            optionReward -= self.personality().failurePenalty;
+        }
+        if (option != null && (done || timedOut || shouldInterrupt(now))) {
             finishOption(false);
         }
     }
@@ -2154,6 +2271,9 @@ public final class CloneController {
     private void startOption(long now) {
         int s = Senses.strategyState(perception, self, self, brain(), now);
         int mask = Senses.strategyMask(perception, self, self, now);
+        if (now < noPickUntil && !hasPickFor(null) && !self.isCreative()) {
+            mask &= ~(Option.MINE.bit() | Option.QUARRY.bit() | Option.STAIRS.bit() | Option.SHAFT.bit());
+        }
         if ((mask & BUSY_OPTIONS) != 0) {
             int idle = Option.STAIRS.bit() | Option.ACHIEVE.bit() | Option.SHAFT.bit();
             if (digPending(now)) {
@@ -2206,7 +2326,12 @@ public final class CloneController {
         }
         optionState = s;
         optionTicks = 0;
-        optionReward = 0;
+        optionFailed = false;
+        optionStartDimension = self.level().dimension().location().toString();
+        optionStartChunkX = self.getBlockX() >> 4;
+        optionStartChunkZ = self.getBlockZ() >> 4;
+        rolesAtOptionStart = StrategyState.teamRoleMask(s);
+        optionReward = brain().siteExperienceValue(optionStartDimension, optionStartChunkX, optionStartChunkZ, option.ordinal(), now) * 0.25f;
         goal = null;
         fleeStuck = 0;
         lastFleeStuck = 0;
@@ -2278,6 +2403,17 @@ public final class CloneController {
         }
     }
 
+    private float roleFeedback(Option completed) {
+        int role = completed.roleBit();
+        if (role == 0 || completed.collaborative()) {
+            return 0f;
+        }
+        if ((rolesAtOptionStart & role) != 0) {
+            return -0.3f * self.personality().failurePenalty;
+        }
+        return rolesAtOptionStart != 0 && optionReward > 0.25f ? 0.2f * self.personality().cooperationReward : 0f;
+    }
+
     private void finishOption(boolean died) {
         if (option == null) {
             return;
@@ -2296,16 +2432,27 @@ public final class CloneController {
         if (option == Option.STAIRS || option == Option.SHAFT) {
             noteDigEnd(now, died);
         }
+        optionReward += roleFeedback(option);
         noteOptionEnd(option, optionTicks, optionReward, died, now);
         if (died) {
-            optionReward -= 30f;
+            optionReward -= 30f * self.personality().deathPenalty;
         }
         if (expedition.takeFinished()) {
-            optionReward += 5f;
+            optionReward += 5f * (option == Option.JOIN ? self.personality().cooperationReward : self.personality().curiosityReward);
         }
+        if (expedition.takeReturned()) {
+            optionReward += 3f * self.personality().homeReward;
+        }
+        String experienceDimension = optionStartDimension == null ? self.level().dimension().location().toString() : optionStartDimension;
+        int experienceChunkX = optionStartDimension == null ? self.getBlockX() >> 4 : optionStartChunkX;
+        int experienceChunkZ = optionStartDimension == null ? self.getBlockZ() >> 4 : optionStartChunkZ;
+        String outcome = died ? "death:" + lastDeath : optionFailed ? "failure:" + option.key() : "success:" + option.key();
+        brain().learnSiteExperience(experienceDimension, experienceChunkX, experienceChunkZ, option.ordinal(), optionReward, outcome, now);
         int s2 = died ? 0 : Senses.strategyState(perception, self, self, brain(), now);
         int mask2 = died ? 0 : Senses.strategyMask(perception, self, self, now);
-        float gamma = (float) Math.pow(0.995, Math.max(1, optionTicks));
+        // Semi-Markov options last many ticks; discount once per second rather than once per raw tick,
+        // otherwise a later return/stocking reward has effectively zero value after a long expedition.
+        float gamma = (float) Math.pow(0.995, Math.max(1.0, optionTicks / 20.0));
         brain().learn(Brain.STRATEGY, optionState, option.ordinal(), optionReward, s2, died, gamma, mask2, 1f, false);
         if (option == Option.CRAFT) {
             crafting.reset();
@@ -2335,6 +2482,9 @@ public final class CloneController {
         }
         motor.resetMining();
         motor.clearPath();
+        lastReturnDistance = Double.NaN;
+        optionStartDimension = null;
+        optionFailed = false;
         option = null;
     }
 
@@ -2480,7 +2630,7 @@ public final class CloneController {
     private void closeCombatStep(boolean terminal, boolean died) {
         if (action != null && combatState >= 0 && targetType != null) {
             if (died) {
-                stepReward -= 25f;
+                stepReward -= 25f * self.personality().deathPenalty;
             }
             if (terminal || target == null || !target.isAlive()) {
                 brain().learn(targetType, combatState, action.ordinal(), stepReward, 0, true, 0f, 0, 1f, false);
@@ -3621,6 +3771,35 @@ public final class CloneController {
     }
 
     private boolean runExplore() {
+        var site = structureMemory.nearestUnexplored(self.level().dimension(), self.position(), 128);
+        if (site != null && safeToExplore(site)) {
+            if (!site.key.equals(exploringSiteKey) || exploringWaypoint == null) {
+                exploringSiteKey = site.key;
+                exploringWaypoint = structureMemory.nextWaypoint(site);
+            }
+            if (exploringWaypoint != null) {
+                BlockPos waypoint = exploringWaypoint;
+                goal = Vec3.atBottomCenterOf(waypoint);
+                boolean arrived = motor.navigate(goal, 1.5, false);
+                if (arrived) {
+                    boolean chest = site.chests().contains(waypoint);
+                    boolean loot = chest && storage.canLoot();
+                    structureMemory.visit(site, waypoint);
+                    exploringWaypoint = null;
+                    goal = null;
+                    if (loot) {
+                        nextOption = Option.LOOT;
+                        return true;
+                    }
+                    return false; // continue on to the next landmark in this same structure
+                }
+                return motor.stuckCount() > 3;
+            }
+            exploringSiteKey = null;
+        } else {
+            exploringSiteKey = null;
+            exploringWaypoint = null;
+        }
         if (goal == null) {
             goal = pickExploreGoal();
         }
@@ -3632,6 +3811,33 @@ public final class CloneController {
             endLook();
         }
         return arrived || motor.stuckCount() > 3;
+    }
+
+    private boolean safeToExplore(com.rlclones.clone.StructureMemory.Site site) {
+        if (hasStructureCombatGear()) {
+            return true;
+        }
+        if (site.dangerous) {
+            return false;
+        }
+        BlockPos min = site.min();
+        BlockPos max = site.max();
+        AABB area = new AABB(min.getX(), min.getY(), min.getZ(), max.getX() + 1, max.getY() + 1, max.getZ() + 1).inflate(8);
+        return self.level().getEntitiesOfClass(Mob.class, area, m -> m.isAlive() && Senses.isHostileTo(m, self)).size() < 5;
+    }
+
+    private boolean hasStructureCombatGear() {
+        for (ItemStack stack : self.getInventory().items) {
+            if (stack.getItem() instanceof net.minecraft.world.item.SwordItem sword && sword.getTier().getLevel() >= 2) {
+                return true; // iron or better
+            }
+        }
+        for (ItemStack stack : self.getInventory().armor) {
+            if (stack.getItem() instanceof net.minecraft.world.item.ArmorItem armor && armor.getDefense() >= 5) {
+                return true; // at least an iron chestplate's protection
+            }
+        }
+        return false;
     }
 
     private Vec3 pickExploreGoal() {
@@ -3856,8 +4062,76 @@ public final class CloneController {
         return true;
     }
 
+    /** R-18: blocks put down to reach the top of a tree (taken up again from the top once it is cut), and the pillar being built. */
+    private final java.util.ArrayDeque<BlockPos> scaffold = new java.util.ArrayDeque<>();
+    private BlockPos scafBase;
+    private boolean scafPlaced;
+    private int scafTicks;
+    private int scafFails;
+    /** Scaffold blocks put down to reach high logs (tests). */
+    public int scaffoldsPlaced;
+
+    /** One tick of pillaring up beside a tree. False when it cannot (no block / jump blocked too often). */
+    private boolean scaffoldStep() {
+        ServerLevel level = self.serverLevel();
+        if (scafBase == null) {
+            scafBase = self.blockPosition();
+            scafPlaced = false;
+            scafTicks = 0;
+        }
+        scafTicks++;
+        if (!scafPlaced) {
+            if (scafTicks <= 1 && self.onGround()) {
+                motor.jump();
+            }
+            if (self.getY() >= scafBase.getY() + 1.0 && level.getBlockState(scafBase).canBeReplaced()) {
+                Equipment.select(self, Equipment.pillarBlockSlot(self));
+                if (motor.useOnTopFace(scafBase.below())) {
+                    scafPlaced = true;
+                    scaffold.addLast(scafBase);
+                    scaffoldsPlaced++;
+                } else {
+                    scafBase = null;
+                    return ++scafFails < 3;
+                }
+            } else if (scafTicks > 14) {
+                scafBase = null;
+                return ++scafFails < 6;
+            }
+        } else if (self.onGround()) {
+            scafBase = null;
+        }
+        return true;
+    }
+
+    /** Take the scaffold down again, topmost first (the block under our feet; we drop onto the next one). True while at it. */
+    private boolean climbDown() {
+        BlockPos top = scaffold.peekLast();
+        ServerLevel level = self.serverLevel();
+        if (top == null) {
+            return false;
+        }
+        if (level.getBlockState(top).isAir() || level.getBlockState(top).canBeReplaced()) {
+            scaffold.pollLast();
+            return !scaffold.isEmpty();
+        }
+        if (self.blockPosition().getY() <= top.getY() || ++scafTicks > 400) {
+            scaffold.clear(); // not on it any more: leave it
+            motor.resetMining();
+            return false;
+        }
+        Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(top)));
+        if (motor.mine(top)) {
+            scaffold.pollLast();
+        }
+        return true;
+    }
+
     private boolean runHarvest(Perception.BlockKind kind) {
         ServerLevel level = self.serverLevel();
+        if (kind == Perception.BlockKind.LOG && blockTarget == null && climbDown()) {
+            return false;
+        }
         if (blockTarget != null && perception.kindAt(blockTarget) != (harvestKind != null ? harvestKind : kind)) {
             perception.forgetBlock(blockTarget);
             blockTarget = null;
@@ -3930,6 +4204,17 @@ public final class CloneController {
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3) {
+            if (kind == Perception.BlockKind.LOG && center.y - self.getEyeY() > 0.5 && Motor.horizontalDistance(self.position(), center) < 3.0
+                    && scaffold.size() < 8 && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && !self.isInWater()) {
+                if (scaffoldStep()) {
+                    return false; // a high log: pillar up beside the trunk
+                }
+                scafFails = 0;
+                skipBlocks.put(blockTarget.immutable(), now());
+                perception.forgetBlock(blockTarget);
+                blockTarget = null;
+                return false;
+            }
             motor.navigate(kind == Perception.BlockKind.LOG ? center : motor.approachPoint(blockTarget), kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
             if (motor.stuckCount() > 3) {
                 traceHarvest("stuck " + self.blockPosition().toShortString());
@@ -3953,7 +4238,9 @@ public final class CloneController {
                     perception.noteBlock(p);
                 }
             }
-            return blocksDone >= 8;
+            boolean moreTree = kind == Perception.BlockKind.LOG && harvestKind == Perception.BlockKind.LOG
+                    && BlockPos.betweenClosedStream(done.offset(-1, 0, -1), done.offset(1, 2, 1)).anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS));
+            return blocksDone >= (moreTree ? 24 : 8); // R-18: a tree half cut is cut to the top
         }
         return false;
     }

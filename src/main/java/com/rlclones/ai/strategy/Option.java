@@ -52,7 +52,9 @@ public enum Option {
     /** Dig a staircase down for ore - or carry on down one already started. */
     STAIRS(3000),
     /** Dig a shaft straight down with ladders - or carry on down one already started. */
-    SHAFT(4000);
+    SHAFT(4000),
+    /** Return from an expedition to its remembered rally point / home. */
+    RETURN(6000);
 
     public static final Option[] VALUES = values();
     public static final int COUNT = VALUES.length;
@@ -66,6 +68,21 @@ public enum Option {
 
     public int bit() {
         return 1 << ordinal();
+    }
+
+    /** Shared high-level team roles visible in the strategy state. */
+    public int roleBit() {
+        return switch (this) {
+            case FARM, HUNT, FISH, ANIMALS, FEED, BREED -> 1; // food and home life
+            case GATHER_WOOD, MINE, QUARRY, STAIRS, SHAFT, SALVAGE, CRAFT, STORE, FETCH -> 2; // supplies
+            case EXPLORE, EXPEDITION, JOIN, LOOT, DISCOVER, PORTAL, FOLLOW, HELP, RETURN -> 4; // exploration and travel
+            default -> 0;
+        };
+    }
+
+    /** These tasks deliberately involve team travel/help and must not be discouraged as duplicated work. */
+    public boolean collaborative() {
+        return this == EXPEDITION || this == JOIN || this == HELP || this == FEED || this == BREED || this == RETURN;
     }
 
     public String key() {

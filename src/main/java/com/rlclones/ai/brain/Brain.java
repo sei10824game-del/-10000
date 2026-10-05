@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -106,12 +107,116 @@ public final class Brain {
     /** Things learned once and for all: "visited:<dimension>", "noboat:<entity type>"... */
     private final Set<String> flags = new java.util.HashSet<>();
 
+    // ---------------------------------------------------------------- place- and action-specific episodic reward memory
+
+    private static final long EXPERIENCE_TTL = 48_000L;
+    private static final int EXPERIENCE_LIMIT = 256;
+
+    private static final class SiteExperience {
+        final String dimension;
+        final int chunkX;
+        final int chunkZ;
+        final int action;
+        float value;
+        int samples;
+        long lastTick;
+        String cause = "";
+
+        SiteExperience(String dimension, int chunkX, int chunkZ, int action) {
+            this.dimension = dimension;
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
+            this.action = action;
+        }
+    }
+
+    /** LRU-bounded online reward estimates keyed by dimension, chunk and strategy action. Action -1 is a general hazard. */
+    private final LinkedHashMap<String, SiteExperience> siteExperiences = new LinkedHashMap<>(32, 0.75f, true);
+
     public boolean hasFlag(String f) {
         return flags.contains(f);
     }
 
     public void setFlag(String f) {
         flags.add(f);
+    }
+
+    /** Add one bounded-reward outcome to the persistent memory for this place and action. */
+    public void learnSiteExperience(String dimension, int chunkX, int chunkZ, int action, float reward, String cause, long now) {
+        if (dimension == null || dimension.isBlank() || !Float.isFinite(reward)) {
+            return;
+        }
+        String key = experienceKey(dimension, chunkX, chunkZ, action);
+        SiteExperience experience = siteExperiences.get(key);
+        if (experience == null) {
+            experience = new SiteExperience(dimension, chunkX, chunkZ, action);
+            siteExperiences.put(key, experience);
+        }
+        long age = Math.max(0, now - experience.lastTick);
+        float sample = Math.max(-1f, Math.min(1f, reward / 5f));
+        if (experience.samples == 0 || age >= EXPERIENCE_TTL) {
+            experience.value = sample;
+            experience.samples = 1;
+        } else {
+            int n = Math.min(8, experience.samples + 1);
+            experience.value += (sample - experience.value) / n;
+            experience.samples = n;
+        }
+        experience.lastTick = now;
+        if (cause != null && !cause.isBlank()) {
+            experience.cause = cause.length() > 96 ? cause.substring(0, 96) : cause;
+        }
+        trimSiteExperiences();
+    }
+
+    private static String experienceKey(String dimension, int chunkX, int chunkZ, int action) {
+        return dimension + "|" + chunkX + "|" + chunkZ + "|" + action;
+    }
+
+    /** Decayed estimate for repeating {@code action} here; falls back to general hazards at this chunk. */
+    public float siteExperienceValue(String dimension, int chunkX, int chunkZ, int action, long now) {
+        SiteExperience experience = siteExperiences.get(experienceKey(dimension, chunkX, chunkZ, action));
+        if (experience == null) {
+            experience = siteExperiences.get(experienceKey(dimension, chunkX, chunkZ, -1));
+        }
+        if (experience == null) {
+            return 0f;
+        }
+        long age = Math.max(0, now - experience.lastTick);
+        if (age >= EXPERIENCE_TTL) {
+            return 0f;
+        }
+        return experience.value * (1f - age / (float) EXPERIENCE_TTL);
+    }
+
+    /** 0 = unknown, 1 = mostly positive, 2 = mostly negative, 3 = mixed outcomes at this chunk. */
+    public int siteExperienceBand(String dimension, int chunkX, int chunkZ, long now) {
+        boolean positive = false;
+        boolean negative = false;
+        for (SiteExperience experience : siteExperiences.values()) {
+            if (!experience.dimension.equals(dimension) || experience.chunkX != chunkX || experience.chunkZ != chunkZ) {
+                continue;
+            }
+            long age = Math.max(0, now - experience.lastTick);
+            if (age >= EXPERIENCE_TTL) {
+                continue;
+            }
+            float value = experience.value * (1f - age / (float) EXPERIENCE_TTL);
+            positive |= value > 0.15f;
+            negative |= value < -0.15f;
+        }
+        return positive && negative ? 3 : negative ? 2 : positive ? 1 : 0;
+    }
+
+    public int siteExperienceCount() {
+        return siteExperiences.size();
+    }
+
+    private void trimSiteExperiences() {
+        while (siteExperiences.size() > EXPERIENCE_LIMIT) {
+            String eldest = siteExperiences.keySet().iterator().next();
+            siteExperiences.remove(eldest);
+        }
     }
 
     // ---------------------------------------------------------------- how to use an item (learned by trying)
@@ -468,7 +573,7 @@ public final class Brain {
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putInt("version", 1);
+        tag.putInt("version", 2);
         tag.putByteArray("strategy", strategy.toBytes());
         CompoundTag c = new CompoundTag();
         combat.forEach((k, v) -> c.putByteArray(k, v.toBytes()));
@@ -508,6 +613,20 @@ public final class Brain {
         net.minecraft.nbt.ListTag fl = new net.minecraft.nbt.ListTag();
         flags.forEach(f -> fl.add(net.minecraft.nbt.StringTag.valueOf(f)));
         tag.put("flags", fl);
+        net.minecraft.nbt.ListTag experiences = new net.minecraft.nbt.ListTag();
+        for (SiteExperience experience : siteExperiences.values()) {
+            CompoundTag e = new CompoundTag();
+            e.putString("dimension", experience.dimension);
+            e.putInt("chunkX", experience.chunkX);
+            e.putInt("chunkZ", experience.chunkZ);
+            e.putInt("action", experience.action);
+            e.putFloat("value", experience.value);
+            e.putInt("samples", experience.samples);
+            e.putLong("lastTick", experience.lastTick);
+            e.putString("cause", experience.cause);
+            experiences.add(e);
+        }
+        tag.put("siteExperiences", experiences);
         int[] pq = new int[PARKOUR_GAPS * 2];
         int[] pn = new int[PARKOUR_GAPS * 2];
         for (int g = 0; g < PARKOUR_GAPS; g++) {
@@ -597,6 +716,22 @@ public final class Brain {
         for (int i = 0; i < fl.size(); i++) {
             b.flags.add(fl.getString(i));
         }
+        net.minecraft.nbt.ListTag experiences = tag.getList("siteExperiences", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        for (int i = 0; i < experiences.size(); i++) {
+            CompoundTag e = experiences.getCompound(i);
+            String dimension = e.getString("dimension");
+            float value = e.getFloat("value");
+            if (dimension.isBlank() || !Float.isFinite(value)) {
+                continue;
+            }
+            SiteExperience experience = new SiteExperience(dimension, e.getInt("chunkX"), e.getInt("chunkZ"), e.getInt("action"));
+            experience.value = Math.max(-1f, Math.min(1f, value));
+            experience.samples = Math.max(1, Math.min(8, e.getInt("samples")));
+            experience.lastTick = e.getLong("lastTick");
+            experience.cause = e.getString("cause");
+            b.siteExperiences.put(experienceKey(dimension, experience.chunkX, experience.chunkZ, experience.action), experience);
+        }
+        b.trimSiteExperiences();
         int[] pq = tag.getIntArray("parkQ");
         int[] pn = tag.getIntArray("parkN");
         if (pq.length == PARKOUR_GAPS * 2 && pn.length == pq.length) {
@@ -682,6 +817,28 @@ public final class Brain {
         b.itemFacts.forEach(itemFacts::putIfAbsent);
         knownBlocks.addAll(b.knownBlocks);
         flags.addAll(b.flags);
+        for (SiteExperience source : b.siteExperiences.values()) {
+            String key = experienceKey(source.dimension, source.chunkX, source.chunkZ, source.action);
+            SiteExperience target = siteExperiences.get(key);
+            if (target == null) {
+                target = new SiteExperience(source.dimension, source.chunkX, source.chunkZ, source.action);
+                target.value = source.value;
+                target.samples = source.samples;
+                target.lastTick = source.lastTick;
+                target.cause = source.cause;
+                siteExperiences.put(key, target);
+            } else {
+                int n1 = Math.max(1, target.samples);
+                int n2 = Math.max(1, source.samples);
+                target.value = (target.value * n1 + source.value * n2) / (float) (n1 + n2);
+                target.samples = Math.min(8, n1 + n2);
+                if (source.lastTick >= target.lastTick) {
+                    target.lastTick = source.lastTick;
+                    target.cause = source.cause;
+                }
+            }
+        }
+        trimSiteExperiences();
         for (int g = 0; g < PARKOUR_GAPS; g++) {
             for (int a = 0; a < 2; a++) {
                 int n = parkN[g][a] + b.parkN[g][a];

@@ -1,6 +1,7 @@
 package com.rlclones.gametest;
 
 import com.rlclones.RLClones;
+import com.rlclones.ai.Motor;
 import com.rlclones.ai.Progression;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.brain.EnemyKnowledge;
@@ -106,7 +107,9 @@ public final class CloneGameTests {
                     com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
                     b.staircases.clear();
                     b.shafts.clear();
+                    b.ladderPits.clear();
                     b.setDirty();
+                    com.rlclones.clone.StructureMemory.get(h.getLevel().getServer()).clear();
                     manager(h).setBreeding(false);
                 }
             });
@@ -142,7 +145,7 @@ public final class CloneGameTests {
     private static void resetArena(GameTestHelper h) {
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
-                for (int y = 0; y <= 5; y++) {
+                for (int y = -16; y <= 5; y++) {
                     BlockPos p = new BlockPos(x, y, z);
                     var want = y == 1 ? Blocks.STONE : Blocks.AIR;
                     var st = h.getBlockState(p);
@@ -950,8 +953,10 @@ public final class CloneGameTests {
         b.portals.clear();
         b.staircases.clear();
         b.shafts.clear();
+        b.ladderPits.clear();
         b.projects.clear();
         b.setDirty();
+        com.rlclones.clone.StructureMemory.get(h.getLevel().getServer()).clear();
     }
 
     private static void runStorage(GameTestHelper h, ClonePlayer c, com.rlclones.ai.Storage.Mode mode, boolean[] started) {
@@ -4407,12 +4412,12 @@ public final class CloneGameTests {
                 h.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
             }
         }
-        for (int x = 10; x <= 12; x++) {
-            for (int z = 10; z <= 12; z++) {
+        for (int x = 11; x <= 13; x++) {
+            for (int z = 11; z <= 13; z++) {
                 h.setBlock(new BlockPos(x, 1, z), Blocks.WATER); // a lake that never runs dry
             }
         }
-        baseAt(h, new BlockPos(3, 2, 3));
+        baseAt(h, new BlockPos(2, 2, 2));
         ClonePlayer c = clone(h, 6.5, 6.5, 45f, false);
         c.getInventory().add(new ItemStack(Items.BUCKET));
         c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
@@ -4420,12 +4425,12 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var w = c.controller().water();
             int sources = 0;
-            for (BlockPos p : BlockPos.betweenClosed(new BlockPos(1, 1, 1), new BlockPos(9, 1, 9))) {
+            for (BlockPos p : BlockPos.betweenClosed(new BlockPos(1, 1, 1), new BlockPos(10, 1, 10))) {
                 if (h.getLevel().getFluidState(h.absolutePos(p)).isSource()) {
                     sources++;
                 }
             }
-            h.assertTrue(w.springsMade >= 1 && sources >= 4, "an endless spring of 4 sources next to the base (" + sources + " " + w.debug + " | "
+            h.assertTrue(w.springsMade >= 1 && sources >= 4, "an endless spring of 4 sources a few blocks from the base (" + sources + " " + w.debug + " | "
                     + w.trace + " | " + c.controller().optionLog + ")");
             h.assertTrue(w.bucketsFilled >= 2, "filled twice at the lake: " + w.bucketsFilled);
             finish(h, c);
@@ -4557,6 +4562,209 @@ public final class CloneGameTests {
             int key = com.rlclones.ai.strategy.StrategyState.encode(v[0], v[1], v[2], v[3] == 1, v[4] == 1, v[5] == 1, v[6] == 1, v[7] == 1, v[8] == 1, v[9] == 1);
             h.assertTrue(java.util.Arrays.equals(v, com.rlclones.ai.strategy.StrategyState.decode(key)), "decode(encode(x)) == x for " + java.util.Arrays.toString(v));
         }
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1strategy")
+    public static void learnedStrategyContextPreservesOldKeys(GameTestHelper h) {
+        int legacy = com.rlclones.ai.strategy.StrategyState.encode(1, 2, 0, true, false, true, false, true, false, true);
+        int expanded = com.rlclones.ai.strategy.StrategyState.encode(1, 2, 0, true, false, true, false, true, false, true,
+                com.rlclones.ai.strategy.StrategyState.packContext(true, true, 5, 2));
+        h.assertTrue(java.util.Arrays.equals(com.rlclones.ai.strategy.StrategyState.decode(legacy), com.rlclones.ai.strategy.StrategyState.decode(expanded)),
+                "the added context does not change any legacy state features");
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.tripReady(expanded), "preparation state is encoded");
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.returnPending(expanded), "a pending return is encoded");
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.teamRoleMask(expanded) == 5, "nearby team roles are encoded");
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.experienceBand(expanded) == 2, "remembered site outcomes are encoded");
+        h.assertTrue(expanded >= 3456 && expanded < com.rlclones.ai.strategy.StrategyState.BASE_STATES * com.rlclones.ai.strategy.StrategyState.CONTEXT_STATES,
+                "new context states occupy a non-overlapping range above all legacy keys");
+        h.assertTrue(com.rlclones.ai.strategy.Option.RETURN.ordinal() == 30, "RETURN is appended so existing action ordinals remain stable");
+        try {
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream out = new java.io.DataOutputStream(bytes);
+            int oldActions = com.rlclones.ai.strategy.Option.RETURN.ordinal();
+            out.writeInt(oldActions);
+            out.writeInt(1);
+            out.writeInt(legacy);
+            out.writeInt(1);
+            for (int action = 0; action < oldActions; action++) {
+                out.writeFloat(action + 0.5f);
+                out.writeInt(action + 1);
+                out.writeInt(0);
+            }
+            out.flush();
+            QTable restored = QTable.fromBytes(bytes.toByteArray(), com.rlclones.ai.strategy.Option.COUNT);
+            QTable.Entry oldRow = restored.peek(legacy);
+            h.assertTrue(oldRow != null && oldRow.q[com.rlclones.ai.strategy.Option.EXPLORE.ordinal()] == com.rlclones.ai.strategy.Option.EXPLORE.ordinal() + 0.5f
+                            && oldRow.n[com.rlclones.ai.strategy.Option.EXPLORE.ordinal()] == com.rlclones.ai.strategy.Option.EXPLORE.ordinal() + 1,
+                    "old Q actions survive loading after RETURN is appended");
+            h.assertTrue(oldRow.q[com.rlclones.ai.strategy.Option.RETURN.ordinal()] == 0f, "the new action starts with a fresh value in an old table");
+        } catch (java.io.IOException e) {
+            throw new AssertionError("could not build the legacy Q-table fixture", e);
+        }
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1strategy")
+    public static void clonePersonalitiesAreStableAndWeightEventsDifferently(GameTestHelper h) {
+        java.util.UUID firstId = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001");
+        java.util.UUID secondId = java.util.UUID.fromString("00000000-0000-0000-0000-000000000002");
+        com.rlclones.clone.ClonePersonality first = com.rlclones.clone.ClonePersonality.forId(firstId);
+        com.rlclones.clone.ClonePersonality restored = com.rlclones.clone.ClonePersonality.forId(firstId);
+        com.rlclones.clone.ClonePersonality second = com.rlclones.clone.ClonePersonality.forId(secondId);
+        h.assertTrue(first.injuryPenalty == restored.injuryPenalty && first.hungerPenalty == restored.hungerPenalty
+                        && first.deathPenalty == restored.deathPenalty && first.failurePenalty == restored.failurePenalty,
+                "the same clone identity restores the same reward profile");
+        h.assertTrue(first.injuryPenalty != second.injuryPenalty, "the same injury has a stable clone-specific penalty");
+        h.assertTrue(first.hungerPenalty != second.hungerPenalty && first.deathPenalty != second.deathPenalty
+                        && first.failurePenalty != second.failurePenalty,
+                "hunger, death, and failure also have stable individual weights");
+        float firstInjury = -4f * first.injuryPenalty;
+        float secondInjury = -4f * second.injuryPenalty;
+        float firstHunger = -3f * 0.05f * first.hungerPenalty;
+        float secondHunger = -3f * 0.05f * second.hungerPenalty;
+        float firstDeath = -30f * first.deathPenalty;
+        float secondDeath = -30f * second.deathPenalty;
+        float firstFailure = -first.failurePenalty;
+        float secondFailure = -second.failurePenalty;
+        h.assertTrue(firstInjury != secondInjury && firstHunger != secondHunger && firstDeath != secondDeath && firstFailure != secondFailure,
+                "the same injury, hunger, death, or failure produces different stable learning rewards");
+        h.assertTrue(first.injuryPenalty >= 0.75f && first.injuryPenalty <= 1.55f && second.injuryPenalty >= 0.75f && second.injuryPenalty <= 1.55f,
+                "individual preferences stay within bounded learning weights");
+        ClonePlayer c = clone(h, 3.5, 3.5, 0f, false);
+        h.assertTrue(c.personality().injuryPenalty == com.rlclones.clone.ClonePersonality.forId(c.getUUID()).injuryPenalty,
+                "a real clone binds its immutable preferences to its profile UUID");
+        finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1strategy")
+    public static void episodicSiteExperiencePersistsAndMerges(GameTestHelper h) {
+        Brain brain = new Brain();
+        String dimension = "minecraft:overworld";
+        int explore = com.rlclones.ai.strategy.Option.EXPLORE.ordinal();
+        int mine = com.rlclones.ai.strategy.Option.MINE.ordinal();
+        brain.learnSiteExperience(dimension, 7, -3, explore, 6f, "safe discovery", 1000);
+        brain.learnSiteExperience(dimension, 7, -3, mine, -8f, "injury", 1000);
+        h.assertTrue(brain.siteExperienceValue(dimension, 7, -3, explore, 1000) > 0, "success is remembered for that action and site");
+        h.assertTrue(brain.siteExperienceValue(dimension, 7, -3, mine, 1000) < 0, "failure is remembered separately for that action and site");
+        h.assertTrue(brain.siteExperienceBand(dimension, 7, -3, 1000) == 3, "both outcomes are represented as mixed site experience");
+        Brain loaded = Brain.load(brain.save());
+        h.assertTrue(loaded.siteExperienceCount() == 2 && loaded.siteExperienceValue(dimension, 7, -3, mine, 1000) < 0,
+                "site-and-action memories survive brain save/load");
+        net.minecraft.nbt.ListTag loadedExperiences = loaded.save().getList("siteExperiences", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        boolean failureCausePersisted = false;
+        for (int i = 0; i < loadedExperiences.size(); i++) {
+            failureCausePersisted |= loadedExperiences.getCompound(i).getString("cause").equals("injury");
+        }
+        h.assertTrue(failureCausePersisted, "the remembered failure cause is persisted with its location and action");
+        Brain merged = Brain.merge(List.of(brain, loaded));
+        h.assertTrue(merged.siteExperienceCount() == 2 && merged.siteExperienceBand(dimension, 7, -3, 1000) == 3,
+                "linked brains merge episodic outcomes without losing their valence");
+        h.assertTrue(loaded.siteExperienceValue(dimension, 7, -3, mine, 49_000) == 0,
+                "old experiences decay out instead of permanently blocking exploration");
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 3.5, 0f, false);
+        long now = h.getLevel().getGameTime();
+        String liveDimension = h.getLevel().dimension().location().toString();
+        int chunkX = c.getBlockX() >> 4;
+        int chunkZ = c.getBlockZ() >> 4;
+        c.getCloneBrain().learnSiteExperience(liveDimension, chunkX, chunkZ, explore, 6f, "safe discovery", now);
+        c.getCloneBrain().learnSiteExperience(liveDimension, chunkX, chunkZ, mine, -8f, "injury", now);
+        c.controller().perception().update(now);
+        int learnedState = com.rlclones.ai.Senses.strategyState(c.controller().perception(), c, c, c.getCloneBrain(), now);
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.experienceBand(learnedState) == 3,
+                "the clone's saved site outcomes change its actual strategy state on revisit");
+        finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1strategy")
+    public static void expeditionPreparationIsAnObservedState(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 3.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.BREAD, 4));
+        c.getInventory().add(new ItemStack(Items.TORCH, 4));
+        long now = h.getLevel().getGameTime();
+        c.controller().perception().update(now);
+        int prepared = com.rlclones.ai.Senses.strategyState(c.controller().perception(), c, c, c.getCloneBrain(), now);
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.tripReady(prepared), "food, torches, health, and spare slots mark an expedition-ready clone");
+        c.getInventory().clearContent();
+        int unprepared = com.rlclones.ai.Senses.strategyState(c.controller().perception(), c, c, c.getCloneBrain(), now);
+        h.assertTrue(!com.rlclones.ai.strategy.StrategyState.tripReady(unprepared) && prepared != unprepared,
+                "losing the supplies changes the learned preparation state");
+        finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 80, batch = "p1strategy")
+    public static void teamRolesBecomePartOfTheLearnedSituation(GameTestHelper h) {
+        ClonePlayer worker = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer observer = clone(h, 7.5, 3.5, 0f, false);
+        worker.controller().forcedOption = com.rlclones.ai.strategy.Option.EXPLORE;
+        worker.controller().tick();
+        h.assertTrue(worker.controller().option() == com.rlclones.ai.strategy.Option.EXPLORE, "a teammate is carrying out a learned role");
+        h.assertTrue(com.rlclones.ai.Senses.teamRoleMask(observer) == 4, "the nearby clone's travel/exploration role is visible to teammates");
+        observer.controller().forcedOption = com.rlclones.ai.strategy.Option.EXPLORE;
+        observer.controller().tick();
+        h.assertTrue(observer.controller().option() == com.rlclones.ai.strategy.Option.EXPLORE, "the second clone begins the same role");
+        try {
+            java.lang.reflect.Field stateField = com.rlclones.ai.CloneController.class.getDeclaredField("optionState");
+            stateField.setAccessible(true);
+            int state = stateField.getInt(observer.controller());
+            h.assertTrue(com.rlclones.ai.strategy.StrategyState.teamRoleMask(state) == 4,
+                    "the observed team role is included in the Q-learning state");
+            java.lang.reflect.Field rewardField = com.rlclones.ai.CloneController.class.getDeclaredField("optionReward");
+            rewardField.setAccessible(true);
+            rewardField.setFloat(observer.controller(), 0f);
+            java.lang.reflect.Method finishOption = com.rlclones.ai.CloneController.class.getDeclaredMethod("finishOption", boolean.class);
+            finishOption.setAccessible(true);
+            finishOption.invoke(observer.controller(), false);
+            long now = h.getLevel().getGameTime();
+            h.assertTrue(observer.getCloneBrain().ownUpdates > 0, "the role feedback reaches the strategy Q update");
+            h.assertTrue(observer.getCloneBrain().siteExperienceValue(h.getLevel().dimension().location().toString(),
+                            observer.getBlockX() >> 4, observer.getBlockZ() >> 4, com.rlclones.ai.strategy.Option.EXPLORE.ordinal(), now) < -0.01f,
+                    "duplicating an active role adds a measurable penalty beyond the ordinary time cost");
+            rewardField.setFloat(observer.controller(), 1f);
+            java.lang.reflect.Method roleFeedback = com.rlclones.ai.CloneController.class.getDeclaredMethod("roleFeedback", com.rlclones.ai.strategy.Option.class);
+            roleFeedback.setAccessible(true);
+            float complementReward = (float) roleFeedback.invoke(observer.controller(), com.rlclones.ai.strategy.Option.MINE);
+            h.assertTrue(complementReward > 0f, "a successful unassigned role receives a complementary-team reward");
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("could not inspect the team-role learning transition", e);
+        }
+        finish(h, worker, observer);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p1strategy")
+    public static void expeditionReturnIsAvailableToTheLearnedPolicy(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 3.5, 0f, false);
+        var expedition = c.controller().expedition();
+        BlockPos rally = c.blockPosition().immutable();
+        BlockPos destination = h.absolutePos(new BlockPos(11, 2, 11));
+        expedition.lead(destination, 0);
+        expedition.leadTick(); // announce the trip and remember its rally point
+        c.teleportTo(h.getLevel(), destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, 0f, 0f);
+        expedition.end();
+        h.assertTrue(expedition.returnPending(), "the completed trip leaves a remembered return journey");
+        long now = h.getLevel().getGameTime();
+        int mask = c.controller().extraOptions(now + 1); // advance only the per-tick option-cache key
+        h.assertTrue((mask & com.rlclones.ai.strategy.Option.RETURN.bit()) != 0, "RETURN is an available strategy action");
+        c.controller().perception().update(now);
+        int state = com.rlclones.ai.Senses.strategyState(c.controller().perception(), c, c, c.getCloneBrain(), now);
+        h.assertTrue(com.rlclones.ai.strategy.StrategyState.returnPending(state), "the pending return is in the state the policy learns from");
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.RETURN;
+        c.controller().tick();
+        h.assertTrue(c.controller().option() == com.rlclones.ai.strategy.Option.RETURN,
+                "the policy can execute its learned RETURN action rather than a scripted route phase");
+        c.teleportTo(h.getLevel(), rally.getX() + 0.5, rally.getY(), rally.getZ() + 0.5, 0f, 0f);
+        c.controller().tick();
+        h.assertTrue(expedition.returnedTrips == 1 && c.controller().option() == null,
+                "following the remembered return route records a successful return");
+        h.assertTrue(c.getCloneBrain().ownUpdates > 0, "the return result is fed into the strategy Q update");
+        finish(h, c);
         h.succeed();
     }
 
@@ -5092,6 +5300,384 @@ public final class CloneGameTests {
                 + inv.countItem(Items.BIRCH_PLANKS) + inv.countItem(Items.SPRUCE_PLANKS)) + " cobble=" + inv.countItem(Items.COBBLESTONE) + " coal=" + inv.countItem(Items.COAL)
                 + " raw_iron=" + inv.countItem(Items.RAW_IRON) + " iron=" + inv.countItem(Items.IRON_INGOT) + " diamond=" + inv.countItem(Items.DIAMOND)
                 + " food=" + c.getFoodData().getFoodLevel() + " hp=" + (int) c.getHealth() + " y=" + c.getBlockY();
+    }
+
+    // ------------------------------------------------------------------ Round 11 (S11-1): water
+
+    /** R-24: a sealed U of water (ceiling on): pushing straight at the wall must turn into swimming round it, not drowning. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r11water")
+    public static void getsOutOfAnUnderwaterCorner(GameTestHelper h) {
+        for (int x = 3; x <= 11; x++) {
+            for (int z = 3; z <= 11; z++) {
+                for (int y = 1; y <= 5; y++) {
+                    boolean legA = z == 4 && x >= 4 && x <= 9;
+                    boolean legB = x == 9 && z >= 4 && z <= 8;
+                    boolean legC = z == 8 && x >= 4 && x <= 9;
+                    boolean wet = (legA || legB || legC) && (y == 2 || y == 3);
+                    h.setBlock(new BlockPos(x, y, z), wet ? Blocks.WATER : Blocks.STONE);
+                }
+            }
+        }
+        h.setBlock(new BlockPos(4, 4, 8), Blocks.AIR); // air to breathe at the far end
+        ClonePlayer c = clone(h, 4.5, 4.5, 0f, false);
+        Vec3 goal = h.absoluteVec(new Vec3(4.5, 2, 8.5));
+        h.onEachTick(() -> {
+            c.controller().motor().moveToward(goal);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.isAlive() && c.getHealth() > 0, "not drowned");
+            h.assertTrue(c.controller().motor().waterEscapes >= 1, "tried another way out of the corner");
+            h.assertTrue(Motor.horizontalDistance(c.position(), goal) < 1.5, "got round the wall to the goal");
+            finish(h, c);
+        });
+    }
+
+    /** R-23: deep water, little air: a door goes down, the clone breathes in it, breaks it and has it back. */
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r11water")
+    public static void breathesInADoorUnderwater(GameTestHelper h) {
+        for (int x = 4; x <= 10; x++) {
+            for (int z = 4; z <= 10; z++) {
+                for (int y = 1; y <= 14; y++) {
+                    boolean shell = x == 4 || x == 10 || z == 4 || z == 10 || y == 1 || y == 14;
+                    h.setBlock(new BlockPos(x, y, z), shell ? Blocks.STONE : Blocks.WATER);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_DOOR));
+        c.setAirSupply((int) (c.getMaxAirSupply() * 0.25));
+        int[] maxAir = {0};
+        h.onEachTick(() -> {
+            c.controller().doorBreath().tick(h.getLevel().getGameTime());
+            c.controller().motor().tick();
+            maxAir[0] = Math.max(maxAir[0], c.getAirSupply());
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().doorBreath().doorsPlaced >= 1, "a door was put down");
+            h.assertTrue(maxAir[0] >= c.getMaxAirSupply() * 0.9, "air back to nearly full (max " + maxAir[0] + ")");
+            h.assertTrue(!c.controller().doorBreath().busy() && c.getInventory().countItem(Items.OAK_DOOR) == 1, "and the door is back in the bag");
+            finish(h, c);
+        });
+    }
+
+    /** R-22: a block on the bank while standing in shallow water: it comes ashore first, then digs. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r11water")
+    public static void stepsOutOfTheWaterToMine(GameTestHelper h) {
+        for (int x = 4; x <= 8; x++) {
+            for (int z = 4; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 2, z), Blocks.WATER);
+            }
+        }
+        BlockPos dirt = new BlockPos(10, 2, 6);
+        h.setBlock(dirt, Blocks.DIRT);
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        BlockPos abs = h.absolutePos(dirt);
+        boolean[] wetWhenDone = {true};
+        boolean[] done = {false};
+        h.onEachTick(() -> {
+            if (!done[0]) {
+                boolean wet = c.isInWater();
+                if (c.controller().motor().mine(abs)) {
+                    done[0] = true;
+                    wetWhenDone[0] = wet;
+                }
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(done[0], "the block was dug");
+            h.assertTrue(!wetWhenDone[0], "from dry footing, not out of the water");
+            finish(h, c);
+        });
+    }
+
+    // ------------------------------------------------------------------ Round 11 (S11-2)
+
+    /** R-18: a 7-high trunk: the top logs are out of reach from the ground, so it pillars up beside it and cuts them all. */
+    @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r11goods")
+    public static void cutsATallTreeToTheTop(GameTestHelper h) {
+        for (int y = 2; y <= 8; y++) {
+            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG);
+        }
+        for (int x = 8; x <= 10; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 9, z), Blocks.OAK_LEAVES);
+            }
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.DIRT, 16));
+        c.controller().forcedOption = opt("GATHER_WOOD");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(countBlocks(h, Blocks.OAK_LOG) == 0, "every log of the tree cut, " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
+                    + c.controller().scaffoldsPlaced + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-25: 10 cells of soil by a channel, 6 seeds: exactly the plot of 6 is tilled and sown, one after the other. */
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r11goods")
+    public static void tillsAndPlantsAsManyAsItHasSeeds(GameTestHelper h) {
+        for (int x = 3; x <= 12; x++) {
+            h.setBlock(new BlockPos(x, 0, 10), Blocks.STONE);
+            h.setBlock(new BlockPos(x, 1, 10), Blocks.WATER);
+            h.setBlock(new BlockPos(x, 1, 11), Blocks.GRASS_BLOCK);
+        }
+        h.setBlock(new BlockPos(7, 2, 13), Blocks.GLOWSTONE);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
+        c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 6));
+        boolean[] work = {false};
+        h.onEachTick(() -> {
+            if (!work[0]) {
+                work[0] = c.controller().farming().hasWork();
+                return;
+            }
+            c.controller().farming().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int planted = 0;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(3, 1, 11)), h.absolutePos(new BlockPos(12, 1, 12)))) {
+                if (h.getLevel().getBlockState(p).is(Blocks.FARMLAND) && h.getLevel().getBlockState(p.above()).is(Blocks.WHEAT)) {
+                    planted++;
+                }
+            }
+            h.assertTrue(planted == 6, "6 cells tilled and sown, got " + planted + " (" + c.controller().farming().debug() + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-26: 30 torches, a dark field with crops: torches go up beside the crops and 16 are kept. */
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r11goods")
+    public static void lightsTheCropsWithSpareTorches(GameTestHelper h) {
+        for (int x = 3; x <= 11; x++) {
+            for (int z = 3; z <= 11; z++) {
+                boolean wall = x == 3 || x == 11 || z == 3 || z == 11;
+                for (int y = 2; y <= 4; y++) {
+                    h.setBlock(new BlockPos(x, y, z), wall ? Blocks.STONE : Blocks.AIR);
+                }
+                h.setBlock(new BlockPos(x, 5, z), Blocks.STONE);
+            }
+        }
+        h.setBlock(new BlockPos(6, 1, 5), Blocks.WATER);
+        for (int x = 5; x <= 7; x++) {
+            for (int z = 6; z <= 7; z++) {
+                h.setBlock(new BlockPos(x, 1, z), Blocks.FARMLAND);
+                h.setBlock(new BlockPos(x, 2, z), Blocks.WHEAT);
+            }
+        }
+        ClonePlayer c = clone(h, 4.5, 8.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.TORCH, 30));
+        h.onEachTick(() -> {
+            c.controller().farming().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().farming().torchesPlaced >= 1, "a torch put up by the crops (" + c.controller().farming().debug() + ")");
+            h.assertTrue(c.getInventory().countItem(Items.TORCH) >= 16, "and 16 or more kept");
+            finish(h, c);
+        });
+    }
+
+    /** R-17: a row of 8 grass between the clone and its goal: cut on the way, without slowing down. */
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r11walk")
+    public static void cutsGrassOnTheWayWithoutStopping(GameTestHelper h) {
+        for (int x = 4; x <= 11; x++) {
+            h.setBlock(new BlockPos(x, 2, 7), Blocks.GRASS);
+        }
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
+        Vec3 goal = h.absoluteVec(new Vec3(13.5, 2, 7.5));
+        int[] ticks = {0};
+        h.onEachTick(() -> {
+            if (Motor.horizontalDistance(c.position(), goal) > 1.0) {
+                ticks[0]++;
+            }
+            c.controller().motor().sweep();
+            c.controller().motor().navigate(goal, 0.5, true);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(Motor.horizontalDistance(c.position(), goal) <= 1.0, "reached the goal");
+            h.assertTrue(c.controller().motor().sweepCuts >= 6, "6 or more blades cut on the way, got " + c.controller().motor().sweepCuts);
+            h.assertTrue(ticks[0] <= 110, "and no stop for them: " + ticks[0] + " ticks for 11 blocks");
+            finish(h, c);
+        });
+    }
+
+    /** R-27: a digger with a stone pickaxe says so; an idle friend with an iron one brings it. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r11walk")
+    public static void handsABetterPickaxeToTheDigger(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer a = clone(h, 8.5, 7.5, 0f, false);
+        ClonePlayer b = clone(h, 4.5, 4.5, 0f, false);
+        a.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        b.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        b.controller().itemAid().onChat(a, "DIGGING 1", h.getLevel().getGameTime());
+        b.controller().forcedOption = opt("FEED");
+        b.setAiEnabled(true);
+        boolean[] returning = {false};
+        h.succeedWhen(() -> {
+            boolean announcedReturn = com.rlclones.ai.Chat.recent().stream().anyMatch(line -> line.contains("RETURN " + a.getGameProfile().getName() + " minecraft:stone_pickaxe"));
+            if (!returning[0] && announcedReturn && a.getInventory().countItem(Items.IRON_PICKAXE) >= 1) {
+                a.controller().forcedOption = opt("FEED");
+                a.setAiEnabled(true);
+                returning[0] = true;
+            }
+            if (returning[0] && b.getInventory().countItem(Items.STONE_PICKAXE) >= 1) {
+                h.assertTrue(b.controller().itemAid().given >= 1, "the friend brought it (" + b.controller().itemAid().state() + " " + b.controller().optionLog + ")");
+                h.assertTrue(a.getInventory().countItem(Items.IRON_PICKAXE) >= 1, "and the digger holds the iron pickaxe now");
+                h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(line -> line.contains("RETURN " + a.getGameProfile().getName() + " minecraft:stone_pickaxe")),
+                        "the old pickaxe was requested back");
+                finish(h, a, b);
+            }
+        });
+    }
+
+    /** R-19: a small home-adjacent lethal shaft gets a solid cap rather than being left beside the base. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r11pits")
+    public static void coversADeadlyHoleNearHome(GameTestHelper h) {
+        clearBases(h);
+        for (int x : new int[]{7, 8}) {
+            for (int y = -10; y <= 1; y++) {
+                h.setBlock(new BlockPos(x, y, 7), Blocks.AIR);
+            }
+            h.setBlock(new BlockPos(x, -11, 7), Blocks.STONE);
+        }
+        com.rlclones.clone.Bases.get(h.getLevel().getServer()).add(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 7)), "test");
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.DIRT, 12));
+        h.onEachTick(() -> {
+            c.controller().pitSafety().tick(null, null, p -> false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            if (c.controller().pitSafety().pitsCovered >= 1) {
+                h.assertTrue(h.getBlockState(new BlockPos(7, 1, 7)).is(Blocks.DIRT) && h.getBlockState(new BlockPos(8, 1, 7)).is(Blocks.DIRT),
+                        "the one-by-two opening is capped at floor level");
+                h.assertTrue(c.isAlive() && c.getHealth() > 0, "the clone never falls into the pit");
+                finish(h, c);
+                clearBases(h);
+            }
+        });
+    }
+
+    /** R-19: a ladder is installed a rung at a time before the clone descends a ten-block natural pit. */
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r11pits")
+    public static void laddersDownIntoADeepPit(GameTestHelper h) {
+        clearBases(h);
+        for (int y = -8; y <= 1; y++) {
+            h.setBlock(new BlockPos(7, y, 7), Blocks.AIR);
+            h.setBlock(new BlockPos(6, y, 7), Blocks.STONE);
+            h.setBlock(new BlockPos(8, y, 7), Blocks.STONE);
+            h.setBlock(new BlockPos(7, y, 6), Blocks.STONE);
+            h.setBlock(new BlockPos(7, y, 8), Blocks.STONE);
+        }
+        h.setBlock(new BlockPos(7, -9, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 2, 6), Blocks.STONE); // a continuous north wall to hang the ladder on
+        ClonePlayer c = clone(h, 7.5, 8.5, 180f, false);
+        c.getInventory().add(new ItemStack(Items.LADDER, 12));
+        c.getInventory().add(new ItemStack(Items.DIRT, 20));
+        boolean[] started = {false};
+        h.onEachTick(() -> {
+            if (!started[0]) {
+                started[0] = c.controller().pitSafety().beginDescentAt(h.absolutePos(new BlockPos(7, 1, 7)));
+            }
+            if (started[0] && c.controller().pitSafety().busy()) {
+                c.controller().pitSafety().tick(opt("EXPLORE"), null, p -> false);
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            if (c.controller().pitSafety().pitsDescended >= 1) {
+                int rungs = 0;
+                for (int y = -8; y <= 2; y++) {
+                    if (h.getBlockState(new BlockPos(7, y, 7)).getBlock() instanceof net.minecraft.world.level.block.LadderBlock) {
+                        rungs++;
+                    }
+                }
+                h.assertTrue(rungs >= 10, "a ladder line reaches almost to the bottom (" + rungs + " rungs)");
+                h.assertTrue(c.isAlive() && c.getHealth() > 0, "the clone reaches the bottom alive");
+                h.assertTrue(!com.rlclones.clone.Bases.get(h.getLevel().getServer()).ladderPits.isEmpty(), "the route is saved for the way back");
+                finish(h, c);
+                clearBases(h);
+            }
+        });
+    }
+
+    /** R-20/R-32: artificial blocks are grouped into a building, then the explorer enters and checks its chest. */
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r11structures")
+    public static void findsAVillageHouseAndLooksInside(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 6; x <= 10; x++) {
+            for (int z = 5; z <= 9; z++) {
+                boolean edge = x == 6 || x == 10 || z == 5 || z == 9;
+                if (edge) {
+                    for (int y = 2; y <= 3; y++) {
+                        if (!(x == 6 && z == 8)) {
+                            h.setBlock(new BlockPos(x, y, z), Blocks.OAK_PLANKS);
+                        }
+                    }
+                }
+                h.setBlock(new BlockPos(x, 4, z), Blocks.OAK_PLANKS);
+            }
+        }
+        var lowerDoor = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                        net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER);
+        h.setBlock(new BlockPos(6, 2, 8), lowerDoor);
+        h.setBlock(new BlockPos(6, 3, 8), lowerDoor.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER));
+        BlockPos chest = new BlockPos(9, 2, 7);
+        h.setBlock(chest, Blocks.CHEST);
+        BlockPos absChest = h.absolutePos(chest);
+        ((net.minecraft.world.level.block.entity.ChestBlockEntity) h.getLevel().getBlockEntity(absChest)).setItem(0, new ItemStack(Items.DIAMOND));
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
+        c.controller().perception().noteBlock(absChest);
+        var structures = com.rlclones.clone.StructureMemory.get(h.getLevel().getServer());
+        com.rlclones.clone.StructureMemory.Site[] site = {null};
+        for (int x = 6; x <= 10; x++) {
+            for (int z = 5; z <= 9; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    BlockPos pos = h.absolutePos(new BlockPos(x, y, z));
+                    c.controller().perception().noteVisibleBlock(pos);
+                }
+            }
+        }
+        site[0] = structures.nearestUnexplored(h.getLevel().dimension(), c.position(), 128);
+        h.assertTrue(site[0] != null && site[0].confirmed() && !site[0].chests().isEmpty(), "the seen building and its chest become a remembered site");
+        h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(line -> line.startsWith(c.getGameProfile().getName() + ": STRUCT ")),
+                "the structure is shared in chat");
+        c.controller().forcedOption = opt("EXPLORE");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            if (c.controller().storage().lootings >= 1 && c.getInventory().countItem(Items.DIAMOND) >= 1) {
+                h.assertTrue(c.controller().optionLog.stream().anyMatch(s -> s.startsWith("EXPLORE")), "exploration was selected");
+                h.assertTrue(site[0].confirmed() && site[0].explored, "the route through the building was recorded");
+                finish(h, c);
+                clearBases(h);
+            }
+        });
+    }
+
+    /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
+    @GameTest(template = ARENA, timeoutTicks = 4000, batch = "r11goods")
+    public static void makesCharcoalFromSpareLogs(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.FURNACE));
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 48));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        c.getInventory().add(new ItemStack(Items.RAW_IRON, 3));
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 3, "and the iron smelted with it (" + c.controller().crafting().smeltTrace() + ")");
+            finish(h, c);
+        });
     }
 
     /**

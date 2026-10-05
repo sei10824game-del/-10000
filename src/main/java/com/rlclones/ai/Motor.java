@@ -52,6 +52,12 @@ public final class Motor {
     private boolean sneak;
     /** Wants to go down in water (towards a goal or prey below) instead of floating up. */
     private boolean dive;
+    private boolean diveHard;
+    /** R-17: cut the grass in front while walking (set each tick by whoever is after seeds). */
+    private boolean sweep;
+    @Nullable
+    private BlockPos sweepTarget;
+    public int sweepCuts;
     /** Times the clone crouched on its own at a dangerous edge. */
     public int edgeSneaks;
     public int hazardBrakes;
@@ -73,6 +79,16 @@ public final class Motor {
     private Vec3 swimSteer;
     @Nullable
     private Vec3 swimGoal;
+    /** R-24: stuck in a water corner: the way we were heading, the escape stage (left, right, up, back), ticks left in it. */
+    @Nullable
+    private Vec3 escapeBase;
+    private int escapeStage;
+    private int escapeTicks;
+    @Nullable
+    private Vec3 wetAnchor;
+    private int wetTicks;
+    /** Times a stall in water was broken by trying another way (diagnostics, tests). */
+    public int waterEscapes;
 
     // path following
     private PathProxyEntity proxy;
@@ -123,6 +139,94 @@ public final class Motor {
 
     public void dive() {
         dive = true;
+    }
+
+    public void sweep() {
+        sweep = true;
+    }
+
+    /** One-tick R-17 reflex: turn to a breakable plant ahead, then cut it without changing the walking input. */
+    private void sweepAhead() {
+        if (!sweep) {
+            sweepTarget = null;
+            return;
+        }
+        if (moveDir == null || self.isInWater() || self.isPassenger()
+                || !com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING, true)) {
+            sweepTarget = null;
+            return;
+        }
+        ServerLevel level = self.serverLevel();
+        double len = Math.sqrt(moveDir.x * moveDir.x + moveDir.z * moveDir.z);
+        if (len < 1e-4) {
+            sweepTarget = null;
+            return;
+        }
+        if (sweepTarget != null && !sweepable(sweepTarget, level)) {
+            sweepTarget = null;
+        }
+        if (sweepTarget != null) {
+            double dx = sweepTarget.getX() + 0.5 - self.getX();
+            double dz = sweepTarget.getZ() + 0.5 - self.getZ();
+            double dist = Math.sqrt(dx * dx + dz * dz);
+            double dot = dist < 1.0e-4 ? 1.0 : (dx * moveDir.x + dz * moveDir.z) / (dist * len);
+            if (dist > 2.8 || dot < -0.15) {
+                sweepTarget = null;
+            }
+        }
+        if (sweepTarget == null) {
+            BlockPos feet = self.blockPosition();
+            double farthest = 0.0;
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, 0, -3), feet.offset(3, 1, 3))) {
+                if (!sweepable(p, level)) {
+                    continue;
+                }
+                double dx = p.getX() + 0.5 - self.getX();
+                double dz = p.getZ() + 0.5 - self.getZ();
+                double dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < 0.4 || dist > 2.5 || (dx * moveDir.x + dz * moveDir.z) / (dist * len) < 0.7071 || dist <= farthest) {
+                    continue;
+                }
+                farthest = dist;
+                sweepTarget = p.immutable(); // pick a farther blade first, leaving time to turn toward it
+            }
+        }
+        BlockPos target = sweepTarget;
+        if (target == null) {
+            return;
+        }
+        Vec3 point = new Vec3(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
+        lookAt(point); // look and walking are independent Motor intentions
+        Vec3 eye = self.getEyePosition();
+        double dx = point.x - eye.x;
+        double dy = point.y - eye.y;
+        double dz = point.z - eye.z;
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
+        float pitch = (float) -Math.toDegrees(Mth.atan2(dy, horizontal));
+        if (Mth.degreesDifferenceAbs(self.getYHeadRot(), yaw) > 8f || Math.abs(self.getXRot() - pitch) > 8f) {
+            return; // keep walking while the head turns; cut once the grass is actually under the crosshair
+        }
+        Vec3 viewEnd = eye.add(self.getViewVector(1.0F).scale(Math.min(Motor.BLOCK_REACH, eye.distanceTo(point) + 0.25)));
+        BlockHitResult hit = level.clip(new ClipContext(eye, viewEnd, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+        if (hit.getType() != HitResult.Type.MISS && !hit.getBlockPos().equals(target)) {
+            sweepTarget = null; // an obstruction, not a grass blade, is under the crosshair
+            return;
+        }
+        self.gameMode.destroyBlock(target.immutable());
+        sweepCuts++;
+        sweepTarget = null;
+    }
+
+    private boolean sweepable(BlockPos pos, ServerLevel level) {
+        BlockState state = level.getBlockState(pos);
+        return state.is(BlockTags.REPLACEABLE_PLANTS) && state.getDestroySpeed(level, pos) == 0 && self.mayInteract(level, pos);
+    }
+
+    /** Stay down even when air is low (the door breath: the air is at the bottom). */
+    public void diveHard() {
+        dive = true;
+        diveHard = true;
     }
 
     @javax.annotation.Nullable
@@ -259,6 +363,12 @@ public final class Motor {
     public void moveDirection(Vec3 dir) {
         Vec3 h = new Vec3(dir.x, 0, dir.z);
         moveDir = h.lengthSqr() < 1e-6 ? null : h.normalize();
+    }
+
+    /** Current horizontal movement intent, if any; used by safety reflexes before the controls are applied. */
+    @Nullable
+    public Vec3 intendedDirection() {
+        return moveDir;
     }
 
     public void moveToward(Vec3 point) {
@@ -522,6 +632,9 @@ public final class Motor {
             resetMining();
             breakingPos = pos.immutable();
         }
+        if (self.isInWater() && !self.isPassenger() && !self.getAbilities().flying && dryFootingFor(pos)) {
+            return false;
+        }
         Vec3 eye = self.getEyePosition();
         if (eye.distanceTo(Vec3.atCenterOf(pos)) > BLOCK_REACH) {
             lookAt(Vec3.atCenterOf(pos));
@@ -561,6 +674,57 @@ public final class Motor {
         return false;
     }
 
+    private int dryTicks;
+
+    /**
+     * R-22: digging in water is 5x slower, afloat another 5x. Step to a dry spot in reach of {@code pos} (solid floor, feet and
+     * head out of the water); with none, sink to the bottom (standing is 5x, not 25x). True while it is moving us.
+     * ponytail: no re-ranking of ore targets by wet standing spots; add if clones still dig wet a lot.
+     */
+    private boolean dryFootingFor(BlockPos pos) {
+        if (++dryTicks > 80) {
+            return false; // tried long enough: just dig
+        }
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        Vec3 target = Vec3.atCenterOf(pos);
+        BlockPos best = null;
+        double bestD = 1e9;
+        for (int dx = -3; dx <= 3; dx++) {
+            for (int dy = -1; dy <= 2; dy++) {
+                for (int dz = -3; dz <= 3; dz++) {
+                    BlockPos c = feet.offset(dx, dy, dz);
+                    if (c.equals(pos) || c.above().equals(pos) || !level.getBlockState(c.below()).isFaceSturdy(level, c.below(), Direction.UP)
+                            || !level.getBlockState(c).getCollisionShape(level, c).isEmpty() || !level.getBlockState(c.above()).getCollisionShape(level, c.above()).isEmpty()
+                            || !level.getFluidState(c).isEmpty() || !level.getFluidState(c.above()).isEmpty()
+                            || Vec3.atCenterOf(c).add(0, 0.62, 0).distanceTo(target) > BLOCK_REACH - 0.3) {
+                        continue;
+                    }
+                    double d = c.distSqr(feet);
+                    if (d < bestD) {
+                        bestD = d;
+                        best = c;
+                    }
+                }
+            }
+        }
+        if (best != null) {
+            moveToward(Vec3.atBottomCenterOf(best));
+            if (best.getY() > feet.getY()) {
+                jump();
+            }
+            return true;
+        }
+        if (!self.onGround() && !water(feet.above(2))) {
+            return false; // at the surface with nothing under: dig
+        }
+        if (!self.onGround()) {
+            diveHard();
+            return true;
+        }
+        return false;
+    }
+
     private static final double[][] FACE_POINTS = {{0, 0, 0}, {0, 0.45, 0}, {0.45, 0, 0}, {-0.45, 0, 0}, {0, 0, 0.45}, {0, 0, -0.45}, {0, -0.45, 0}};
 
     private Vec3 visiblePoint(ServerLevel level, Vec3 eye, BlockPos pos) {
@@ -579,6 +743,7 @@ public final class Motor {
     }
 
     public void resetMining() {
+        dryTicks = 0;
         if (breakingPos != null && breakStage >= 0) {
             self.level().destroyBlockProgress(self.getId(), breakingPos, -1);
         }
@@ -776,7 +941,7 @@ public final class Motor {
      */
     private boolean swimStroke() {
         if (swimSteer == null || swimGoal == null || moveDir == null || !self.isInWater() || self.isPassenger() || self.isInLava() || sneak
-                || self.isUsingItem() || self.getAbilities().flying || self.level().getGameTime() < strokeOffUntil) {
+                || self.isUsingItem() || self.getAbilities().flying || escapeTicks > 0 || self.level().getGameTime() < strokeOffUntil) {
             return false;
         }
         if (self.getFoodData().getFoodLevel() <= 6 && !self.getAbilities().mayfly) {
@@ -808,8 +973,59 @@ public final class Motor {
         return (float) Mth.clamp(-Math.toDegrees(Math.atan2(dy, horiz)), -40, 50);
     }
 
+    /**
+     * R-24: swimming into a corner (no headway for 20 ticks) goes nowhere. Try, 30 ticks each: left, right, straight up,
+     * back (up first when air is low). ponytail: no BFS to the nearest air cell, "up" covers it; add if it drowns anyway.
+     */
+    private void waterEscape() {
+        if (!self.isInWater() || self.isPassenger() || self.isInLava() || self.getAbilities().flying || (moveDir == null && escapeTicks <= 0)) {
+            wetAnchor = null;
+            wetTicks = 0;
+            escapeTicks = 0;
+            return;
+        }
+        if (escapeTicks > 0) {
+            Vec3 b = escapeBase;
+            switch (escapeStage % 4) {
+                case 0 -> moveDir = new Vec3(b.z, 0, -b.x);
+                case 1 -> moveDir = new Vec3(-b.z, 0, b.x);
+                case 2 -> moveDir = null;
+                default -> moveDir = new Vec3(-b.x, 0, -b.z);
+            }
+            if (escapeStage % 4 == 2) {
+                jump = true;
+                dive = false;
+            }
+            if (--escapeTicks == 0) {
+                escapeStage++;
+                escapeTicks = escapeStage < 4 ? 30 : 0;
+                wetAnchor = self.position();
+                wetTicks = 0;
+            }
+            return;
+        }
+        if (wetAnchor == null) {
+            wetAnchor = self.position();
+        }
+        if (++wetTicks < 20) {
+            return;
+        }
+        boolean stuck = self.position().distanceTo(wetAnchor) < 0.3;
+        wetAnchor = self.position();
+        wetTicks = 0;
+        if (stuck) {
+            Vec3 h = new Vec3(moveDir.x, 0, moveDir.z);
+            escapeBase = h.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : h.normalize();
+            escapeStage = self.getAirSupply() < self.getMaxAirSupply() * 0.3 ? 2 : 0;
+            escapeTicks = 30;
+            waterEscapes++;
+        }
+    }
+
     public void tick() {
         flight();
+        waterEscape();
+        sweepAhead();
         boolean stroke = swimStroke();
         // rotation
         float yaw = self.getYRot();
@@ -919,7 +1135,7 @@ public final class Motor {
                     strokeFrom = self.position();
                     strokeTicks = 0;
                 }
-            } else if (dive && self.getAirSupply() > self.getMaxAirSupply() * 0.3) {
+            } else if (dive && (diveHard || self.getAirSupply() > self.getMaxAirSupply() * 0.3)) {
                 // sink on purpose (what holding the sneak key does for a player in water)
                 jump = false;
                 self.setDeltaMovement(self.getDeltaMovement().add(0, -0.04, 0));
@@ -953,6 +1169,8 @@ public final class Motor {
         sprint = false;
         sneak = false;
         dive = false;
+        diveHard = false;
+        sweep = false;
         flyGoal = null;
         swimSteer = null;
         swimGoal = null;

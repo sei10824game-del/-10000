@@ -7,6 +7,8 @@ import com.rlclones.ai.combat.CombatAction;
 import com.rlclones.ai.combat.CombatState;
 import com.rlclones.ai.strategy.Option;
 import com.rlclones.ai.strategy.StrategyState;
+import com.rlclones.clone.CloneManager;
+import com.rlclones.clone.ClonePlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -349,7 +351,49 @@ public final class Senses {
         boolean ally = nearestAlly(observer, agent, observerSelf, now, 48) != null
                 || (observerSelf != agent && observerSelf.distanceTo(agent) < 48);
         boolean animals = nearestAnimal(observer, agent, now, 24) != null;
-        return StrategyState.encode(hp, food, threat, hasFood(agent), items, resource, ally, isDark(agent), Equipment.isArmed(agent), animals);
+        boolean returning = agent instanceof ClonePlayer clone && clone.controller().expedition().returnPending();
+        int experience = brain == null ? 0 : brain.siteExperienceBand(agent.level().dimension().location().toString(),
+                agent.getBlockX() >> 4, agent.getBlockZ() >> 4, now);
+        int context = StrategyState.packContext(tripReady(agent), returning, teamRoleMask(agent), experience);
+        return StrategyState.encode(hp, food, threat, hasFood(agent), items, resource, ally, isDark(agent), Equipment.isArmed(agent), animals, context);
+    }
+
+    /** Expedition readiness is observed, not required by a hard-coded lead mask, so the policy can learn its value. */
+    private static boolean tripReady(Player agent) {
+        if (agent.getHealth() < agent.getMaxHealth() * 0.7f || FoodAid.foodItems(agent) < 4 || agent.getInventory().countItem(net.minecraft.world.item.Items.TORCH) < 4) {
+            return false;
+        }
+        int free = 0;
+        for (ItemStack stack : agent.getInventory().items) {
+            if (stack.isEmpty() && ++free >= 3) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Role categories currently covered by living nearby clones in the same team. */
+    public static int teamRoleMask(Player agent) {
+        if (!(agent instanceof ServerPlayer serverPlayer)) {
+            return 0;
+        }
+        CloneManager manager = CloneManager.peek();
+        if (manager == null || manager.server() != serverPlayer.getServer()) {
+            return 0;
+        }
+        String team = agent instanceof ClonePlayer clone ? clone.cloneTeam() : ClonePlayer.DEFAULT_TEAM;
+        int mask = 0;
+        for (ClonePlayer peer : manager.clones()) {
+            if (peer == agent || !peer.isAlive() || peer.isRemoved() || peer.level() != agent.level()
+                    || !team.equals(peer.cloneTeam()) || peer.distanceToSqr(agent) > 48 * 48) {
+                continue;
+            }
+            Option working = peer.controller().option();
+            if (working != null) {
+                mask |= working.roleBit();
+            }
+        }
+        return mask;
     }
 
     public static int strategyMask(Perception observer, Player agent, Player observerSelf, long now) {

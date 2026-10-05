@@ -1,6 +1,7 @@
 package com.rlclones.ai;
 
 import com.rlclones.ai.brain.Brain;
+import com.rlclones.clone.Bases;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -78,6 +79,17 @@ public final class Expedition {
     private int memberTicks;
     private boolean finished;
 
+    // a completed trip leaves a learned, optional return task rather than ending at the destination
+    @Nullable
+    private BlockPos returnTarget;
+    @Nullable
+    private ResourceKey<Level> returnDimension;
+    private boolean returnPending;
+    private boolean returned;
+    private int returnTicks;
+    public int returnedTrips;
+    public int failedReturns;
+
     public int led;
     public int joinedTrips;
     public int completed;
@@ -108,6 +120,22 @@ public final class Expedition {
 
     public int need() {
         return need;
+    }
+
+    public boolean returnPending() {
+        return returnPending && returnTarget != null;
+    }
+
+    @Nullable
+    public BlockPos returnTarget() {
+        return returnTarget;
+    }
+
+    /** Collects the "returned home" reward once. */
+    public boolean takeReturned() {
+        boolean done = returned;
+        returned = false;
+        return done;
     }
 
     public Set<UUID> joiners(String leaderName) {
@@ -166,7 +194,7 @@ public final class Expedition {
     }
 
     public boolean canLead(long now) {
-        return !committed() && now - lastLed >= COOLDOWN && self.getHealth() >= self.getMaxHealth() * 0.9f;
+        return !committed() && !returnPending() && now - lastLed >= COOLDOWN && self.getHealth() >= self.getMaxHealth() * 0.7f;
     }
 
     /** Tests: the first-trip delay is over (a trip may be led now). */
@@ -176,7 +204,7 @@ public final class Expedition {
 
     public boolean canJoin(long now) {
         Offer o = offer;
-        return o != null && !committed() && now - o.tick() < GATHER_TICKS && o.dimension() == self.level().dimension()
+        return o != null && !committed() && !returnPending() && now - o.tick() < GATHER_TICKS && o.dimension() == self.level().dimension()
                 && joiners(o.leaderName()).size() < o.need() && Math.sqrt(self.blockPosition().distSqr(o.rally())) < JOIN_RADIUS;
     }
 
@@ -208,6 +236,7 @@ public final class Expedition {
         }
         if (text.startsWith("EXPEDITION_END")) {
             if (joined != null && joined.leader().equals(sender.getUUID())) {
+                queueReturn(joined.dimension(), joined.rally());
                 joined = null;
                 finished = true;
                 completed++;
@@ -246,8 +275,13 @@ public final class Expedition {
         this.kind = "EXPLORE";
         this.foe = "";
         this.calmTicks = 0;
+        this.returnPending = false;
+        this.returnTarget = null;
+        this.returnDimension = null;
+        this.returnTicks = 0;
         this.leading = true;
-        this.rally = self.blockPosition();
+        Bases.Base home = Bases.get(self.getServer()).nearest(self.level().dimension(), self.position(), 32);
+        this.rally = home == null ? self.blockPosition().immutable() : home.center.immutable();
         this.target = target.immutable();
         this.need = need;
         this.phase = 0;
@@ -384,11 +418,64 @@ public final class Expedition {
         if (!leading) {
             return;
         }
+        if (self.isAlive() && rally != null) {
+            queueReturn(self.level().dimension(), rally);
+        }
         leading = false;
         BlockPos p = self.blockPosition();
         Chat.say(self, Component.translatable(kind.equals("HUNT") ? "rlclones.chat.hunt_end" : "rlclones.chat.expedition_end", p.getX(), p.getZ()),
                 "EXPEDITION_END " + p.getX() + " " + p.getY() + " " + p.getZ() + (kind.equals("HUNT") ? " kind=HUNT" : ""));
         joiners.remove(self.getGameProfile().getName());
+    }
+
+    private void queueReturn(ResourceKey<Level> dimension, BlockPos destination) {
+        if (dimension == null || !dimension.equals(self.level().dimension()) || destination == null) {
+            return;
+        }
+        if (self.distanceTo(Vec3.atBottomCenterOf(destination)) <= 4.0) {
+            returnPending = false;
+            returnTarget = null;
+            returnDimension = null;
+            returnTicks = 0;
+            return;
+        }
+        returnDimension = dimension;
+        returnTarget = destination.immutable();
+        returnPending = true;
+        returnTicks = 0;
+    }
+
+    /** The RL-selected RETURN option follows this remembered route; failed attempts remain negative experience. */
+    public Status returnTick() {
+        if (!returnPending || returnTarget == null) {
+            return Status.DONE;
+        }
+        if (returnDimension == null || !returnDimension.equals(self.level().dimension())) {
+            clearReturn();
+            failedReturns++;
+            return Status.FAILED;
+        }
+        if (self.distanceTo(Vec3.atBottomCenterOf(returnTarget)) <= 4.0) {
+            motor.stop();
+            clearReturn();
+            returned = true;
+            returnedTrips++;
+            return Status.DONE;
+        }
+        if (++returnTicks >= 6000) {
+            clearReturn();
+            failedReturns++;
+            return Status.FAILED;
+        }
+        motor.navigate(Vec3.atBottomCenterOf(returnTarget), 3.0, self.distanceTo(Vec3.atBottomCenterOf(returnTarget)) > 16.0);
+        return Status.WORKING;
+    }
+
+    private void clearReturn() {
+        returnPending = false;
+        returnTarget = null;
+        returnDimension = null;
+        returnTicks = 0;
     }
 
     // ================================================================== following
@@ -413,6 +500,7 @@ public final class Expedition {
         }
         ServerPlayer leader = player(o.leader());
         if (leader == null || !leader.isAlive() || leader.level() != self.level() || ++memberTicks > 14000) {
+            queueReturn(o.dimension(), o.rally());
             joined = null;
             return Status.DONE;
         }

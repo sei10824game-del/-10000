@@ -6,6 +6,8 @@ import com.rlclones.ai.Senses;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.combat.CombatAction;
 import com.rlclones.ai.strategy.Option;
+import com.rlclones.clone.ClonePersonality;
+import com.rlclones.clone.ClonePlayer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -41,6 +43,7 @@ public final class AgentWatcher {
     }
 
     private final ServerPlayer self;
+    private final ClonePersonality personality;
     private final Perception perception;
     private final Supplier<Brain> brain;
     private final ToLongFunction<Entity> sinceEnemyAttack;
@@ -49,6 +52,7 @@ public final class AgentWatcher {
 
     public AgentWatcher(ServerPlayer self, Perception perception, Supplier<Brain> brain, ToLongFunction<Entity> sinceEnemyAttack) {
         this.self = self;
+        this.personality = self instanceof ClonePlayer clone ? clone.personality() : ClonePersonality.neutral();
         this.perception = perception;
         this.brain = brain;
         this.sinceEnemyAttack = sinceEnemyAttack;
@@ -162,15 +166,15 @@ public final class AgentWatcher {
         }
     }
 
-    private static float combatReward(List<AgentEvents.Event> events) {
+    private float combatReward(List<AgentEvents.Event> events) {
         float r = 0;
         for (AgentEvents.Event e : events) {
             switch (e.kind()) {
                 case DEALT -> r += e.amount();
-                case HURT -> r -= e.amount() * 1.5f;
+                case HURT -> r -= e.amount() * 1.5f * personality.injuryPenalty;
                 case KILL_HOSTILE -> r += 8f;
                 case KILL_ANIMAL -> r += 4f;
-                case DEATH -> r -= 25f;
+                case DEATH -> r -= 25f * personality.deathPenalty;
                 case BLOCKED -> r += e.amount() * 0.5f;
                 default -> {
                 }
@@ -265,6 +269,8 @@ public final class AgentWatcher {
         int food = agent.getFoodData().getFoodLevel();
         if (food > t.stratFood) {
             reward += (food - t.stratFood) * (t.stratFood <= 14 ? 1.0f : 0.2f);
+        } else if (food < t.stratFood) {
+            reward -= (t.stratFood - food) * 0.05f * personality.hungerPenalty;
         }
         boolean died = !agent.isAlive();
         Brain b = brain.get();
@@ -277,15 +283,15 @@ public final class AgentWatcher {
         }
     }
 
-    private static float strategyReward(List<AgentEvents.Event> events) {
+    private float strategyReward(List<AgentEvents.Event> events) {
         float r = 0;
         for (AgentEvents.Event e : events) {
             switch (e.kind()) {
-                case HURT -> r -= e.amount();
+                case HURT -> r -= e.amount() * personality.injuryPenalty;
                 case DEALT -> r += (e.flags() & AgentEvents.FLAG_HOSTILE) != 0 ? e.amount() * 0.2f : 0f;
                 case KILL_HOSTILE -> r += 6f;
                 case KILL_ANIMAL -> r += 2f;
-                case DEATH -> r -= 30f;
+                case DEATH -> r -= 30f * personality.deathPenalty;
                 case PICKUP -> r += Math.min(e.amount(), 5f) * 0.2f;
                 case BREAK_LOG -> r += 0.5f;
                 case BREAK_ORE -> r += 0.8f;
@@ -298,6 +304,9 @@ public final class AgentWatcher {
     }
 
     private Option inferOption(Player agent, Trace t, List<AgentEvents.Event> events, long now) {
+        if (agent instanceof ClonePlayer clone && clone.controller().option() == Option.RETURN) {
+            return Option.RETURN;
+        }
         boolean fought = false;
         boolean hunted = false;
         boolean ate = false;
