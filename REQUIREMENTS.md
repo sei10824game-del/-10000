@@ -31,17 +31,17 @@
 | R-14 | バケツ作成と無限水源の構築 | 実装 | 実装済 | 検証 |
 | R-15 | バフ/デバフの強化学習 | 設計 | 部分実装 | 観測空間への統合・報酬への寄与(Opusで設計) |
 | R-16 | 地面に広がる効果残留の認知と学習 | 設計 | 部分実装 | 観測空間への統合・報酬への寄与(Opusで設計) |
-| R-17 | 草(種)を歩きながら視線を振って壊す | 実装 | 設計済(plan.md 25章) | 実装済(S11-3。CI待ち) |
-| R-18 | 木の伐採で一番上の原木まで取り切る | 修正 | 設計済(plan.md 25章) | 実装済(S11-2。CI待ち) |
+| R-17 | 草(種)を歩きながら視線を振って壊す | 実装 | 設計済(plan.md 25章) | 実装済・テスト通過(S11-3, run 37358148619) |
+| R-18 | 木の伐採で一番上の原木まで取り切る | 修正 | 設計済(plan.md 25章) | 実装済・テスト失敗(run 37358148619。原木2本残り) |
 | R-19 | 洞窟の深い穴: 降りる道を作る/危険な穴は塞ぐ | 実装 | 設計済(plan.md 25章) | 実装(S11-4) |
 | R-20 | 建造物(村・mod の建造物)を認識して探索 | 実装 | 設計済(plan.md 25章) | 実装(S11-4) |
-| R-21 | 余った原木を木炭にして燃料を確保 | 実装 | 設計済(plan.md 25章) | 実装済(S11-2。CI待ち) |
+| R-21 | 余った原木を木炭にして燃料を確保 | 実装 | 設計済(plan.md 25章) | 実装済・テスト失敗(run 37358148619。木炭はできるが鉄の焼成に回らない) |
 | R-22 | 水に浸からずに掘る(水中・浮上中の採掘をしない) | 修正 | 設計済(plan.md 25章) | 実装済(S11-1。CI待ち) |
 | R-23 | 水中の息継ぎにドアの空気だまりを使う | 実装 | 設計済(plan.md 25章) | 実装済(S11-1。CI待ち) |
-| R-24 | 洞窟の水中で角に張り付いて溺れない | 修正 | 設計済(plan.md 25章) | 実装済(S11-1。CI待ち) |
+| R-24 | 洞窟の水中で角に張り付いて溺れない | 修正 | 設計済(plan.md 25章) | 実装済・テスト通過(S11-1, run 37358148619) |
 | R-25 | 耕すとき手持ちの種の数だけ一度に | 修正 | 設計済(plan.md 25章) | 実装済(S11-2。CI待ち) |
 | R-26 | 余った松明を作物の近く→湧き潰しに使う | 実装 | 設計済(plan.md 25章) | 実装済(S11-2。CI待ち) |
-| R-27 | 掘っているクローンと近くの別クローンでツールを交代 | 実装 | 設計済(plan.md 25章) | 実装済(S11-3。CI待ち) |
+| R-27 | 掘っているクローンと近くの別クローンでツールを交代 | 実装 | 設計済(plan.md 25章) | 実装済・テスト通過(S11-3, run 37358148619) |
 
 ## 受け入れ条件
 
@@ -173,11 +173,12 @@ R-16 効果残留の認知: 地面に広がる効果付き残留を認知し、�
 - Round 10 追加テストは 87da8d6 以降の12ラン(再実行を含む。17ce6d0 と c2cbbf3 は失敗テスト名を未確認で除く)で失敗なし
 - 2b9914f(失敗: 牛の囲い込み・板材を建物から取る)、49fbc8b(失敗: TNTを戦闘で使いボタンで起爆・食べ物を頼んで仲間が持ってくる)。いずれも Round 10 追加テスト以外
 
-### CI停止(2026-10-05 16:36〜): GitHub の支払い/利用上限
+### CI: 課金で停止(2026-10-05 16:36〜18:43)→ 復旧
 
-- run 37342075743(72c2512・S11-3)以降、build と client-smoke が起動しない(0 steps)。Annotations は `The job was not started because recent account payments have failed or your spending limit needs to be increased`。「Billing & plans」の対応まで CI は何も検証しない
-- 最後に実際に走った CI: run 37340276428(12aa8e5、30m53s)。失敗した必須テスト4件: `getsOutOfAnUnderwaterCorner` / `creativeBuildsPortalsAndAnEnchantingRoom` / `pensCowsWhenWheatPilesUp` / `makesCharcoalFromSpareLogs`(このあと b23639d で charcoal テストを修正、未検証)。run 37336877128(62976c6)では `huntsFishInTheWater` と `pearlsOverALavaMoat`(既知flaky)も失敗
-- 注: ログは `gh run view --log-failed` が 403/EOF でも、run の HTML ページの Annotations で失敗テスト名は読める
+- 停止中: run 37342075743(72c2512)以降は build/client-smoke が起動しなかった(0 steps、`The job was not started because recent account payments have failed or your spending limit needs to be increased`)
+- 復旧後: run 37358148619(1cc3ef5・S11-3フォロー)。**ビルド成功・client-smoke 成功**。S11-3 の新規2テストを含めて通過。失敗した必須テストは4件: `makesCharcoalFromSpareLogs`(木炭はできたが、その木炭で鉄を焼く所で失敗)/ `cutsAtallTreeToTheTop`(R-18)/ `creativeBuildsPortalsAndAnEnchantingRoom`(既存)/ `pensCowsWhenWheatPilesUp`(既知の最多不安定)
+- ソーク: 72000tick・6体・errors=0・死亡1(落下)。stone_pick 6/6、furnace 5/6、coal 4/6、iron_ingot 1/6、iron_pick 0/6、diamond 0/6
+- 注: ログは `gh run view --log-failed` が 403/EOF でも、`gh run view <id>` の ANNOTATIONS で失敗テスト名は読める(artifacts のダウンロードは不可のことがある)
 
 ### 観測された不安定テスト(隔離は未実施・要判断)
 

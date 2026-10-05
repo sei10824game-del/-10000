@@ -477,5 +477,8 @@
 - R-27: 掘る側(STAIRS/SHAFT)が 600tick ごとに `DIGGING <tier>`(`ItemAid.announceDigging`)。受けた側が、掘っておらず16ブロック以内で自分の最良ツルハシがより高格なら `offered` の Ask を作り、既存の FEED/`helpTick` で渡す(1本しか無くても渡す)
 - R-27(返す方): `ServerEvents.onPickup` の Thrower(NBT)から渡してくれた相手を `ItemAid.onGift` が覚え、`returnOldTool` が「今の最良より下の最良」=前のツルハシをその相手へ投げ返す(拾った時に即、以後は DIGGING のたび。16ブロックより遠いときは次の機会、1200tick を過ぎたら諦めて保つ)
 - 渡す・返すは `tossTo`(相手の足元へ狙って投げる。target を相手にして本人だけ拾える)に統一。`helpTick` の受け渡しも相手の足元へ投げる形にした(立っている相手が拾えるように)。テスト `handsABetterPickaxeToTheDigger` は鉄を受け取り石を返すことまで見る
-- CI: 2026-10-05 16:36 から GitHub の支払い/利用上限で全ジョブが起動しない(run 37342075743、0 steps)。最後に実際に走ったのは run 37340276428(12aa8e5、30m53s)で、失敗4件: `getsOutOfAnUnderwaterCorner` / `creativeBuildsPortalsAndAnEnchantingRoom` / `pensCowsWhenWheatPilesUp` / `makesCharcoalFromSpareLogs`。run 37336877128(62976c6)では `huntsFishInTheWater`・`pearlsOverALavaMoat`(既知flaky)も失敗。**S11-3 以降(72c2512 とこのセッション)は未検証**。ローカルは JDK/Gradle が無く Maven/Gradle 配布にも到達できないためコンパイル不可
-- 次: 課金の復旧後に CI で S11-1〜S11-3 の失敗を確認 → S11-4(R-19・R-20/R-32)
+- CI(2026-10-05): 16:36〜18:43 は GitHub の支払い/利用上限で全ジョブが起動しなかった(run 37342075743 は 0 steps)。復旧後の run 37358148619(1cc3ef5)で **mod ビルド成功・client-smoke 成功**。ローカルは JDK/Gradle が無く Maven/Gradle 配布にも到達できないためコンパイル不可(検証は CI)
+- run 37358148619 の結果: **S11-3 の新規2テストは通過**(`cutsGrassOnTheWayWithoutStopping`・`handsABetterPickaxeToTheDigger`)。`getsOutOfAnUnderwaterCorner`(S11-1)・`huntsFishInTheWater`・`pearlsOverALavaMoat` も通過
+- 残る必須失敗4件(次にやる): `makesCharcoalFromSpareLogs`(木炭はできた。2つ目の「その木炭で鉄を焼く」で失敗: `smelt[work=false ready=false items=2 fuel=0]`)、`cutsAtallTreeToTheTop`(R-18。「2 left (scaffold 1)」)、`creativeBuildsPortalsAndAnEnchantingRoom`(既存。前ランから)、`pensCowsWhenWheatPilesUp`(既知の最多不安定)
+- ソーク(72000tick・6体・errors=0・死亡1件=落下 option=MINE): wood/table/wood_pick/stone_pick 6/6、furnace 5/6、coal 4/6、**iron_ingot 1/6**(Clone283)、iron_pick 0/6、diamond 0/6。SOAK-OPTIONS: MINE=200・STAIRS=148・SHAFT=1(掘りが選ばれるようになった)。SOAK-NONE は escape=198 が最多
+- 次: 上の4件を直す → S11-4(R-19・R-20/R-32)
