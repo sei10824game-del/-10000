@@ -472,6 +472,10 @@
 - run 37336376594(S11-1のdocsコミット e6de9d4): 失敗5件=corner(修正済)・lava bucket・staircase・climbsUp…・pens。run 37336877128(S11-2 62976c6): corner(修正済)・`creativeBuildsPortalsAndAnEnchantingRoom`・`pearlsOverALavaMoat…`(既知flaky)・`huntsFishInTheWater`(水中。再現を見る)・`makesCharcoalFromSpareLogs`(自分のテスト: 原木を道具・樽・本棚の製作に使い切った。原木を48に増やし、鉄3本の焼成だけを見る形に直した)
 
 ## 29. S11-3 実装(R-17・R-27)
-- R-17: `Motor.sweep()`(その tick だけ有効)と `sweepAhead`: 歩行中、前方2.5ブロック・±45°の草(`REPLACEABLE_PLANTS`で硬さ0)を `destroyBlock` で刈る(1tick1つ。視線は向けない)。`Farming` の SEEDS 作業の移動中に `motor.sweep()`。テスト `cutsGrassOnTheWayWithoutStopping`
-- R-27: 掘る側(STAIRS/SHAFT)が 600tick ごとに `DIGGING <tier>`(`ItemAid.announceDigging`)。受けた側が、掘っておらず16ブロック以内で自分の最良ツルハシがより高格なら、`offered` の Ask を作り、既存の FEED/`helpTick` で渡す(1本しか無くても渡す)。**未実装: 古いツルハシを渡した側へ投げ返す**。テスト `handsABetterPickaxeToTheDigger`
-- 次: S11-4(R-19・R-20/R-32)
+- R-17: `Motor.sweep()`(その tick だけ有効)と `sweepAhead`: 歩行中、前方2.5ブロック・±45°の草を刈る(1tick1つ)。草の判定は `Farming.isGrass`(GRASS/TALL_GRASS/FERN/LARGE_FERN)かつ硬さ0。刈る tick は `lookAtBlock` で視線をその草へ向け、回転はその tick 止めて視線を保つ(次のtickから戻る)。歩みは `moveDir` 基準なので止まらない・曲がらない。`Farming` の SEEDS 作業の移動中だけ `motor.sweep()`。テスト `cutsGrassOnTheWayWithoutStopping`(6本以上・110tick以内・刈った各tickで下向き)
+  - 旧実装は `BlockTags.REPLACEABLE_PLANTS` を使っていたが、この名前は 1.20(23w14a)で `REPLACEABLE_BY_TREES` に改名され 1.20.1 には存在しない=コンパイル不可。`Farming.isGrass` に置換した
+- R-27: 掘る側(STAIRS/SHAFT)が 600tick ごとに `DIGGING <tier>`(`ItemAid.announceDigging`)。受けた側が、掘っておらず16ブロック以内で自分の最良ツルハシがより高格なら `offered` の Ask を作り、既存の FEED/`helpTick` で渡す(1本しか無くても渡す)
+- R-27(返す方): `ServerEvents.onPickup` の Thrower(NBT)から渡してくれた相手を `ItemAid.onGift` が覚え、`returnOldTool` が「今の最良より下の最良」=前のツルハシをその相手へ投げ返す(拾った時に即、以後は DIGGING のたび。16ブロックより遠いときは次の機会、1200tick を過ぎたら諦めて保つ)
+- 渡す・返すは `tossTo`(相手の足元へ狙って投げる。target を相手にして本人だけ拾える)に統一。`helpTick` の受け渡しも相手の足元へ投げる形にした(立っている相手が拾えるように)。テスト `handsABetterPickaxeToTheDigger` は鉄を受け取り石を返すことまで見る
+- CI: 2026-10-05 16:36 から GitHub の支払い/利用上限で全ジョブが起動しない(run 37342075743、0 steps)。最後に実際に走ったのは run 37340276428(12aa8e5、30m53s)で、失敗4件: `getsOutOfAnUnderwaterCorner` / `creativeBuildsPortalsAndAnEnchantingRoom` / `pensCowsWhenWheatPilesUp` / `makesCharcoalFromSpareLogs`。run 37336877128(62976c6)では `huntsFishInTheWater`・`pearlsOverALavaMoat`(既知flaky)も失敗。**S11-3 以降(72c2512 とこのセッション)は未検証**。ローカルは JDK/Gradle が無く Maven/Gradle 配布にも到達できないためコンパイル不可
+- 次: 課金の復旧後に CI で S11-1〜S11-3 の失敗を確認 → S11-4(R-19・R-20/R-32)

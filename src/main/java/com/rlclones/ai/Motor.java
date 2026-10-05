@@ -56,6 +56,9 @@ public final class Motor {
     /** R-17: cut the grass in front while walking (set each tick by whoever is after seeds). */
     private boolean sweep;
     public int sweepCuts;
+    /** R-17: the gaze is on a blade of grass this tick (so the cut is made looking at it). */
+    private boolean sweepAimed;
+    public int sweepLooks;
     /** Times the clone crouched on its own at a dangerous edge. */
     public int edgeSneaks;
     public int hazardBrakes;
@@ -145,6 +148,7 @@ public final class Motor {
 
     /** One tick of R-17: a blade of grass just ahead (within 2.5 blocks, +-45 degrees of where we walk) is cut on the way; the walk goes on. */
     private void sweepAhead() {
+        sweepAimed = false;
         if (!sweep || moveDir == null || self.isInWater() || self.isPassenger() || !com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING, true)) {
             return;
         }
@@ -156,19 +160,42 @@ public final class Motor {
         BlockPos feet = self.blockPosition();
         for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, 0, -3), feet.offset(3, 1, 3))) {
             BlockState st = level.getBlockState(p);
-            if (!st.is(BlockTags.REPLACEABLE_PLANTS) || st.getDestroySpeed(level, p) != 0 || !self.mayInteract(level, p)) {
+            if (!Farming.isGrass(st) || st.getDestroySpeed(level, p) != 0 || !self.mayInteract(level, p)) {
                 continue;
             }
             double dx = p.getX() + 0.5 - self.getX();
             double dz = p.getZ() + 0.5 - self.getZ();
             double dist = Math.sqrt(dx * dx + dz * dz);
             if (dist <= 2.5 && (dist < 0.4 || (dx * moveDir.x + dz * moveDir.z) / (dist * len) >= 0.7071)) {
+                if (lookAtBlock(p)) {
+                    sweepLooks++;
+                }
                 self.gameMode.destroyBlock(p.immutable());
                 sweepCuts++;
                 return; // one a tick
             }
         }
     }
+
+    /** R-17: turn the gaze onto the block for this one tick. The walk is steered by moveDir, so looking aside does not slow it down. */
+    private boolean lookAtBlock(BlockPos p) {
+        Vec3 eye = self.getEyePosition();
+        if (eye.distanceToSqr(p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5) < 1e-6) {
+            return false;
+        }
+        double dx = p.getX() + 0.5 - eye.x;
+        double dy = p.getY() + 0.5 - eye.y;
+        double dz = p.getZ() + 0.5 - eye.z;
+        double horiz = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
+        float pitch = (float) -Math.toDegrees(Mth.atan2(dy, horiz));
+        self.setYRot(yaw);
+        self.setYHeadRot(yaw);
+        self.setXRot(Mth.clamp(pitch, -89f, 89f));
+        sweepAimed = true;
+        return true;
+    }
+
 
     /** Stay down even when air is low (the door breath: the air is at the bottom). */
     public void diveHard() {
@@ -990,6 +1017,11 @@ public final class Motor {
         }
         float dyaw = Mth.clamp(Mth.wrapDegrees(targetYaw - yaw), -MAX_YAW_STEP, MAX_YAW_STEP);
         float dpitch = Mth.clamp(targetPitch - pitch, -MAX_PITCH_STEP, MAX_PITCH_STEP);
+        if (sweepAimed) {
+            // R-17: the glance at the grass is held for this tick (the way back starts on the next one)
+            dyaw = 0f;
+            dpitch = 0f;
+        }
         float newYaw = Mth.wrapDegrees(yaw + dyaw);
         float newPitch = Mth.clamp(pitch + dpitch, -90f, 90f);
         self.setYRot(newYaw);
@@ -1112,6 +1144,7 @@ public final class Motor {
         dive = false;
         diveHard = false;
         sweep = false;
+        sweepAimed = false;
         flyGoal = null;
         swimSteer = null;
         swimGoal = null;

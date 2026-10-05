@@ -50,6 +50,11 @@ public final class ItemAid {
     private final Map<String, Long> coming = new HashMap<>();
     /** R-27: asks that come from a digger's "DIGGING tier" line and our better pickaxe: the only one we have may go. */
     private final java.util.Set<Ask> offered = new java.util.HashSet<>();
+    /** R-27: the friend who tossed us the better pickaxe (the one we had before goes back to them). */
+    @Nullable
+    private UUID toolFrom;
+    private long toolFromAt;
+    public int returned;
     @Nullable
     private Ask helping;
     private int ticks;
@@ -160,6 +165,7 @@ public final class ItemAid {
     /** Say what we dig with, so a friend with a better pickaxe can bring it (every 600 ticks while on the stairs / shaft). */
     public void announceDigging() {
         Chat.say(self, Component.literal("DIGGING"), "DIGGING " + bestPickTier(self));
+        returnOldTool(); // R-27: the old pickaxe also goes back on this beat
     }
 
     /** R-27: a digger within 16 blocks digs with a worse pickaxe than our best, and we are not digging ourselves: bring ours. */
@@ -189,6 +195,69 @@ public final class ItemAid {
             asks.add(a);
             offered.add(a);
         }
+    }
+
+    /** R-27: a pickaxe a friend tossed us (remember them: the one we were using goes back). */
+    public void onGift(UUID from, ItemStack stack) {
+        if (stack.getItem() instanceof PickaxeItem) {
+            toolFrom = from;
+            toolFromAt = now();
+        }
+    }
+
+    /** R-27 (the way back): toss the pickaxe we dug with before to whoever brought us the better one. */
+    public void returnOldTool() {
+        UUID from = toolFrom;
+        if (from == null) {
+            return;
+        }
+        if (now() - toolFromAt > 1200) {
+            toolFrom = null; // too long ago: the friend has moved on, we keep the old one
+            return;
+        }
+        Player friend = online(from);
+        if (friend == null || friend.distanceTo(self) > 16) {
+            return; // not right now: try again later
+        }
+        int best = bestPickTier(self);
+        int old = -1;
+        int oldTier = Integer.MAX_VALUE;
+        var inv = self.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack s = inv.items.get(i);
+            if (s.getItem() instanceof PickaxeItem pi && pi.getTier().getLevel() < best && pi.getTier().getLevel() < oldTier) {
+                oldTier = pi.getTier().getLevel();
+                old = i;
+            }
+        }
+        if (old < 0) {
+            return; // nothing older left (we have only the better one)
+        }
+        toolFrom = null;
+        tossTo(friend, inv.items.get(old).split(1));
+        returned++;
+        debug = "gave back a pickaxe to " + friend.getGameProfile().getName();
+    }
+
+    /** Toss one stack to a friend, aimed so it lands at their feet (only they may pick it up). */
+    private void tossTo(Player friend, ItemStack stack) {
+        Vec3 eye = self.getEyePosition();
+        Vec3 to = friend.position().add(0, 0.5, 0).subtract(eye);
+        float yaw = (float) Math.toDegrees(Mth.atan2(to.z, to.x)) - 90.0F;
+        self.setYRot(yaw);
+        self.setYHeadRot(yaw);
+        self.setXRot(30f);
+        ItemEntity e = self.drop(stack, false, true);
+        if (e == null) {
+            return;
+        }
+        double d = to.length();
+        if (d > 0.05) {
+            double speed = Mth.clamp(0.12 + d * 0.05, 0.15, 0.55);
+            e.setPos(eye.x, eye.y - 0.3, eye.z);
+            e.setDeltaMovement(to.normalize().scale(speed).add(0, 0.02 * (d / speed), 0));
+        }
+        gift(e, friend.getUUID());
     }
 
     // ------------------------------------------------------------------ giving
@@ -328,13 +397,13 @@ public final class ItemAid {
             }
         }
         if (worst >= 0) {
-            gift(self.drop(inv.items.get(worst).split(1), false, true), a.from);
+            tossTo(p, inv.items.get(worst).split(1));
         } else {
             for (int i = 0; i < inv.items.size() && give > 0; i++) {
                 ItemStack s = inv.items.get(i);
                 if (matches(s, a.item)) {
                     int n = Math.min(give, s.getCount());
-                    gift(self.drop(s.split(n), false, true), a.from);
+                    tossTo(p, s.split(n));
                     give -= n;
                 }
             }

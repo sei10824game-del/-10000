@@ -173,6 +173,12 @@ R-16 効果残留の認知: 地面に広がる効果付き残留を認知し、�
 - Round 10 追加テストは 87da8d6 以降の12ラン(再実行を含む。17ce6d0 と c2cbbf3 は失敗テスト名を未確認で除く)で失敗なし
 - 2b9914f(失敗: 牛の囲い込み・板材を建物から取る)、49fbc8b(失敗: TNTを戦闘で使いボタンで起爆・食べ物を頼んで仲間が持ってくる)。いずれも Round 10 追加テスト以外
 
+### CI停止(2026-10-05 16:36〜): GitHub の支払い/利用上限
+
+- run 37342075743(72c2512・S11-3)以降、build と client-smoke が起動しない(0 steps)。Annotations は `The job was not started because recent account payments have failed or your spending limit needs to be increased`。「Billing & plans」の対応まで CI は何も検証しない
+- 最後に実際に走った CI: run 37340276428(12aa8e5、30m53s)。失敗した必須テスト4件: `getsOutOfAnUnderwaterCorner` / `creativeBuildsPortalsAndAnEnchantingRoom` / `pensCowsWhenWheatPilesUp` / `makesCharcoalFromSpareLogs`(このあと b23639d で charcoal テストを修正、未検証)。run 37336877128(62976c6)では `huntsFishInTheWater` と `pearlsOverALavaMoat`(既知flaky)も失敗
+- 注: ログは `gh run view --log-failed` が 403/EOF でも、run の HTML ページの Annotations で失敗テスト名は読める
+
 ### 観測された不安定テスト(隔離は未実施・要判断)
 
 「既知のflakyテスト」には溶岩の堀(パール)だけが書かれているが、CIでは他にも失敗が出ている(Round 10 追加テストではない既存テスト)。

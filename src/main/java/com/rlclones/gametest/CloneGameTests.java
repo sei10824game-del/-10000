@@ -5283,6 +5283,8 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
         Vec3 goal = h.absoluteVec(new Vec3(13.5, 2, 7.5));
         int[] ticks = {0};
+        int[] cuts = {0};
+        List<Float> looks = new ArrayList<>();
         h.onEachTick(() -> {
             if (Motor.horizontalDistance(c.position(), goal) > 1.0) {
                 ticks[0]++;
@@ -5290,10 +5292,17 @@ public final class CloneGameTests {
             c.controller().motor().sweep();
             c.controller().motor().navigate(goal, 0.5, true);
             c.controller().motor().tick();
+            if (c.controller().motor().sweepCuts > cuts[0]) {
+                cuts[0] = c.controller().motor().sweepCuts;
+                looks.add(c.getXRot()); // R-17: the gaze was turned onto the blade as it was cut
+            }
         });
         h.succeedWhen(() -> {
             h.assertTrue(Motor.horizontalDistance(c.position(), goal) <= 1.0, "reached the goal");
-            h.assertTrue(c.controller().motor().sweepCuts >= 6, "6 or more blades cut on the way, got " + c.controller().motor().sweepCuts);
+            h.assertTrue(cuts[0] >= 6, "6 or more blades cut on the way, got " + cuts[0]);
+            h.assertTrue(c.controller().motor().sweepLooks >= cuts[0], "each cut made looking at the grass: "
+                    + c.controller().motor().sweepLooks + " of " + cuts[0]);
+            h.assertTrue(!looks.isEmpty() && looks.stream().allMatch(p -> p > 10f), "and looking down at it, not at the horizon: " + looks);
             h.assertTrue(ticks[0] <= 110, "and no stop for them: " + ticks[0] + " ticks for 11 blocks");
             finish(h, c);
         });
@@ -5311,8 +5320,13 @@ public final class CloneGameTests {
         b.controller().forcedOption = opt("FEED");
         b.setAiEnabled(true);
         h.succeedWhen(() -> {
-            h.assertTrue(b.controller().itemAid().given >= 1, "the friend brought it (" + b.controller().itemAid().state() + " " + b.controller().optionLog + ")");
+            var ib = b.controller().itemAid();
+            h.assertTrue(ib.given >= 1, "the friend brought it (" + ib.state() + " " + b.controller().optionLog + ")");
             h.assertTrue(a.getInventory().countItem(Items.IRON_PICKAXE) >= 1, "and the digger holds the iron pickaxe now");
+            // R-27 (the way back): the pickaxe the digger was using goes to whoever brought the better one
+            var ia = a.controller().itemAid();
+            h.assertTrue(ia.returned >= 1, "the old pickaxe went back (" + ia.state() + ")");
+            h.assertTrue(a.getInventory().countItem(Items.STONE_PICKAXE) == 0, "and is no longer on the digger");
             finish(h, a, b);
         });
     }

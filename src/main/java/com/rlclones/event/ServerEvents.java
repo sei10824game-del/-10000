@@ -438,6 +438,8 @@ public final class ServerEvents {
             net.minecraft.nbt.CompoundTag t = event.getOriginalEntity().saveWithoutId(new net.minecraft.nbt.CompoundTag());
             if (t.hasUUID("Thrower") && !t.getUUID("Thrower").equals(p.getUUID())) {
                 c.foodAid().thank(t.getUUID("Thrower"), com.rlclones.ai.FoodAid.goodFood(event.getStack()) ? 3f : 1f);
+                c.itemAid().onGift(t.getUUID("Thrower"), event.getStack()); // R-27: a better pickaxe was brought over
+                c.itemAid().returnOldTool(); // ... so the pickaxe we used before goes back to whoever brought it
             }
         }
     }

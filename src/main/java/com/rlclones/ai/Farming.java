@@ -113,7 +113,8 @@ public final class Farming {
         return -1;
     }
 
-    private static boolean isGrass(BlockState st) {
+    /** Grass that can be cut in passing for its seeds (R-17 uses it from the walk). */
+    public static boolean isGrass(BlockState st) {
         return st.is(Blocks.GRASS) || st.is(Blocks.TALL_GRASS) || st.is(Blocks.FERN) || st.is(Blocks.LARGE_FERN);
     }
 
