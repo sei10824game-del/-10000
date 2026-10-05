@@ -3237,7 +3237,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             EnemyKnowledge k = c.getCloneBrain().knowledgeIfPresent("minecraft:skeleton");
             String traits = k == null ? "none" : k.traits.toString();
-            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + " | skeleton " + (sk.isAlive() ? "alive" : "dead") + " " + sk.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
+            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + " | skeleton " + (sk.isAlive() ? "alive" : "dead by " + (sk.getLastDamageSource() == null ? "-" : sk.getLastDamageSource().getMsgId() + " " + sk.getLastDamageSource().getEntity()) + " dmg " + sk.getLastHurtByMob()) + " " + sk.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
                     + " hp " + (int) c.getHealth() + " " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " " + c.controller().optionLog + " " + c.controller().tells().debug + ")");
             h.assertTrue(c.controller().tells().tellBlocks >= 2, "and the shield comes up in time to catch the arrows (" + c.controller().tells().tellBlocks
                     + " " + c.controller().tells().debug + ")");
@@ -5040,6 +5040,11 @@ public final class CloneGameTests {
             ClonePlayer c = manager(h).summon(null, level, new Vec3(x + 0.5, y, z + 0.5), i * 60f);
             if (c == null) {
                 continue;
+            }
+            for (String hazard : List.of("minecraft:lava", "minecraft:fire", "minecraft:soul_fire", "minecraft:magma_block", "minecraft:cactus")) {
+                for (int k = 0; k < 3; k++) {
+                    c.getCloneBrain().learnHarmful(hazard); // as if the player had taught them with the L key (a new clone alone learns lava only by dying)
+                }
             }
             c.setAiEnabled(true);
             cleanUpOnFailure(h, c);
