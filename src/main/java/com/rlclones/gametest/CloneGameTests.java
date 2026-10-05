@@ -3207,6 +3207,10 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r9tells")
     public static void learnsTheSignsOfAnAttackAndRaisesTheShieldInTime(GameTestHelper h) {
         // what announces an attack: a creeper swelling (synced entity data, as modded bosses animate theirs), a bow drawn
+        String[] cells = {""};
+        for (int dy = 1; dy <= 4; dy++) {
+            cells[0] += " y" + dy + "=" + h.getBlockState(new BlockPos(10, dy, 7)).getBlock().getDescriptionId().replace("block.minecraft.", "");
+        }
         var creeper = h.spawn(EntityType.CREEPER, new Vec3(12.5, 2, 12.5));
         creeper.setNoAi(true);
         creeper.setSwellDir(1);
@@ -3239,7 +3243,9 @@ public final class CloneGameTests {
             if (death[0].isEmpty() && !sk.isAlive()) {
                 var src = sk.getLastDamageSource();
                 death[0] = "t" + h.getTick() + " " + (src == null ? "no source" : src.getMsgId() + " by " + src.getEntity() + " direct " + src.getDirectEntity())
-                        + " removal " + sk.getRemovalReason() + " clone at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " option " + c.controller().option();
+                        + " removal " + sk.getRemovalReason() + " cells at start" + cells[0] + " now"
+                        + " y2=" + h.getBlockState(new BlockPos(10, 2, 7)).getBlock().getDescriptionId().replace("block.minecraft.", "")
+                        + " y3=" + h.getBlockState(new BlockPos(10, 3, 7)).getBlock().getDescriptionId().replace("block.minecraft.", "") + " clone at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " option " + c.controller().option();
             }
         });
         h.succeedWhen(() -> {
