@@ -46,9 +46,16 @@ public final class StairMining {
     /** Recent events (diagnostics, tests). */
     public String trace = "";
 
+    /** The last events only (soak diagnostics: {@link #trace} stops filling up after the first 500 characters). */
+    public String recent = "";
+
     private void trace(String what) {
         if (trace.length() < 500) {
             trace += " " + what;
+        }
+        recent += " " + what;
+        if (recent.length() > 300) {
+            recent = recent.substring(recent.length() - 200);
         }
     }
 

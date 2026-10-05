@@ -4861,8 +4861,10 @@ public final class CloneGameTests {
                                     ? "strategy:" + cc.endedOption + (cc.endedAfter <= 1 ? "<=1" : cc.endedAfter < 20 ? "<20" : "long") : cc.idleWhy, 1, Integer::sum);
                         }
                         if (tick[0] % 2400 == 0) {
-                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | esc={}[{}] dig={} | {}", tick[0], n, o, Progression.describe(live), cc.crafting().trace(),
-                                    cc.escapeStarts, cc.escapeWhy, cc.digDrives, soakBag(live));
+                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | esc={}[{}] dig={} stairs={}/{}/{} shaft={}/{} | {}", tick[0], n, o, Progression.describe(live), cc.crafting().trace(),
+                                    cc.escapeStarts, cc.escapeWhy, cc.digDrives, cc.stairs().stepsDug, cc.stairs().debug,
+                                    cc.stairs().recent,
+                                    cc.shafts().levelsDug, cc.shafts().debug, soakBag(live));
                         }
                     }
                 }

@@ -562,8 +562,8 @@ public final class CloneController {
         if (trapCheck) {
             lastTrapCheck = now;
         }
-        if (trapCheck && now - escapeFailedAt > 600 && !motor.isFlying() && !hostileWithin(3.5, now) && option != Option.SHAFT
-                && forcedOption != Option.SHAFT && escape.isTrapped()) {
+        if (trapCheck && now - escapeFailedAt > 600 && !motor.isFlying() && !hostileWithin(3.5, now) && option != Option.SHAFT && option != Option.STAIRS
+                && forcedOption != Option.SHAFT && forcedOption != Option.STAIRS && escape.isTrapped()) {
             // reflex, like a player who notices he fell into a hole: get out before doing anything else
             if (option != null) {
                 finishOption(false);

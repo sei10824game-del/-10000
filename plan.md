@@ -164,3 +164,13 @@
 - `StairMining.targetY` / `ShaftMining.targetY` は未設定(MIN_VALUE)なら `target()` が `Progression.digTargetY(need)`(鉄16・ダイヤ-58)。鉄装備でもダイヤが足りなければ掘る(`ironGeared && !digWanted` のときだけ止まる)。テストが `targetY` を直接入れる使い方はそのまま
 - P-13: `Crafting.placeStation` は平地が無いとき、隣の空き(足元と頭の高さ)に `Motor.placeBlockAt` で壁・床の面から置く
 - 未実装(S3): P-05 横掘り(目標の深さに着いたあと)。それまで、深さに着くと掘りは止まる(`digPending` も偽になり遠征は戻る)
+
+## 9. S2 の結果(ソーク run 37248773132、72000tick、6体)と見つかった原因
+- CI: 179件、必須の失敗0。ソーク: 石のツルハシ 6/6(初到達 12000〜46400tick)、かまど 6/6、石炭 1/6、鉄 0/6。死亡0、エラー0、行動なし 4%(85/2160、うち escape 78)
+- オプション: STAIRS 506(23%)、SHAFT 70、GATHER_WOOD 269、FARM 203、STORE 162、JOIN 224、EXPEDITION 133、MINE 10、QUARRY 10
+- 見つかった原因:
+  1. 掘りが下へ進まない: STAIRS が長く選ばれているのに、y は 57〜75 のまま(目標は 16)。`SOAK-TRACE` の escape 回数は Clone263 だけ 361 回(足元は `oak_log` y=57〜58。穴から原木を積んで出る行動)で、他は約10回。階段を掘る途中で「はまった」と判断され、掘りが中断される疑い。`trapCheck` は SHAFT だけを除外していた → STAIRS も除外した(未検証。次のソークの `esc=` の回数で確認)
+  2. 木のツルハシ → 石のツルハシが遅い(12000〜46400tick): `need=STONE` の間は遠征・JOINが約40000tickまで続く(P-06 は `digPending` のときだけ)。QUARRY は10件。石が16ブロック以内に見えるときしか選べない
+  3. `digDrives`(駆動で掘りを選んだ回数)は 0〜3 回だけで、STAIRS の大半は Q 表が選んだもの。駆動の条件(地表・階段が近い・休止)で外れている
+- 診断を足した: `SOAK-TRACE` に `stairs=<掘った段数>/<debug>/<直近の出来事>` と `shaft=<段数>/<debug>`(`StairMining.recent`)
+- 次(S3 の候補): (a) 階段が進まない原因の確定と修正、(b) `need=STONE` の間の遠征抑制と石探し(石が見えなくても岩場へ向かう)、(c) P-05 横掘り、P-07 観測、P-08 報酬
