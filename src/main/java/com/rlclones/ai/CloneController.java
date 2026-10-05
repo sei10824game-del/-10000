@@ -434,6 +434,19 @@ public final class CloneController {
     /** Falls into holes (soak diagnostics): how often the escape began and what it began on. */
     public int escapeStarts;
     public String escapeWhy = "";
+    /** Where the last escape began, when, and how many in a row began within 3 blocks of it (a pit we keep going back to). */
+    private BlockPos lastEscapeAt;
+    private long lastEscapeTick = Long.MIN_VALUE / 2;
+    private int escapeRepeat;
+    /** Options that started and ended in the same tick with nothing to show for it, in a row (plan.md D-4). */
+    private static final java.util.Set<Option> CHURN_OPTIONS = java.util.EnumSet.of(Option.MINE, Option.CRAFT, Option.QUARRY, Option.GATHER_WOOD,
+            Option.STAIRS, Option.SHAFT, Option.FARM, Option.STORE, Option.FETCH, Option.LOOT, Option.DISCOVER, Option.ACHIEVE, Option.SALVAGE,
+            Option.BREW, Option.ANIMALS, Option.FISH, Option.PORTAL);
+    private final long[] optionCooldown = new long[Option.COUNT];
+    @Nullable
+    private Option churnOption;
+    private int churnRun;
+    public int churnCooldowns;
 
     public CombatAction action() {
         return action;
@@ -574,7 +587,7 @@ public final class CloneController {
                 escaping = true;
                 escapeStarts++;
                 escapeWhy = self.level().getBlockState(self.blockPosition().below()).getBlock() + " y=" + self.getBlockY();
-                escape.start(motor.recentGoal());
+                escape.start(motor.recentGoal(), onEscapeStart(now));
             }
         }
         Prof.add(Prof.TRAP, pt);
@@ -1326,6 +1339,63 @@ public final class CloneController {
 
     // ------------------------------------------------------------------ extra options (chests, farming, expeditions)
 
+    /**
+     * An escape from a pit begins here. Begun three times within 3 blocks in 2400 ticks it is a loop (out, back for the ore
+     * or the stairs, in again): the ores about are left alone for a while, the stairs here are given up, and getting out now
+     * means getting well away. Returns how far away (0 = out of the cell is enough).
+     */
+    public int onEscapeStart(long now) {
+        BlockPos at = self.blockPosition();
+        if (lastEscapeAt != null && lastEscapeAt.distManhattan(at) <= 3 && now - lastEscapeTick < 2400) {
+            escapeRepeat++;
+        } else {
+            escapeRepeat = 1;
+        }
+        lastEscapeAt = at;
+        lastEscapeTick = now;
+        if (escapeRepeat < 3) {
+            return 0;
+        }
+        stairs.avoidNear(at, 10, now + 6000);
+        for (java.util.Map.Entry<BlockPos, Perception.BlockKind> e : perception.blocks().entrySet()) {
+            if (e.getValue() == Perception.BlockKind.ORE && e.getKey().distManhattan(at) <= 8) {
+                skipBlocks.put(e.getKey().immutable(), now + 1200); // (forgotten after 1200 more ticks)
+            }
+        }
+        return 6;
+    }
+
+    public boolean skipped(BlockPos p) {
+        return skipBlocks.containsKey(p);
+    }
+
+    /** An option has ended (D-4): three in a row that came to nothing in a tick are left out for 600 ticks. */
+    public void noteOptionEnd(Option o, int ticks, float reward, boolean died, long now) {
+        if (!CHURN_OPTIONS.contains(o)) {
+            return;
+        }
+        if (!died && ticks <= 1 && Math.abs(reward) < 0.01f) {
+            if (churnOption == o) {
+                churnRun++;
+            } else {
+                churnOption = o;
+                churnRun = 1;
+            }
+            if (churnRun >= 3) {
+                optionCooldown[o.ordinal()] = now + 600;
+                churnRun = 0;
+                churnCooldowns++;
+            }
+        } else if (ticks > 5) {
+            churnOption = null;
+            churnRun = 0;
+        }
+    }
+
+    public boolean cooledDown(Option o, long now) {
+        return now < optionCooldown[o.ordinal()];
+    }
+
     /** Hungry and nothing to eat: no trips, no digging, food first. */
     private boolean hungryNoFood() {
         return !self.isCreative() && self.getFoodData().getFoodLevel() < 8 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
@@ -1435,7 +1505,8 @@ public final class CloneController {
         if (farming.hasWork() || water.hasWork()) {
             mask |= Option.FARM.bit(); // a field to work, or water to bring home for one
         }
-        boolean homeBody = digPending(now) || hungryNoFood(); // iron / diamonds to dig for, or no food for a trip: no new trips
+        // iron / diamonds to dig for, a stone pickaxe still to make, or no food for a trip: no new trips
+        boolean homeBody = digPending(now) || hungryNoFood() || Progression.need(self) == Progression.Need.STONE;
         if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline())) {
             mask |= Option.EXPEDITION.bit();
         }
@@ -2017,6 +2088,9 @@ public final class CloneController {
         if (dig != null) {
             return dig;
         }
+        if ((mask & Option.QUARRY.bit()) != 0 && Progression.need(self) == Progression.Need.STONE) {
+            return Option.QUARRY; // a wooden pickaxe and stone in sight: the stone pickaxe is next
+        }
         if ((mask & Option.HUNT.bit()) != 0 && FoodAid.foodItems(self) < 16 && fishInSight(16) != null && random.nextFloat() < 0.85f) {
             huntFish = true;
             return Option.HUNT; // fish swimming about: food for the taking
@@ -2086,6 +2160,11 @@ public final class CloneController {
                 idle &= ~forcedOption.bit();
             }
             mask &= ~idle; // those are for when there is nothing else to do
+        }
+        for (Option co : CHURN_OPTIONS) {
+            if (now < optionCooldown[co.ordinal()] && co != forcedOption) {
+                mask &= ~co.bit(); // it keeps ending at once: not now
+            }
         }
         int o;
         Option committed = expedition.isLeading() ? Option.EXPEDITION : expedition.joinedOffer() != null ? Option.JOIN : null;
@@ -2214,6 +2293,7 @@ public final class CloneController {
         if (option == Option.STAIRS || option == Option.SHAFT) {
             noteDigEnd(now, died);
         }
+        noteOptionEnd(option, optionTicks, optionReward, died, now);
         if (died) {
             optionReward -= 30f;
         }
@@ -3667,9 +3747,13 @@ public final class CloneController {
         toolUps++;
         if (make != null) {
             crafting.forcedTarget = make;
-            nextOption = Option.CRAFT;
-            toolUpDebug = "craft " + ItemAid.key(make);
-            return true;
+            if (crafting.hasWork()) {
+                nextOption = Option.CRAFT;
+                toolUpDebug = "craft " + ItemAid.key(make);
+                return true;
+            }
+            crafting.forcedTarget = null; // it could be made, but not here and now (no room for a table...): as if it could not
+            toolUpDebug = "cannot craft " + ItemAid.key(make) + " now";
         }
         itemAid.need(goal, 1);
         toolBlockedUntil = now() + 600; // no pickaxe to be had right now: the ore does not pull us back for a while

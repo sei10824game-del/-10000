@@ -107,8 +107,15 @@ public final class Escape {
     // ------------------------------------------------------------------ escaping
 
     private BlockPos startCell;
+    /** 0 = out of the cell is enough; else it must be this far away (blocks) or 3 higher before the escape counts as done. */
+    private int minLeave;
 
     public void start(@Nullable Vec3 goal) {
+        start(goal, 0);
+    }
+
+    public void start(@Nullable Vec3 goal, int minLeave) {
+        this.minLeave = minLeave;
         this.goal = goal;
         this.startCell = self.blockPosition();
         ticks = 0;
@@ -119,6 +126,16 @@ public final class Escape {
         motor.resetMining();
     }
 
+    private boolean farEnough() {
+        if (minLeave <= 0) {
+            return true;
+        }
+        BlockPos at = self.blockPosition();
+        double dx = at.getX() - startCell.getX();
+        double dz = at.getZ() - startCell.getZ();
+        return Math.sqrt(dx * dx + dz * dz) >= minLeave || at.getY() - startCell.getY() >= 3;
+    }
+
     public Status tick() {
         ticks++;
         if (ticks > 900) {
@@ -126,7 +143,7 @@ public final class Escape {
             return Status.FAILED;
         }
         // finished only once we actually left the cell we were stuck in and are no longer boxed in
-        if (ticks % 10 == 0 && pillarBase == null && self.onGround() && !self.blockPosition().equals(startCell) && !isTrapped()) {
+        if (ticks % 10 == 0 && pillarBase == null && self.onGround() && !self.blockPosition().equals(startCell) && !isTrapped() && farEnough()) {
             motor.resetMining();
             return Status.DONE;
         }

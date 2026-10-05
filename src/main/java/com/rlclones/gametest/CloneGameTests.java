@@ -4770,6 +4770,75 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 80, batch = "p26stone")
+    public static void staysForTheStonePickaxeBeforeAnyTrip(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer friend = clone(h, 3.5, 3.5, 0f, false);
+        c.controller().expedition().readyToLead();
+        int trip = opt("EXPEDITION").bit();
+        int[] mask = new int[3];
+        h.runAfterDelay(5, () -> mask[0] = strategyMask(h, c)); // bare hands: a trip is on offer
+        h.runAfterDelay(10, () -> c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE)));
+        h.runAfterDelay(15, () -> mask[1] = strategyMask(h, c)); // a wooden pickaxe: the stone pickaxe first
+        h.runAfterDelay(20, () -> {
+            c.getInventory().clearContent();
+            c.getInventory().add(new ItemStack(Items.STONE_PICKAXE)); // (and this arena lies below the depth to dig to: nothing to stay for)
+        });
+        h.runAfterDelay(25, () -> {
+            mask[2] = strategyMask(h, c);
+            h.assertTrue((mask[0] & trip) != 0, "bare hands: a trip is on offer");
+            h.assertTrue((mask[1] & trip) == 0, "a wooden pickaxe and no stone one yet: no trip");
+            h.assertTrue((mask[2] & trip) != 0, "a stone pickaxe: trips again (nothing to dig for down here)");
+            finish(h, c, friend);
+            h.succeed();
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p26churn")
+    public static void coolsDownAnOptionThatEndsAtOnce(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var cc = c.controller();
+        long now = h.getLevel().getGameTime();
+        var mine = opt("MINE");
+        var craft = opt("CRAFT");
+        var quarry = opt("QUARRY");
+        cc.noteOptionEnd(mine, 0, -0.005f, false, now);
+        cc.noteOptionEnd(mine, 1, -0.005f, false, now);
+        h.assertTrue(!cc.cooledDown(mine, now + 1), "twice is not yet a habit");
+        cc.noteOptionEnd(mine, 0, 0f, false, now);
+        h.assertTrue(cc.cooledDown(mine, now + 1) && !cc.cooledDown(mine, now + 700), "three in a row: left out for 600 ticks, then back");
+        cc.noteOptionEnd(craft, 0, 0f, false, now);
+        cc.noteOptionEnd(craft, 0, 0f, false, now);
+        cc.noteOptionEnd(craft, 40, 0.2f, false, now); // one that did something breaks the run
+        cc.noteOptionEnd(craft, 0, 0f, false, now);
+        h.assertTrue(!cc.cooledDown(craft, now + 1), "a run broken by one that ran is no habit");
+        for (int i = 0; i < 6; i++) {
+            cc.noteOptionEnd(quarry, 0, 1.5f, false, now); // ended at once but with something gained
+        }
+        h.assertTrue(!cc.cooledDown(quarry, now + 1), "ending at once with a reward does not count");
+        finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "p26pit")
+    public static void leavesAPitItKeepsFallingInto(GameTestHelper h) {
+        clearBases(h);
+        BlockPos ore = new BlockPos(9, 2, 7);
+        h.setBlock(ore, Blocks.COAL_ORE);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        seen(h, c, ore);
+        var cc = c.controller();
+        long now = h.getLevel().getGameTime();
+        h.assertTrue(cc.onEscapeStart(now) == 0 && cc.onEscapeStart(now + 100) == 0, "the first two times out of the cell is enough");
+        h.assertTrue(!cc.skipped(h.absolutePos(ore)), "and the ore still draws");
+        h.assertTrue(cc.onEscapeStart(now + 200) == 6, "the third time in the same place: well away this time");
+        h.assertTrue(cc.skipped(h.absolutePos(ore)), "and the ore nearby is left alone");
+        h.assertTrue(cc.onEscapeStart(now + 5000) == 0, "long after, it is a new start");
+        finish(h, c);
+        h.succeed();
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
@@ -4953,8 +5022,8 @@ public final class CloneGameTests {
                                     ? "strategy:" + cc.endedOption + (cc.endedAfter <= 1 ? "<=1" : cc.endedAfter < 20 ? "<20" : "long") : cc.idleWhy, 1, Integer::sum);
                         }
                         if (tick[0] % 2400 == 0) {
-                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | esc={}[{}] dig={} stairs={}/{}/{} shaft={}/{} | {}", tick[0], n, o, Progression.describe(live), cc.crafting().trace(),
-                                    cc.escapeStarts, cc.escapeWhy, cc.digDrives, cc.stairs().stepsDug + "g" + cc.stairs().giveUps + "a" + cc.stairs().abandoned, cc.stairs().debug,
+                            RLClones.LOGGER.info("SOAK-TRACE t={} {} opt={} {} | {} | esc={}[{}] cd={} dig={} stairs={}/{}/{} shaft={}/{} | {}", tick[0], n, o, Progression.describe(live), cc.crafting().trace(),
+                                    cc.escapeStarts, cc.escapeWhy, cc.churnCooldowns, cc.digDrives, cc.stairs().stepsDug + "g" + cc.stairs().giveUps + "a" + cc.stairs().abandoned, cc.stairs().debug,
                                     cc.stairs().recent,
                                     cc.shafts().levelsDug, cc.shafts().debug, soakBag(live));
                         }

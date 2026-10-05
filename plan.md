@@ -269,3 +269,10 @@
 ### 運用ルールの提案(決めるのは人)
 - 今は「CI 失敗の修正は 1 セッション 1 回」なので、不安定テストが1つ落ちるだけで止まる。例として「`REQUIREMENTS.md` の不安定テスト一覧にあるテストだけが落ちたときは、修正回数に数えず報告だけして先へ進む」を CLAUDE.md に足す案がある
 - ソークは push のたびに約20分かかる。設計・修正の途中は `soak.flag` を消し、ソークで確かめたいときだけ置く案もある
+
+## 14. S2.6 の実装メモ(D-4・D-6・D-7)
+- D-6: `CloneController.onEscapeStart`。2400tick 以内に 3 ブロック以内で 3 回目の escape → 近く(8 ブロック)の鉱石を `skipBlocks` に 2400tick、近く(10 ブロック)の階段を 6000tick 避ける(`StairMining.avoidNear`)、`Escape.start(goal, 6)`(出たあと水平 6 ブロック以上、または 3 以上高い所まで行かないと DONE にしない)
+- D-4: `noteOptionEnd`。1tick 以内・報酬ほぼ0で終わったオプション(MINE・CRAFT・QUARRY・GATHER_WOOD・STAIRS・SHAFT・FARM・STORE ほか。FIGHT・FLEE・EAT・REST・EXPLORE などは除く)が3回続けば 600tick マスクから外す(`forcedOption` には効かせない)。`toolUp` は、作れるはずのツルハシが今は作れない(`crafting.hasWork()` が偽)なら作れないものとして扱い、`toolBlockedUntil` を入れる
+- D-7: `Progression.need == STONE`(木のツルハシだけ)の間は新しい遠征・JOIN をしない。石が見えて QUARRY が選べるなら `drive` で QUARRY を引く
+- ソークの `SOAK-TRACE` に `cd=`(空回りで外した回数)を足した
+- CI にテスト結果の要約ステップを追加(`.github/workflows/build.yml`): 失敗メッセージ・ソークの集計・`CLONE-DEATH` を、ジョブサマリーと注釈(`gh api repos/.../check-runs/<id>/annotations`)に出す

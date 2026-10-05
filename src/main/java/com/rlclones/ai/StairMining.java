@@ -138,6 +138,15 @@ public final class StairMining {
         return t == null || self.level().getGameTime() >= t;
     }
 
+    /** Staircases with their top or bottom within {@code radius} of {@code pos} are left alone until {@code until} (a pit we keep falling into). */
+    public void avoidNear(BlockPos pos, int radius, long until) {
+        for (Bases.Staircase s : bases().staircases) {
+            if (s.dimension == self.level().dimension() && (s.top.distManhattan(pos) <= radius || s.end.distManhattan(pos) <= radius)) {
+                avoid.put(s.top, until);
+            }
+        }
+    }
+
     private void toStage(int n) {
         stage = n;
         bestMetric = Integer.MIN_VALUE;
