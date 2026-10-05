@@ -3237,7 +3237,8 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             EnemyKnowledge k = c.getCloneBrain().knowledgeIfPresent("minecraft:skeleton");
             String traits = k == null ? "none" : k.traits.toString();
-            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + ")");
+            h.assertTrue(k != null && com.rlclones.ai.AttackTells.isTell(k, "use:bow"), "the drawn bow is learned as the sign of a shot (" + traits + " | skeleton " + (sk.isAlive() ? "alive" : "dead") + " " + sk.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
+                    + " hp " + (int) c.getHealth() + " " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " " + c.controller().optionLog + " " + c.controller().tells().debug + ")");
             h.assertTrue(c.controller().tells().tellBlocks >= 2, "and the shield comes up in time to catch the arrows (" + c.controller().tells().tellBlocks
                     + " " + c.controller().tells().debug + ")");
             finish(h, c);

@@ -45,6 +45,10 @@ public final class StairMining {
     public int giveUps;
     /** Cells of level tunnel dug at the target depth, all in all (plan.md P-05). */
     public int tunnelDug;
+    /** Where there was no way to dig down (a base's blocks all around, a slab of bedrock...) and until when: not tried again nearby. */
+    @Nullable
+    private BlockPos noWayAt;
+    private long noWayUntil;
     /** Leaving the tunnel (hungry, hurt): up the stairs to the top, where there is food and daylight. */
     private boolean ascending;
     private static final int TUNNEL_CAP = 160;
@@ -133,6 +137,9 @@ public final class StairMining {
     /** On the surface (sky overhead), carrying a pickaxe, still missing iron or diamond gear, not deep enough yet. */
     public boolean wanted() {
         if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || pickTier() < 0 || ironGeared(self) && !Progression.digWanted(self) || self.isInWater()) {
+            return false;
+        }
+        if (noWayAt != null && self.level().getGameTime() < noWayUntil && self.blockPosition().distManhattan(noWayAt) <= 16) {
             return false;
         }
         boolean surface = assumeSurface || self.level().canSeeSky(self.blockPosition().above());
@@ -393,6 +400,8 @@ public final class StairMining {
         if (stairs == null) {
             Direction d = pickDirection(feet);
             if (d == null) {
+                noWayAt = feet;
+                noWayUntil = self.level().getGameTime() + 6000;
                 return Status.FAILED;
             }
             stairs = bases().addStaircase(self.level().dimension(), feet, d);
@@ -563,8 +572,9 @@ public final class StairMining {
             return Status.DONE;
         }
         boolean hungry = self.getFoodData().getFoodLevel() < 10 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
-        if (self.getHealth() < self.getMaxHealth() * 0.5f || hungry) {
-            debug = "leaves the tunnel: " + (hungry ? "hungry" : "hurt");
+        boolean noPick = pickTier() < 0; // it broke: wood for a new one is up there
+        if (self.getHealth() < self.getMaxHealth() * 0.5f || hungry || noPick) {
+            debug = "leaves the tunnel: " + (noPick ? "no pickaxe" : hungry ? "hungry" : "hurt");
             ascending = true; // (the tunnel stays: it is carried on later) - up the stairs first: nothing to eat down here
             toStage(0);
             return Status.WORKING;

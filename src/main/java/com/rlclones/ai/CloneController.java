@@ -1445,7 +1445,7 @@ public final class CloneController {
             }
             return (mask & Option.FARM.bit()) != 0 ? Option.FARM : null;
         }
-        if (Crafting.woodUnits(self) < 4 && (mask & Option.GATHER_WOOD.bit()) != 0) {
+        if (Crafting.woodUnits(self) < 12 && (mask & Option.GATHER_WOOD.bit()) != 0) { // a spare pickaxe's worth and a table
             return Option.GATHER_WOOD; // a table, sticks, ladders: from wood
         }
         digDrives++;

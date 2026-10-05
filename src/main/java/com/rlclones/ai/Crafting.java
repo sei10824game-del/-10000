@@ -184,8 +184,13 @@ public final class Crafting {
         return Math.max(0, need - cobble(p));
     }
 
+    /** The furnace we left a batch in is far away now: not worth the walk (and not a reason to never smelt again). */
+    private boolean furnaceFar() {
+        return furnace != null && self.blockPosition().distSqr(furnace) > 40 * 40;
+    }
+
     private boolean furnaceReady() {
-        return furnace != null && self.level().getGameTime() >= furnaceReadyAt;
+        return furnace != null && !furnaceFar() && self.level().getGameTime() >= furnaceReadyAt;
     }
 
     @Nullable
@@ -796,7 +801,7 @@ public final class Crafting {
     }
 
     private boolean smeltWork() {
-        return self.level().getGameTime() >= stationBlockedUntil && furnace == null && !smeltables(self).isEmpty() && fuelSlot(self) >= 0
+        return self.level().getGameTime() >= stationBlockedUntil && (furnace == null || furnaceFar()) && !smeltables(self).isEmpty() && fuelSlot(self) >= 0
                 && (nearest(Perception.BlockKind.FURNACE, 24) != null || count(self, Items.FURNACE) > 0);
     }
 
@@ -914,6 +919,9 @@ public final class Crafting {
         }
         if (smelting || placeOnly) {
             stationBlockedUntil = now + 300;
+        }
+        if (smelting) {
+            furnace = null; // could not get to it (or use it): it must not stop every later smelting
         }
         giveUps++;
         reset();
