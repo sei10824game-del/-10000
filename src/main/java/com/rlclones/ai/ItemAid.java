@@ -48,6 +48,8 @@ public final class ItemAid {
     private final Map<String, Long> lastAsked = new HashMap<>();
     /** Item asked for -> when a friend said it is bringing it. */
     private final Map<String, Long> coming = new HashMap<>();
+    /** R-27: asks that come from a digger's "DIGGING tier" line and our better pickaxe: the only one we have may go. */
+    private final java.util.Set<Ask> offered = new java.util.HashSet<>();
     @Nullable
     private Ask helping;
     private int ticks;
@@ -127,6 +129,10 @@ public final class ItemAid {
             }
             return true;
         }
+        if (text.startsWith("DIGGING ") && p.length >= 2 && sender != self && !self.isCreative()) {
+            offerPickaxe(sender, p[1], now);
+            return true;
+        }
         if (text.startsWith("GIVE ")) {
             if (p.length >= 3) {
                 if (p[1].equals(self.getGameProfile().getName())) {
@@ -137,6 +143,52 @@ public final class ItemAid {
             return true;
         }
         return false;
+    }
+
+    // ------------------------------------------------------------------ digging
+
+    public static int bestPickTier(Player p) {
+        int t = -1;
+        for (ItemStack s : p.getInventory().items) {
+            if (s.getItem() instanceof PickaxeItem pi) {
+                t = Math.max(t, pi.getTier().getLevel());
+            }
+        }
+        return t;
+    }
+
+    /** Say what we dig with, so a friend with a better pickaxe can bring it (every 600 ticks while on the stairs / shaft). */
+    public void announceDigging() {
+        Chat.say(self, Component.literal("DIGGING"), "DIGGING " + bestPickTier(self));
+    }
+
+    /** R-27: a digger within 16 blocks digs with a worse pickaxe than our best, and we are not digging ourselves: bring ours. */
+    private void offerPickaxe(ServerPlayer digger, String tier, long now) {
+        var ctl = self.controller();
+        var o = ctl == null ? null : ctl.option();
+        if (o == com.rlclones.ai.strategy.Option.STAIRS || o == com.rlclones.ai.strategy.Option.SHAFT || o == com.rlclones.ai.strategy.Option.MINE
+                || o == com.rlclones.ai.strategy.Option.QUARRY || digger.distanceTo(self) > 16) {
+            return;
+        }
+        int theirs;
+        try {
+            theirs = Integer.parseInt(tier);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        Item best = null;
+        for (ItemStack s : self.getInventory().items) {
+            if (s.getItem() instanceof PickaxeItem pi && pi.getTier().getLevel() > theirs
+                    && (best == null || pi.getTier().getLevel() > ((PickaxeItem) best).getTier().getLevel())) {
+                best = pi;
+            }
+        }
+        if (best != null) {
+            Ask a = new Ask(digger.getUUID(), digger.getGameProfile().getName(), key(best), 1, now);
+            asks.removeIf(x -> x.from.equals(a.from) && x.item.equals(a.item));
+            asks.add(a);
+            offered.add(a);
+        }
     }
 
     // ------------------------------------------------------------------ giving
@@ -211,7 +263,7 @@ public final class ItemAid {
         double bestD = Double.MAX_VALUE;
         for (Ask a : asks) {
             Player p = online(a.from);
-            if (p == null || p.distanceTo(self) > 64 || has(p, a.item) || spare(self, a.item) <= 0) {
+            if (p == null || p.distanceTo(self) > 64 || has(p, a.item) || spare(self, a.item) <= 0 && !offered.contains(a)) {
                 continue;
             }
             double d = p.distanceTo(self);
@@ -260,7 +312,7 @@ public final class ItemAid {
         self.setYRot(yaw);
         self.setYHeadRot(yaw);
         self.setXRot(30f);
-        int give = Math.min(a.count, spare(self, a.item));
+        int give = Math.min(a.count, Math.max(spare(self, a.item), offered.contains(a) ? 1 : 0));
         var inv = self.getInventory();
         // tools: hand over the worst one that will do and keep the best
         int worst = -1;
@@ -293,6 +345,7 @@ public final class ItemAid {
             other.controller().foodAid().thank(self.getUUID(), 2f); // they know who brought it
         }
         asks.remove(a);
+        offered.remove(a);
         helping = null;
         return Status.DONE;
     }

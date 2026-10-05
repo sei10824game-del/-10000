@@ -53,6 +53,9 @@ public final class Motor {
     /** Wants to go down in water (towards a goal or prey below) instead of floating up. */
     private boolean dive;
     private boolean diveHard;
+    /** R-17: cut the grass in front while walking (set each tick by whoever is after seeds). */
+    private boolean sweep;
+    public int sweepCuts;
     /** Times the clone crouched on its own at a dangerous edge. */
     public int edgeSneaks;
     public int hazardBrakes;
@@ -134,6 +137,37 @@ public final class Motor {
 
     public void dive() {
         dive = true;
+    }
+
+    public void sweep() {
+        sweep = true;
+    }
+
+    /** One tick of R-17: a blade of grass just ahead (within 2.5 blocks, +-45 degrees of where we walk) is cut on the way; the walk goes on. */
+    private void sweepAhead() {
+        if (!sweep || moveDir == null || self.isInWater() || self.isPassenger() || !com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING, true)) {
+            return;
+        }
+        ServerLevel level = self.serverLevel();
+        double len = Math.sqrt(moveDir.x * moveDir.x + moveDir.z * moveDir.z);
+        if (len < 1e-4) {
+            return;
+        }
+        BlockPos feet = self.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, 0, -3), feet.offset(3, 1, 3))) {
+            BlockState st = level.getBlockState(p);
+            if (!st.is(BlockTags.REPLACEABLE_PLANTS) || st.getDestroySpeed(level, p) != 0 || !self.mayInteract(level, p)) {
+                continue;
+            }
+            double dx = p.getX() + 0.5 - self.getX();
+            double dz = p.getZ() + 0.5 - self.getZ();
+            double dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist <= 2.5 && (dist < 0.4 || (dx * moveDir.x + dz * moveDir.z) / (dist * len) >= 0.7071)) {
+                self.gameMode.destroyBlock(p.immutable());
+                sweepCuts++;
+                return; // one a tick
+            }
+        }
     }
 
     /** Stay down even when air is low (the door breath: the air is at the bottom). */
@@ -932,6 +966,7 @@ public final class Motor {
     public void tick() {
         flight();
         waterEscape();
+        sweepAhead();
         boolean stroke = swimStroke();
         // rotation
         float yaw = self.getYRot();
@@ -1076,6 +1111,7 @@ public final class Motor {
         sneak = false;
         dive = false;
         diveHard = false;
+        sweep = false;
         flyGoal = null;
         swimSteer = null;
         swimGoal = null;

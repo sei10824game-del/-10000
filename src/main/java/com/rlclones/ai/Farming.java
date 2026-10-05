@@ -450,6 +450,9 @@ public final class Farming {
         }
         Vec3 top = new Vec3(target.getX() + 0.5, target.getY() + 1.0, target.getZ() + 0.5);
         if (self.getEyePosition().distanceTo(top) > Motor.BLOCK_REACH - 0.7) {
+            if (job == Job.SEEDS) {
+                motor.sweep(); // R-17: cut the grass on the way there
+            }
             motor.navigate(top, 1.5, false);
             if (motor.stuckCount() > 6) {
                 failed.put(target, level.getGameTime()); // cannot get there: try other spots first

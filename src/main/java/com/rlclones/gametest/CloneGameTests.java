@@ -5274,6 +5274,49 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-17: a row of 8 grass between the clone and its goal: cut on the way, without slowing down. */
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r11walk")
+    public static void cutsGrassOnTheWayWithoutStopping(GameTestHelper h) {
+        for (int x = 4; x <= 11; x++) {
+            h.setBlock(new BlockPos(x, 2, 7), Blocks.GRASS);
+        }
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
+        Vec3 goal = h.absoluteVec(new Vec3(13.5, 2, 7.5));
+        int[] ticks = {0};
+        h.onEachTick(() -> {
+            if (Motor.horizontalDistance(c.position(), goal) > 1.0) {
+                ticks[0]++;
+            }
+            c.controller().motor().sweep();
+            c.controller().motor().navigate(goal, 0.5, true);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(Motor.horizontalDistance(c.position(), goal) <= 1.0, "reached the goal");
+            h.assertTrue(c.controller().motor().sweepCuts >= 6, "6 or more blades cut on the way, got " + c.controller().motor().sweepCuts);
+            h.assertTrue(ticks[0] <= 110, "and no stop for them: " + ticks[0] + " ticks for 11 blocks");
+            finish(h, c);
+        });
+    }
+
+    /** R-27: a digger with a stone pickaxe says so; an idle friend with an iron one brings it. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r11walk")
+    public static void handsABetterPickaxeToTheDigger(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer a = clone(h, 8.5, 7.5, 0f, false);
+        ClonePlayer b = clone(h, 4.5, 4.5, 0f, false);
+        a.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        b.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        b.controller().itemAid().onChat(a, "DIGGING 1", h.getLevel().getGameTime());
+        b.controller().forcedOption = opt("FEED");
+        b.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(b.controller().itemAid().given >= 1, "the friend brought it (" + b.controller().itemAid().state() + " " + b.controller().optionLog + ")");
+            h.assertTrue(a.getInventory().countItem(Items.IRON_PICKAXE) >= 1, "and the digger holds the iron pickaxe now");
+            finish(h, a, b);
+        });
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 4000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {

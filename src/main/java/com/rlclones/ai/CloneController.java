@@ -2030,6 +2030,9 @@ public final class CloneController {
             finishOption(false); // (toolUp true: it chose crafting / wood as the next option)
             return;
         }
+        if ((option == Option.STAIRS || option == Option.SHAFT) && optionTicks % 600 == 1) {
+            itemAid.announceDigging(); // R-27
+        }
         if (ORE_REFLEX.contains(option) && oreReflex(now)) {
             optionTicks++;
             return; // an ore right in front of us comes first
