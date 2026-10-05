@@ -362,7 +362,7 @@ public final class StairMining {
             stepsDug++; // stepped down onto the new step: the staircase grows along its line only
             s.end = feet.immutable();
             bases().setDirty();
-        } else if (!feet.equals(s.end)) {
+        } else if (!feet.equals(s.end) && !feet.equals(s.end.relative(s.dir))) { // (just past the end, level with it: on the way down onto the next step)
             if (!self.onGround()) {
                 return Status.WORKING; // in the air (stepping down): see where we land
             }
