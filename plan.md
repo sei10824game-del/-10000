@@ -472,6 +472,16 @@
 - run 37336376594(S11-1のdocsコミット e6de9d4): 失敗5件=corner(修正済)・lava bucket・staircase・climbsUp…・pens。run 37336877128(S11-2 62976c6): corner(修正済)・`creativeBuildsPortalsAndAnEnchantingRoom`・`pearlsOverALavaMoat…`(既知flaky)・`huntsFishInTheWater`(水中。再現を見る)・`makesCharcoalFromSpareLogs`(自分のテスト: 原木を道具・樽・本棚の製作に使い切った。原木を48に増やし、鉄3本の焼成だけを見る形に直した)
 
 ## 29. S11-3 実装(R-17・R-27)
-- R-17: `Motor.sweep()`(その tick だけ有効)と `sweepAhead`: 歩行中、前方2.5ブロック・±45°の草(`REPLACEABLE_PLANTS`で硬さ0)を `destroyBlock` で刈る(1tick1つ。視線は向けない)。`Farming` の SEEDS 作業の移動中に `motor.sweep()`。テスト `cutsGrassOnTheWayWithoutStopping`
-- R-27: 掘る側(STAIRS/SHAFT)が 600tick ごとに `DIGGING <tier>`(`ItemAid.announceDigging`)。受けた側が、掘っておらず16ブロック以内で自分の最良ツルハシがより高格なら、`offered` の Ask を作り、既存の FEED/`helpTick` で渡す(1本しか無くても渡す)。**未実装: 古いツルハシを渡した側へ投げ返す**。テスト `handsABetterPickaxeToTheDigger`
-- 次: S11-4(R-19・R-20/R-32)
+- R-17: `Farming` の SEEDS 移動時に `motor.sweep()`。`Motor.sweepAhead` は前方2.5ブロック・±45°の即時破壊できる草を1tick1つ選び、`lookAt` で向き、視線が±8°以内になるまで移動を続けながら刈る。テスト `cutsGrassOnTheWayWithoutStopping`
+- R-27: 掘る側(STAIRS/SHAFT)は600tickごとに `DIGGING <tier> <item-id>`。掘っていない16ブロック以内の仲間がより良いツルハシを持つと、既存のFEED/`helpTick`で渡す(1本しかなくても渡す)。渡し側が `RETURN name <old-pickaxe>` を送り、受け取った側もFEEDで旧ツルハシを返す。テスト `handsABetterPickaxeToTheDigger` は鉄を受け取ったあと石を返すところまで確認
+- 旧S11-3のCI run 37342075743 はジョブ開始前にGitHub billing/payment制限で拒否。実装コードの成否は確認できていない
+- 本セッションで上記2点の未実装を補完
+
+## 30. S11-4 実装(R-19・R-20/R-32)とS11-3の残り
+- **R-17 視線**: `Motor.sweepAhead` は草を保持ターゲットにして `lookAt` で追従。頭の向きが対象の±8°に入るまで移動を継続し、視線上の障害が無いときだけ刈る
+- **R-27 返却**: `DIGGING` に階層とツルハシIDを含める。良いツルハシを渡した側は `RETURN name <old-pickaxe-id>` を伝え、受け取った側が旧ツルハシを持っていれば1本でも返す。テストを返却まで確認するよう拡張
+- **R-19**: 新規 `PitSafety` が移動意図の先に `Motor.dropAt` の致死穴(HP≤10なら4、通常8ブロック)を検出。掘り/下方目標なら、必要数のはしごを所持またはクラフトしてから1セル穴を支えブロック付きではしごで降り、`Bases.LadderPit` に帰路を保存。降りない穴は拠点24ブロック以内または再訪チャンクで、3×3以内のものだけ余剰ブロックで蓋をする。広い穴は既存Motorの縁しゃがみを使う
+- **R-20/R-32**: `Perception` が実際に見たブロックだけを `StructureMemory`(SavedData)へ渡す。構造物データは `StructureManager.getAllStructuresAt` と `Registries.STRUCTURE` からID/範囲を取り、人工ブロックの集まりは手作り建物候補としてまとめる。`STRUCT` チャットで共有し、未探索の構造物をEXPLOREの入口・中心・チェスト順に訪問、チェストを既存LOOTへ渡す。スポナー/敵5体以上は鉄以上の剣または防具が無ければ避ける
+- 追加必須テスト: `laddersDownIntoADeepPit`, `coversADeadlyHoleNearHome`, `findsAVillageHouseAndLooksInside`; R-17/R-27の既存テストも更新
+- **検証未完了**: `./gradlew test --no-daemon` は `JAVA_HOME` 未設定かつ `java` 不在で実行不可。Java構文パーサーと `git diff --check` は通過。直前のCI run 37342075743 はGitHub Actionsがbilling/payment制限でrunner起動前に拒否。今回のpush後もCIが同じ制限なら検証は保留
+- **残り**: R-26の「作物以外、拠点周囲の湧き潰し」はS11-2時点の未実装のまま

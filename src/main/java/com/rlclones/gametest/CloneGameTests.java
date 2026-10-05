@@ -107,7 +107,9 @@ public final class CloneGameTests {
                     com.rlclones.clone.Bases b = com.rlclones.clone.Bases.get(h.getLevel().getServer());
                     b.staircases.clear();
                     b.shafts.clear();
+                    b.ladderPits.clear();
                     b.setDirty();
+                    com.rlclones.clone.StructureMemory.get(h.getLevel().getServer()).clear();
                     manager(h).setBreeding(false);
                 }
             });
@@ -143,7 +145,7 @@ public final class CloneGameTests {
     private static void resetArena(GameTestHelper h) {
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
-                for (int y = 0; y <= 5; y++) {
+                for (int y = -16; y <= 5; y++) {
                     BlockPos p = new BlockPos(x, y, z);
                     var want = y == 1 ? Blocks.STONE : Blocks.AIR;
                     var st = h.getBlockState(p);
@@ -951,8 +953,10 @@ public final class CloneGameTests {
         b.portals.clear();
         b.staircases.clear();
         b.shafts.clear();
+        b.ladderPits.clear();
         b.projects.clear();
         b.setDirty();
+        com.rlclones.clone.StructureMemory.get(h.getLevel().getServer()).clear();
     }
 
     private static void runStorage(GameTestHelper h, ClonePlayer c, com.rlclones.ai.Storage.Mode mode, boolean[] started) {
@@ -5310,10 +5314,148 @@ public final class CloneGameTests {
         b.controller().itemAid().onChat(a, "DIGGING 1", h.getLevel().getGameTime());
         b.controller().forcedOption = opt("FEED");
         b.setAiEnabled(true);
+        boolean[] returning = {false};
         h.succeedWhen(() -> {
-            h.assertTrue(b.controller().itemAid().given >= 1, "the friend brought it (" + b.controller().itemAid().state() + " " + b.controller().optionLog + ")");
-            h.assertTrue(a.getInventory().countItem(Items.IRON_PICKAXE) >= 1, "and the digger holds the iron pickaxe now");
-            finish(h, a, b);
+            boolean announcedReturn = com.rlclones.ai.Chat.recent().stream().anyMatch(line -> line.contains("RETURN " + a.getGameProfile().getName() + " minecraft:stone_pickaxe"));
+            if (!returning[0] && announcedReturn && a.getInventory().countItem(Items.IRON_PICKAXE) >= 1) {
+                a.controller().forcedOption = opt("FEED");
+                a.setAiEnabled(true);
+                returning[0] = true;
+            }
+            if (returning[0] && b.getInventory().countItem(Items.STONE_PICKAXE) >= 1) {
+                h.assertTrue(b.controller().itemAid().given >= 1, "the friend brought it (" + b.controller().itemAid().state() + " " + b.controller().optionLog + ")");
+                h.assertTrue(a.getInventory().countItem(Items.IRON_PICKAXE) >= 1, "and the digger holds the iron pickaxe now");
+                h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(line -> line.contains("RETURN " + a.getGameProfile().getName() + " minecraft:stone_pickaxe")),
+                        "the old pickaxe was requested back");
+                finish(h, a, b);
+            }
+        });
+    }
+
+    /** R-19: a small home-adjacent lethal shaft gets a solid cap rather than being left beside the base. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r11pits")
+    public static void coversADeadlyHoleNearHome(GameTestHelper h) {
+        clearBases(h);
+        for (int x : new int[]{7, 8}) {
+            for (int y = -10; y <= 1; y++) {
+                h.setBlock(new BlockPos(x, y, 7), Blocks.AIR);
+            }
+            h.setBlock(new BlockPos(x, -11, 7), Blocks.STONE);
+        }
+        com.rlclones.clone.Bases.get(h.getLevel().getServer()).add(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 7)), "test");
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.DIRT, 12));
+        h.onEachTick(() -> {
+            c.controller().pitSafety().tick(null, null, p -> false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            if (c.controller().pitSafety().pitsCovered >= 1) {
+                h.assertTrue(h.getBlockState(new BlockPos(7, 1, 7)).is(Blocks.DIRT) && h.getBlockState(new BlockPos(8, 1, 7)).is(Blocks.DIRT),
+                        "the one-by-two opening is capped at floor level");
+                h.assertTrue(c.isAlive() && c.getHealth() > 0, "the clone never falls into the pit");
+                finish(h, c);
+                clearBases(h);
+            }
+        });
+    }
+
+    /** R-19: a ladder is installed a rung at a time before the clone descends a ten-block natural pit. */
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r11pits")
+    public static void laddersDownIntoADeepPit(GameTestHelper h) {
+        clearBases(h);
+        for (int y = -8; y <= 1; y++) {
+            h.setBlock(new BlockPos(7, y, 7), Blocks.AIR);
+            h.setBlock(new BlockPos(6, y, 7), Blocks.STONE);
+            h.setBlock(new BlockPos(8, y, 7), Blocks.STONE);
+            h.setBlock(new BlockPos(7, y, 6), Blocks.STONE);
+            h.setBlock(new BlockPos(7, y, 8), Blocks.STONE);
+        }
+        h.setBlock(new BlockPos(7, -9, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(7, 2, 6), Blocks.STONE); // a continuous north wall to hang the ladder on
+        ClonePlayer c = clone(h, 7.5, 8.5, 180f, false);
+        c.getInventory().add(new ItemStack(Items.LADDER, 12));
+        c.getInventory().add(new ItemStack(Items.DIRT, 20));
+        boolean[] started = {false};
+        h.onEachTick(() -> {
+            if (!started[0]) {
+                started[0] = c.controller().pitSafety().beginDescentAt(h.absolutePos(new BlockPos(7, 1, 7)));
+            }
+            if (started[0] && c.controller().pitSafety().busy()) {
+                c.controller().pitSafety().tick(opt("EXPLORE"), null, p -> false);
+            }
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            if (c.controller().pitSafety().pitsDescended >= 1) {
+                int rungs = 0;
+                for (int y = -8; y <= 2; y++) {
+                    if (h.getBlockState(new BlockPos(7, y, 7)).getBlock() instanceof net.minecraft.world.level.block.LadderBlock) {
+                        rungs++;
+                    }
+                }
+                h.assertTrue(rungs >= 10, "a ladder line reaches almost to the bottom (" + rungs + " rungs)");
+                h.assertTrue(c.isAlive() && c.getHealth() > 0, "the clone reaches the bottom alive");
+                h.assertTrue(!com.rlclones.clone.Bases.get(h.getLevel().getServer()).ladderPits.isEmpty(), "the route is saved for the way back");
+                finish(h, c);
+                clearBases(h);
+            }
+        });
+    }
+
+    /** R-20/R-32: artificial blocks are grouped into a building, then the explorer enters and checks its chest. */
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r11structures")
+    public static void findsAVillageHouseAndLooksInside(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 6; x <= 10; x++) {
+            for (int z = 5; z <= 9; z++) {
+                boolean edge = x == 6 || x == 10 || z == 5 || z == 9;
+                if (edge) {
+                    for (int y = 2; y <= 3; y++) {
+                        if (!(x == 6 && z == 8)) {
+                            h.setBlock(new BlockPos(x, y, z), Blocks.OAK_PLANKS);
+                        }
+                    }
+                }
+                h.setBlock(new BlockPos(x, 4, z), Blocks.OAK_PLANKS);
+            }
+        }
+        var lowerDoor = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                        net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER);
+        h.setBlock(new BlockPos(6, 2, 8), lowerDoor);
+        h.setBlock(new BlockPos(6, 3, 8), lowerDoor.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER));
+        BlockPos chest = new BlockPos(9, 2, 7);
+        h.setBlock(chest, Blocks.CHEST);
+        BlockPos absChest = h.absolutePos(chest);
+        ((net.minecraft.world.level.block.entity.ChestBlockEntity) h.getLevel().getBlockEntity(absChest)).setItem(0, new ItemStack(Items.DIAMOND));
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
+        c.controller().perception().noteBlock(absChest);
+        var structures = com.rlclones.clone.StructureMemory.get(h.getLevel().getServer());
+        com.rlclones.clone.StructureMemory.Site[] site = {null};
+        for (int x = 6; x <= 10; x++) {
+            for (int z = 5; z <= 9; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    BlockPos pos = h.absolutePos(new BlockPos(x, y, z));
+                    c.controller().perception().noteVisibleBlock(pos);
+                }
+            }
+        }
+        site[0] = structures.nearestUnexplored(h.getLevel().dimension(), c.position(), 128);
+        h.assertTrue(site[0] != null && site[0].confirmed() && !site[0].chests().isEmpty(), "the seen building and its chest become a remembered site");
+        h.assertTrue(com.rlclones.ai.Chat.recent().stream().anyMatch(line -> line.startsWith(c.getGameProfile().getName() + ": STRUCT ")),
+                "the structure is shared in chat");
+        c.controller().forcedOption = opt("EXPLORE");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            if (c.controller().storage().lootings >= 1 && c.getInventory().countItem(Items.DIAMOND) >= 1) {
+                h.assertTrue(c.controller().optionLog.stream().anyMatch(s -> s.startsWith("EXPLORE")), "exploration was selected");
+                h.assertTrue(site[0].confirmed() && site[0].explored, "the route through the building was recorded");
+                finish(h, c);
+                clearBases(h);
+            }
         });
     }
 

@@ -55,6 +55,8 @@ public final class Motor {
     private boolean diveHard;
     /** R-17: cut the grass in front while walking (set each tick by whoever is after seeds). */
     private boolean sweep;
+    @Nullable
+    private BlockPos sweepTarget;
     public int sweepCuts;
     /** Times the clone crouched on its own at a dangerous edge. */
     public int edgeSneaks;
@@ -143,31 +145,82 @@ public final class Motor {
         sweep = true;
     }
 
-    /** One tick of R-17: a blade of grass just ahead (within 2.5 blocks, +-45 degrees of where we walk) is cut on the way; the walk goes on. */
+    /** One-tick R-17 reflex: turn to a breakable plant ahead, then cut it without changing the walking input. */
     private void sweepAhead() {
-        if (!sweep || moveDir == null || self.isInWater() || self.isPassenger() || !com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING, true)) {
+        if (!sweep) {
+            sweepTarget = null;
+            return;
+        }
+        if (moveDir == null || self.isInWater() || self.isPassenger()
+                || !com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING, true)) {
+            sweepTarget = null;
             return;
         }
         ServerLevel level = self.serverLevel();
         double len = Math.sqrt(moveDir.x * moveDir.x + moveDir.z * moveDir.z);
         if (len < 1e-4) {
+            sweepTarget = null;
             return;
         }
-        BlockPos feet = self.blockPosition();
-        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, 0, -3), feet.offset(3, 1, 3))) {
-            BlockState st = level.getBlockState(p);
-            if (!st.is(BlockTags.REPLACEABLE_PLANTS) || st.getDestroySpeed(level, p) != 0 || !self.mayInteract(level, p)) {
-                continue;
-            }
-            double dx = p.getX() + 0.5 - self.getX();
-            double dz = p.getZ() + 0.5 - self.getZ();
+        if (sweepTarget != null && !sweepable(sweepTarget, level)) {
+            sweepTarget = null;
+        }
+        if (sweepTarget != null) {
+            double dx = sweepTarget.getX() + 0.5 - self.getX();
+            double dz = sweepTarget.getZ() + 0.5 - self.getZ();
             double dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist <= 2.5 && (dist < 0.4 || (dx * moveDir.x + dz * moveDir.z) / (dist * len) >= 0.7071)) {
-                self.gameMode.destroyBlock(p.immutable());
-                sweepCuts++;
-                return; // one a tick
+            double dot = dist < 1.0e-4 ? 1.0 : (dx * moveDir.x + dz * moveDir.z) / (dist * len);
+            if (dist > 2.8 || dot < -0.15) {
+                sweepTarget = null;
             }
         }
+        if (sweepTarget == null) {
+            BlockPos feet = self.blockPosition();
+            double farthest = 0.0;
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, 0, -3), feet.offset(3, 1, 3))) {
+                if (!sweepable(p, level)) {
+                    continue;
+                }
+                double dx = p.getX() + 0.5 - self.getX();
+                double dz = p.getZ() + 0.5 - self.getZ();
+                double dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < 0.4 || dist > 2.5 || (dx * moveDir.x + dz * moveDir.z) / (dist * len) < 0.7071 || dist <= farthest) {
+                    continue;
+                }
+                farthest = dist;
+                sweepTarget = p.immutable(); // pick a farther blade first, leaving time to turn toward it
+            }
+        }
+        BlockPos target = sweepTarget;
+        if (target == null) {
+            return;
+        }
+        Vec3 point = new Vec3(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
+        lookAt(point); // look and walking are independent Motor intentions
+        Vec3 eye = self.getEyePosition();
+        double dx = point.x - eye.x;
+        double dy = point.y - eye.y;
+        double dz = point.z - eye.z;
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
+        float pitch = (float) -Math.toDegrees(Mth.atan2(dy, horizontal));
+        if (Mth.degreesDifferenceAbs(self.getYHeadRot(), yaw) > 8f || Math.abs(self.getXRot() - pitch) > 8f) {
+            return; // keep walking while the head turns; cut once the grass is actually under the crosshair
+        }
+        Vec3 viewEnd = eye.add(self.getViewVector(1.0F).scale(Math.min(Motor.BLOCK_REACH, eye.distanceTo(point) + 0.25)));
+        BlockHitResult hit = level.clip(new ClipContext(eye, viewEnd, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+        if (hit.getType() != HitResult.Type.MISS && !hit.getBlockPos().equals(target)) {
+            sweepTarget = null; // an obstruction, not a grass blade, is under the crosshair
+            return;
+        }
+        self.gameMode.destroyBlock(target.immutable());
+        sweepCuts++;
+        sweepTarget = null;
+    }
+
+    private boolean sweepable(BlockPos pos, ServerLevel level) {
+        BlockState state = level.getBlockState(pos);
+        return state.is(BlockTags.REPLACEABLE_PLANTS) && state.getDestroySpeed(level, pos) == 0 && self.mayInteract(level, pos);
     }
 
     /** Stay down even when air is low (the door breath: the air is at the bottom). */
@@ -310,6 +363,12 @@ public final class Motor {
     public void moveDirection(Vec3 dir) {
         Vec3 h = new Vec3(dir.x, 0, dir.z);
         moveDir = h.lengthSqr() < 1e-6 ? null : h.normalize();
+    }
+
+    /** Current horizontal movement intent, if any; used by safety reflexes before the controls are applied. */
+    @Nullable
+    public Vec3 intendedDirection() {
+        return moveDir;
     }
 
     public void moveToward(Vec3 point) {

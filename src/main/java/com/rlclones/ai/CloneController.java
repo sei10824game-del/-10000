@@ -49,6 +49,7 @@ public final class CloneController {
     private final ClonePlayer self;
     private final Perception perception;
     private final Motor motor;
+    private final PitSafety pitSafety;
     private final AgentWatcher watcher;
     private final Crafting crafting;
     private final Escape escape;
@@ -70,6 +71,7 @@ public final class CloneController {
     private final Farming farming;
     private final Expedition expedition;
     private final Discovery discovery;
+    private final com.rlclones.clone.StructureMemory structureMemory;
     private final Consumables consumables;
     private final Brewing brewing;
     private final Animals animals;
@@ -129,6 +131,8 @@ public final class CloneController {
     private final Int2LongOpenHashMap enemyLastAttack = new Int2LongOpenHashMap();
     private final Int2LongOpenHashMap enemyLastShot = new Int2LongOpenHashMap();
     private final LongOpenHashSet visitedChunks = new LongOpenHashSet();
+    private final java.util.Map<Long, Integer> visitedChunkVisits = new java.util.HashMap<>();
+    private long lastVisitedChunk = Long.MIN_VALUE;
     private final Random random = new Random();
 
     // strategy
@@ -151,6 +155,10 @@ public final class CloneController {
     // task scratch
     private Vec3 goal;
     private int goalTimer;
+    @Nullable
+    private String exploringSiteKey;
+    @Nullable
+    private BlockPos exploringWaypoint;
     private int calmTicks;
     private BlockPos blockTarget;
     private int blockTicks;
@@ -170,11 +178,13 @@ public final class CloneController {
         this.motor = new Motor(self);
         this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
         this.crafting = new Crafting(self, motor, perception);
+        this.pitSafety = new PitSafety(self, motor, crafting);
         this.escape = new Escape(self, motor);
         this.storage = new Storage(self, motor, perception, crafting);
         this.farming = new Farming(self, motor);
         this.expedition = new Expedition(self, motor);
         this.discovery = new Discovery(self, motor, perception);
+        this.structureMemory = com.rlclones.clone.StructureMemory.get(self.getServer());
         this.consumables = new Consumables(self, motor, perception);
         this.brewing = new Brewing(self, motor, perception);
         this.animals = new Animals(self, motor, perception);
@@ -212,8 +222,21 @@ public final class CloneController {
             Brain b = self.getCloneBrain();
             return b != null && b.isHarmful(id);
         });
+        perception.setStructureObserver(this::observeStructureBlock);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
+    }
+
+    private void observeStructureBlock(BlockPos pos, BlockState state) {
+        if (self.isCreative()) {
+            return;
+        }
+        var site = structureMemory.observe(self.serverLevel(), pos, state, now());
+        if (site != null && structureMemory.markAnnounced(site)) {
+            BlockPos center = site.center();
+            Chat.say(self, Component.literal("Noted a structure at " + center.toShortString()),
+                    "STRUCT " + site.id + " " + center.getX() + " " + center.getY() + " " + center.getZ());
+        }
     }
 
     private Brain brain() {
@@ -226,6 +249,10 @@ public final class CloneController {
 
     public Motor motor() {
         return motor;
+    }
+
+    public PitSafety pitSafety() {
+        return pitSafety;
     }
 
     public Escape escape() {
@@ -630,6 +657,7 @@ public final class CloneController {
                 motor.lookAt(lookBack);
             }
         }
+        pitSafety.tick(option, motor.recentGoal(), this::oftenVisited);
         long pm = Prof.t();
         motor.tick();
         Prof.add(Prof.MOTOR, pm);
@@ -932,6 +960,18 @@ public final class CloneController {
         String name = sender.getGameProfile().getName();
         if (t.startsWith("OMW ")) {
             responders.computeIfAbsent(t.substring(4).trim(), k -> new java.util.HashSet<>()).add(sender.getUUID());
+            return;
+        }
+        if (t.startsWith("STRUCT ")) {
+            String[] parts = t.split("\\s+");
+            if (parts.length >= 5 && sender.level() instanceof ServerLevel level) {
+                try {
+                    structureMemory.rememberReported(level, parts[1], new BlockPos(Integer.parseInt(parts[2]), Integer.parseInt(parts[3]),
+                            Integer.parseInt(parts[4])), now);
+                } catch (NumberFormatException ignored) {
+                    // malformed reports do not become exploration targets
+                }
+            }
             return;
         }
         if (t.startsWith("HAZARD ")) {
@@ -1647,6 +1687,17 @@ public final class CloneController {
         if (visitedChunks.size() < 4096 && visitedChunks.add(chunk)) {
             optionReward += 0.3f;
         }
+        if (chunk != lastVisitedChunk) {
+            if (visitedChunkVisits.size() < 4096 || visitedChunkVisits.containsKey(chunk)) {
+                visitedChunkVisits.merge(chunk, 1, Integer::sum);
+            }
+            lastVisitedChunk = chunk;
+        }
+    }
+
+    private boolean oftenVisited(BlockPos pos) {
+        long chunk = ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4);
+        return visitedChunkVisits.getOrDefault(chunk, 0) >= 3;
     }
 
     // ------------------------------------------------------------------ learning from sightings
@@ -3644,6 +3695,35 @@ public final class CloneController {
     }
 
     private boolean runExplore() {
+        var site = structureMemory.nearestUnexplored(self.level().dimension(), self.position(), 128);
+        if (site != null && safeToExplore(site)) {
+            if (!site.key.equals(exploringSiteKey) || exploringWaypoint == null) {
+                exploringSiteKey = site.key;
+                exploringWaypoint = structureMemory.nextWaypoint(site);
+            }
+            if (exploringWaypoint != null) {
+                BlockPos waypoint = exploringWaypoint;
+                goal = Vec3.atBottomCenterOf(waypoint);
+                boolean arrived = motor.navigate(goal, 1.5, false);
+                if (arrived) {
+                    boolean chest = site.chests().contains(waypoint);
+                    boolean loot = chest && storage.canLoot();
+                    structureMemory.visit(site, waypoint);
+                    exploringWaypoint = null;
+                    goal = null;
+                    if (loot) {
+                        nextOption = Option.LOOT;
+                        return true;
+                    }
+                    return false; // continue on to the next landmark in this same structure
+                }
+                return motor.stuckCount() > 3;
+            }
+            exploringSiteKey = null;
+        } else {
+            exploringSiteKey = null;
+            exploringWaypoint = null;
+        }
         if (goal == null) {
             goal = pickExploreGoal();
         }
@@ -3655,6 +3735,33 @@ public final class CloneController {
             endLook();
         }
         return arrived || motor.stuckCount() > 3;
+    }
+
+    private boolean safeToExplore(com.rlclones.clone.StructureMemory.Site site) {
+        if (hasStructureCombatGear()) {
+            return true;
+        }
+        if (site.dangerous) {
+            return false;
+        }
+        BlockPos min = site.min();
+        BlockPos max = site.max();
+        AABB area = new AABB(min.getX(), min.getY(), min.getZ(), max.getX() + 1, max.getY() + 1, max.getZ() + 1).inflate(8);
+        return self.level().getEntitiesOfClass(Mob.class, area, m -> m.isAlive() && Senses.isHostileTo(m, self)).size() < 5;
+    }
+
+    private boolean hasStructureCombatGear() {
+        for (ItemStack stack : self.getInventory().items) {
+            if (stack.getItem() instanceof net.minecraft.world.item.SwordItem sword && sword.getTier().getLevel() >= 2) {
+                return true; // iron or better
+            }
+        }
+        for (ItemStack stack : self.getInventory().armor) {
+            if (stack.getItem() instanceof net.minecraft.world.item.ArmorItem armor && armor.getDefense() >= 5) {
+                return true; // at least an iron chestplate's protection
+            }
+        }
+        return false;
     }
 
     private Vec3 pickExploreGoal() {
