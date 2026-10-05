@@ -1439,7 +1439,7 @@ public final class CloneController {
         if (!(stairsOk || shaftOk) || !digPending(now) || now - lastDigEnd < 1200 || self.getHealth() < self.getMaxHealth() * 0.7f) {
             return null;
         }
-        if (self.getFoodData().getFoodLevel() < 14 && FoodAid.foodItems(self) < 4) {
+        if (self.getFoodData().getFoodLevel() < 18 && FoodAid.foodItems(self) < 6) { // enough for a long way down: food first
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
             }

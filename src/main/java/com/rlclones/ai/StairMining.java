@@ -44,6 +44,8 @@ public final class StairMining {
     public int giveUps;
     /** Cells of level tunnel dug at the target depth, all in all (plan.md P-05). */
     public int tunnelDug;
+    /** Leaving the tunnel (hungry, hurt): up the stairs to the top, where there is food and daylight. */
+    private boolean ascending;
     private static final int TUNNEL_CAP = 160;
     private static final int TURN_EVERY = 32;
 
@@ -237,6 +239,7 @@ public final class StairMining {
             debug = "resume " + stairs.top.toShortString() + " -> " + stairs.end.toShortString() + " from stage " + first;
         }
         ticks = 0;
+        ascending = false;
         toStage(first);
         stuck = 0;
         lastFeet = self.blockPosition();
@@ -324,7 +327,13 @@ public final class StairMining {
                 if (stalled(300)) {
                     return failStairs("no nearer the top " + s.top.toShortString() + " from " + feet.toShortString());
                 }
-                if (motor.navigate(Vec3.atBottomCenterOf(s.top), 1.0, false) || stepIndex(feet) >= 0) {
+                boolean navigated = motor.navigate(Vec3.atBottomCenterOf(s.top), 1.0, false);
+                if (ascending ? navigated || feet.distManhattan(s.top) <= 2 : navigated || stepIndex(feet) >= 0) {
+                    if (ascending) {
+                        ascending = false;
+                        debug = "back at the top " + s.top.toShortString();
+                        return Status.DONE; // up in the open again: food, rest
+                    }
                     toStage(1);
                     motor.resetStuck();
                 } else if (motor.stuckCount() > 8) {
@@ -515,10 +524,12 @@ public final class StairMining {
             bases().setDirty();
             return Status.DONE;
         }
-        boolean hungry = self.getFoodData().getFoodLevel() < 8 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
+        boolean hungry = self.getFoodData().getFoodLevel() < 10 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
         if (self.getHealth() < self.getMaxHealth() * 0.5f || hungry) {
             debug = "leaves the tunnel: " + (hungry ? "hungry" : "hurt");
-            return Status.DONE; // (the tunnel stays: it is carried on later)
+            ascending = true; // (the tunnel stays: it is carried on later) - up the stairs first: nothing to eat down here
+            toStage(0);
+            return Status.WORKING;
         }
         progress(s.tunnelLen);
         if (stalled(300)) {

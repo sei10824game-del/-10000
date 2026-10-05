@@ -46,8 +46,17 @@ jobs:
             echo "### Soak"
             grep -a -E 'SOAK-(SUMMARY|NONE|OPTIONS|CLONE)|CLONE-DEATH' "$log" | cut -c1-1500 || true
           } | tee -a "$GITHUB_STEP_SUMMARY"
-          grep -a 'LogTestReporter' "$log" | grep -a ' failed!' | head -40 | sed 's/%/%25/g' | cut -c1-1500 | while IFS= read -r l; do echo "::error title=GameTest failed::$l"; done || true
-          grep -a -E 'SOAK-(SUMMARY|NONE|OPTIONS|CLONE)|CLONE-DEATH' "$log" | head -40 | sed 's/%/%25/g' | cut -c1-1500 | while IFS= read -r l; do echo "::notice title=Soak::$l"; done || true
+          # (GitHub keeps 10 notices and 10 errors per step: one notice per kind, long ones joined)
+          esc() { sed 's/%/%25/g' | cut -c1-1200 | awk 'BEGIN{ORS="%0A"} {print}'; }
+          grep -a 'LogTestReporter' "$log" | grep -a ' failed!' | head -9 | sed 's/%/%25/g' | cut -c1-1500 | while IFS= read -r l; do echo "::error title=GameTest failed::$l"; done || true
+          for k in SUMMARY NONE OPTIONS; do
+            m=$(grep -a "SOAK-$k" "$log" | tail -1 | sed 's/%/%25/g' | cut -c1-1500)
+            if [ -n "$m" ]; then echo "::notice title=Soak $k::$m"; fi
+          done
+          c=$(grep -a 'SOAK-CLONE' "$log" | tail -8 | esc)
+          if [ -n "$c" ]; then echo "::notice title=Soak clones::$c"; fi
+          d=$(grep -a 'CLONE-DEATH' "$log" | grep -a -v ', -58, ' | tail -8 | esc)
+          if [ -n "$d" ]; then echo "::notice title=Soak deaths::$d"; fi
 
       - name: Upload mod jar
         if: always()

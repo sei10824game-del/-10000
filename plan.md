@@ -282,3 +282,11 @@
 - 実装: `StairMining` の stage 3(`tunnelTick`)。目標の深さに着いても鉄・ダイヤが足りなければ、階段の向きにまっすぐ 1×2 のトンネルを掘る。32セルごとに右へ曲がる。上限 160セル。水・溶岩・掘れない物があれば曲がり、曲がれなければ階段を `finished` にする。HP<50% か空腹(満腹度<8 で食べ物なし)なら離れる(トンネルは残り、あとで続きから)。`Bases.Staircase` に `tunnelEnd`・`tunnelDir`・`tunnelLen`(保存しない)。`nearestStaircase` は上端・下端・トンネルの先端のうち近いものまでの距離で探す。`StairMining.pending()` = 掘る深さが残っている、または続きのトンネルがある。駆動(`digDrive`)と遠征の抑制はこれを使う。掘りの進み(`noteDigEnd`)はトンネル8セルでも進みと数える
 - 鉱石は階段と同じく `oreReflex` が取る
 - 次: 溺死3件と溶岩死3件の安全対策(遠征・探索・STORE の経路で水・溶岩を避ける)。鉄ツルハシ以降(`Crafting` はすでに鉄→ダイヤの順で作る)。P-07 観測・P-08 報酬
+
+## 16. run 37280294312(P-05 横掘り)の結果と、その次
+- CI: 必須3件が失敗(`usesExistingBrewingStand`・`learnsTheSignsOfAnAttackAndRaisesTheShieldInTime`・既知の `pensCowsWhenWheatPilesUp`)。どれも掘りと関係が薄く、実行ごとに落ちるテストが入れ替わる不安定なもの。新規の `tunnelsSidewaysAtTheTargetDepth` は通った
+- ソーク(72000tick): 死亡 0(ソークの6体)。石のツルハシ 6/6(初到達 11800〜49000tick。2体は47000tick以降)、かまど 6/6。鉄: 生の鉄 1個(Clone270)、インゴット 0。階段・横掘りで y=39 まで届いた2体(Clone267・272)は、満腹度0・HP10 のまま地下にいた(石炭が33個・10個)。STORE が 364(17%)で多い
+- 見つかった問題: トンネルの中で空腹になると、`tunnelTick` はオプションを終えるだけで、地下に残って食べ物を探せない
+- 対策(実装済み): 空腹(満腹度<10 で食べ物なし)かHP<50%なら、トンネルから階段を上って上端へ戻る(`ascending`: stage 0 で上端まで歩き、着いたら DONE)。掘り始める前の食べ物の条件を、満腹度<18 かつ食べ物<6 なら HUNT/FARM を先にする、へ強めた
+- CI の注釈: GitHub は 1 ステップにつき通知 10件・エラー 10件までしか残さない。通知は種類ごとに 1 件(SUMMARY・NONE・OPTIONS・個体ごとの SOAK-CLONE を改行でまとめた 1 件・死亡)に変更。`SOAK-CLONE` に `Progression`・階段(段数 g 失敗 a 見限り)・`tunnel=`(掘ったセル数)・`esc=`・`cd=`・`dig=`・階段の debug を足した
+- 次: 水・溶岩の安全対策(溺死3・溶岩死3。いずれも遠征・探索・STORE・FOLLOW の途中)。鉄がなかなか出ない原因の確認(トンネルの長さ `tunnel=` と、見つけた鉱石の数)

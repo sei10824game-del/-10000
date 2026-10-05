@@ -5068,7 +5068,10 @@ public final class CloneGameTests {
                     for (String n : names) {
                         var m = first.getOrDefault(n, java.util.Map.of());
                         ClonePlayer live = manager(h).byName(n);
-                        RLClones.LOGGER.info("SOAK-CLONE {} steps={} gone@{} | {}", n, m, gone.get(n), live == null ? "-" : soakBag(live));
+                        RLClones.LOGGER.info("SOAK-CLONE {} steps={} gone@{} | {}", n, m, gone.get(n), live == null ? "-" : soakBag(live) + " | " + Progression.describe(live)
+                                + " stairs=" + live.controller().stairs().stepsDug + "g" + live.controller().stairs().giveUps + "a" + live.controller().stairs().abandoned
+                                + " tunnel=" + live.controller().stairs().tunnelDug + " esc=" + live.controller().escapeStarts + " cd=" + live.controller().churnCooldowns
+                                + " dig=" + live.controller().digDrives + " | " + live.controller().stairs().debug);
                     }
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
                     RLClones.LOGGER.info("SOAK-NONE (what the clone was busy with when no option ran) {}", nones);
