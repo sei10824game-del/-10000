@@ -30,6 +30,25 @@ jobs:
           printf 'level-seed=rlclones\n' > run/server.properties
           ./gradlew runGameTestServer --no-daemon
 
+      - name: Summarize game test results
+        # the failure messages sit far up in the log: collect them (and the soak numbers) where they can be read
+        # at once - the job summary, and annotations that the API serves without the whole log
+        if: always()
+        run: |
+          log=run/logs/latest.log
+          if [ ! -f "$log" ]; then echo "no $log"; exit 0; fi
+          {
+            echo "### Game tests"
+            grep -a -E 'required tests failed|optional tests failed|GAME TESTS COMPLETE' "$log" | cut -c1-300 || true
+            grep -a -E 'GameTestServer\]:    - ' "$log" | cut -c1-300 || true
+            echo "### Failure messages"
+            grep -a 'LogTestReporter' "$log" | grep -a ' failed!' | cut -c1-1500 || true
+            echo "### Soak"
+            grep -a -E 'SOAK-(SUMMARY|NONE|OPTIONS)|CLONE-DEATH' "$log" | cut -c1-1500 || true
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -a 'LogTestReporter' "$log" | grep -a ' failed!' | head -40 | sed 's/%/%25/g' | cut -c1-1500 | while IFS= read -r l; do echo "::error title=GameTest failed::$l"; done || true
+          grep -a -E 'SOAK-(SUMMARY|NONE|OPTIONS)|CLONE-DEATH' "$log" | head -40 | sed 's/%/%25/g' | cut -c1-1500 | while IFS= read -r l; do echo "::notice title=Soak::$l"; done || true
+
       - name: Upload mod jar
         if: always()
         uses: actions/upload-artifact@v4
