@@ -138,6 +138,12 @@ public class Bases extends SavedData {
         public boolean finished;
         /** Times a clone failed to follow it (not saved): two and it is given up. */
         public int failures;
+        /** At the target depth the staircase goes on as a level tunnel (not saved): its tip, its direction, cells dug. */
+        @Nullable
+        public BlockPos tunnelEnd;
+        @Nullable
+        public net.minecraft.core.Direction tunnelDir;
+        public int tunnelLen;
 
         public Staircase(ResourceKey<Level> dimension, BlockPos top, net.minecraft.core.Direction dir, BlockPos end, boolean finished) {
             this.dimension = dimension;
@@ -247,6 +253,10 @@ public class Bases extends SavedData {
         double bestD = radius;
         for (Staircase s : staircases) {
             double d = Vec3.atCenterOf(s.top).distanceTo(pos);
+            d = Math.min(d, Vec3.atCenterOf(s.end).distanceTo(pos));
+            if (s.tunnelEnd != null) {
+                d = Math.min(d, Vec3.atCenterOf(s.tunnelEnd).distanceTo(pos)); // down in the tunnel: it is the tip that is near
+            }
             if (s.dimension == dim && !s.finished && d < bestD && ok.test(s)) {
                 bestD = d;
                 best = s;

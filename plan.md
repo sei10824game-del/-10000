@@ -276,3 +276,9 @@
 - D-7: `Progression.need == STONE`(木のツルハシだけ)の間は新しい遠征・JOIN をしない。石が見えて QUARRY が選べるなら `drive` で QUARRY を引く
 - ソークの `SOAK-TRACE` に `cd=`(空回りで外した回数)を足した
 - CI にテスト結果の要約ステップを追加(`.github/workflows/build.yml`): 失敗メッセージ・ソークの集計・`CLONE-DEATH` を、ジョブサマリーと注釈(`gh api repos/.../check-runs/<id>/annotations`)に出す
+
+## 15. S3(P-05 横掘り)の実装メモ — run 37277528777 までの結果を受けて
+- 結果: CI は全緑(179+3件)。ソーク: 石のツルハシ 6/6・かまど 6/6・石炭 4/6・鉄 0/6。QUARRY 219(石の段階が速くなった)、EXPEDITION 35(299→35)、行動なし 6%(escape 130)。死亡3(溺死3: 遠征・STORE・FOLLOW。前の3回は溶岩)。直前の run(37277318214、S2.6 なし)では鉄インゴット 1/6 が出た
+- 実装: `StairMining` の stage 3(`tunnelTick`)。目標の深さに着いても鉄・ダイヤが足りなければ、階段の向きにまっすぐ 1×2 のトンネルを掘る。32セルごとに右へ曲がる。上限 160セル。水・溶岩・掘れない物があれば曲がり、曲がれなければ階段を `finished` にする。HP<50% か空腹(満腹度<8 で食べ物なし)なら離れる(トンネルは残り、あとで続きから)。`Bases.Staircase` に `tunnelEnd`・`tunnelDir`・`tunnelLen`(保存しない)。`nearestStaircase` は上端・下端・トンネルの先端のうち近いものまでの距離で探す。`StairMining.pending()` = 掘る深さが残っている、または続きのトンネルがある。駆動(`digDrive`)と遠征の抑制はこれを使う。掘りの進み(`noteDigEnd`)はトンネル8セルでも進みと数える
+- 鉱石は階段と同じく `oreReflex` が取る
+- 次: 溺死3件と溶岩死3件の安全対策(遠征・探索・STORE の経路で水・溶岩を避ける)。鉄ツルハシ以降(`Crafting` はすでに鉄→ダイヤの順で作る)。P-07 観測・P-08 報酬

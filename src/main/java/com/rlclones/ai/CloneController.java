@@ -430,6 +430,7 @@ public final class CloneController {
     private int digFails;
     private int digStartY;
     private int digStartShort;
+    private int digStartTunnel;
     public int digDrives;
     /** Falls into holes (soak diagnostics): how often the escape began and what it began on. */
     public int escapeStarts;
@@ -1403,12 +1404,13 @@ public final class CloneController {
 
     /** Iron / diamonds are still to be found, there is depth left to dig for them, and the last digs did not all get nowhere. */
     private boolean digPending(long now) {
-        return now >= digBackoffUntil && Progression.digWanted(self) && self.getBlockY() > stairs.target();
+        return now >= digBackoffUntil && Progression.digWanted(self) && stairs.pending();
     }
 
     private void markDigStart() {
         digStartY = self.getBlockY();
         digStartShort = Progression.ironShort(self) + Progression.diamondShort(self);
+        digStartTunnel = stairs.tunnelDug;
     }
 
     private void noteDigEnd(long now, boolean died) {
@@ -1416,7 +1418,8 @@ public final class CloneController {
         if (died) {
             return;
         }
-        boolean progress = digStartY - self.getBlockY() >= 4 || digStartShort - (Progression.ironShort(self) + Progression.diamondShort(self)) > 0;
+        boolean progress = digStartY - self.getBlockY() >= 4 || stairs.tunnelDug - digStartTunnel >= 8
+                || digStartShort - (Progression.ironShort(self) + Progression.diamondShort(self)) > 0;
         if (progress) {
             digFails = 0;
         } else if (++digFails >= 3) {

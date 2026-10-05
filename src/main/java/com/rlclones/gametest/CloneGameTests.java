@@ -4839,6 +4839,30 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 2500, batch = "p3tunnel")
+    public static void tunnelsSidewaysAtTheTargetDepth(GameTestHelper h) {
+        clearBases(h);
+        stoneMass(h);
+        h.setBlock(new BlockPos(4, 2, 7), Blocks.AIR);
+        h.setBlock(new BlockPos(4, 3, 7), Blocks.AIR);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        var st = bases.addStaircase(h.getLevel().dimension(), h.absolutePos(new BlockPos(3, 3, 7)), Direction.EAST);
+        st.end = h.absolutePos(new BlockPos(4, 2, 7)); // one step down: this is the bottom
+        ClonePlayer c = clone(h, 4.5, 7.5, 90f, false);
+        stairsKit(h, c); // a stone pickaxe and no iron: iron is what is wanted
+        learnStoneBlocks(c);
+        c.controller().stairs().targetY = h.absolutePos(new BlockPos(4, 2, 7)).getY(); // as deep as it goes: level with the clone
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.STAIRS;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            var stairs = c.controller().stairs();
+            h.assertTrue(st.tunnelLen >= 5 && stairs.tunnelDug >= 5, "a level tunnel dug on from the bottom (" + st.tunnelLen + " " + stairs.debug + " | " + stairs.recent + ")");
+            h.assertTrue(h.getBlockState(new BlockPos(6, 2, 7)).isAir() && h.getBlockState(new BlockPos(6, 3, 7)).isAir(), "two blocks high");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */

@@ -42,6 +42,10 @@ public final class StairMining {
     private final java.util.Map<BlockPos, Long> avoid = new java.util.HashMap<>();
     public int abandoned;
     public int giveUps;
+    /** Cells of level tunnel dug at the target depth, all in all (plan.md P-05). */
+    public int tunnelDug;
+    private static final int TUNNEL_CAP = 160;
+    private static final int TURN_EVERY = 32;
 
     /** Dig down to here; unset (MIN_VALUE) = what the next step needs (iron: 16, diamonds: -58), see {@link Progression}. */
     public int targetY = Integer.MIN_VALUE;
@@ -130,7 +134,24 @@ public final class StairMining {
         }
         boolean surface = assumeSurface || self.level().canSeeSky(self.blockPosition().above());
         Bases.Staircase known = bases().nearestStaircase(self.level().dimension(), self.position(), 64, this::usable);
+        if (known != null && branchable(known)) {
+            return true; // down at the depth already, iron / diamonds still to find: the tunnel goes on
+        }
         return (surface || known != null) && self.getBlockY() > target();
+    }
+
+    /** At the target depth with iron / diamonds still to find and tunnel left to dig. */
+    private boolean branchable(Bases.Staircase s) {
+        return s.end.getY() <= target() && s.tunnelLen < TUNNEL_CAP && Progression.digWanted(self);
+    }
+
+    /** Digging is still worth it: depth to go down, or a tunnel to carry on with. */
+    public boolean pending() {
+        if (self.getBlockY() > target()) {
+            return true;
+        }
+        Bases.Staircase known = bases().nearestStaircase(self.level().dimension(), self.position(), 64, this::usable);
+        return known != null && branchable(known);
     }
 
     private boolean usable(Bases.Staircase s) {
@@ -209,6 +230,9 @@ public final class StairMining {
                 first = 2; // already down at the bottom
             } else if (feet.distManhattan(stairs.top) <= 2 || onStairs(feet)) {
                 first = 1;
+            }
+            if (stairs.end.getY() <= target() && stairs.tunnelEnd != null && feet.distManhattan(stairs.tunnelEnd) <= 3) {
+                first = 3; // down in the tunnel already
             }
             debug = "resume " + stairs.top.toShortString() + " -> " + stairs.end.toShortString() + " from stage " + first;
         }
@@ -345,6 +369,9 @@ public final class StairMining {
                     return failStairs("stuck on step " + i + " of " + s.steps() + " at " + feet.toShortString());
                 }
             }
+            case 3 -> {
+                return tunnelTick(feet);
+            }
             default -> {
                 return digTick(feet);
             }
@@ -389,6 +416,10 @@ public final class StairMining {
             return stuck > 60 ? failStairs("cannot get to the end " + s.end.toShortString() + " from " + feet.toShortString()) : Status.WORKING;
         }
         if (feet.getY() <= target()) {
+            if (branchable(s)) {
+                toStage(3); // deep enough, but no iron / diamonds yet: along the level
+                return Status.WORKING;
+            }
             s.finished = true;
             bases().setDirty();
             return Status.DONE;
@@ -429,6 +460,122 @@ public final class StairMining {
             return failStairs("cannot step down to " + next.toShortString() + " from " + feet.toShortString());
         }
         return Status.WORKING;
+    }
+
+    /** No liquid in the cell or next to it. */
+    private boolean dry(BlockPos p) {
+        ServerLevel level = self.serverLevel();
+        if (!level.getFluidState(p).isEmpty()) {
+            return false;
+        }
+        for (Direction f : Direction.values()) {
+            if (!level.getFluidState(p.relative(f)).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The cells (2 high) ahead in direction {@code d} from {@code tip}: nothing in the way that cannot be dug, no liquid. */
+    private boolean openAhead(BlockPos tip, Direction d) {
+        BlockPos next = tip.relative(d);
+        for (BlockPos p : new BlockPos[]{next, next.above()}) {
+            if (solid(p) ? !diggable(p) : !dry(p)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The way on is blocked (water, lava, bedrock...): turn if a side is open, else this staircase ends here. */
+    private Status turnOrFinish(Bases.Staircase s, Direction d, String why) {
+        BlockPos tip = s.tunnelEnd != null ? s.tunnelEnd : s.end;
+        for (Direction t : new Direction[]{d.getClockWise(), d.getCounterClockWise()}) {
+            if (openAhead(tip, t)) {
+                s.tunnelDir = t;
+                trace("turn@" + tip.toShortString() + t);
+                return Status.WORKING;
+            }
+        }
+        s.finished = true;
+        bases().setDirty();
+        debug = "tunnel ends at " + tip.toShortString() + ": " + why;
+        return Status.DONE;
+    }
+
+    /** Level with the target depth and iron / diamonds still to find: a 1x2 tunnel straight on, turning right every so often. */
+    private Status tunnelTick(BlockPos feet) {
+        Bases.Staircase s = stairs;
+        if (s == null) {
+            toStage(2);
+            return Status.WORKING;
+        }
+        if (!Progression.digWanted(self) || s.tunnelLen >= TUNNEL_CAP) {
+            s.finished = true;
+            bases().setDirty();
+            return Status.DONE;
+        }
+        boolean hungry = self.getFoodData().getFoodLevel() < 8 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
+        if (self.getHealth() < self.getMaxHealth() * 0.5f || hungry) {
+            debug = "leaves the tunnel: " + (hungry ? "hungry" : "hurt");
+            return Status.DONE; // (the tunnel stays: it is carried on later)
+        }
+        progress(s.tunnelLen);
+        if (stalled(300)) {
+            return failStairs("no progress in the tunnel at " + feet.toShortString());
+        }
+        BlockPos tip = s.tunnelEnd != null ? s.tunnelEnd : s.end;
+        Direction d = s.tunnelDir != null ? s.tunnelDir : s.dir;
+        if (!feet.equals(tip)) {
+            if (!self.onGround()) {
+                return Status.WORKING;
+            }
+            if (!feet.equals(tip.relative(d))) {
+                if (feet.distManhattan(tip) > 2) {
+                    motor.navigate(Vec3.atBottomCenterOf(tip), 1.0, false); // back to where the digging stopped
+                    return motor.stuckCount() > 8 ? failStairs("cannot get to the tunnel tip " + tip.toShortString() + " from " + feet.toShortString()) : Status.WORKING;
+                }
+                motor.moveToward(Vec3.atBottomCenterOf(tip));
+                return stuck > 60 ? failStairs("cannot get back to the tunnel tip at " + feet.toShortString()) : Status.WORKING;
+            }
+            // stepped forward onto the cell just dug
+            s.tunnelEnd = feet.immutable();
+            s.tunnelLen++;
+            tunnelDug++;
+            bases().setDirty();
+            tip = s.tunnelEnd;
+            if (s.tunnelLen % TURN_EVERY == 0) {
+                s.tunnelDir = d.getClockWise();
+                d = s.tunnelDir;
+            }
+        }
+        BlockPos next = tip.relative(d);
+        for (BlockPos p : new BlockPos[]{next.above(), next}) {
+            if (solid(p)) {
+                if (!diggable(p)) {
+                    return turnOrFinish(s, d, "cannot dig " + p.toShortString() + " " + self.level().getBlockState(p));
+                }
+                motor.stop();
+                Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
+                motor.mine(p);
+                return Status.WORKING;
+            }
+            if (!dry(p)) {
+                return turnOrFinish(s, d, "liquid at " + p.toShortString());
+            }
+        }
+        BlockPos floor = next.below();
+        if (!solid(floor)) {
+            int slot = Equipment.pillarBlockSlot(self);
+            if (slot < 0 || !dry(floor)) {
+                return turnOrFinish(s, d, "no floor at " + floor.toShortString());
+            }
+            Equipment.select(self, slot);
+            motor.placeBlockAt(floor);
+            return Status.WORKING;
+        }
+        motor.moveToward(Vec3.atBottomCenterOf(next));
+        return stuck > 60 ? failStairs("cannot step on in the tunnel at " + feet.toShortString()) : Status.WORKING;
     }
 
     /** A direction with solid ground to dig into (no liquid, no drop right ahead). */
