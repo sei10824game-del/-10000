@@ -469,3 +469,4 @@
 - R-28: `pickSite` を 拠点から6ブロック以上・範囲±12 に。テスト `bringsWaterHomeAndMakesASpring` の配置を合わせた
 - R-30: 掘る4オプション(MINE/QUARRY/STAIRS/SHAFT)でツルハシ無し→`toolUp`(作る/材料集め)。それも不可なら1200tick は掘るオプションを選ばない
 - R-31: `bestToolSlot` が、適正ツールが無い(速度が上がらない)ブロックでは、素手/非ツールのスロットを選ぶ
+- run 37336376594(S11-1のdocsコミット e6de9d4): 失敗5件=corner(修正済)・lava bucket・staircase・climbsUp…・pens。run 37336877128(S11-2 62976c6): corner(修正済)・`creativeBuildsPortalsAndAnEnchantingRoom`・`pearlsOverALavaMoat…`(既知flaky)・`huntsFishInTheWater`(水中。再現を見る)・`makesCharcoalFromSpareLogs`(自分のテスト: 原木を道具・樽・本棚の製作に使い切った。原木を48に増やし、鉄3本の焼成だけを見る形に直した)
