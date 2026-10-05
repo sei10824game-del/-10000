@@ -307,7 +307,15 @@ public final class StairMining {
                 return false; // water or lava behind it
             }
         }
+        if (level.getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
+            return false; // gravel / sand above it would pour into the cleared space and shut the stair behind us
+        }
         return bases().nearest(level.dimension(), Vec3.atCenterOf(p), 8) == null;
+    }
+
+    /** Tests: could this block be dug out for the stairs / tunnel? */
+    public boolean canDigOut(BlockPos p) {
+        return diggable(p);
     }
 
     public Status tick() {

@@ -332,3 +332,9 @@
 - ソーク: 鉄インゴット 0/6(前回 3/6。ばらつきが大きい)、死亡 1(落下 (3151,45,-2) EXPLORE)。**REST が 320(15%)**(前回 27)。満腹度 0 が 6体中5体、HP10 のまま REST で動かない個体が多い。食料不足が最大の障害
 - ソークの条件の不備: `doMobSpawning=false`(アリーナを守るため)は、動物の自然発生も止める(通常は動物が時々湧く)。クローンが周囲の動物を食べ尽くすと、再び現れない → 餓死の一因。対策: ソークで 1200tick ごとに、各クローンの近く(14〜32ブロック)の草の上に動物(牛・豚・羊・鶏)を1匹出す
 - 未対応: `bringsWaterHomeAndMakesASpring`(`filled twice at the lake: 1`、2回続けて失敗)。水・湖の環境に依存するテスト
+
+## 23. run 37306529663(砂利の対策・動物の再発生)の結果
+- CI: 必須2件(`penscowswhenwheatpilesup`: 既知。`climbsUpToShootAnEnemyHiddenBehindAWall`: 初めて失敗)。`learnsTheSignsOf...` は通った(砂利の対策が効いた)。`bringsWaterHomeAndMakesASpring` も通った
+- ソーク: 鉄インゴット 1/6、死亡 2(どちらも**溺死**: MINE の最中 (3140,49,-55) と option なし (3133,41,28)。地下 y41〜49)。食べ物を持つ個体が 3/6(満腹度 11・20・4)に増えた(動物の再発生が効いた)。HUNT 27(前回 3)、REST 137(前回 320)
+- **`tunnel=0`(横掘りのセルが0)が6体全員**: 横掘りは一度も始まっていない。階段は y=37〜39 まで掘れているが(段数 29〜35)、そこで `no nearer the top 3147,68,35 from 3147,39,35`(上端の真下にいて、上端へ戻れない)・`cannot reach the top` で止まる。階段が途中で埋まっている疑い(砂利・砂が崩れて塞ぐ)。対策(実装済み): `StairMining.diggable` が「上に落下ブロック(砂利・砂)がある石」を掘らない(`canDigOut`)。テスト `doesNotDigOutWhatHoldsUpGravel`
+- 次: 溺死(地下で水に入ったら上へ)。階段の「上端に戻れない」の原因確認(階段の記録 `s.dir`・上端と今いる位置の関係を `SOAK-CLONE` に出す)

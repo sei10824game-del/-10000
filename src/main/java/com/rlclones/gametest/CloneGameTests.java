@@ -4934,6 +4934,22 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "p4gravel")
+    public static void doesNotDigOutWhatHoldsUpGravel(GameTestHelper h) {
+        clearBases(h);
+        h.setBlock(new BlockPos(5, 3, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(5, 4, 7), Blocks.STONE);
+        h.setBlock(new BlockPos(5, 5, 7), Blocks.GRAVEL); // rests on the stone below it
+        h.setBlock(new BlockPos(9, 3, 7), Blocks.STONE);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var st = c.controller().stairs();
+        h.assertTrue(!st.canDigOut(h.absolutePos(new BlockPos(5, 4, 7))), "stone with gravel on top: digging it out would bring the gravel down");
+        h.assertTrue(st.canDigOut(h.absolutePos(new BlockPos(5, 3, 7))), "the stone under it is fine (nothing above it that falls)") ;
+        h.assertTrue(st.canDigOut(h.absolutePos(new BlockPos(9, 3, 7))), "plain stone is fine");
+        finish(h, c);
+        h.succeed();
+    }
+
     // ------------------------------------------------------------------ soak: how far do clones get on their own?
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
