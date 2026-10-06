@@ -263,6 +263,9 @@ public final class ServerEvents {
         if (Senses.isAgent(victim)) {
             AgentEvents.record(victim.getUUID(), now, AgentEvents.Kind.HURT, amount, attacker == null ? -1 : attacker.getId(), 0);
         }
+        if (victim instanceof ClonePlayer cp) {
+            cp.controller().onHurt(event.getSource(), amount);
+        }
         if (victim instanceof ClonePlayer cp && attacker == null && event.getSource().getDirectEntity() == null) {
             cp.controller().onEnvironmentDamage(event.getSource());
         }

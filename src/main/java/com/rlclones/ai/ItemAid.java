@@ -24,6 +24,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,6 +49,14 @@ public final class ItemAid {
     private final Map<String, Long> lastAsked = new HashMap<>();
     /** Item asked for -> when a friend said it is bringing it. */
     private final Map<String, Long> coming = new HashMap<>();
+    /** R-27: asks that come from a digger's "DIGGING tier" line and our better pickaxe: the only one we have may go. */
+    private final java.util.Set<Ask> offered = new java.util.HashSet<>();
+    /** Requests created by a RETURN line: fulfillment is stronger evidence of reciprocity than an ordinary gift. */
+    private final java.util.Set<Ask> returnRequests = new java.util.HashSet<>();
+    /** Old tool reported by the digger, to be returned after the offered pickaxe is delivered. */
+    private final Map<Ask, String> returnItems = new HashMap<>();
+    /** Partner UUID -> deadline for a requested tool return; a missed promise is negative social evidence. */
+    private final Map<UUID, Long> expectedReturns = new HashMap<>();
     @Nullable
     private Ask helping;
     private int ticks;
@@ -68,6 +77,24 @@ public final class ItemAid {
 
     private long now() {
         return self.level().getGameTime();
+    }
+
+    /** Called periodically by the controller so broken tool-return promises can lower learned trust. */
+    public void tick(long now) {
+        Iterator<Map.Entry<UUID, Long>> it = expectedReturns.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UUID, Long> pending = it.next();
+            if (now >= pending.getValue()) {
+                if (self.getCloneBrain() != null) {
+                    self.getCloneBrain().learnSocial(pending.getKey(), -0.75f, "item_not_returned", now);
+                }
+                it.remove();
+            }
+        }
+    }
+
+    public void noteReturnedBy(UUID partner) {
+        expectedReturns.remove(partner);
     }
 
     // ------------------------------------------------------------------ asking
@@ -119,10 +146,33 @@ public final class ItemAid {
                     n = Math.max(1, Math.min(64, Integer.parseInt(p[2])));
                 } catch (NumberFormatException ignored) {
                 }
-                asks.removeIf(a -> a.from.equals(sender.getUUID()) && a.item.equals(p[1]));
+                removeAsks(a -> a.from.equals(sender.getUUID()) && a.item.equals(p[1]));
                 asks.add(new Ask(sender.getUUID(), sender.getGameProfile().getName(), p[1], n, now));
                 while (asks.size() > 8) {
-                    asks.remove(0);
+                    Ask dropped = asks.remove(0);
+                    offered.remove(dropped);
+                    returnItems.remove(dropped);
+                }
+            }
+            return true;
+        }
+        if (text.startsWith("DIGGING ") && p.length >= 2 && sender != self && !self.isCreative()) {
+            offerPickaxe(sender, p[1], p.length >= 3 ? p[2] : "", now);
+            return true;
+        }
+        if (text.startsWith("RETURN ")) {
+            if (p.length >= 3 && p[1].equals(self.getGameProfile().getName()) && sender != self && !self.isCreative()) {
+                try {
+                    Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(p[2]));
+                    if (item instanceof PickaxeItem) {
+                        removeAsks(a -> a.from.equals(sender.getUUID()) && a.item.equals(p[2]));
+                        Ask a = new Ask(sender.getUUID(), sender.getGameProfile().getName(), p[2], 1, now);
+                        asks.add(a);
+                        offered.add(a); // the old tool is not surplus to the helper; it is the actual requested return
+                        returnRequests.add(a);
+                    }
+                } catch (RuntimeException ignored) {
+                    // malformed item ids do not enter the request queue
                 }
             }
             return true;
@@ -132,9 +182,111 @@ public final class ItemAid {
                 if (p[1].equals(self.getGameProfile().getName())) {
                     coming.put(p[2], now);
                 }
-                asks.removeIf(a -> a.name.equals(p[1]) && a.item.equals(p[2])); // somebody else is bringing it already
+                removeAsks(a -> a.name.equals(p[1]) && a.item.equals(p[2])); // somebody else is bringing it already
             }
             return true;
+        }
+        return false;
+    }
+
+    private void removeAsks(java.util.function.Predicate<Ask> predicate) {
+        var it = asks.iterator();
+        while (it.hasNext()) {
+            Ask ask = it.next();
+            if (predicate.test(ask)) {
+                it.remove();
+                offered.remove(ask);
+                returnRequests.remove(ask);
+                returnItems.remove(ask);
+                if (ask.equals(helping)) {
+                    helping = null;
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ digging
+
+    private static Item bestPickItem(Player p) {
+        Item best = null;
+        for (ItemStack stack : p.getInventory().items) {
+            if (stack.getItem() instanceof PickaxeItem pick
+                    && (best == null || pick.getTier().getLevel() > ((PickaxeItem) best).getTier().getLevel())) {
+                best = stack.getItem();
+            }
+        }
+        return best;
+    }
+
+    public static int bestPickTier(Player p) {
+        Item best = bestPickItem(p);
+        return best instanceof PickaxeItem pick ? pick.getTier().getLevel() : -1;
+    }
+
+    /** Say what we dig with, so a friend with a better pickaxe can bring it (every 600 ticks while on the stairs / shaft). */
+    public void announceDigging() {
+        Item best = bestPickItem(self);
+        String line = "DIGGING " + bestPickTier(self) + (best == null ? "" : " " + key(best));
+        Chat.say(self, Component.literal("DIGGING"), line);
+    }
+
+    /** R-27: a digger within 16 blocks digs with a worse pickaxe than our best, and we are not digging ourselves: bring ours. */
+    private void offerPickaxe(ServerPlayer digger, String tier, String oldId, long now) {
+        var ctl = self.controller();
+        var o = ctl == null ? null : ctl.option();
+        if (o == com.rlclones.ai.strategy.Option.STAIRS || o == com.rlclones.ai.strategy.Option.SHAFT || o == com.rlclones.ai.strategy.Option.MINE
+                || o == com.rlclones.ai.strategy.Option.QUARRY || digger.distanceTo(self) > 16) {
+            return;
+        }
+        int theirs;
+        try {
+            theirs = Integer.parseInt(tier);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        Item best = null;
+        for (ItemStack stack : self.getInventory().items) {
+            if (stack.getItem() instanceof PickaxeItem pick && pick.getTier().getLevel() > theirs
+                    && (best == null || pick.getTier().getLevel() > ((PickaxeItem) best).getTier().getLevel())) {
+                best = stack.getItem();
+            }
+        }
+        if (best == null) {
+            return;
+        }
+        Item old = null;
+        if (!oldId.isBlank()) {
+            try {
+                Item reported = ForgeRegistries.ITEMS.getValue(new ResourceLocation(oldId));
+                if (reported instanceof PickaxeItem pick && pick.getTier().getLevel() == theirs && hasExact(digger, reported)) {
+                    old = reported;
+                }
+            } catch (RuntimeException ignored) {
+                // old clients only report the tier; use the inventory fallback below
+            }
+        }
+        if (old == null) {
+            for (ItemStack stack : digger.getInventory().items) {
+                if (stack.getItem() instanceof PickaxeItem pick && pick.getTier().getLevel() == theirs) {
+                    old = stack.getItem();
+                    break;
+                }
+            }
+        }
+        removeAsks(a -> a.from.equals(digger.getUUID()) && offered.contains(a));
+        Ask a = new Ask(digger.getUUID(), digger.getGameProfile().getName(), key(best), 1, now);
+        asks.add(a);
+        offered.add(a); // the best pickaxe may be the only one the helper owns
+        if (old != null) {
+            returnItems.put(a, key(old));
+        }
+    }
+
+    private static boolean hasExact(Player player, Item item) {
+        for (ItemStack stack : player.getInventory().items) {
+            if (stack.is(item)) {
+                return true;
+            }
         }
         return false;
     }
@@ -206,17 +358,20 @@ public final class ItemAid {
     @Nullable
     private Ask pick() {
         long now = now();
-        asks.removeIf(a -> now - a.tick > 2400);
+        removeAsks(a -> now - a.tick > 2400);
         Ask best = null;
         double bestD = Double.MAX_VALUE;
         for (Ask a : asks) {
             Player p = online(a.from);
-            if (p == null || p.distanceTo(self) > 64 || has(p, a.item) || spare(self, a.item) <= 0) {
+            if (p == null || p.distanceTo(self) > 64 || has(p, a.item) || spare(self, a.item) <= 0 && !offered.contains(a)) {
                 continue;
             }
             double d = p.distanceTo(self);
-            if (d < bestD) {
-                bestD = d;
+            float trust = self.getCloneBrain() == null ? 0f : self.getCloneBrain().socialTrust(a.from, now);
+            float balance = self.getCloneBrain() == null ? 0f : self.getCloneBrain().partnerBalance(a.from, now);
+            double score = d - trust * 12.0 - Math.tanh(balance / 8.0) * 7.0;
+            if (score < bestD) {
+                bestD = score;
                 best = a;
             }
         }
@@ -243,13 +398,15 @@ public final class ItemAid {
         Ask a = helping;
         Player p = a == null ? null : online(a.from);
         if (p == null || ++ticks > 1800 || has(p, a.item)) {
-            asks.remove(a);
+            removeAsks(x -> x.equals(a));
+            helping = null;
             return Status.FAILED;
         }
         if (p.distanceTo(self) > 2.5) {
             motor.navigate(p.position(), 1.5, p.distanceTo(self) > 10);
             if (motor.stuckCount() > 8) {
-                asks.remove(a);
+                removeAsks(x -> x.equals(a));
+                helping = null;
                 return Status.FAILED;
             }
             return Status.WORKING;
@@ -260,7 +417,7 @@ public final class ItemAid {
         self.setYRot(yaw);
         self.setYHeadRot(yaw);
         self.setXRot(30f);
-        int give = Math.min(a.count, spare(self, a.item));
+        int give = Math.min(a.count, Math.max(spare(self, a.item), offered.contains(a) ? 1 : 0));
         var inv = self.getInventory();
         // tools: hand over the worst one that will do and keep the best
         int worst = -1;
@@ -287,13 +444,27 @@ public final class ItemAid {
                 }
             }
         }
+        boolean returnedItem = returnRequests.remove(a);
         given++;
         debug = "gave " + a.item + " to " + a.name;
         if (p instanceof ClonePlayer other && other.controller() != null) {
-            other.controller().foodAid().thank(self.getUUID(), 2f); // they know who brought it
+            other.controller().foodAid().thank(self.getUUID(), 2f, returnedItem ? "item_returned" : "item_shared");
+            if (self.getCloneBrain() != null) {
+                if (returnedItem) {
+                    self.getCloneBrain().recordContribution(other.getUUID(), 2f, "item_returned", self.level().getGameTime());
+                } else {
+                    self.getCloneBrain().recordWithdrawal(other.getUUID(), 2f, "item_given", self.level().getGameTime());
+                }
+            }
         }
+        String returnKey = returnItems.remove(a);
         asks.remove(a);
+        offered.remove(a);
         helping = null;
+        if (returnKey != null) {
+            expectedReturns.put(a.from, now() + 2400);
+            Chat.say(self, Component.literal("Please return the old pickaxe"), "RETURN " + a.name + " " + returnKey);
+        }
         return Status.DONE;
     }
 

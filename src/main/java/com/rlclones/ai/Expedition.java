@@ -1,6 +1,8 @@
 package com.rlclones.ai;
 
 import com.rlclones.ai.brain.Brain;
+import com.rlclones.ai.brain.RoutePlanner;
+import com.rlclones.clone.Bases;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -20,7 +22,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.IntSupplier;
 import java.util.function.LongPredicate;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -47,6 +51,13 @@ public final class Expedition {
     private final ServerPlayer self;
     private final Motor motor;
     private final Random random = new Random();
+    private Supplier<Brain> brainSource = () -> null;
+    private IntSupplier routeContext = () -> 0;
+    private long routeStartChunk = Long.MIN_VALUE;
+    private long routeTargetChunk = Long.MIN_VALUE;
+    private int routeContextAtPlan = Integer.MIN_VALUE;
+    @Nullable
+    private BlockPos routeWaypoint;
 
     @Nullable
     private Offer offer;
@@ -78,6 +89,17 @@ public final class Expedition {
     private int memberTicks;
     private boolean finished;
 
+    // a completed trip leaves a learned, optional return task rather than ending at the destination
+    @Nullable
+    private BlockPos returnTarget;
+    @Nullable
+    private ResourceKey<Level> returnDimension;
+    private boolean returnPending;
+    private boolean returned;
+    private int returnTicks;
+    public int returnedTrips;
+    public int failedReturns;
+
     public int led;
     public int joinedTrips;
     public int completed;
@@ -108,6 +130,22 @@ public final class Expedition {
 
     public int need() {
         return need;
+    }
+
+    public boolean returnPending() {
+        return returnPending && returnTarget != null;
+    }
+
+    @Nullable
+    public BlockPos returnTarget() {
+        return returnTarget;
+    }
+
+    /** Collects the "returned home" reward once. */
+    public boolean takeReturned() {
+        boolean done = returned;
+        returned = false;
+        return done;
     }
 
     public Set<UUID> joiners(String leaderName) {
@@ -147,26 +185,103 @@ public final class Expedition {
         return Mth.clamp(n, 1, 4);
     }
 
+    public void setRouteMemory(Supplier<Brain> brainSource, IntSupplier routeContext) {
+        this.brainSource = brainSource == null ? () -> null : brainSource;
+        this.routeContext = routeContext == null ? () -> 0 : routeContext;
+    }
+
     /** An unexplored spot 120-200 blocks away (a chunk this clone has never been in). */
     @Nullable
     public BlockPos pickTarget(LongPredicate visited) {
+        return pickTarget(visited, null, self.level().getGameTime(), 0);
+    }
+
+    /** Choose among novel targets using remembered danger along and near each candidate route. */
+    @Nullable
+    public BlockPos pickTarget(LongPredicate visited, Brain brain, long now, int context) {
+        BlockPos best = null;
+        double bestScore = Double.MAX_VALUE;
         for (int i = 0; i < 12; i++) {
             double a = random.nextDouble() * Math.PI * 2;
             double d = 120 + random.nextDouble() * 80;
             int x = Mth.floor(self.getX() + Math.cos(a) * d);
             int z = Mth.floor(self.getZ() + Math.sin(a) * d);
-            if (visited.test(ChunkPos.asLong(x >> 4, z >> 4))) {
+            int cx = x >> 4;
+            int cz = z >> 4;
+            if (visited.test(ChunkPos.asLong(cx, cz))) {
                 continue;
             }
-            int y = self.level().hasChunk(x >> 4, z >> 4)
+            int y = self.level().hasChunk(cx, cz)
                     ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) : self.getBlockY();
-            return new BlockPos(x, y, z);
+            BlockPos candidate = new BlockPos(x, y, z);
+            if (brain == null || brain.routeExperienceCount() == 0) {
+                return candidate;
+            }
+            String dimension = self.level().dimension().location().toString();
+            float directRisk = RoutePlanner.directRiskCost(brain, dimension, self.getBlockX() >> 4, self.getBlockZ() >> 4, cx, cz, context, now);
+            float chosenRisk = RoutePlanner.riskCost(brain, dimension, self.getBlockX() >> 4, self.getBlockZ() >> 4, cx, cz, context, now);
+            double score = 20.0 * chosenRisk + 0.5 * directRisk + d * 0.001 + random.nextDouble() * 0.05;
+            if (score < bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
         }
-        return null;
+        return best;
+    }
+
+    /** Route waypoint used only when learned hazard memory marks the direct chunk path as risky. */
+    private Vec3 routeGoal(BlockPos destination) {
+        long from = ChunkPos.asLong(self.getBlockX() >> 4, self.getBlockZ() >> 4);
+        int targetX = destination.getX() >> 4;
+        int targetZ = destination.getZ() >> 4;
+        long to = ChunkPos.asLong(targetX, targetZ);
+        Vec3 direct = Vec3.atBottomCenterOf(destination);
+        if (from == to) {
+            return direct;
+        }
+        Brain brain = brainSource.get();
+        if (brain == null || brain.routeExperienceCount() == 0) {
+            return direct;
+        }
+        int context = routeContext.getAsInt() & 31;
+        String dimension = self.level().dimension().location().toString();
+        int fromX = self.getBlockX() >> 4;
+        int fromZ = self.getBlockZ() >> 4;
+        long now = self.level().getGameTime();
+        if (RoutePlanner.directRiskCost(brain, dimension, fromX, fromZ, targetX, targetZ, context, now) < 0.01f) {
+            routeWaypoint = null;
+            routeStartChunk = Long.MIN_VALUE;
+            return direct;
+        }
+        if (routeStartChunk != from || routeTargetChunk != to || routeContextAtPlan != context || routeWaypoint == null) {
+            java.util.List<Long> route = RoutePlanner.path(brain, dimension, fromX, fromZ, targetX, targetZ, context, now);
+            java.util.List<Long> directRoute = RoutePlanner.directPath(fromX, fromZ, targetX, targetZ);
+            float directCost = RoutePlanner.routeCost(brain, dimension, directRoute, context, now);
+            float riskAwareCost = RoutePlanner.routeCost(brain, dimension, route, context, now);
+            int distanceBin = Math.min(7, (int) (RoutePlanner.distance(fromX, fromZ, targetX, targetZ) / 4.0));
+            brain.learnRouteCounterfactual(context, distanceBin, directCost, riskAwareCost, 0.08f);
+            int routeChoice = brain.chooseRouteChoice(context, distanceBin);
+            boolean useRiskAware = routeChoice == Brain.ROUTE_RISK_AWARE
+                    || RoutePlanner.directRiskCost(brain, dimension, fromX, fromZ, targetX, targetZ, context, now) >= 1.0f;
+            if (!useRiskAware || route.size() < 2 || route.get(1) == to) {
+                routeWaypoint = destination.immutable();
+            } else {
+                long step = route.get(1);
+                int x = ChunkPos.getX(step) * 16 + 8;
+                int z = ChunkPos.getZ(step) * 16 + 8;
+                int y = self.level().hasChunk(x >> 4, z >> 4)
+                        ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) : self.getBlockY();
+                routeWaypoint = new BlockPos(x, y, z);
+            }
+            routeStartChunk = from;
+            routeTargetChunk = to;
+            routeContextAtPlan = context;
+        }
+        return Vec3.atBottomCenterOf(routeWaypoint);
     }
 
     public boolean canLead(long now) {
-        return !committed() && now - lastLed >= COOLDOWN && self.getHealth() >= self.getMaxHealth() * 0.9f;
+        return !committed() && !returnPending() && now - lastLed >= COOLDOWN && self.getHealth() >= self.getMaxHealth() * 0.7f;
     }
 
     /** Tests: the first-trip delay is over (a trip may be led now). */
@@ -176,7 +291,7 @@ public final class Expedition {
 
     public boolean canJoin(long now) {
         Offer o = offer;
-        return o != null && !committed() && now - o.tick() < GATHER_TICKS && o.dimension() == self.level().dimension()
+        return o != null && !committed() && !returnPending() && now - o.tick() < GATHER_TICKS && o.dimension() == self.level().dimension()
                 && joiners(o.leaderName()).size() < o.need() && Math.sqrt(self.blockPosition().distSqr(o.rally())) < JOIN_RADIUS;
     }
 
@@ -208,6 +323,7 @@ public final class Expedition {
         }
         if (text.startsWith("EXPEDITION_END")) {
             if (joined != null && joined.leader().equals(sender.getUUID())) {
+                queueReturn(joined.dimension(), joined.rally());
                 joined = null;
                 finished = true;
                 completed++;
@@ -246,14 +362,23 @@ public final class Expedition {
         this.kind = "EXPLORE";
         this.foe = "";
         this.calmTicks = 0;
+        this.returnPending = false;
+        this.returnTarget = null;
+        this.returnDimension = null;
+        this.returnTicks = 0;
         this.leading = true;
-        this.rally = self.blockPosition();
+        Bases.Base home = Bases.get(self.getServer()).nearest(self.level().dimension(), self.position(), 32);
+        this.rally = home == null ? self.blockPosition().immutable() : home.center.immutable();
         this.target = target.immutable();
         this.need = need;
         this.phase = 0;
         this.phaseTicks = 0;
         this.totalTicks = 0;
         this.wander = null;
+        routeStartChunk = Long.MIN_VALUE;
+        routeTargetChunk = Long.MIN_VALUE;
+        routeContextAtPlan = Integer.MIN_VALUE;
+        routeWaypoint = null;
         lastLed = self.level().getGameTime();
         joiners.put(self.getGameProfile().getName(), new HashSet<>());
         led++;
@@ -295,7 +420,7 @@ public final class Expedition {
             case 1 -> {
                 // wait at the rally point until enough people came (or it is clear nobody else will)
                 if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(rally)) > 2) {
-                    motor.navigate(Vec3.atBottomCenterOf(rally), 1.5, false);
+                    motor.navigate(routeGoal(rally), 1.5, false);
                 } else {
                     motor.stop();
                     ServerPlayer arriving = null;
@@ -334,7 +459,7 @@ public final class Expedition {
                     phaseTicks = 0;
                     return Status.WORKING;
                 }
-                motor.navigate(goal, 6, false);
+                motor.navigate(routeGoal(target), 6, false);
             }
             default -> {
                 if (kind.equals("HUNT")) {
@@ -348,7 +473,7 @@ public final class Expedition {
                         return Status.DONE;
                     }
                     if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(target)) > 6) {
-                        motor.navigate(Vec3.atBottomCenterOf(target), 4, false);
+                        motor.navigate(routeGoal(target), 4, false);
                     }
                     return Status.WORKING;
                 }
@@ -384,11 +509,69 @@ public final class Expedition {
         if (!leading) {
             return;
         }
+        if (self.isAlive() && rally != null) {
+            queueReturn(self.level().dimension(), rally);
+        }
         leading = false;
         BlockPos p = self.blockPosition();
         Chat.say(self, Component.translatable(kind.equals("HUNT") ? "rlclones.chat.hunt_end" : "rlclones.chat.expedition_end", p.getX(), p.getZ()),
                 "EXPEDITION_END " + p.getX() + " " + p.getY() + " " + p.getZ() + (kind.equals("HUNT") ? " kind=HUNT" : ""));
         joiners.remove(self.getGameProfile().getName());
+    }
+
+    private void queueReturn(ResourceKey<Level> dimension, BlockPos destination) {
+        if (dimension == null || !dimension.equals(self.level().dimension()) || destination == null) {
+            return;
+        }
+        if (self.distanceTo(Vec3.atBottomCenterOf(destination)) <= 4.0) {
+            returnPending = false;
+            returnTarget = null;
+            returnDimension = null;
+            returnTicks = 0;
+            return;
+        }
+        returnDimension = dimension;
+        returnTarget = destination.immutable();
+        returnPending = true;
+        returnTicks = 0;
+        routeStartChunk = Long.MIN_VALUE;
+        routeTargetChunk = Long.MIN_VALUE;
+        routeContextAtPlan = Integer.MIN_VALUE;
+        routeWaypoint = null;
+    }
+
+    /** The RL-selected RETURN option follows this remembered route; failed attempts remain negative experience. */
+    public Status returnTick() {
+        if (!returnPending || returnTarget == null) {
+            return Status.DONE;
+        }
+        if (returnDimension == null || !returnDimension.equals(self.level().dimension())) {
+            clearReturn();
+            failedReturns++;
+            return Status.FAILED;
+        }
+        if (self.distanceTo(Vec3.atBottomCenterOf(returnTarget)) <= 4.0) {
+            motor.stop();
+            clearReturn();
+            returned = true;
+            returnedTrips++;
+            return Status.DONE;
+        }
+        if (++returnTicks >= 6000) {
+            clearReturn();
+            failedReturns++;
+            return Status.FAILED;
+        }
+        Vec3 goal = routeGoal(returnTarget);
+        motor.navigate(goal, 3.0, self.distanceTo(Vec3.atBottomCenterOf(returnTarget)) > 16.0);
+        return Status.WORKING;
+    }
+
+    private void clearReturn() {
+        returnPending = false;
+        returnTarget = null;
+        returnDimension = null;
+        returnTicks = 0;
     }
 
     // ================================================================== following
@@ -413,6 +596,7 @@ public final class Expedition {
         }
         ServerPlayer leader = player(o.leader());
         if (leader == null || !leader.isAlive() || leader.level() != self.level() || ++memberTicks > 14000) {
+            queueReturn(o.dimension(), o.rally());
             joined = null;
             return Status.DONE;
         }

@@ -166,6 +166,55 @@ public final class Farming {
         return -1;
     }
 
+    private int torchCount() {
+        int n = 0;
+        for (net.minecraft.world.item.ItemStack st : self.getInventory().items) {
+            if (st.is(net.minecraft.world.item.Items.TORCH)) {
+                n += st.getCount();
+            }
+        }
+        return n;
+    }
+
+    /** R-26: torches beyond the 16 kept for digging. */
+    private boolean sparingTorches() {
+        return torchCount() > 16;
+    }
+
+    /** A crop (or farmland) too dark for the plants to grow. */
+    private static boolean cropDark(ServerLevel level, BlockPos p) {
+        return level.getBlockState(p).getBlock() instanceof FarmBlock && level.getBlockState(p.above()).isAir() && level.getRawBrightness(p.above(), 0) < 9
+                || level.getBlockState(p).getBlock() instanceof FarmBlock && level.getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.CropBlock
+                && level.getRawBrightness(p.above(), 0) < 9;
+    }
+
+    /** R-25: the plot being worked: tilled and sown cell by cell, nothing else in between, until it is done. */
+    private final java.util.ArrayDeque<BlockPos> lot = new java.util.ArrayDeque<>();
+
+    private void planLot(ServerLevel level, BlockPos first) {
+        lot.clear();
+        java.util.ArrayDeque<BlockPos> todo = new java.util.ArrayDeque<>();
+        java.util.Set<BlockPos> seen = new java.util.HashSet<>();
+        todo.add(first);
+        seen.add(first);
+        int n = Math.max(1, seedCount());
+        while (!todo.isEmpty() && lot.size() < n) {
+            BlockPos p = todo.poll();
+            if (!tillable(level, p)) {
+                continue;
+            }
+            lot.add(p);
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    BlockPos q = p.offset(dx, 0, dz);
+                    if ((dx != 0 || dz != 0) && Math.abs(q.getX() - first.getX()) <= 6 && Math.abs(q.getZ() - first.getZ()) <= 6 && seen.add(q)) {
+                        todo.add(q);
+                    }
+                }
+            }
+        }
+    }
+
     private static boolean waterBeside(ServerLevel level, BlockPos pos) {
         for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
             if (level.getFluidState(pos.relative(d)).is(FluidTags.WATER)) {
@@ -229,6 +278,10 @@ public final class Farming {
         return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(pos);
     }
 
+    private static BlockState st(ServerLevel level, BlockPos p) {
+        return level.getBlockState(p);
+    }
+
     @Nullable
     private BlockPos find(Job[] out) {
         ServerLevel level = self.serverLevel();
@@ -238,6 +291,21 @@ public final class Farming {
         BlockPos feet = self.blockPosition();
         BlockPos best = null;
         double bestScore = Double.MAX_VALUE;
+        while (!lot.isEmpty() && seeds) {
+            BlockPos p = lot.peek();
+            Long lf = failed.get(p);
+            if (lf != null && self.level().getGameTime() - lf < 1200) {
+                lot.poll();
+            } else if (st(level, p).getBlock() instanceof FarmBlock && level.getBlockState(p.above()).isAir()) {
+                out[0] = Job.PLANT;
+                return p;
+            } else if (hoe && tillable(level, p)) {
+                out[0] = Job.TILL;
+                return p;
+            } else {
+                lot.poll(); // done (sown) or no longer fit
+            }
+        }
         for (BlockPos p : BlockPos.betweenClosed(feet.offset(-RADIUS, -2, -RADIUS), feet.offset(RADIUS, 1, RADIUS))) {
             BlockState st = level.getBlockState(p);
             Job j = null;
@@ -305,6 +373,21 @@ public final class Farming {
                 return plot;
             }
         }
+        if (best == null && sparingTorches() && Config.get(Config.ALLOW_BLOCK_PLACING, true)) {
+            // R-26: spare torches light the crops (a torch every 4-5 blocks follows from lighting where it is dark)
+            double d0 = Double.MAX_VALUE;
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-RADIUS, -2, -RADIUS), feet.offset(RADIUS, 1, RADIUS))) {
+                Long f = failed.get(p);
+                if (cropDark(level, p) && (f == null || self.level().getGameTime() - f >= 1200) && p.distSqr(feet) < d0 && visible(level, p, false)) {
+                    d0 = p.distSqr(feet);
+                    best = p.immutable();
+                    out[0] = Job.LIGHT;
+                }
+            }
+        }
+        if (best != null && out[0] == Job.TILL && lot.isEmpty()) {
+            planLot(level, best); // R-25: as many cells as there are seeds, in one go
+        }
         return best;
     }
 
@@ -358,7 +441,7 @@ public final class Farming {
             case PLANT -> st.getBlock() instanceof FarmBlock && level.getBlockState(target.above()).isAir() && seedSlot(self) >= 0;
             case TILL -> tillable(level, target) && hoeSlot(self) >= 0 && seedSlot(self) >= 0;
             case SEEDS -> isGrass(st);
-            case LIGHT -> !bright(level, target.above()) && (soilish(st) || bank(level, target));
+            case LIGHT -> !bright(level, target.above()) && (soilish(st) || bank(level, target)) || sparingTorches() && cropDark(level, target);
             case SOIL -> dirtSlot() >= 0 && (bank(level, target) || st.canBeReplaced() && !level.getBlockState(target.below()).getCollisionShape(level, target.below()).isEmpty());
         };
         if (!stillValid) {
@@ -367,6 +450,9 @@ public final class Farming {
         }
         Vec3 top = new Vec3(target.getX() + 0.5, target.getY() + 1.0, target.getZ() + 0.5);
         if (self.getEyePosition().distanceTo(top) > Motor.BLOCK_REACH - 0.7) {
+            if (job == Job.SEEDS) {
+                motor.sweep(); // R-17: cut the grass on the way there
+            }
             motor.navigate(top, 1.5, false);
             if (motor.stuckCount() > 6) {
                 failed.put(target, level.getGameTime()); // cannot get there: try other spots first

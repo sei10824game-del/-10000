@@ -188,6 +188,26 @@ public class Bases extends SavedData {
 
     public final List<Shaft> shafts = new ArrayList<>();
 
+    // ---------------------------------------------------------------- naturally occurring pits made safe with ladders
+
+    /** A deep natural hole explored with a ladder route; top/bottom are the standing feet cells. */
+    public record LadderPit(ResourceKey<Level> dimension, BlockPos top, BlockPos bottom, net.minecraft.core.Direction wall) {
+    }
+
+    public final List<LadderPit> ladderPits = new ArrayList<>();
+
+    public LadderPit addLadderPit(ResourceKey<Level> dimension, BlockPos top, BlockPos bottom, net.minecraft.core.Direction wall) {
+        for (LadderPit pit : ladderPits) {
+            if (pit.dimension() == dimension && pit.top().distManhattan(top) <= 2) {
+                return pit;
+            }
+        }
+        LadderPit pit = new LadderPit(dimension, top.immutable(), bottom.immutable(), wall);
+        ladderPits.add(pit);
+        setDirty();
+        return pit;
+    }
+
     public Shaft addShaft(ResourceKey<Level> dim, BlockPos top, net.minecraft.core.Direction wall) {
         Shaft s = new Shaft(dim, top, wall, top, false);
         shafts.add(s);
@@ -391,6 +411,13 @@ public class Bases extends SavedData {
                     NbtUtils.readBlockPos(st.getCompound("top")), net.minecraft.core.Direction.from3DDataValue(st.getInt("wall")),
                     NbtUtils.readBlockPos(st.getCompound("end")), st.getBoolean("finished")));
         }
+        ListTag pitList = tag.getList("ladderPits", Tag.TAG_COMPOUND);
+        for (int i = 0; i < pitList.size(); i++) {
+            CompoundTag pit = pitList.getCompound(i);
+            r.ladderPits.add(new LadderPit(ResourceKey.create(Registries.DIMENSION, new ResourceLocation(pit.getString("dim"))),
+                    NbtUtils.readBlockPos(pit.getCompound("top")), NbtUtils.readBlockPos(pit.getCompound("bottom")),
+                    net.minecraft.core.Direction.from3DDataValue(pit.getInt("wall"))));
+        }
         ListTag projectList = tag.getList("projects", Tag.TAG_STRING);
         for (int i = 0; i < projectList.size(); i++) {
             r.projects.add(projectList.getString(i));
@@ -460,6 +487,16 @@ public class Bases extends SavedData {
             shaftList.add(t);
         }
         tag.put("shafts", shaftList);
+        ListTag pitList = new ListTag();
+        for (LadderPit pit : ladderPits) {
+            CompoundTag t = new CompoundTag();
+            t.putString("dim", pit.dimension().location().toString());
+            t.put("top", NbtUtils.writeBlockPos(pit.top()));
+            t.put("bottom", NbtUtils.writeBlockPos(pit.bottom()));
+            t.putInt("wall", pit.wall().get3DDataValue());
+            pitList.add(t);
+        }
+        tag.put("ladderPits", pitList);
         ListTag projectList = new ListTag();
         for (String p : projects) {
             projectList.add(net.minecraft.nbt.StringTag.valueOf(p));

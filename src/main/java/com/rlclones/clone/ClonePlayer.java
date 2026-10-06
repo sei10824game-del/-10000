@@ -22,6 +22,7 @@ import javax.annotation.Nullable;
  */
 public class ClonePlayer extends ServerPlayer {
     private Brain brain;
+    private final ClonePersonality personality;
     private final CloneController controller;
     private boolean aiEnabled = true;
     /** Clones of different teams fight each other; players count as {@link #DEFAULT_TEAM}. */
@@ -31,6 +32,7 @@ public class ClonePlayer extends ServerPlayer {
     public ClonePlayer(MinecraftServer server, ServerLevel level, GameProfile profile, Brain brain) {
         super(server, level, profile);
         this.brain = brain;
+        this.personality = ClonePersonality.forId(profile.getId());
         this.controller = new CloneController(this);
         this.setMaxUpStep(0.6F);
     }
@@ -45,6 +47,11 @@ public class ClonePlayer extends ServerPlayer {
 
     public Brain getCloneBrain() {
         return brain;
+    }
+
+    /** Stable identity-bound reward preferences, independent of whether the learned brain is linked. */
+    public ClonePersonality personality() {
+        return personality;
     }
 
     public void setCloneBrain(Brain brain) {
