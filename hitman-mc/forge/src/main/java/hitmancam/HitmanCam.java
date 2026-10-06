@@ -16,7 +16,7 @@ import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Receives "x y z fx fy fz" (HITMAN camera, Glacier coords = Minecraft axes) on UDP 127.0.0.1:27015
+ * Receives "x y z fx fy fz" (HITMAN camera, world coords, Z up) on UDP 127.0.0.1:27015
  * and pins the local player's camera to it. Offsets are JVM properties: -Dhitmancam.offx/offy/offz, -Dhitmancam.port.
  */
 @Mod("hitmancam")
@@ -24,7 +24,7 @@ public class HitmanCam {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final int PORT = Integer.getInteger("hitmancam.port", 27015);
     private static final double OFF_X = Double.parseDouble(System.getProperty("hitmancam.offx", "0"));
-    private static final double OFF_Y = Double.parseDouble(System.getProperty("hitmancam.offy", "100"));
+    private static final double OFF_Y = Double.parseDouble(System.getProperty("hitmancam.offy", "-60"));
     private static final double OFF_Z = Double.parseDouble(System.getProperty("hitmancam.offz", "0"));
     private static final long STALE_MS = 500;
 
@@ -77,10 +77,12 @@ public class HitmanCam {
         if (mc.mouseHandler.isMouseGrabbed()) mc.mouseHandler.releaseMouse();
         if (System.currentTimeMillis() - latestAt > STALE_MS) return;
 
-        double x = v[0] + OFF_X, y = v[1] + OFF_Y, z = v[2] + OFF_Z;
-        // forward f -> MC yaw (0 = +z/south, clockwise from above) and pitch (+ = down)
-        float yaw = (float) Math.toDegrees(Math.atan2(-v[3], v[5]));
-        float pitch = (float) Math.toDegrees(-Math.asin(Math.max(-1, Math.min(1, v[4]))));
+        // HITMAN world is Z-up (x east, y north, z up): MC = (x, z, -y), same for the forward vector
+        double x = v[0] + OFF_X, y = v[2] + OFF_Y, z = -v[1] + OFF_Z;
+        double fx = v[3], fy = v[5], fz = -v[4];
+        // forward -> MC yaw (0 = +z/south, clockwise from above) and pitch (+ = down)
+        float yaw = (float) Math.toDegrees(Math.atan2(-fx, fz));
+        float pitch = (float) Math.toDegrees(-Math.asin(Math.max(-1, Math.min(1, fy))));
         // eye height: the camera is the eye, so lower the feet position by it
         double feetY = y - pl.getEyeHeight();
 
