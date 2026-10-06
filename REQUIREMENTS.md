@@ -171,6 +171,7 @@ R-16 効果残留の認知: 地面に広がる効果付き残留を認知し、�
 - 全テスト通過: run 37221207689(a5eb9fa・1回目)、run 37222304270(1dfdb0a・1回目)。このとき Round 10 で追加した21件(batch r10*)も全件通過
 - 同じコミットの再実行はどちらも失敗(a5eb9fa: ネザー往復・牛の囲い込み / 1dfdb0a: 溶岩の堀のパール)
 - Round 10 追加テストは 87da8d6 以降の12ラン(再実行を含む。17ce6d0 と c2cbbf3 は失敗テスト名を未確認で除く)で失敗なし
+- 2026-10-06 に増えた不安定: `getsOutOfAnUnderwaterCorner`(S11-1 の新規)/ `makesSoilBesideBareWaterAndLightsThePlot`
 - 2b9914f(失敗: 牛の囲い込み・板材を建物から取る)、49fbc8b(失敗: TNTを戦闘で使いボタンで起爆・食べ物を頼んで仲間が持ってくる)。いずれも Round 10 追加テスト以外
 
 ### CI: 課金で停止(2026-10-05 16:36〜18:43)→ 復旧
@@ -181,6 +182,7 @@ R-16 効果残留の認知: 地面に広がる効果付き残留を認知し、�
   - 通過が続く: なし(下以外は通過)。`pensCowsWhenWheatPilesUp` は今回通過(既知の最多不安定)
   - 2回続けて失敗(決定的・次に直す): `makesCharcoalFromSpareLogs`(R-21。木炭はできるが鉄の焼成に回らない)/ `cutsAtallTreeToTheTop`(R-18)/ `creativeBuildsPortalsAndAnEnchantingRoom`(既存)
   - 通過→失敗=不安定: `getsOutOfAnUnderwaterCorner`(S11-1 のテスト。「not drowned」)/ `cutsGrassOnTheWayWithoutStopping`(草の支持ブロックの罠。アリーナの床が石なので草が消えていた。GRASS_BLOCK を敷く形に修正済み)
+- 3回目 run 37466898663(d29a190、草テストの支持ブロック修正): `cutsGrassOnTheWayWithoutStopping` は**通過**(修正が効いた)。3回連続で失敗は `makesCharcoalFromSpareLogs` / `cutsAtallTreeToTheTop` / `creativeBuildsPortalsAndAnEnchantingRoom`。不安定は `getsOutOfAnUnderwaterCorner`(4回中3回)・`makesSoilBesideBareWaterAndLightsThePlot`(今回初)・`pensCowsWhenWheatPilesUp`(既知)
 - ソーク: 72000tick・6体・errors=0。run 37358148619 は死亡1(落下)・stone_pick 6/6・furnace 5/6・coal 4/6・iron_ingot 1/6、run 37360814478 は死亡2(どちらも落下)・coal 5/6・iron_ingot 1/6。iron_pick と diamond は 0/6 のまま
 - 注: ログは `gh run view --log-failed` が 403/EOF でも、`gh run view <id>` の ANNOTATIONS で失敗テスト名は読める(artifacts のダウンロードは不可のことがある)
 

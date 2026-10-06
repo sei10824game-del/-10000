@@ -491,3 +491,8 @@
   - `makesCharcoalFromSpareLogs`(R-21 の2つ目「木炭で鉄を焼く」)・`cutsAtallTreeToTheTop`(R-18)・`creativeBuildsPortalsAndAnEnchantingRoom`: 2回続けて失敗= **決定的**。次に直す
 - ソーク(37360814478): 72000tick・6体・errors=0・死亡2(どちらも落下: option=STORE と MINE)。stone_pick 6/6、furnace 5/6、coal 5/6、iron_ingot 1/6、iron_pick 0/6、diamond 0/6
 - gametest-logs の artifact は取得できない(blob storage が EOF)。失敗テスト名は `gh run view <id>` の ANNOTATIONS で読む(`--log-failed` は 403/EOF)
+- run 37466898663(d29a190、草テストの支持ブロック修正): `cutsGrassOnTheWayWithoutStopping` は**通過**(修正が効いた。刈る瞬間の視線も見ている)。`handsABetterPickaxeToTheDigger` も通過継続
+  - 3回連続で失敗(決定的): `makesCharcoalFromSpareLogs`(R-21 の2つ目)/ `cutsAtallTreeToTheTop`(R-18)/ `creativeBuildsPortalsAndAnEnchantingRoom`(既存)
+  - 不安定: `getsOutOfAnUnderwaterCorner`(4回中3回失敗)/ `makesSoilBesideBareWaterAndLightsThePlot`(今回初。同じソースの前2回は通過)/ `pensCowsWhenWheatPilesUp`(既知)
+  - ソーク: **gone=0(初)**・furnace 6/6・coal 5/6・iron_ingot 1/6・iron_pick 0/6・errors=0
+- 不安定テスト一覧(2026-10-06 時点、隔離は未実施): `getsOutOfAnUnderwaterCorner`(S11-1 の新規)/ `makesSoilBesideBareWaterAndLightsThePlot` / `pensCowsWhenWheatPilesUp` / `huntsFishInTheWater` / `pearlsOverALavaMoat`(既知)
