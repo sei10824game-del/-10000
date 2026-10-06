@@ -69,6 +69,11 @@ public class HitmanCam {
         LocalPlayer pl = Minecraft.getInstance().player;
         if (v == null || pl == null || System.currentTimeMillis() - latestAt > STALE_MS) return;
 
+        // the camera is driven from HITMAN: don't hold the mouse or pause when focus moves there
+        Minecraft mc = Minecraft.getInstance();
+        mc.options.pauseOnLostFocus = false;
+        if (mc.mouseHandler.isMouseGrabbed()) mc.mouseHandler.releaseMouse();
+
         double x = v[0] + OFF_X, y = v[1] + OFF_Y, z = v[2] + OFF_Z;
         // forward f -> MC yaw (0 = +z/south, clockwise from above) and pitch (+ = down)
         float yaw = (float) Math.toDegrees(Math.atan2(-v[3], v[5]));
