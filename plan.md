@@ -482,3 +482,12 @@
 - 残る必須失敗4件(次にやる): `makesCharcoalFromSpareLogs`(木炭はできた。2つ目の「その木炭で鉄を焼く」で失敗: `smelt[work=false ready=false items=2 fuel=0]`)、`cutsAtallTreeToTheTop`(R-18。「2 left (scaffold 1)」)、`creativeBuildsPortalsAndAnEnchantingRoom`(既存。前ランから)、`pensCowsWhenWheatPilesUp`(既知の最多不安定)
 - ソーク(72000tick・6体・errors=0・死亡1件=落下 option=MINE): wood/table/wood_pick/stone_pick 6/6、furnace 5/6、coal 4/6、**iron_ingot 1/6**(Clone283)、iron_pick 0/6、diamond 0/6。SOAK-OPTIONS: MINE=200・STAIRS=148・SHAFT=1(掘りが選ばれるようになった)。SOAK-NONE は escape=198 が最多
 - 次: 上の4件を直す → S11-4(R-19・R-20/R-32)
+
+## 30. run 37360814478(S11-3 の2回目の実行)と不安定テストの切り分け
+- 37358148619(S11-3 フォロー 1cc3ef5)と 37360814478(a949ba8、.md のみ差分)は**同じソースの2回実行**。比べて切り分けられる:
+  - `cutsGrassOnTheWayWithoutStopping`: 通過 → **失敗(「got 0」)**。原因は草の支持ブロック。アリーナの床は `resetArena` が**石**に戻すため、`Blocks.GRASS` は隣を置いたときの `BushBlock.updateShape`(`canSurvive`=偽)で消える。消えた跡の空気がさらに隣を更新して**連鎖して全滅**する(だから 0)。前のテストの置き土産で床が土だった回だけ草が残って通過していた。既存テストは `GRASS_BLOCK` を敷いてから植物を置いている。テストを「土を敷く→草を置く→置いた直後に残っているか確かめる」に直した
+  - `getsOutOfAnUnderwaterCorner`(S11-1 で追加): 通過 → 失敗(not drowned)= **不安定**(要修正。次のランでも見る)
+  - `pensCowsWhenWheatPilesUp`: 失敗 → 通過(既知の最多不安定)
+  - `makesCharcoalFromSpareLogs`(R-21 の2つ目「木炭で鉄を焼く」)・`cutsAtallTreeToTheTop`(R-18)・`creativeBuildsPortalsAndAnEnchantingRoom`: 2回続けて失敗= **決定的**。次に直す
+- ソーク(37360814478): 72000tick・6体・errors=0・死亡2(どちらも落下: option=STORE と MINE)。stone_pick 6/6、furnace 5/6、coal 5/6、iron_ingot 1/6、iron_pick 0/6、diamond 0/6
+- gametest-logs の artifact は取得できない(blob storage が EOF)。失敗テスト名は `gh run view <id>` の ANNOTATIONS で読む(`--log-failed` は 403/EOF)

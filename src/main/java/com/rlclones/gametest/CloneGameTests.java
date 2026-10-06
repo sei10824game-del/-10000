@@ -5277,8 +5277,16 @@ public final class CloneGameTests {
     /** R-17: a row of 8 grass between the clone and its goal: cut on the way, without slowing down. */
     @GameTest(template = ARENA, timeoutTicks = 300, batch = "r11walk")
     public static void cutsGrassOnTheWayWithoutStopping(GameTestHelper h) {
+        // the arena floor is stone and grass dies without soil under it (the update from the next block would wipe the row)
+        for (int x = 3; x <= 12; x++) {
+            h.setBlock(new BlockPos(x, 1, 7), Blocks.GRASS_BLOCK);
+        }
         for (int x = 4; x <= 11; x++) {
             h.setBlock(new BlockPos(x, 2, 7), Blocks.GRASS);
+        }
+        for (int x = 4; x <= 11; x++) {
+            h.assertTrue(h.getBlockState(new BlockPos(x, 2, 7)).is(Blocks.GRASS),
+                    "the grass at x=" + x + " is still there (it must stand on soil, not on the arena's stone)");
         }
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
         Vec3 goal = h.absoluteVec(new Vec3(13.5, 2, 7.5));

@@ -177,7 +177,11 @@ R-16 効果残留の認知: 地面に広がる効果付き残留を認知し、�
 
 - 停止中: run 37342075743(72c2512)以降は build/client-smoke が起動しなかった(0 steps、`The job was not started because recent account payments have failed or your spending limit needs to be increased`)
 - 復旧後: run 37358148619(1cc3ef5・S11-3フォロー)。**ビルド成功・client-smoke 成功**。S11-3 の新規2テストを含めて通過。失敗した必須テストは4件: `makesCharcoalFromSpareLogs`(木炭はできたが、その木炭で鉄を焼く所で失敗)/ `cutsAtallTreeToTheTop`(R-18)/ `creativeBuildsPortalsAndAnEnchantingRoom`(既存)/ `pensCowsWhenWheatPilesUp`(既知の最多不安定)
-- ソーク: 72000tick・6体・errors=0・死亡1(落下)。stone_pick 6/6、furnace 5/6、coal 4/6、iron_ingot 1/6、iron_pick 0/6、diamond 0/6
+- 2回目 run 37360814478(a949ba8、.md のみ差分=同じソース)での比較:
+  - 通過が続く: なし(下以外は通過)。`pensCowsWhenWheatPilesUp` は今回通過(既知の最多不安定)
+  - 2回続けて失敗(決定的・次に直す): `makesCharcoalFromSpareLogs`(R-21。木炭はできるが鉄の焼成に回らない)/ `cutsAtallTreeToTheTop`(R-18)/ `creativeBuildsPortalsAndAnEnchantingRoom`(既存)
+  - 通過→失敗=不安定: `getsOutOfAnUnderwaterCorner`(S11-1 のテスト。「not drowned」)/ `cutsGrassOnTheWayWithoutStopping`(草の支持ブロックの罠。アリーナの床が石なので草が消えていた。GRASS_BLOCK を敷く形に修正済み)
+- ソーク: 72000tick・6体・errors=0。run 37358148619 は死亡1(落下)・stone_pick 6/6・furnace 5/6・coal 4/6・iron_ingot 1/6、run 37360814478 は死亡2(どちらも落下)・coal 5/6・iron_ingot 1/6。iron_pick と diamond は 0/6 のまま
 - 注: ログは `gh run view --log-failed` が 403/EOF でも、`gh run view <id>` の ANNOTATIONS で失敗テスト名は読める(artifacts のダウンロードは不可のことがある)
 
 ### 観測された不安定テスト(隔離は未実施・要判断)
