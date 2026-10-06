@@ -99,6 +99,8 @@ public final class Perception {
     private java.util.function.Predicate<String> harmful = id -> false;
     /** Blocks the clone has never examined but could obtain (see Discovery). */
     private java.util.function.BiPredicate<BlockState, BlockPos> unknown = (st, pos) -> false;
+    /** Called for blocks the clone has actually seen, so shared structure memory never relies on chunk-wide scanning. */
+    private java.util.function.BiConsumer<BlockPos, BlockState> structureObserver = (pos, state) -> { };
     /** Things newly noticed (entities coming into view, interesting blocks); used to judge how well looking around works. */
     public int discoveries;
 
@@ -294,6 +296,7 @@ public final class Perception {
                 continue;
             }
             BlockPos pos = hit.getBlockPos().immutable();
+            noteVisibleBlock(pos);
             BlockKind kind = kindOf(pos);
             if (kind == BlockKind.STONE && !blocks.containsKey(pos) && !diggable.test(pos)) {
                 continue;
@@ -393,6 +396,16 @@ public final class Perception {
 
     public void setUnknown(java.util.function.BiPredicate<BlockState, BlockPos> unknown) {
         this.unknown = unknown;
+    }
+
+    public void setStructureObserver(java.util.function.BiConsumer<BlockPos, BlockState> observer) {
+        this.structureObserver = observer == null ? (pos, state) -> { } : observer;
+    }
+
+    /** Notify memory of a block that was actually seen; also used by GameTests to model a direct sighting. */
+    public void noteVisibleBlock(BlockPos pos) {
+        BlockPos seen = pos.immutable();
+        structureObserver.accept(seen, self.level().getBlockState(seen));
     }
 
     /** Stone worth remembering: only where it can safely be dug (not the thin floor over a drop). */

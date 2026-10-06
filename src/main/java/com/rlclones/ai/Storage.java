@@ -305,11 +305,40 @@ public final class Storage {
         return fetchableChest() != null;
     }
 
+    private boolean safeStructureLoot(BlockPos pos) {
+        var memory = com.rlclones.clone.StructureMemory.get(self.getServer());
+        boolean danger = memory.isDangerousAt(self.level().dimension(), pos);
+        if (!danger) {
+            danger = self.level().getEntitiesOfClass(net.minecraft.world.entity.Mob.class, new net.minecraft.world.phys.AABB(pos).inflate(8),
+                    mob -> mob.isAlive() && Senses.isHostileTo(mob, self)).size() >= 5;
+        }
+        if (!danger) {
+            return true;
+        }
+        for (ItemStack stack : self.getInventory().items) {
+            if (stack.getItem() instanceof net.minecraft.world.item.SwordItem sword && sword.getTier().getLevel() >= 2) {
+                return true;
+            }
+        }
+        for (ItemStack stack : self.getInventory().armor) {
+            if (stack.getItem() instanceof ArmorItem armor && armor.getDefense() >= 5) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** A stray chest: generated loot (loot table still attached) or inside a structure, and not one of our bases. */
     private boolean isStray(BlockPos pos) {
         ServerLevel level = self.serverLevel();
         if (Bases.get(self.getServer()).isBaseChest(level.dimension(), pos)) {
             return false;
+        }
+        if (!safeStructureLoot(pos)) {
+            return false;
+        }
+        if (com.rlclones.clone.StructureMemory.get(self.getServer()).isKnownChest(level.dimension(), pos)) {
+            return true;
         }
         return strayCache.computeIfAbsent(pos.immutable(), p -> {
             BlockEntity be = level.getBlockEntity(p);
@@ -336,6 +365,21 @@ public final class Storage {
             if (d < bestD && isStray(e.getKey())) {
                 bestD = d;
                 best = e.getKey();
+            }
+        }
+        for (var site : com.rlclones.clone.StructureMemory.get(self.getServer()).sites()) {
+            if (site.dimension != self.level().dimension() || !site.confirmed()) {
+                continue;
+            }
+            for (BlockPos pos : site.chests()) {
+                if (looted.contains(pos) || blocked(pos)) {
+                    continue;
+                }
+                double d = pos.distToCenterSqr(self.position());
+                if (d < bestD && isStray(pos)) {
+                    bestD = d;
+                    best = pos;
+                }
             }
         }
         return best;

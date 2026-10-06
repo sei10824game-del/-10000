@@ -448,3 +448,97 @@
 | S11-4 | R-19、R-20 | 洞窟と建造物(探索の拡張。大きい) |
 - 各セッションの終わりにソークを1回回し、死亡数(特に溺死・溶岩)と、鉄ツルハシ以降の到達を確かめる
 - 受け入れ: 各項目のテストが必須で通ること + 既存の必須テストが通ること(既知の不安定テストを除く)
+
+## 26. S11-1 実装(R-24・R-23・R-22)
+- R-24: `Motor.waterEscape`(水中で20tick 0.3ブロック未満 → 左・右・上・後ろを30tickずつ。空気30%未満は上から)。周囲BFSで最寄りの空気は省略(上で代用)
+- R-23: 新規 `DoorBreath`(空気40%未満・水面が遠い・ドア所持 → 隣のセルにドアを置く→入って息継ぎ→空気90%で内側から壊して回収)。水中で壊すと5倍遅いので内側から壊す。`Motor.diveHard`(空気が少なくても潜る)。`Crafting.wanted` に swamALot+板6枚以上でドア
+- R-22: `Motor.mine` が水中なら `dryFootingFor`(届く乾いた足場へ移る。無ければ底へ沈む。80tickで諦めて掘る)。対象選びの後回し(2.)は未実装
+- テスト: `getsOutOfAnUnderwaterCorner` / `breathesInADoorUnderwater` / `stepsOutOfTheWaterToMine`(batch r11water)。ローカルはオフラインでコンパイル不可、検証はCI
+- run 37333868601(S11-1): 新規3テストは通過。必須の失敗3件: `carriesOnDownAStaircaseAlreadyStarted`(既存・実装前から)、`usesTntInAFight...`・`visitsTheNetherAndComesBack`(今回初。水中と無関係で、不安定の疑い。次のrunで再現するか確認)。次は S11-2(R-18・R-21・R-25・R-26)
+
+## 27. S11-2 実装(R-18・R-21・R-25・R-26)
+- R-21: `Crafting.smeltables` が、石炭・木炭が無く原木が8本を超えるとき原木を入れる(`spareLogs`、最大8)。炉には余りだけ右クリックで1本ずつ入れる(`loadSpareLogs`)。燃料は既存どおり板。テスト `makesCharcoalFromSpareLogs`(原木12・板8・生の鉄3)
+- R-18: `runHarvest(LOG)`: 切った原木の周り(3×3×上2)にまだ原木があれば上限を 24 に(`moreTree`)。腕が届かない高い原木は、幹の脇で足場を積んで登る(`scaffoldStep`、最大8段、`Equipment.pillarBlockSlot`のブロック)。切り終えたら足元の足場を上から壊して降りる(`climbDown`)。テスト `cutsATallTreeToTheTop`
+- R-25: `Farming.planLot`: TILL を始めるとき、種の数だけの区画(最初のマスから8近傍BFS、6マス以内)を決め、`find` が区画を先に消化する。テスト `tillsAndPlantsAsManyAsItHasSeeds`
+- R-26: 松明が16本を超えるとき、暗い作物(農地・作物で明るさ9未満)へ既存の LIGHT で置く(`cropDark`)。**未実装: 拠点周りの湧き潰し(`Lighting`で暗いマスへ歩いて置く)**。テスト `lightsTheCropsWithSpareTorches`
+- ローカルはオフラインでコンパイル不可。検証はCI
+
+## 28. run 37334912136 と Round 12(R-28〜R-32)
+- CI: 必須失敗4件。`getsOutOfAnUnderwaterCorner`(自分のテスト: 密閉の水路で空気が無く、遅いと溺れる。出口の端に空気セルを足した)、`useslavabucketinafightandtakesitback`(初。水中と無関係。次のrunで再現確認)、`carriesOnDownAStaircaseAlreadyStarted`・`pensCowsWhenWheatPilesUp`(既存)
+- ログ取得: `gh run view --log-failed` は403。`gh api repos/<repo>/check-runs/<job id>/annotations` に "GameTest failed" が出るのでそれで失敗名を読む
+- R-28: `pickSite` を 拠点から6ブロック以上・範囲±12 に。テスト `bringsWaterHomeAndMakesASpring` の配置を合わせた
+- R-30: 掘る4オプション(MINE/QUARRY/STAIRS/SHAFT)でツルハシ無し→`toolUp`(作る/材料集め)。それも不可なら1200tick は掘るオプションを選ばない
+- R-31: `bestToolSlot` が、適正ツールが無い(速度が上がらない)ブロックでは、素手/非ツールのスロットを選ぶ
+- run 37336376594(S11-1のdocsコミット e6de9d4): 失敗5件=corner(修正済)・lava bucket・staircase・climbsUp…・pens。run 37336877128(S11-2 62976c6): corner(修正済)・`creativeBuildsPortalsAndAnEnchantingRoom`・`pearlsOverALavaMoat…`(既知flaky)・`huntsFishInTheWater`(水中。再現を見る)・`makesCharcoalFromSpareLogs`(自分のテスト: 原木を道具・樽・本棚の製作に使い切った。原木を48に増やし、鉄3本の焼成だけを見る形に直した)
+
+## 29. S11-3 実装(R-17・R-27)
+- R-17: `Farming` の SEEDS 移動時に `motor.sweep()`。`Motor.sweepAhead` は前方2.5ブロック・±45°の即時破壊できる草を1tick1つ選び、`lookAt` で向き、視線が±8°以内になるまで移動を続けながら刈る。テスト `cutsGrassOnTheWayWithoutStopping`
+- R-27: 掘る側(STAIRS/SHAFT)は600tickごとに `DIGGING <tier> <item-id>`。掘っていない16ブロック以内の仲間がより良いツルハシを持つと、既存のFEED/`helpTick`で渡す(1本しかなくても渡す)。渡し側が `RETURN name <old-pickaxe>` を送り、受け取った側もFEEDで旧ツルハシを返す。テスト `handsABetterPickaxeToTheDigger` は鉄を受け取ったあと石を返すところまで確認
+- 旧S11-3のCI run 37342075743 はジョブ開始前にGitHub billing/payment制限で拒否。実装コードの成否は確認できていない
+- 本セッションで上記2点の未実装を補完
+
+## 30. S11-4 実装(R-19・R-20/R-32)とS11-3の残り
+- **R-17 視線**: `Motor.sweepAhead` は草を保持ターゲットにして `lookAt` で追従。頭の向きが対象の±8°に入るまで移動を継続し、視線上の障害が無いときだけ刈る
+- **R-27 返却**: `DIGGING` に階層とツルハシIDを含める。良いツルハシを渡した側は `RETURN name <old-pickaxe-id>` を伝え、受け取った側が旧ツルハシを持っていれば1本でも返す。テストを返却まで確認するよう拡張
+- **R-19**: 新規 `PitSafety` が移動意図の先に `Motor.dropAt` の致死穴(HP≤10なら4、通常8ブロック)を検出。掘り/下方目標なら、必要数のはしごを所持またはクラフトしてから1セル穴を支えブロック付きではしごで降り、`Bases.LadderPit` に帰路を保存。降りない穴は拠点24ブロック以内または再訪チャンクで、3×3以内のものだけ余剰ブロックで蓋をする。広い穴は既存Motorの縁しゃがみを使う
+- **R-20/R-32**: `Perception` が実際に見たブロックだけを `StructureMemory`(SavedData)へ渡す。構造物データは `StructureManager.getAllStructuresAt` と `Registries.STRUCTURE` からID/範囲を取り、人工ブロックの集まりは手作り建物候補としてまとめる。`STRUCT` チャットで共有し、未探索の構造物をEXPLOREの入口・中心・チェスト順に訪問、チェストを既存LOOTへ渡す。スポナー/敵5体以上は鉄以上の剣または防具が無ければ避ける
+- 追加必須テスト: `laddersDownIntoADeepPit`, `coversADeadlyHoleNearHome`, `findsAVillageHouseAndLooksInside`; R-17/R-27の既存テストも更新
+- **検証未完了**: `./gradlew test --no-daemon` は `JAVA_HOME` 未設定かつ `java` 不在で実行不可。Java構文パーサーと `git diff --check` は通過。直前のCI run 37342075743 はGitHub Actionsがbilling/payment制限でrunner起動前に拒否。今回のpush後もCIが同じ制限なら検証は保留
+- **残り**: R-26の「作物以外、拠点周囲の湧き潰し」はS11-2時点の未実装のまま
+
+## 31. Round 13 設計・実装: R-33〜R-36 (遠征・役割・個性・経験)
+### 方針
+- 行動列を決め打ちせず、既存の `Brain.STRATEGY` を主に使う。準備度・帰還状態・近くの仲間の担当役割・場所での経験を `StrategyState` の上位コンテキストに加え、実行結果を option reward に返す。
+- `StrategyState` の既存キー(0〜3455)はコンテキスト0のまま保存互換を保つ。新しいコンテキストは既存キーの上位桁に追加し、疎なQテーブルで必要な状態だけ作る。`Option.RETURN` はenum末尾へ追加し、既存の行動ordinalを動かさない。
+- 長いオプションも次の計画に価値を伝えられるよう、semi-Markovの割引は従来の1tick単位ではなく約20tick(1秒)単位にする。時間コスト自体は維持し、長い遠征が常に損になる状態は、帰還・発見報酬とソークで確認する。
+
+### R-33 遠征ライフサイクル
+- 遠征状態に「準備済み」を含める: 食料4個以上・松明4本以上・空きスロット3以上・体力70%以上。ハードマスクにはせず、Qが準備不足で出る/準備する結果を学ぶ。
+- 探索/狩猟の遠征を終了したら出発地点(近くに登録済みの拠点がある場合は拠点)を帰還目標として残し、`RETURN` を戦略の選択肢にする。同行者にも同じ帰還目標を共有する。帰還報酬・遠征完了報酬・死亡/失敗ペナルティを別々に学習させる。
+- `RETURN` は安全上の強制ではなくマスクに出す学習可能な選択肢。重大な危険は既存のFLEE/戦闘割込みを優先する。移動距離の実進捗にも小さな報酬を与え、長距離帰還の時間コストを相殺できるようにする。失敗上限とOptionのtick上限は同じにし、一度の失敗に二重ペナルティが付かないようにする。
+
+### R-34 役割分担
+- 近くの同チームのクローンの実行中Optionから、食料/生活・素材/採掘・探索/移動の3カテゴリの担当maskを観測する。
+- そのmaskを持つ状態で既存Optionを選ぶ。既に埋まったカテゴリへの弱い重複ペナルティ、未担当カテゴリの仕事で実績が出たときの協力報酬を付け、Qが状況別に役割を選ぶようにする。救援/JOINなど本来の協力行動は重複ペナルティ対象外。
+
+### R-35 個体差
+- `ClonePersonality` はUUID由来の決定的traitを使い、同じcloneの再起動/リスポーン後も同一。脳をリンクしてもtraitは個体ごとに残す。学習対象は負傷・空腹・死亡・失敗へのペナルティ、および好奇心・協力・帰還の報酬係数。
+- 値域を狭く上下させ、ゲーム挙動を不安定にしない。個体差は乱数を毎回振るのでなく、安定した報酬形状として現れる。
+
+### R-36 経験記憶
+- `Brain` に上限付きの地点×行動のオンライン平均報酬記憶を保存する。死亡/被害は原因つきの汎用失敗記憶としても記録。古い記憶は時間で減衰し、SavedData/脳のファイルへ保存、脳リンク時は重み付きで統合。
+- 同じ地点の経験バンド(未知/成功/失敗/混在)を状態に含め、同じ地点・同じ行動の過去値を小さなreward shapingとして使う。既存Q更新も行うので「記憶を読むだけ」でなく結果に応じて方策を学習する。
+
+### 実装・受け入れテスト
+- `StrategyState` は旧0〜3455をそのまま維持し、上位contextに準備/帰還/role mask/経験bandを追加。`Option.RETURN` は末尾ordinal 30。旧30-action Q行を31-actionテーブルとして読み込むテストも追加。
+- `ClonePersonality` はUUID由来の決定的trait。負傷・空腹・死亡・失敗の同一量が個体ごとに異なる報酬になることと、実ClonePlayerへの結び付きをテスト。
+- `Brain` の地点×行動報酬記憶は256件LRU上限、48,000tick減衰、save/load/merge対応。実際の再訪stateがpositive/negative混在bandに変わるテストを追加。
+- 遠征準備stateの実測、帰還先の保持、RETURN actionの実行と結果のstrategy Q更新をテスト。`canLead` の体力条件は状態設計と同じ70%に合わせた。
+- 役割テストは同チーム・近距離の実行中Optionがstateに入り、重複役割のnegative rewardがoption終了時にQ更新と地点経験へ入ることを確認。
+- GameTest名: `learnedStrategyContextPreservesOldKeys`, `clonePersonalitiesAreStableAndWeightEventsDifferently`, `episodicSiteExperiencePersistsAndMerges`, `expeditionPreparationIsAnObservedState`, `teamRolesBecomePartOfTheLearnedSituation`, `expeditionReturnIsAvailableToTheLearnedPolicy`。
+- **検証未完了**: 現環境にJava/JDKが無く、`./gradlew test --no-daemon` は `JAVA_HOME` 未設定かつ `java` 不在で起動不可。`git diff --check` とソース構造の静的確認後、pushしてCIで検証する。
+
+## 32. Round 14 追加学習機能
+- **パラメーター化スキル**: `LearnedSkill` を長期目標・世界状態・skill parameter・進行度で符号化し、開始/終了に独立したQテーブルを使う。スキルは `StrategyState` の弱いコンテキスト/事前値にのみ作用し、採掘→製作などの固定行動列は持たない。
+- **反実仮想リプレイ**: その場で実行可能だった低レベルOptionの代替候補を、地点×行動の過去結果と既存Q値から低信頼度で学習し、通常経験で訂正可能な形で同じリプレイメモリへ保存。遠征経路は直行とA*危険回避候補のコストを比べ、経路選択Qテーブルも学習する。
+- **チーム資源台帳**: 拠点への `DEPOSIT`/`WITHDRAW`、食料・ツール譲渡、救援を個体ごとに寄与/引出しとして記録。時間減衰と上限を設け、救援・食料・アイテム支援先の選択と「助けてもらった相手」の評価に反映する。
+- **報告信頼性**: `STRUCT`/`HAZARD`/`SAFE` の発言を保留報告として保存し、ロード済み構造物データや後続の直接観察で正誤を更新する。正確度はタイプ別・相手別の事後確率として減衰し、低信頼の報告はそのまま世界知識へ採用しない。
+- 受け入れテスト: `learnedSkillsAndCounterfactualReplayPersist`, `contributionLedgerAndReportReliabilityLearn`。`Brain` の保存・ロード・脳リンクにも各テーブル/台帳/保留報告を追加。
+- **検証未完了**: `java` コマンドが無いためコンパイル/GameTestは起動不可。`git diff --check` は通過。
+
+## 33. Round 15: 不確実な建造物報告の能動検証
+- EXPLORE中に未解決のSTRUCT報告を候補にし、相手別の報告信頼度と距離からQテーブルが「確認に寄る/今回は見送る」を選ぶ。確認候補の優先度や経路を固定スクリプトにはせず、報告精度・移動距離・見送りコストの結果を別Qテーブルへ返す。
+- 報告位置へ到着後、生成構造は構造データで照合。手作り建物はロード済み範囲の人工ブロックを調べ、異なる3ブロック以上を要件にする。近傍チャンクが未ロードなら誤報と断定せず保留する。誤った未確認候補は共有探索記憶から取り除き、報告者の正確さも更新する。
+- 追加受け入れ: verify/deferのQ値保存/ロード、近傍の人工建物を正しいと認定、十分にロードされた空の範囲では誤報を除外し、走査不能な領域では保留するGameTest。
+- **検証未完了**: 環境に `java` が無いためコンパイル/GameTestは起動不可。`git diff --check` とJava delimiter/static lexical checksを行う。
+
+## 34. Round 16: 構造報告の条件別信頼度
+- 全STRUCT報告に共通の信頼度だけでなく、報告者×構造ID×発信者から報告地点までの距離帯ごとに正誤を学習する。距離帯は[0,16)、[16,64)、[64,256)、[256,∞) blocksの4段階。
+- 条件別の標本が少ない間は報告者の一般STRUCT信頼度へ縮約し、標本が増えるにつれて固有の正確さへ適応。EXPLOREの確認/保留Q状態にも条件別信頼度を供給する。
+- プロファイルは上限付きで保存/ロード/脳リンク時に統合し、保留報告にも距離帯を保存する。受け入れ: 同じ発信者の近距離/遠距離・異なる構造IDで正確さが別々に変わり、保存/ロードとmergeで維持されるGameTest。
+
+## 35. Round 17: クローン間の調査重複を抑える
+- 共有StructureMemoryにチーム別・報告別の短期verification leaseを置き、同じチームの一体だけが未解決報告の調査を開始できるようにする。対立チームの調査は別keyで並行できる。
+- 調査担当が別候補や緊急行動へ移ったときはleaseを解放。移動中に担当が止まった場合も1200tickで自然失効し、最長約600tickごとのrenewで長距離移動を継続できる。調査結果は48,000tick保持し、別Brainの保留報告も直接現地調査なしで解決する。lease/結果はワールドSavedDataに保存する。
+- leaseは同じ調査を二重に実行しないための排他だけを担う。確認する/見送る判断と利用可能な候補のQ選択は継続し、候補の固定順や強制的な担当割当は行わない。
+- 追加受け入れ: `teamVerificationLeasesPreventDuplicateTrips` で同チームの排他、別チームの独立、明示解放、更新/期限切れ、結果共有、保存ロードを確認する。

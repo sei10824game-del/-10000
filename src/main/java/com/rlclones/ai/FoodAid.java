@@ -154,7 +154,11 @@ public final class FoodAid {
             if (p == null || p.distanceTo(self) > 64 || foodItems(p) >= 2 || p.getFoodData().getFoodLevel() >= 17) {
                 continue;
             }
-            double score = p.distanceTo(self) - (CloneManager.isParentOf(self, p) ? 1000 : 0);
+            long now = self.level().getGameTime();
+            float trust = self.getCloneBrain() == null ? 0f : self.getCloneBrain().socialTrust(a.from, now);
+            float balance = self.getCloneBrain() == null ? 0f : self.getCloneBrain().partnerBalance(a.from, now);
+            double score = p.distanceTo(self) - (CloneManager.isParentOf(self, p) ? 1000 : 0) - trust * 12.0
+                    - Math.tanh(balance / 8.0) * 7.0;
             if (score < bestScore) {
                 bestScore = score;
                 best = a;
@@ -220,7 +224,10 @@ public final class FoodAid {
         lastHelped = a.from;
         debug = "fed " + a.name;
         if (p instanceof ClonePlayer other && other.controller() != null) {
-            other.controller().foodAid().thank(self.getUUID(), 3f); // they know who brought it
+            other.controller().foodAid().thank(self.getUUID(), 3f, "food_shared"); // they know who brought it
+            if (self.getCloneBrain() != null) {
+                self.getCloneBrain().recordWithdrawal(other.getUUID(), 3f, "food_given", self.level().getGameTime());
+            }
         }
         asks.remove(a);
         helping = null;
@@ -230,13 +237,29 @@ public final class FoodAid {
     // ------------------------------------------------------------------ gratitude
 
     public void thank(UUID helper, float amount) {
-        if (!helper.equals(self.getUUID())) {
-            gratitude.merge(helper, amount, Float::sum);
+        thank(helper, amount, "shared_resource");
+    }
+
+    public void thank(UUID helper, float amount, String cause) {
+        if (helper == null || helper.equals(self.getUUID())) {
+            return;
+        }
+        gratitude.merge(helper, amount, Float::sum);
+        if (self.getCloneBrain() != null) {
+            long now = self.level().getGameTime();
+            self.getCloneBrain().learnSocial(helper, Math.max(-1f, Math.min(1f, amount / 3f)), cause, now);
+            if (cause != null && (cause.endsWith("shared") || "item_returned".equals(cause))) {
+                self.getCloneBrain().recordContribution(helper, amount, cause, now);
+            }
+        }
+        if ("item_returned".equals(cause) && self.controller() != null) {
+            self.controller().itemAid().noteReturnedBy(helper);
         }
     }
 
     public float gratitude(UUID who) {
-        return gratitude.getOrDefault(who, 0f);
+        float old = gratitude.getOrDefault(who, 0f);
+        return old + (self.getCloneBrain() == null ? 0f : self.getCloneBrain().socialTrust(who, self.level().getGameTime()) * 3f);
     }
 
     /** The helper we owe most who is around (same dimension, within {@code radius}); null if nobody helped. */
@@ -244,10 +267,21 @@ public final class FoodAid {
     public Player favourite(double radius) {
         Player best = null;
         float bestG = 0;
-        for (Map.Entry<UUID, Float> e : gratitude.entrySet()) {
-            Player p = online(e.getKey());
-            if (p != null && p.distanceTo(self) < radius && e.getValue() > bestG && !p.isSpectator()) {
-                bestG = e.getValue();
+        if (self.getServer() == null) {
+            return null;
+        }
+        long now = self.level().getGameTime();
+        for (Player p : self.getServer().getPlayerList().getPlayers()) {
+            if (p == self || !p.isAlive() || p.isSpectator() || p.level() != self.level() || p.distanceTo(self) >= radius
+                    || Senses.rivals(p, self)) {
+                continue;
+            }
+            UUID id = p.getUUID();
+            float learned = self.getCloneBrain() == null ? 0f : self.getCloneBrain().socialTrust(id, now);
+            float balance = self.getCloneBrain() == null ? 0f : self.getCloneBrain().partnerBalance(id, now);
+            float score = gratitude.getOrDefault(id, 0f) + learned * 3f + (float) Math.tanh(balance / 8.0) * 3f;
+            if (score > bestG) {
+                bestG = score;
                 best = p;
             }
         }

@@ -7,12 +7,38 @@ public final class StrategyState {
     public static final int HP = 3;
     public static final int FOOD = 3;
     public static final int THREAT = 3;
+    /** The original state space. Keeping this as the low-order part leaves every old Q key unchanged. */
+    public static final int BASE_STATES = HP * FOOD * THREAT * (1 << 7);
+    /** Legacy bits, macro-goal bits and learned skill/parameter context share a sparse 16-bit context field. */
+    public static final int CONTEXT_STATES = 1 << 16;
+
+    private static final int READY_BIT = 1;
+    private static final int RETURN_BIT = 1 << 1;
+    private static final int ROLE_SHIFT = 2;
+    private static final int EXPERIENCE_SHIFT = 5;
+    private static final int GOAL_SHIFT = 7;
+    private static final int GOAL_MASK = 7;
+    private static final int SKILL_SHIFT = 10;
+    private static final int SKILL_MASK = 7;
+    private static final int SKILL_PARAMETER_SHIFT = 13;
+    private static final int SKILL_PARAMETER_MASK = 7;
 
     private StrategyState() {
     }
 
+    /** Original encoding retained for saved brains and callers that do not have extra context. */
     public static int encode(int hp, int food, int threat, boolean hasFood, boolean items, boolean resource,
                              boolean ally, boolean dark, boolean armed, boolean animals) {
+        return encode(hp, food, threat, hasFood, items, resource, ally, dark, armed, animals, 0);
+    }
+
+    /**
+     * Encodes the legacy situation in the low digits and learned planning context in the high digits.
+     * The context is: prepared for a trip, return journey pending, a 3-bit team role mask, a 2-bit site
+     * outcome, a 3-bit long-term goal, a 3-bit learned skill, and a 3-bit skill parameter bin.
+     */
+    public static int encode(int hp, int food, int threat, boolean hasFood, boolean items, boolean resource,
+                             boolean ally, boolean dark, boolean armed, boolean animals, int context) {
         int k = Math.max(0, Math.min(HP - 1, hp));
         k = k * FOOD + Math.max(0, Math.min(FOOD - 1, food));
         k = k * THREAT + Math.max(0, Math.min(THREAT - 1, threat));
@@ -23,11 +49,64 @@ public final class StrategyState {
         k = k * 2 + (dark ? 1 : 0);
         k = k * 2 + (armed ? 1 : 0);
         k = k * 2 + (animals ? 1 : 0);
-        return k;
+        int safeContext = Math.max(0, Math.min(CONTEXT_STATES - 1, context));
+        return safeContext * BASE_STATES + k;
+    }
+
+    public static int packContext(boolean tripReady, boolean returnPending, int roleMask, int experienceBand) {
+        return packContext(tripReady, returnPending, roleMask, experienceBand, LongTermGoal.NONE.id(), LearnedSkill.NONE.id(), 0);
+    }
+
+    public static int packContext(boolean tripReady, boolean returnPending, int roleMask, int experienceBand, int goalId) {
+        return packContext(tripReady, returnPending, roleMask, experienceBand, goalId, LearnedSkill.NONE.id(), 0);
+    }
+
+    public static int packContext(boolean tripReady, boolean returnPending, int roleMask, int experienceBand,
+                                  int goalId, int skillId, int skillParameterBin) {
+        return (tripReady ? READY_BIT : 0)
+                | (returnPending ? RETURN_BIT : 0)
+                | ((roleMask & 7) << ROLE_SHIFT)
+                | ((experienceBand & 3) << EXPERIENCE_SHIFT)
+                | ((goalId & GOAL_MASK) << GOAL_SHIFT)
+                | ((skillId & SKILL_MASK) << SKILL_SHIFT)
+                | ((skillParameterBin & SKILL_PARAMETER_MASK) << SKILL_PARAMETER_SHIFT);
+    }
+
+    public static int context(int key) {
+        return key < 0 ? 0 : key / BASE_STATES;
+    }
+
+    public static boolean tripReady(int key) {
+        return (context(key) & READY_BIT) != 0;
+    }
+
+    public static boolean returnPending(int key) {
+        return (context(key) & RETURN_BIT) != 0;
+    }
+
+    public static int teamRoleMask(int key) {
+        return (context(key) >>> ROLE_SHIFT) & 7;
+    }
+
+    public static int experienceBand(int key) {
+        return (context(key) >>> EXPERIENCE_SHIFT) & 3;
+    }
+
+    public static int longTermGoalId(int key) {
+        return (context(key) >>> GOAL_SHIFT) & GOAL_MASK;
+    }
+
+    public static int learnedSkillId(int key) {
+        return (context(key) >>> SKILL_SHIFT) & SKILL_MASK;
+    }
+
+    public static int skillParameterBin(int key) {
+        return (context(key) >>> SKILL_PARAMETER_SHIFT) & SKILL_PARAMETER_MASK;
     }
 
     /** Returns {hp, food, threat, hasFood, items, resource, ally, dark, armed, animals}. */
     public static int[] decode(int key) {
+        key = key < 0 ? 0 : key % BASE_STATES;
         int[] v = new int[10];
         for (int i = 9; i >= 3; i--) {
             v[i] = key & 1;
@@ -43,8 +122,10 @@ public final class StrategyState {
 
     public static String describe(int key) {
         int[] v = decode(key);
-        return String.format(Locale.ROOT, "hp=%d food=%d threat=%d hasFood=%d items=%d resource=%d ally=%d dark=%d armed=%d animals=%d",
-                v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]);
+        return String.format(Locale.ROOT,
+                "hp=%d food=%d threat=%d hasFood=%d items=%d resource=%d ally=%d dark=%d armed=%d animals=%d ready=%d return=%d roles=%d experience=%d goal=%d skill=%d skillParam=%d",
+                v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], tripReady(key) ? 1 : 0,
+                returnPending(key) ? 1 : 0, teamRoleMask(key), experienceBand(key), longTermGoalId(key), learnedSkillId(key), skillParameterBin(key));
     }
 
     public static void prior(int key, float[] q) {
@@ -85,5 +166,111 @@ public final class StrategyState {
         q[Option.ACHIEVE.ordinal()] = threat == 0 ? 0.35f : -0.4f;
         q[Option.STAIRS.ordinal()] = threat == 0 ? 0.45f : -0.4f;
         q[Option.SHAFT.ordinal()] = threat == 0 ? 0.4f : -0.4f;
+        q[Option.RETURN.ordinal()] = -0.1f;
+
+        int context = context(key);
+        if ((context & READY_BIT) != 0 && threat == 0) {
+            q[Option.EXPEDITION.ordinal()] += 0.2f;
+        }
+        if ((context & RETURN_BIT) != 0) {
+            q[Option.RETURN.ordinal()] = food == 0 || hp == 0 ? 1.5f : 1.0f;
+        }
+        if (experienceBand(key) == 2) {
+            q[Option.EXPLORE.ordinal()] -= 0.15f;
+            q[Option.EXPEDITION.ordinal()] -= 0.15f;
+            q[Option.LOOT.ordinal()] -= 0.1f;
+        }
+
+        int roles = teamRoleMask(key);
+        if ((roles & 1) != 0) {
+            q[Option.FARM.ordinal()] -= 0.05f;
+            q[Option.HUNT.ordinal()] -= 0.05f;
+            q[Option.FISH.ordinal()] -= 0.05f;
+        }
+        if ((roles & 2) != 0) {
+            q[Option.GATHER_WOOD.ordinal()] -= 0.05f;
+            q[Option.MINE.ordinal()] -= 0.05f;
+            q[Option.QUARRY.ordinal()] -= 0.05f;
+        }
+        if ((roles & 4) != 0) {
+            q[Option.EXPLORE.ordinal()] -= 0.05f;
+            q[Option.DISCOVER.ordinal()] -= 0.05f;
+        }
+
+        // A soft abstract-goal prior shapes the low-level choice without prescribing an action sequence.
+        switch (longTermGoalId(key)) {
+            case 1 -> {
+                q[Option.GATHER_WOOD.ordinal()] += 0.18f;
+                q[Option.QUARRY.ordinal()] += 0.18f;
+                q[Option.MINE.ordinal()] += 0.18f;
+                q[Option.CRAFT.ordinal()] += 0.18f;
+                q[Option.STAIRS.ordinal()] += 0.18f;
+                q[Option.SHAFT.ordinal()] += 0.18f;
+            }
+            case 2 -> {
+                q[Option.HUNT.ordinal()] += 0.2f;
+                q[Option.FISH.ordinal()] += 0.2f;
+                q[Option.FARM.ordinal()] += 0.2f;
+                q[Option.ANIMALS.ordinal()] += 0.2f;
+                q[Option.FEED.ordinal()] += 0.2f;
+                q[Option.EAT.ordinal()] += 0.2f;
+            }
+            case 3 -> {
+                q[Option.EXPLORE.ordinal()] += 0.2f;
+                q[Option.EXPEDITION.ordinal()] += 0.2f;
+                q[Option.DISCOVER.ordinal()] += 0.2f;
+                q[Option.LOOT.ordinal()] += 0.2f;
+            }
+            case 4 -> {
+                q[Option.HELP.ordinal()] += 0.2f;
+                q[Option.FEED.ordinal()] += 0.2f;
+                q[Option.BREED.ordinal()] += 0.2f;
+                q[Option.JOIN.ordinal()] += 0.2f;
+                q[Option.FOLLOW.ordinal()] += 0.2f;
+            }
+            case 5 -> q[Option.RETURN.ordinal()] += 0.55f;
+            default -> {
+            }
+        }
+
+        // Skills bias options but do not prescribe an order; the option Q-table still chooses each concrete action.
+        int parameter = skillParameterBin(key);
+        switch (LearnedSkill.fromId(learnedSkillId(key))) {
+            case RESOURCE_RUN -> {
+                q[Option.GATHER_WOOD.ordinal()] += 0.12f;
+                q[Option.MINE.ordinal()] += 0.12f;
+                q[Option.QUARRY.ordinal()] += 0.12f;
+                q[Option.CRAFT.ordinal()] += 0.12f;
+                if (parameter == 1) {
+                    q[Option.GATHER_WOOD.ordinal()] += 0.12f;
+                } else if (parameter >= 3) {
+                    q[Option.MINE.ordinal()] += 0.12f;
+                    q[Option.STAIRS.ordinal()] += 0.08f;
+                    q[Option.SHAFT.ordinal()] += 0.08f;
+                }
+            }
+            case FOOD_RESERVE -> {
+                q[Option.HUNT.ordinal()] += 0.15f;
+                q[Option.FISH.ordinal()] += 0.15f;
+                q[Option.FARM.ordinal()] += 0.15f;
+                q[Option.ANIMALS.ordinal()] += 0.12f;
+                q[Option.EAT.ordinal()] += 0.12f;
+            }
+            case SCOUTING -> {
+                q[Option.EXPLORE.ordinal()] += 0.15f;
+                q[Option.EXPEDITION.ordinal()] += 0.15f;
+                q[Option.DISCOVER.ordinal()] += 0.12f;
+                q[Option.LOOT.ordinal()] += 0.08f;
+            }
+            case PARTNER_AID -> {
+                q[Option.HELP.ordinal()] += 0.15f;
+                q[Option.FEED.ordinal()] += 0.15f;
+                q[Option.JOIN.ordinal()] += 0.12f;
+                q[Option.FOLLOW.ordinal()] += 0.08f;
+            }
+            case RETURN_ROUTE -> q[Option.RETURN.ordinal()] += 0.6f;
+            default -> {
+            }
+        }
     }
 }

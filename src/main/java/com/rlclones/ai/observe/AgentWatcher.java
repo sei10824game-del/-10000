@@ -5,10 +5,19 @@ import com.rlclones.ai.Perception;
 import com.rlclones.ai.Senses;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.combat.CombatAction;
+import com.rlclones.ai.strategy.LongTermGoal;
 import com.rlclones.ai.strategy.Option;
+import com.rlclones.clone.ClonePersonality;
+import com.rlclones.clone.ClonePlayer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.PickaxeItem;
+import net.minecraft.world.item.TieredItem;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -38,9 +47,16 @@ public final class AgentWatcher {
         Vec3 stratPos;
         float stratHp;
         int stratFood;
+        float stratMaterials;
+        int stratReturnedTrips;
+        int stratFailedReturns;
+        int stratGoalId;
+        int stratGoalState = -1;
+        float combatHp;
     }
 
     private final ServerPlayer self;
+    private final ClonePersonality personality;
     private final Perception perception;
     private final Supplier<Brain> brain;
     private final ToLongFunction<Entity> sinceEnemyAttack;
@@ -49,6 +65,7 @@ public final class AgentWatcher {
 
     public AgentWatcher(ServerPlayer self, Perception perception, Supplier<Brain> brain, ToLongFunction<Entity> sinceEnemyAttack) {
         this.self = self;
+        this.personality = self instanceof ClonePlayer clone ? clone.personality() : ClonePersonality.neutral();
         this.perception = perception;
         this.brain = brain;
         this.sinceEnemyAttack = sinceEnemyAttack;
@@ -131,6 +148,7 @@ public final class AgentWatcher {
         }
         t.enemyId = enemy.getId();
         t.enemyType = Perception.typeId(enemy);
+        t.combatHp = agent.getHealth();
         t.combatState = Senses.combatState(agent, enemy, brain.get().knowledge(t.enemyType), sinceEnemyAttack.applyAsLong(enemy), Senses.crowd(perception, agent));
     }
 
@@ -147,12 +165,13 @@ public final class AgentWatcher {
         float reward = combatReward(events) - 0.01f * (now - t.tick);
         boolean agentDied = !agent.isAlive();
         boolean enemyGone = enemy == null || !enemy.isAlive() || enemy.isRemoved();
+        float learnedWeight = ImitationConfidence.weight(weight, reward, agent.getHealth() - t.combatHp, 0f, !agentDied, false, false);
         Brain b = brain.get();
         if (agentDied || enemyGone) {
-            b.learn(t.enemyType, t.combatState, action, reward, 0, true, 0f, 0, weight, true);
+            b.learn(t.enemyType, t.combatState, action, reward, 0, true, 0f, 0, learnedWeight, true);
         } else if (perception.isVisible(enemy)) {
             int s2 = Senses.combatState(agent, enemy, b.knowledge(t.enemyType), sinceEnemyAttack.applyAsLong(enemy), Senses.crowd(perception, agent));
-            b.learn(t.enemyType, t.combatState, action, reward, s2, false, (float) Config.get(Config.DISCOUNT, 0.9), Senses.combatMask(agent), weight, true);
+            b.learn(t.enemyType, t.combatState, action, reward, s2, false, (float) Config.get(Config.DISCOUNT, 0.9), Senses.combatMask(agent), learnedWeight, true);
         } else {
             return;
         }
@@ -162,15 +181,15 @@ public final class AgentWatcher {
         }
     }
 
-    private static float combatReward(List<AgentEvents.Event> events) {
+    private float combatReward(List<AgentEvents.Event> events) {
         float r = 0;
         for (AgentEvents.Event e : events) {
             switch (e.kind()) {
                 case DEALT -> r += e.amount();
-                case HURT -> r -= e.amount() * 1.5f;
+                case HURT -> r -= e.amount() * 1.5f * personality.injuryPenalty;
                 case KILL_HOSTILE -> r += 8f;
                 case KILL_ANIMAL -> r += 4f;
-                case DEATH -> r -= 25f;
+                case DEATH -> r -= 25f * personality.deathPenalty;
                 case BLOCKED -> r += e.amount() * 0.5f;
                 default -> {
                 }
@@ -247,6 +266,17 @@ public final class AgentWatcher {
         t.stratPos = agent.position();
         t.stratHp = agent.getHealth();
         t.stratFood = agent.getFoodData().getFoodLevel();
+        t.stratMaterials = materialScore(agent);
+        t.stratGoalId = 0;
+        t.stratGoalState = -1;
+        t.stratReturnedTrips = 0;
+        t.stratFailedReturns = 0;
+        if (agent instanceof ClonePlayer clone) {
+            t.stratGoalId = clone.controller().longTermGoalId();
+            t.stratGoalState = clone.controller().longTermGoalState(now);
+            t.stratReturnedTrips = clone.controller().expedition().returnedTrips;
+            t.stratFailedReturns = clone.controller().expedition().failedReturns;
+        }
         t.stratState = agent.isAlive() ? Senses.strategyState(perception, agent, self, brain.get(), now) : -1;
     }
 
@@ -265,27 +295,80 @@ public final class AgentWatcher {
         int food = agent.getFoodData().getFoodLevel();
         if (food > t.stratFood) {
             reward += (food - t.stratFood) * (t.stratFood <= 14 ? 1.0f : 0.2f);
+        } else if (food < t.stratFood) {
+            reward -= (t.stratFood - food) * 0.05f * personality.hungerPenalty;
+        }
+        float materialDelta = materialScore(agent) - t.stratMaterials;
+        reward += materialDelta >= 0 ? Math.min(4f, materialDelta * 0.8f) : Math.max(-3f, materialDelta * 0.5f);
+        int returnedDelta = 0;
+        int failedReturnDelta = 0;
+        if (agent instanceof ClonePlayer clone) {
+            returnedDelta = Math.max(0, clone.controller().expedition().returnedTrips - t.stratReturnedTrips);
+            failedReturnDelta = Math.max(0, clone.controller().expedition().failedReturns - t.stratFailedReturns);
+            reward += returnedDelta * 3f - failedReturnDelta * 2f;
         }
         boolean died = !agent.isAlive();
+        boolean returnedSafely = returnedDelta > 0;
+        boolean failedReturn = failedReturnDelta > 0;
+        float learnedWeight = ImitationConfidence.weight(weight, reward, dh, materialDelta, !died, returnedSafely, failedReturn);
         Brain b = brain.get();
         int s2 = died ? 0 : Senses.strategyState(perception, agent, self, b, now);
         int mask2 = died ? 0 : Senses.strategyMask(perception, agent, self, now);
-        b.learn(Brain.STRATEGY, t.stratState, option.ordinal(), reward, s2, died, (float) Math.pow(0.995, dt), mask2, weight, true);
+        b.learn(Brain.STRATEGY, t.stratState, option.ordinal(), reward, s2, died, (float) Math.pow(0.995, dt), mask2, learnedWeight, true);
+        if (agent instanceof ClonePlayer clone && t.stratGoalId > 0 && t.stratGoalId < LongTermGoal.COUNT && t.stratGoalState >= 0) {
+            int goalState2 = clone.controller().longTermGoalState(now);
+            boolean goalTerminal = died || clone.controller().longTermGoalId() != t.stratGoalId;
+            int goalMask2 = died ? 0 : clone.controller().longTermGoalMask(now);
+            b.learn(Brain.GOALS, t.stratGoalState, t.stratGoalId, reward * 0.25f, goalState2, goalTerminal,
+                    (float) Math.pow(0.995, dt / 20.0), goalMask2, learnedWeight, true);
+        }
         observedTransitions++;
         if (reward >= 0) {
             b.recordDemo(Brain.STRATEGY, t.stratState, option.ordinal());
         }
     }
 
-    private static float strategyReward(List<AgentEvents.Event> events) {
+    /** Value of tangible supplies carried by a demonstrator, including returned ores and useful equipment. */
+    private static float materialScore(Player player) {
+        float score = 0f;
+        for (ItemStack stack : player.getInventory().items) {
+            int count = stack.getCount();
+            if (stack.is(ItemTags.LOGS)) {
+                score += count * 0.12f;
+            } else if (stack.is(ItemTags.PLANKS)) {
+                score += count * 0.04f;
+            } else if (stack.is(Items.COBBLESTONE) || stack.is(Items.DEEPSLATE) || stack.is(Items.STONE)) {
+                score += count * 0.035f;
+            } else if (stack.is(Items.COAL) || stack.is(Items.CHARCOAL)) {
+                score += count * 0.12f;
+            } else if (stack.is(Items.RAW_IRON) || stack.is(Items.IRON_ORE) || stack.is(Items.DEEPSLATE_IRON_ORE)) {
+                score += count * 0.3f;
+            } else if (stack.is(Items.IRON_INGOT) || stack.is(Items.GOLD_INGOT) || stack.is(Items.COPPER_INGOT)) {
+                score += count * 0.45f;
+            } else if (stack.is(Items.DIAMOND) || stack.is(Items.NETHERITE_INGOT)) {
+                score += count * 0.8f;
+            }
+            if (stack.getItem() instanceof PickaxeItem pick) {
+                score += 0.2f * pick.getTier().getLevel();
+            } else if (stack.getItem() instanceof TieredItem tiered) {
+                score += 0.1f * tiered.getTier().getLevel();
+            }
+            if (stack.getItem() instanceof ArmorItem armor) {
+                score += armor.getDefense() * 0.08f;
+            }
+        }
+        return Math.min(50f, score);
+    }
+
+    private float strategyReward(List<AgentEvents.Event> events) {
         float r = 0;
         for (AgentEvents.Event e : events) {
             switch (e.kind()) {
-                case HURT -> r -= e.amount();
+                case HURT -> r -= e.amount() * personality.injuryPenalty;
                 case DEALT -> r += (e.flags() & AgentEvents.FLAG_HOSTILE) != 0 ? e.amount() * 0.2f : 0f;
                 case KILL_HOSTILE -> r += 6f;
                 case KILL_ANIMAL -> r += 2f;
-                case DEATH -> r -= 30f;
+                case DEATH -> r -= 30f * personality.deathPenalty;
                 case PICKUP -> r += Math.min(e.amount(), 5f) * 0.2f;
                 case BREAK_LOG -> r += 0.5f;
                 case BREAK_ORE -> r += 0.8f;
@@ -298,6 +381,9 @@ public final class AgentWatcher {
     }
 
     private Option inferOption(Player agent, Trace t, List<AgentEvents.Event> events, long now) {
+        if (agent instanceof ClonePlayer clone && clone.controller().option() == Option.RETURN) {
+            return Option.RETURN;
+        }
         boolean fought = false;
         boolean hunted = false;
         boolean ate = false;

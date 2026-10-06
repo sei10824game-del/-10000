@@ -101,6 +101,8 @@ public final class CloneCommand {
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES)
                                 .then(Commands.literal("on").executes(ctx -> setAi(ctx, true)))
                                 .then(Commands.literal("off").executes(ctx -> setAi(ctx, false)))))
+                .then(Commands.literal("inventory")
+                        .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(CloneCommand::inventory)))
                 .then(Commands.literal("brain")
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(CloneCommand::brain)))
                 .then(Commands.literal("knowledge")
@@ -210,6 +212,28 @@ public final class CloneCommand {
             src.sendSuccess(() -> Component.literal(" - " + line), false);
         }
         return m.clones().size();
+    }
+
+    /** R-29: what a clone carries, as chat lines (hotbar / main / armor / offhand), identical items summed. */
+    private static int inventory(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "name");
+        ClonePlayer c = manager(ctx).byName(name);
+        if (c == null) {
+            ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.unknown", name));
+            return 0;
+        }
+        java.util.Map<String, Integer> sum = new java.util.LinkedHashMap<>();
+        java.util.List<net.minecraft.world.item.ItemStack> all = new java.util.ArrayList<>(c.getInventory().items);
+        all.addAll(c.getInventory().armor);
+        all.addAll(c.getInventory().offhand);
+        for (net.minecraft.world.item.ItemStack st : all) {
+            if (!st.isEmpty()) {
+                sum.merge(st.getHoverName().getString(), st.getCount(), Integer::sum);
+            }
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal(name + " (" + sum.size() + "): "
+                + (sum.isEmpty() ? "-" : sum.entrySet().stream().map(e -> e.getKey() + " x" + e.getValue()).collect(java.util.stream.Collectors.joining(", ")))), false);
+        return sum.size();
     }
 
     private static int remove(CommandContext<CommandSourceStack> ctx) {
