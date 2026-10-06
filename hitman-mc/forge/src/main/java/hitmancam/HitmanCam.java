@@ -40,8 +40,8 @@ public class HitmanCam {
     }
 
     private static void listen() {
-        try (DatagramSocket sock = new DatagramSocket(PORT, InetAddress.getLoopbackAddress())) {
-            LOGGER.info("hitmancam listening on 127.0.0.1:{}", PORT);
+        try (DatagramSocket sock = new DatagramSocket(PORT, InetAddress.getByAddress(new byte[]{127, 0, 0, 1}))) {
+            LOGGER.info("hitmancam listening on {}", sock.getLocalSocketAddress());
             byte[] buf = new byte[256];
             while (true) {
                 DatagramPacket p = new DatagramPacket(buf, buf.length);
