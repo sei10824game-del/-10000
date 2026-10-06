@@ -54,6 +54,7 @@ public class HitmanCam {
                 } catch (NumberFormatException e) {
                     continue;
                 }
+                if (latest == null) LOGGER.info("hitmancam: first camera packet received");
                 latest = v;
                 latestAt = System.currentTimeMillis();
             }
@@ -66,13 +67,15 @@ public class HitmanCam {
     public void onRender(TickEvent.RenderTickEvent e) {
         if (e.phase != TickEvent.Phase.START) return;
         double[] v = latest;
-        LocalPlayer pl = Minecraft.getInstance().player;
-        if (v == null || pl == null || System.currentTimeMillis() - latestAt > STALE_MS) return;
-
-        // the camera is driven from HITMAN: don't hold the mouse or pause when focus moves there
         Minecraft mc = Minecraft.getInstance();
+        LocalPlayer pl = mc.player;
+        if (v == null || pl == null) return;
+
+        // once HITMAN has sent a camera, never hold the mouse or pause: otherwise a paused/unfocused HITMAN stops
+        // sending and the mouse can't be handed back to it
         mc.options.pauseOnLostFocus = false;
         if (mc.mouseHandler.isMouseGrabbed()) mc.mouseHandler.releaseMouse();
+        if (System.currentTimeMillis() - latestAt > STALE_MS) return;
 
         double x = v[0] + OFF_X, y = v[1] + OFF_Y, z = v[2] + OFF_Z;
         // forward f -> MC yaw (0 = +z/south, clockwise from above) and pitch (+ = down)
