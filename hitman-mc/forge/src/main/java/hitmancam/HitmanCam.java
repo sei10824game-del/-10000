@@ -74,6 +74,8 @@ public class HitmanCam {
         // once HITMAN has sent a camera, never hold the mouse or pause: otherwise a paused/unfocused HITMAN stops
         // sending and the mouse can't be handed back to it
         mc.options.pauseOnLostFocus = false;
+        // focus loss (clicking HITMAN) opens the pause menu: close it so the view keeps following
+        if (mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen) mc.setScreen(null);
         if (mc.mouseHandler.isMouseGrabbed()) mc.mouseHandler.releaseMouse();
         if (System.currentTimeMillis() - latestAt > STALE_MS) return;
 
