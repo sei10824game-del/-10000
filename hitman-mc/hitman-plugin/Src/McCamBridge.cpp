@@ -52,8 +52,17 @@ void McCamBridge::OnEngineInitialized() {
 void McCamBridge::OnFrameUpdate(const SGameUpdateEvent&) {
     if (m_Socket == ~0ull) return;
 
+    static unsigned s_Frame = 0;
+    static bool s_WarnedNull = false;
+
     const auto s_Camera = Functions::GetCurrentCamera->Call();
-    if (!s_Camera) return;
+    if (!s_Camera) {
+        if (!s_WarnedNull) {
+            s_WarnedNull = true;
+            Logger::Warn("[McCamBridge] GetCurrentCamera() returned null (will retry quietly).");
+        }
+        return;
+    }
 
     const SMatrix s_M = s_Camera->GetObjectToWorldMatrix();
 
@@ -67,7 +76,12 @@ void McCamBridge::OnFrameUpdate(const SGameUpdateEvent&) {
     s_To.sin_port = htons(k_Port);
     inet_pton(AF_INET, "127.0.0.1", &s_To.sin_addr);
 
-    sendto(static_cast<SOCKET>(m_Socket), s_Buf, s_Len, 0, reinterpret_cast<sockaddr*>(&s_To), sizeof(s_To));
+    const int s_Sent = sendto(static_cast<SOCKET>(m_Socket), s_Buf, s_Len, 0, reinterpret_cast<sockaddr*>(&s_To), sizeof(s_To));
+
+    // diagnostics: first frame, then roughly every 5 s at 60 fps
+    if (s_Frame++ % 300 == 0) {
+        Logger::Info("[McCamBridge] sendto={} (len {}, err {}) {}", s_Sent, s_Len, s_Sent < 0 ? WSAGetLastError() : 0, s_Buf);
+    }
 }
 
 DEFINE_ZHM_PLUGIN(McCamBridge);
