@@ -4022,7 +4022,7 @@ public final class CloneGameTests {
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
             var cc = c.controller();
-            h.assertTrue(!c.getCloneBrain().isHarmful(id) && cc.hazardsCorrected >= 1, "standing and touching it a long while unhurt: not harmful after all");
+            h.assertTrue(!c.getCloneBrain().isHarmful(id) && cc.hazardsCorrected >= 1, "standing and touching it a long while unhurt: not harmful after all (samples " + cc.harmlessSamples(id) + " hp " + c.getHealth() + " at " + c.blockPosition().subtract(h.absolutePos(new BlockPos(0, 0, 0))).toShortString() + " " + cc.optionLog + ")");
             h.assertTrue(c.getCloneBrain().provenSafe(id), "and not believed again on hearsay");
             h.assertTrue(!friend.getCloneBrain().isHarmful(id), "the others are told");
             finish(h, c, friend);

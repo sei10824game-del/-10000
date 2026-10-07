@@ -1184,6 +1184,11 @@ public final class CloneController {
     private final it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<String> harmlessContact = new it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<>();
     /** Harmful-block beliefs corrected after long harmless contact (diagnostics, tests). */
     public int hazardsCorrected;
+
+    /** Diagnostics: the harmless-contact samples so far for {@code id}. */
+    public int harmlessSamples(String id) {
+        return harmlessContact.getInt(id);
+    }
     private static final int HARMLESS_SAMPLES = 6;
 
     /**
