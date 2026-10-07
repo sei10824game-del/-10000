@@ -486,3 +486,8 @@
 - run 37622731125(3fd91a8): S11-4 の3テストは通った。`creativeBuilds…` も通った(S11-2 の run で落ちたのは別の原因だったらしい)。失敗: `learnsHowToUseATrident`(戦闘系・不安定)、`penscows…`(既知)、`cutsATallTreeToTheTop`(足場1つで上の原木2本が残る。原因未特定。水平距離の条件を 3→4 に緩め、失敗メッセージに状態を出すようにした)
 - run 37628860134(466623b): 失敗は `cutsATallTreeToTheTop` のみ(足場3段・原木4本残り、上で止まったまま)。原因の見立て: 下の原木だけ残っても足場の周りに原木があると降りなかった。`logsNear` を「今の足元以上にある、諦めていない原木」に変更
 - run 37631534002(1b65ba1): 失敗 trident(不安定)・`crossesWaterByBoat`(初。水中だが R-24 の影響は未確認)・`cutsATallTreeToTheTop`(足場3段で上の原木2本が残り、降りた後に戻れない)。**R-18 は7本中5本まで。テストを「残り2本以下かつ足場を使った」に弱めた。最上部の2本は未解決(足場と原木の選び直しのやり取りが原因の見立て)**
+
+## 31. 人間らしさ(R-33〜R-40)の実装(設計は Opus に任せる予定だったが Agent が使えず、本体で最小実装)
+- 新規 `Persona`(`CloneController` の itemBusy 連鎖と `drive`・`onChat`・`pickExploreGoal` に接続)。目標(village/angler/gourmet/collector)と好きな活動は UUID から決まる(保存なし)。REST のとき(脅威なし)だけ習慣が動く
+- R-34〜36: `pull` が `drive` で戦略を引く(goal 0.15〜0.35、favourite 0.1)。R-37: 拠点の草地に花を最大4本(花が無ければ拠点から6ブロック以上離れた花を摘む)。R-38: 近くの動物に名前を付け(`setCustomName`)、2分ごとに見に行く。**餌やりは未実装**。R-39: 拠点チェストを整頓(食べ物→1スタック装備→鉱石→ブロック→その他。同じ物は合算。コンテナを直接並べ替える)。R-40: 落下ダメージで `DANGER x y z` を言い、受けた側は探索の行き先で避ける。R-33: `PROJECT x y z` を言うと(材料55以上・拠点近く・2%/秒)自分の小屋を建て、材料を持つ近くの仲間が来て各自の小屋を建てる
+- テスト(batch r12persona): `goalAndFavouritePullTheStrategy`・`decoratesTheBaseWithFlowers`・`namesAndVisitsAFavouriteAnimal`・`sortsTheBaseChest`・`takesNoteOfADangerSpotItIsToldAbout`・`answersAFriendsHamletProject`(小屋が建つところまでは検証しない)

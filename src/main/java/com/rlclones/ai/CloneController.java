@@ -82,6 +82,7 @@ public final class CloneController {
     private final DoorBreath doorBreath;
     private final Structures structures;
     private final Pits pits;
+    private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
     private boolean lookedAround;
@@ -189,6 +190,7 @@ public final class CloneController {
         this.doorBreath = new DoorBreath(self, motor);
         this.structures = new Structures(self);
         this.pits = new Pits(self, motor);
+        this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
         this.foodAid = new FoodAid(self, motor);
@@ -326,6 +328,10 @@ public final class CloneController {
 
     public BoatTrap boatTrap() {
         return boatTrap;
+    }
+
+    public Persona persona() {
+        return persona;
     }
 
     public Pits pits() {
@@ -568,7 +574,7 @@ public final class CloneController {
         long pr = Prof.t();
         watchTells(now);
         boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
-        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || pits.tick(now, option) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || pits.tick(now, option) || persona.tick(now, option, threatened) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
@@ -968,7 +974,7 @@ public final class CloneController {
         if (expedition.onChat(sender, t, now)) {
             return;
         }
-        if (itemAid.onChat(sender, t, now) || structures.onChat(t)) {
+        if (itemAid.onChat(sender, t, now) || structures.onChat(t) || persona.onChat(sender, t, now)) {
             return;
         }
         if (foodAid.onChat(sender, t, now)) {
@@ -2123,6 +2129,10 @@ public final class CloneController {
         Option dig = digDrive(now, mask);
         if (dig != null) {
             return dig;
+        }
+        Option liking = persona.pull(mask, random.nextFloat(), random.nextFloat(), structures.target() != null);
+        if (liking != null) {
+            return liking; // R-34..R-36: its goal / favourite
         }
         if ((mask & Option.QUARRY.bit()) != 0 && Progression.need(self) == Progression.Need.STONE) {
             return Option.QUARRY; // a wooden pickaxe and stone in sight: the stone pickaxe is next
@@ -3686,7 +3696,7 @@ public final class CloneController {
             int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z));
             double y = Math.abs(surface - self.getY()) > 12 ? self.getY() : surface;
             long chunk = ChunkPos.asLong(Mth.floor(x) >> 4, Mth.floor(z) >> 4);
-            double score = (visitedChunks.contains(chunk) ? 0 : 1) + random.nextDouble() * 0.5;
+            double score = (visitedChunks.contains(chunk) ? 0 : 1) + random.nextDouble() * 0.5 - (persona.avoids(new Vec3(x, y, z)) ? 2 : 0);
             if (score > bestScore) {
                 bestScore = score;
                 best = new Vec3(x, y, z);

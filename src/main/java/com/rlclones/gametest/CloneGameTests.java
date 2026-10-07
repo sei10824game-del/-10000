@@ -5396,6 +5396,128 @@ public final class CloneGameTests {
         });
     }
 
+    // ------------------------------------------------------------------ Round 13: a someone (R-33..R-40)
+
+    /** R-34/35/36: a collector (and a fishing favourite) feels like advancements / fishing, whatever else is on offer. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r12persona")
+    public static void goalAndFavouritePullTheStrategy(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var p = c.controller().persona();
+        p.goal = java.util.Arrays.asList(com.rlclones.ai.Persona.GOALS).indexOf("collector");
+        p.favourite = 0; // FISH
+        int all = 0;
+        for (var o : com.rlclones.ai.strategy.Option.VALUES) {
+            all |= o.bit();
+        }
+        int ach = 0;
+        int fish = 0;
+        java.util.Random r = new java.util.Random(7);
+        for (int i = 0; i < 400; i++) {
+            var o = p.pull(all, r.nextFloat(), r.nextFloat(), false);
+            ach += o == opt("ACHIEVE") ? 1 : 0;
+            fish += o == opt("FISH") ? 1 : 0;
+        }
+        h.assertTrue(ach >= 80 && fish >= 10, "a collector goes for advancements (" + ach + "/400) and now and then fishes (" + fish + "/400)");
+        finish(h, c);
+        h.succeed();
+    }
+
+    /** R-37: flowers in the bag, a base with grass round it: they are planted 3..6 blocks from the chest. */
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r12persona")
+    public static void decoratesTheBaseWithFlowers(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                h.setBlock(new BlockPos(x, 1, z), Blocks.GRASS_BLOCK);
+            }
+        }
+        baseAt(h, new BlockPos(7, 2, 7));
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.POPPY, 3));
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().persona().flowersPlaced >= 2 && countBlocks(h, Blocks.POPPY) >= 2,
+                    "flowers planted round the base (" + c.controller().persona().flowersPlaced + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** R-38: an animal near: it gets a name and the clone walks over to see it. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r12persona")
+    public static void namesAndVisitsAFavouriteAnimal(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 7.5, 0f, false);
+        Pig pig = pig(h, 11.5, 7.5);
+        boolean[] close = {false};
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+            close[0] |= c.controller().persona().petVisits >= 1 && pig.distanceTo(c) < 4.5;
+        });
+        h.succeedWhen(() -> {
+            var p = c.controller().persona();
+            h.assertTrue(pig.hasCustomName() && p.petsNamed >= 1, "the animal got a name");
+            h.assertTrue(close[0], "and the clone walked over to look in on it (visits " + p.petVisits + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-39: an untidy base chest next to the clone is put in order: food first, tools next, stacks merged. */
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r12persona")
+    public static void sortsTheBaseChest(GameTestHelper h) {
+        clearBases(h);
+        BlockPos at = new BlockPos(7, 2, 7);
+        baseAt(h, at);
+        var chest = (net.minecraft.world.Container) h.getLevel().getBlockEntity(h.absolutePos(at));
+        chest.setItem(0, new ItemStack(Items.DIRT, 10));
+        chest.setItem(1, new ItemStack(Items.IRON_PICKAXE));
+        chest.setItem(2, new ItemStack(Items.DIRT, 20));
+        chest.setItem(3, new ItemStack(Items.BREAD, 5));
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().persona().chestsTidied >= 1, "the chest was tidied");
+            h.assertTrue(chest.getItem(0).is(Items.BREAD) && chest.getItem(1).is(Items.IRON_PICKAXE) && chest.getItem(2).is(Items.DIRT)
+                    && chest.getItem(2).getCount() == 30 && chest.getItem(3).isEmpty(), "food, tools, then the dirt in one stack");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** R-40: told of a spot where a friend fell, the clone steers its explorations away from it. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r12persona")
+    public static void takesNoteOfADangerSpotItIsToldAbout(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer friend = clone(h, 3.5, 3.5, 0f, false);
+        BlockPos spot = h.absolutePos(new BlockPos(12, 2, 12));
+        c.controller().persona().onChat(friend, "DANGER " + spot.getX() + " " + spot.getY() + " " + spot.getZ(), h.getLevel().getGameTime());
+        h.assertTrue(c.controller().persona().avoids(Vec3.atCenterOf(spot.offset(3, 0, 2))), "a point near the spot is to be avoided");
+        h.assertTrue(!c.controller().persona().avoids(Vec3.atCenterOf(spot.offset(-30, 0, 0))), "far from it is fine");
+        finish(h, c, friend);
+        h.succeed();
+    }
+
+    /** R-33: a friend starts a project (a hut): a clone with building blocks answers and sets off for it. */
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "r12persona")
+    public static void answersAFriendsHamletProject(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 3.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        ClonePlayer friend = clone(h, 12.5, 12.5, 0f, false);
+        BlockPos at = h.absolutePos(new BlockPos(12, 2, 12));
+        c.controller().persona().onChat(friend, "PROJECT " + at.getX() + " " + at.getY() + " " + at.getZ(), h.getLevel().getGameTime());
+        h.assertTrue(c.controller().persona().projectActive(), "it took the project up");
+        finish(h, c, friend);
+        h.succeed();
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {
