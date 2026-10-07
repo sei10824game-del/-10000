@@ -493,3 +493,8 @@
 - テスト(batch r12persona): `goalAndFavouritePullTheStrategy`・`decoratesTheBaseWithFlowers`・`namesAndVisitsAFavouriteAnimal`・`sortsTheBaseChest`・`takesNoteOfADangerSpotItIsToldAbout`・`answersAFriendsHamletProject`(小屋が建つところまでは検証しない)
 - run 37642432767(2e1013c, Persona 初): 失敗 `namesAndVisitsAFavouriteAnimal`(初回の見に行きが2400tick後で時間切れ→名付け直後に変更)・`sortsTheBaseChest`(原因未特定。診断を失敗メッセージに出す)・`correctsABlockWronglyThoughtHarmful`(初。Persona.pull の影響の疑い。次の run で再現を見る)・`cutsATallTree…`(残り3本まで許容)・TNT(既知の不安定)
 - run 37647523797(0389c87): `sortsTheBaseChest` は "no base": 同じ batch の別テストが `clearBases`(全体で共有)を呼んで拠点を消していた。Persona のテストを1本ずつ別 batch に分けた。他の失敗は不安定(minesStone…・pens・neverStandsIdle)。`correctsABlock…` は通った
+
+## 32. ソークの確認(46bc7cb の run 37650863808 と過去の run)
+- 死亡数: 12aa8e5=1、56bc091=0、3fd91a8=0、98c2791=1(溺死 MINE)、0389c87=0、**46bc7cb=5**(全員 (3152〜3153, 37, 11〜13) で STORE 中に落下・壁の中。満腹度0が3体)。0389c87 と 46bc7cb の差はテストの batch 名だけ → ソークの位置(地形)が変わると同じ場所で繰り返し死ぬ。リスポーン後も同じ拠点へ戻るのが疑い
+- 対応: 満腹度が低く食べ物が無い(`hungryNoFood`)クローンは STORE を選ばない(食料調達を先に)。未対応: 拠点の周囲の落下地形(その地点の調査には死亡位置の地形ログが要る)
+- 鉄ツルハシまで届いた個体: 0〜1 体(目標の鉄ツルハシ・ダイヤには未到達。全 run で iron_pick は最大1)

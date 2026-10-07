@@ -1520,7 +1520,7 @@ public final class CloneController {
             mask |= Option.HELP.bit();
         }
         if (self.containerMenu == self.inventoryMenu) {
-            if (storage.canStore()) {
+            if (storage.canStore() && !hungryNoFood()) { // (a starving clone looks for food first: the soak deaths were all STORE with food 0)
                 mask |= Option.STORE.bit();
             }
             if (storage.canFetch()) {
