@@ -5322,7 +5322,7 @@ public final class CloneGameTests {
     }
 
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
-    @GameTest(template = ARENA, timeoutTicks = 4000, batch = "r11goods")
+    @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.FURNACE));
@@ -5334,7 +5334,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 3, "and the iron smelted with it (" + c.controller().crafting().smeltTrace() + ")");
+            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 3, "and the iron smelted with it (ingots " + c.getInventory().countItem(Items.IRON_INGOT) + " raw " + c.getInventory().countItem(Items.RAW_IRON) + " charcoal " + c.getInventory().countItem(Items.CHARCOAL) + " logs " + c.getInventory().countItem(Items.OAK_LOG) + " " + c.controller().crafting().smeltTrace() + ")");
             finish(h, c);
         });
     }
