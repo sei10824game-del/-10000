@@ -5321,6 +5321,81 @@ public final class CloneGameTests {
         });
     }
 
+    // ------------------------------------------------------------------ Round 11 (S11-4)
+
+    /** A 5x5 stone block 11 high (y 2..12) with a hole cut through it at x=7, z=7 (and z=8 when {@code wide}); the clone stands on top, facing the hole. */
+    private static ClonePlayer onAPitEdge(GameTestHelper h, boolean wide) {
+        for (int x = 5; x <= 9; x++) {
+            for (int z = 5; z <= 9; z++) {
+                for (int y = 2; y <= 12; y++) {
+                    boolean hole = x == 7 && (z == 7 || wide && z == 8);
+                    h.setBlock(new BlockPos(x, y, z), hole ? Blocks.AIR : Blocks.STONE);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
+        Vec3 top = h.absoluteVec(new Vec3(6.5, 13, 7.5));
+        c.teleportTo(h.getLevel(), top.x, top.y, top.z, -90f, 0f);
+        return c;
+    }
+
+    /** R-19: an 11-deep 1x1 hole, 12 ladders: down the ladders to the bottom, alive. */
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r11pit")
+    public static void laddersDownIntoADeepPit(GameTestHelper h) {
+        ClonePlayer c = onAPitEdge(h, false);
+        c.getInventory().add(new ItemStack(Items.LADDER, 12));
+        c.controller().pits().force = true;
+        h.onEachTick(() -> {
+            c.controller().pits().tick(h.getLevel().getGameTime(), null);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            var p = c.controller().pits();
+            h.assertTrue(p.laddersPlaced >= 3 && p.descents >= 1, "climbed down by ladders (placed " + p.laddersPlaced + " descents " + p.descents + " y " + c.getY() + ")");
+            h.assertTrue(c.isAlive() && c.getHealth() >= 18f, "and unhurt (hp " + c.getHealth() + ")");
+            h.assertTrue(c.getY() < h.absoluteVec(new Vec3(0, 4, 0)).y, "at the bottom (y " + c.getY() + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-19: a deep 1x2 hole beside a base, nothing to dig for: it is covered with blocks. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r11pit")
+    public static void coversADeadlyHoleNearHome(GameTestHelper h) {
+        clearBases(h);
+        baseAt(h, new BlockPos(2, 2, 2));
+        ClonePlayer c = onAPitEdge(h, true);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 8));
+        h.onEachTick(() -> {
+            c.controller().pits().tick(h.getLevel().getGameTime(), null);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(!h.getBlockState(new BlockPos(7, 12, 7)).isAir() && !h.getBlockState(new BlockPos(7, 12, 8)).isAir(),
+                    "both cells of the hole covered (covered " + c.controller().pits().covered + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** R-20: told of a structure across the room, an exploring clone heads there and counts it as visited. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r11pit")
+    public static void headsForAKnownStructureAndVisitsIt(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 10; x <= 12; x++) {
+            for (int z = 10; z <= 12; z++) {
+                h.setBlock(new BlockPos(x, 2, z), x == 11 && z == 11 ? Blocks.CHEST : Blocks.OAK_PLANKS);
+            }
+        }
+        ClonePlayer c = clone(h, 2.5, 2.5, 0f, false);
+        c.controller().structures().note(h.absolutePos(new BlockPos(11, 2, 11)));
+        c.controller().forcedOption = opt("EXPLORE");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().structures().visits >= 1, "went to the structure and counted it (visits " + c.controller().structures().visits + " " + c.controller().optionLog + ")");
+            finish(h, c);
+        });
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {

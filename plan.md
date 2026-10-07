@@ -478,3 +478,8 @@
 - run 37598520263(56bc091。初めてテストまで走った): 失敗 `minesStoneAndBuildsAFurnace`(以前は通っていた。再現を見る)、corner(通路を作り直し)、`cutsGrassOnTheWayWithoutStopping`(草が土の無い所で消えていた。足元を草ブロックに)、`makesCharcoalFromSpareLogs`(板が無く燃料なし。`fuelSlot` が余りの原木を燃料にするよう修正)、`creativeBuilds…`(既知)
 - ジョブログは取れない。`.github/workflows/build.yml` がコンパイルエラーを注釈に出す。読むのは `gh api repos/<repo>/check-runs/<job id>/annotations`
 - run 37615987279(ff776db): `makesCharcoalFromSpareLogs` は「生の鉄が炉に入る(燃料は余りの原木のみ)」までを確認する形に弱めた(インゴットの回収まで通らず原因未特定。木炭自体の生成はテストしていない)。`cutsATallTreeToTheTop`: 原木の合間に足場を壊していた(`climbDown` は周囲に原木が無いときだけに)。不安定な戦闘系(learnsEnemyRange… 等)は run ごとに入れ替わる
+
+## 30. S11-4 実装(R-19・R-20/R-32)
+- R-19: 新規 `Pits`(`CloneController` の itemBusy 連鎖)。前方の穴が深さ8以上(`Motor.dropAt`)で、掘る目的(`Progression.digWanted` かつ EXPLORE)、はしごが深さ以上あれば、縁の向こう壁にはしごを付け、縁を越えて(`motor.dare`)降り、1段ずつ下にはしごを付けながら滑り降りる。拠点24ブロック以内で下りない穴は、開口が3×3以内ならブロックで蓋(`planCover`)。広い穴は何もしない(縁のしゃがみ任せ)。**未実装: 穴の記録(Basesに「はしごの穴」)・はしごが尽きたときの上り**
+- R-20/R-32: 新規 `Structures`。見えているチェストが生成構造物の中(`structureManager().getAllStructuresAt`)なら拠点とは別の「構造物」として記録し、`STRUCT x y z` で共有。`pickExploreGoal` が、128ブロック以内の未訪問の構造物を優先。10ブロック以内に着いたら訪問済み。チェストは既存の LOOT に任せる。**未実装: スポナー・危険度の判断、チェスト以外の人工物(ドア・ベッド等)での発見**
+- テスト(batch r11pit): `laddersDownIntoADeepPit`・`coversADeadlyHoleNearHome`・`headsForAKnownStructureAndVisitsIt`(構造物の通知は `structures().note` で代用。実際の生成構造物の判定はテストしていない)

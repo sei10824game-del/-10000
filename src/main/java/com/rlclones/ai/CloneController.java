@@ -80,6 +80,8 @@ public final class CloneController {
     private final BoatTrap boatTrap;
     private final Lighting lighting;
     private final DoorBreath doorBreath;
+    private final Structures structures;
+    private final Pits pits;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
     private boolean lookedAround;
@@ -185,6 +187,8 @@ public final class CloneController {
         this.boatTrap = new BoatTrap(self, motor);
         this.lighting = new Lighting(self, motor);
         this.doorBreath = new DoorBreath(self, motor);
+        this.structures = new Structures(self);
+        this.pits = new Pits(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
         this.foodAid = new FoodAid(self, motor);
@@ -322,6 +326,14 @@ public final class CloneController {
 
     public BoatTrap boatTrap() {
         return boatTrap;
+    }
+
+    public Pits pits() {
+        return pits;
+    }
+
+    public Structures structures() {
+        return structures;
     }
 
     public DoorBreath doorBreath() {
@@ -527,6 +539,7 @@ public final class CloneController {
             checkAlarms(now);
         }
         waterMoves();
+        structures.tick(now, perception);
         if (self.isInWater() && !self.isPassenger()) {
             swimTicks = Math.min(3000, swimTicks + 1);
         } else if (swimTicks > 0 && (now & 7) == 0) {
@@ -555,7 +568,7 @@ public final class CloneController {
         long pr = Prof.t();
         watchTells(now);
         boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
-        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || pits.tick(now, option) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
@@ -955,7 +968,7 @@ public final class CloneController {
         if (expedition.onChat(sender, t, now)) {
             return;
         }
-        if (itemAid.onChat(sender, t, now)) {
+        if (itemAid.onChat(sender, t, now) || structures.onChat(t)) {
             return;
         }
         if (foodAid.onChat(sender, t, now)) {
@@ -3659,6 +3672,10 @@ public final class CloneController {
 
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
+        Vec3 site = structures.target();
+        if (site != null && Senses.threats(perception, self, now(), 16).isEmpty()) {
+            return site; // R-20: a structure seen (or told of) and not visited yet
+        }
         Vec3 best = null;
         double bestScore = -1;
         for (int i = 0; i < 6; i++) {
