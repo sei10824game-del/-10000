@@ -5399,7 +5399,7 @@ public final class CloneGameTests {
     // ------------------------------------------------------------------ Round 13: a someone (R-33..R-40)
 
     /** R-34/35/36: a collector (and a fishing favourite) feels like advancements / fishing, whatever else is on offer. */
-    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r12persona")
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r12goal")
     public static void goalAndFavouritePullTheStrategy(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         var p = c.controller().persona();
@@ -5423,7 +5423,7 @@ public final class CloneGameTests {
     }
 
     /** R-37: flowers in the bag, a base with grass round it: they are planted 3..6 blocks from the chest. */
-    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r12persona")
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r12deco")
     public static void decoratesTheBaseWithFlowers(GameTestHelper h) {
         clearBases(h);
         for (int x = 1; x <= 13; x++) {
@@ -5447,7 +5447,7 @@ public final class CloneGameTests {
     }
 
     /** R-38: an animal near: it gets a name and the clone walks over to see it. */
-    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r12persona")
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r12pet")
     public static void namesAndVisitsAFavouriteAnimal(GameTestHelper h) {
         clearBases(h);
         ClonePlayer c = clone(h, 3.5, 7.5, 0f, false);
@@ -5467,7 +5467,7 @@ public final class CloneGameTests {
     }
 
     /** R-39: an untidy base chest next to the clone is put in order: food first, tools next, stacks merged. */
-    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r12persona")
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r12tidy")
     public static void sortsTheBaseChest(GameTestHelper h) {
         clearBases(h);
         BlockPos at = new BlockPos(7, 2, 7);
@@ -5492,7 +5492,7 @@ public final class CloneGameTests {
     }
 
     /** R-40: told of a spot where a friend fell, the clone steers its explorations away from it. */
-    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r12persona")
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r12danger")
     public static void takesNoteOfADangerSpotItIsToldAbout(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         ClonePlayer friend = clone(h, 3.5, 3.5, 0f, false);
@@ -5505,7 +5505,7 @@ public final class CloneGameTests {
     }
 
     /** R-33: a friend starts a project (a hut): a clone with building blocks answers and sets off for it. */
-    @GameTest(template = ARENA, timeoutTicks = 200, batch = "r12persona")
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "r12hamlet")
     public static void answersAFriendsHamletProject(GameTestHelper h) {
         clearBases(h);
         ClonePlayer c = clone(h, 3.5, 3.5, 0f, false);
