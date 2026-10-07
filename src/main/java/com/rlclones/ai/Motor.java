@@ -156,7 +156,7 @@ public final class Motor {
         BlockPos feet = self.blockPosition();
         for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, 0, -3), feet.offset(3, 1, 3))) {
             BlockState st = level.getBlockState(p);
-            if (!st.is(BlockTags.REPLACEABLE_PLANTS) || st.getDestroySpeed(level, p) != 0 || !self.mayInteract(level, p)) {
+            if (!Farming.isGrass(st) || !self.mayInteract(level, p)) {
                 continue;
             }
             double dx = p.getX() + 0.5 - self.getX();

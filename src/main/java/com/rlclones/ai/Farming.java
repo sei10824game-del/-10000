@@ -113,7 +113,7 @@ public final class Farming {
         return -1;
     }
 
-    private static boolean isGrass(BlockState st) {
+    public static boolean isGrass(BlockState st) {
         return st.is(Blocks.GRASS) || st.is(Blocks.TALL_GRASS) || st.is(Blocks.FERN) || st.is(Blocks.LARGE_FERN);
     }
 
