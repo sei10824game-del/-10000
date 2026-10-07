@@ -20,7 +20,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build mod
-        run: ./gradlew build --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log || {
+            grep -a -E "error:|\.java:[0-9]+: " build.log | head -40 | while IFS= read -r l; do echo "::error::${l:0:300}"; done
+            exit 1
+          }
 
       - name: Run GameTests (headless server)
         # a fixed world seed: the test arenas sit underground, and random terrain around them (falling gravel,
