@@ -483,3 +483,4 @@
 - R-19: 新規 `Pits`(`CloneController` の itemBusy 連鎖)。前方の穴が深さ8以上(`Motor.dropAt`)で、掘る目的(`Progression.digWanted` かつ EXPLORE)、はしごが深さ以上あれば、縁の向こう壁にはしごを付け、縁を越えて(`motor.dare`)降り、1段ずつ下にはしごを付けながら滑り降りる。拠点24ブロック以内で下りない穴は、開口が3×3以内ならブロックで蓋(`planCover`)。広い穴は何もしない(縁のしゃがみ任せ)。**未実装: 穴の記録(Basesに「はしごの穴」)・はしごが尽きたときの上り**
 - R-20/R-32: 新規 `Structures`。見えているチェストが生成構造物の中(`structureManager().getAllStructuresAt`)なら拠点とは別の「構造物」として記録し、`STRUCT x y z` で共有。`pickExploreGoal` が、128ブロック以内の未訪問の構造物を優先。10ブロック以内に着いたら訪問済み。チェストは既存の LOOT に任せる。**未実装: スポナー・危険度の判断、チェスト以外の人工物(ドア・ベッド等)での発見**
 - テスト(batch r11pit): `laddersDownIntoADeepPit`・`coversADeadlyHoleNearHome`・`headsForAKnownStructureAndVisitsIt`(構造物の通知は `structures().note` で代用。実際の生成構造物の判定はテストしていない)
+- run 37622731125(3fd91a8): S11-4 の3テストは通った。`creativeBuilds…` も通った(S11-2 の run で落ちたのは別の原因だったらしい)。失敗: `learnsHowToUseATrident`(戦闘系・不安定)、`penscows…`(既知)、`cutsATallTreeToTheTop`(足場1つで上の原木2本が残る。原因未特定。水平距離の条件を 3→4 に緩め、失敗メッセージに状態を出すようにした)

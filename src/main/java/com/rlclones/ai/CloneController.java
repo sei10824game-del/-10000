@@ -4043,7 +4043,7 @@ public final class CloneController {
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3) {
-            if (kind == Perception.BlockKind.LOG && center.y - self.getEyeY() > 0.5 && Motor.horizontalDistance(self.position(), center) < 3.0
+            if (kind == Perception.BlockKind.LOG && center.y - self.getEyeY() > 0.5 && Motor.horizontalDistance(self.position(), center) < 4.0
                     && scaffold.size() < 8 && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && !self.isInWater()) {
                 if (scaffoldStep()) {
                     return false; // a high log: pillar up beside the trunk

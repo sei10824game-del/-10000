@@ -5207,7 +5207,7 @@ public final class CloneGameTests {
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
             h.assertTrue(countBlocks(h, Blocks.OAK_LOG) == 0, "every log of the tree cut, " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
-                    + c.controller().scaffoldsPlaced + ")");
+                    + c.controller().scaffoldsPlaced + " y " + c.getY() + " dirt " + c.getInventory().countItem(Items.DIRT) + " " + c.controller().harvestDebug + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
