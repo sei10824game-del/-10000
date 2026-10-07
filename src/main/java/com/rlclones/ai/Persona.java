@@ -61,6 +61,7 @@ public final class Persona {
     // tidy
     private final Map<BlockPos, Long> tidied = new HashMap<>();
     public int chestsTidied;
+    public String tidyDebug = "";
 
     // danger
     private final List<BlockPos> dangers = new ArrayList<>();
@@ -345,7 +346,7 @@ public final class Persona {
             pet.setCustomName(Component.literal(name));
             petsNamed++;
             Chat.say(self, Component.literal(name + "!"), "PET " + name);
-            lastVisit = now;
+            lastVisit = now - 2300; // the first look-in comes soon after the naming
             return false;
         }
         if (visitTicks == 0) {
@@ -392,6 +393,7 @@ public final class Persona {
 
     private void tidyTick(long now) {
         Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 8);
+        tidyDebug = base == null ? "no base" : "base chests=" + base.chests.size() + " pos=" + self.blockPosition().toShortString();
         if (base == null) {
             return;
         }

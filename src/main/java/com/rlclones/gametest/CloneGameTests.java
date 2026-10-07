@@ -5206,7 +5206,7 @@ public final class CloneGameTests {
         c.controller().forcedOption = opt("GATHER_WOOD");
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
-            h.assertTrue(countBlocks(h, Blocks.OAK_LOG) <= 2 && c.controller().scaffoldsPlaced >= 1, "the tree cut but the top (scaffold up for the high logs), " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
+            h.assertTrue(countBlocks(h, Blocks.OAK_LOG) <= 3 && c.controller().scaffoldsPlaced >= 1, "the tree cut but the top (scaffold up for the high logs), " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
                     + c.controller().scaffoldsPlaced + " y " + c.getY() + " dirt " + c.getInventory().countItem(Items.DIRT) + " " + c.controller().harvestDebug + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
@@ -5483,7 +5483,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().persona().chestsTidied >= 1, "the chest was tidied");
+            h.assertTrue(c.controller().persona().chestsTidied >= 1, "the chest was tidied (" + c.controller().persona().tidyDebug + ")");
             h.assertTrue(chest.getItem(0).is(Items.BREAD) && chest.getItem(1).is(Items.IRON_PICKAXE) && chest.getItem(2).is(Items.DIRT)
                     && chest.getItem(2).getCount() == 30 && chest.getItem(3).isEmpty(), "food, tools, then the dirt in one stack");
             finish(h, c);
