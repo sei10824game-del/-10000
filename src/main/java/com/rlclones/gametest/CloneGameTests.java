@@ -5097,31 +5097,34 @@ public final class CloneGameTests {
 
     // ------------------------------------------------------------------ Round 11 (S11-1): water
 
-    /** R-24: a sealed U of water (ceiling on): pushing straight at the wall must turn into swimming round it, not drowning. */
+    /**
+     * R-24: a 1-wide water tunnel under a ceiling with one air pocket at x=7. The clone, low on air, pushes at the dead end
+     * (x=3) and makes no headway: it must try other ways (the last, back along the tunnel, passes the pocket) and get its air back.
+     */
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r11water")
     public static void getsOutOfAnUnderwaterCorner(GameTestHelper h) {
         for (int x = 3; x <= 11; x++) {
-            for (int z = 3; z <= 11; z++) {
+            for (int z = 6; z <= 8; z++) {
                 for (int y = 1; y <= 5; y++) {
-                    boolean legA = z == 4 && x >= 4 && x <= 9;
-                    boolean legB = x == 9 && z >= 4 && z <= 8;
-                    boolean legC = z == 8 && x >= 4 && x <= 9;
-                    boolean wet = (legA || legB || legC) && (y == 2 || y == 3);
+                    boolean wet = z == 7 && x >= 4 && x <= 10 && (y == 2 || y == 3);
                     h.setBlock(new BlockPos(x, y, z), wet ? Blocks.WATER : Blocks.STONE);
                 }
             }
         }
-        h.setBlock(new BlockPos(4, 4, 8), Blocks.AIR); // air to breathe at the far end
-        ClonePlayer c = clone(h, 4.5, 4.5, 0f, false);
-        Vec3 goal = h.absoluteVec(new Vec3(4.5, 2, 8.5));
+        h.setBlock(new BlockPos(7, 4, 7), Blocks.AIR);
+        ClonePlayer c = clone(h, 5.5, 7.5, 90f, false);
+        c.setAirSupply((int) (c.getMaxAirSupply() * 0.25));
+        Vec3 goal = h.absoluteVec(new Vec3(1.5, 2, 7.5));
+        int[] maxAir = {0};
         h.onEachTick(() -> {
             c.controller().motor().moveToward(goal);
             c.controller().motor().tick();
+            maxAir[0] = Math.max(maxAir[0], c.getAirSupply());
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.isAlive() && c.getHealth() > 0, "not drowned");
-            h.assertTrue(c.controller().motor().waterEscapes >= 1, "tried another way out of the corner");
-            h.assertTrue(Motor.horizontalDistance(c.position(), goal) < 1.5, "got round the wall to the goal");
+            h.assertTrue(c.isAlive(), "not drowned");
+            h.assertTrue(c.controller().motor().waterEscapes >= 1, "tried another way out of the dead end");
+            h.assertTrue(maxAir[0] >= c.getMaxAirSupply() * 0.9, "and got to the air pocket (max air " + maxAir[0] + ")");
             finish(h, c);
         });
     }
