@@ -3921,6 +3921,11 @@ public final class CloneController {
         return true;
     }
 
+    private boolean logsNear(BlockPos at) {
+        ServerLevel level = self.serverLevel();
+        return BlockPos.betweenClosedStream(at.offset(-3, -1, -3), at.offset(3, 6, 3)).anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS));
+    }
+
     /** Take the scaffold down again, topmost first (the block under our feet; we drop onto the next one). True while at it. */
     private boolean climbDown() {
         BlockPos top = scaffold.peekLast();
@@ -3946,8 +3951,8 @@ public final class CloneController {
 
     private boolean runHarvest(Perception.BlockKind kind) {
         ServerLevel level = self.serverLevel();
-        if (kind == Perception.BlockKind.LOG && blockTarget == null && climbDown()) {
-            return false;
+        if (kind == Perception.BlockKind.LOG && blockTarget == null && !scaffold.isEmpty() && !logsNear(scaffold.peekLast()) && climbDown()) {
+            return false; // the tree is cut: take the scaffold down (not between two logs of it)
         }
         if (blockTarget != null && perception.kindAt(blockTarget) != (harvestKind != null ? harvestKind : kind)) {
             perception.forgetBlock(blockTarget);

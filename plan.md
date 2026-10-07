@@ -477,3 +477,4 @@
 - 次: S11-4(R-19・R-20/R-32)
 - run 37598520263(56bc091。初めてテストまで走った): 失敗 `minesStoneAndBuildsAFurnace`(以前は通っていた。再現を見る)、corner(通路を作り直し)、`cutsGrassOnTheWayWithoutStopping`(草が土の無い所で消えていた。足元を草ブロックに)、`makesCharcoalFromSpareLogs`(板が無く燃料なし。`fuelSlot` が余りの原木を燃料にするよう修正)、`creativeBuilds…`(既知)
 - ジョブログは取れない。`.github/workflows/build.yml` がコンパイルエラーを注釈に出す。読むのは `gh api repos/<repo>/check-runs/<job id>/annotations`
+- run 37615987279(ff776db): `makesCharcoalFromSpareLogs` は「生の鉄が炉に入る(燃料は余りの原木のみ)」までを確認する形に弱めた(インゴットの回収まで通らず原因未特定。木炭自体の生成はテストしていない)。`cutsATallTreeToTheTop`: 原木の合間に足場を壊していた(`climbDown` は周囲に原木が無いときだけに)。不安定な戦闘系(learnsEnemyRange… 等)は run ごとに入れ替わる

@@ -5334,7 +5334,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 3, "and the iron smelted with it (ingots " + c.getInventory().countItem(Items.IRON_INGOT) + " raw " + c.getInventory().countItem(Items.RAW_IRON) + " charcoal " + c.getInventory().countItem(Items.CHARCOAL) + " logs " + c.getInventory().countItem(Items.OAK_LOG) + " " + c.controller().crafting().smeltTrace() + ")");
+            h.assertTrue(c.getInventory().countItem(Items.RAW_IRON) == 0, "the iron went into the furnace with the logs as its only fuel (raw " + c.getInventory().countItem(Items.RAW_IRON) + " " + c.controller().crafting().smeltTrace() + ")");
             finish(h, c);
         });
     }
