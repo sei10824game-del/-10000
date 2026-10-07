@@ -9,7 +9,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.world.Container;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
@@ -69,13 +72,24 @@ public final class Persona {
     public int dangersNoted;
 
     // project (a hamlet)
-    private enum Project {NONE, GOTO, BUILD}
+    private enum Project {NONE, GOTO, BUILD, FEAST_GOTO, FEAST}
     private Project project = Project.NONE;
     private BlockPos meet;
     private Builder builder;
     private int projectTicks;
     private long projectCooldown;
     private final List<BlockPos> huts = new ArrayList<>();
+    // dig site shared by a digger (R-44), festival (R-47), diary (R-49), pantry (R-41)
+    @Nullable
+    private BlockPos digSite;
+    private long festivalCooldown;
+    public int festivals;
+    public long diaryAt = 6000; // (ticks lived)
+    public int diaries;
+    public int pantryMoves;
+    private int pantryRun;
+    private long weatherCooldown;
+    public int stormRuns;
     public int hutsBuilt;
 
     public Persona(ClonePlayer self, Motor motor) {
@@ -98,7 +112,10 @@ public final class Persona {
 
     /** An option the clone feels like doing (or null): its goal first, then its favourite. Rolls are uniform [0,1). */
     @Nullable
-    public Option pull(int mask, float roll, float roll2, boolean structureKnown) {
+    public Option pull(int mask, float roll, float roll2, boolean structureKnown, boolean young) {
+        if (young && roll < 0.5f && (mask & Option.FOLLOW.bit()) != 0) {
+            return Option.FOLLOW; // R-45: a newborn sticks to the grown-ups
+        }
         switch (GOALS[goal]) {
             case "village" -> {
                 if (structureKnown && roll < 0.25f && (mask & Option.EXPLORE.bit()) != 0) {
@@ -141,6 +158,28 @@ public final class Persona {
             }
             return true;
         }
+        if (text.startsWith("DIGSITE ")) {
+            String[] p = text.split(" ");
+            try {
+                digSite = new BlockPos(Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]));
+            } catch (RuntimeException ignored) {
+            }
+            return true;
+        }
+        if (text.startsWith("FESTIVAL ")) {
+            String[] p = text.split(" ");
+            if (sender != self && project == Project.NONE && now >= festivalCooldown) {
+                try {
+                    meet = new BlockPos(Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]));
+                    if (meet.distSqr(self.blockPosition()) < 64 * 64) {
+                        project = Project.FEAST_GOTO;
+                        projectTicks = 0;
+                    }
+                } catch (RuntimeException ignored) {
+                }
+            }
+            return true;
+        }
         if (text.startsWith("PROJECT ")) {
             String[] p = text.split(" ");
             if (sender != self && project == Project.NONE && now >= projectCooldown && Builder.buildingBlocks(self) >= Builder.BLOCKS) {
@@ -174,8 +213,33 @@ public final class Persona {
         dangersNoted++;
     }
 
-    /** Is {@code p} near a spot somebody got hurt at? */
+    /** Where clones have died (all of them, until the server stops): nobody explores towards those spots. */
+    private static final List<BlockPos> DEATHS = new ArrayList<>();
+
+    public static void noteDeath(BlockPos p) {
+        synchronized (DEATHS) {
+            if (DEATHS.size() >= 64) {
+                DEATHS.remove(0);
+            }
+            DEATHS.add(p.immutable());
+        }
+    }
+
+    public static void forgetDeaths() {
+        synchronized (DEATHS) {
+            DEATHS.clear();
+        }
+    }
+
+    /** Is {@code p} near a spot somebody got hurt at or died at? */
     public boolean avoids(Vec3 p) {
+        synchronized (DEATHS) {
+            for (BlockPos d : DEATHS) {
+                if (Motor.horizontalDistance(Vec3.atCenterOf(d), p) < 10) {
+                    return true;
+                }
+            }
+        }
         for (BlockPos d : dangers) {
             if (Motor.horizontalDistance(Vec3.atCenterOf(d), p) < 10) {
                 return true;
@@ -204,6 +268,9 @@ public final class Persona {
             return false;
         }
         boolean idle = option == Option.REST;
+        if (project == Project.FEAST_GOTO || project == Project.FEAST) {
+            return festivalTick(now);
+        }
         if (project != Project.NONE) {
             return projectTick(now);
         }
@@ -214,7 +281,15 @@ public final class Persona {
             return visitTicks > 0 && petTick(now);
         }
         tidyTick(now);
+        pantryTick(now);
+        diaryTick(now);
+        if (stormTick(now) || pantryRun > 0 && hungryRun(now)) {
+            return true;
+        }
         if (visitTicks > 0 || petTick(now)) {
+            return true;
+        }
+        if (now >= festivalCooldown && proposeFestival(now)) {
             return true;
         }
         if (now >= projectCooldown && proposeProject(now)) {
@@ -501,6 +576,221 @@ public final class Persona {
             return false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------ R-41: the pantry
+
+    private static boolean isFood(ItemStack s) {
+        return s.isEdible() && !s.is(Items.ROTTEN_FLESH) && !s.is(Items.SPIDER_EYE) && !s.is(Items.POISONOUS_POTATO) && !s.is(Items.PUFFERFISH);
+    }
+
+    private static ItemStack insert(Container c, ItemStack s) {
+        for (int i = 0; i < c.getContainerSize() && !s.isEmpty(); i++) {
+            ItemStack o = c.getItem(i);
+            if (o.isEmpty()) {
+                c.setItem(i, s.copy());
+                return ItemStack.EMPTY;
+            }
+            if (ItemStack.isSameItemSameTags(o, s) && o.getCount() < o.getMaxStackSize()) {
+                int n = Math.min(s.getCount(), o.getMaxStackSize() - o.getCount());
+                o.grow(n);
+                s.shrink(n);
+            }
+        }
+        return s;
+    }
+
+    /** At the base chest: food beyond 12 goes in (a store for the lean days); empty-handed and hungry, some comes out. */
+    private void pantryTick(long now) {
+        Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 8);
+        if (base == null) {
+            return;
+        }
+        for (BlockPos pos : base.chests) {
+            if (self.getEyePosition().distanceTo(Vec3.atCenterOf(pos)) > 5 || !(level().getBlockEntity(pos) instanceof Container c)) {
+                continue;
+            }
+            int have = FoodAid.foodItems(self);
+            var inv = self.getInventory();
+            if (have > 12) {
+                int excess = have - 12;
+                for (int i = 0; i < inv.items.size() && excess > 0; i++) {
+                    ItemStack s = inv.items.get(i);
+                    if (isFood(s)) {
+                        int n = Math.min(excess, s.getCount());
+                        ItemStack left = insert(c, s.split(n));
+                        s.grow(left.getCount()); // (no room: back in the bag)
+                        excess -= n - left.getCount();
+                        pantryMoves += n - left.getCount();
+                    }
+                }
+                c.setChanged();
+            } else if (have == 0 && self.getFoodData().getFoodLevel() < 14) {
+                for (int i = 0; i < c.getContainerSize(); i++) {
+                    ItemStack s = c.getItem(i);
+                    if (isFood(s)) {
+                        int n = Math.min(8, s.getCount());
+                        inv.add(s.split(n));
+                        pantryMoves += n;
+                        c.setChanged();
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    /** Hungry with nothing to eat, a base with food in its chest within reach: go there (the pantryTick then takes some). */
+    private boolean hungryRun(long now) {
+        if (--pantryRun <= 0) {
+            return false;
+        }
+        Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 64);
+        if (base == null || FoodAid.foodItems(self) > 0) {
+            pantryRun = 0;
+            return false;
+        }
+        if (Motor.horizontalDistance(self.position(), Vec3.atCenterOf(base.center)) > 3) {
+            motor.navigate(Vec3.atBottomCenterOf(base.center), 2.0, false);
+            return true;
+        }
+        pantryRun = 0;
+        return false;
+    }
+
+    /** Called when the clone is hungry and has no food (by the controller each second): maybe the base chest has some. */
+    public void wantPantry() {
+        if (pantryRun <= 0) {
+            Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 64);
+            if (base != null) {
+                for (BlockPos pos : base.chests) {
+                    if (level().getBlockEntity(pos) instanceof Container c) {
+                        for (int i = 0; i < c.getContainerSize(); i++) {
+                            if (isFood(c.getItem(i))) {
+                                pantryRun = 600;
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ R-44: a dig site told by a digger
+
+    public void announceDig() {
+        BlockPos at = self.blockPosition();
+        Chat.say(self, Component.literal("DIGSITE"), "DIGSITE " + at.getX() + " " + at.getY() + " " + at.getZ());
+    }
+
+    @Nullable
+    public Vec3 digTarget() {
+        return digSite == null || digSite.distSqr(self.blockPosition()) > 128 * 128 ? null : Vec3.atBottomCenterOf(digSite);
+    }
+
+    // ------------------------------------------------------------------ R-46: out of a thunderstorm
+
+    private boolean stormTick(long now) {
+        if (!level().isThundering() || !level().canSeeSky(self.blockPosition()) || now < weatherCooldown) {
+            return false;
+        }
+        Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 80);
+        if (base == null) {
+            return false;
+        }
+        if (Motor.horizontalDistance(self.position(), Vec3.atCenterOf(base.center)) > 3) {
+            motor.navigate(Vec3.atBottomCenterOf(base.center), 2.0, false);
+            if (motor.stuckCount() > 6) {
+                weatherCooldown = now + 1200;
+            }
+            stormRuns++;
+            return true;
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------ R-47: a gathering at the base
+
+    private boolean proposeFestival(long now) {
+        Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 24);
+        if (base == null || self.getRandom().nextFloat() > 0.003f || now < 12000) {
+            return false;
+        }
+        meet = base.center;
+        project = Project.FEAST_GOTO;
+        projectTicks = 0;
+        Chat.say(self, Component.literal("FESTIVAL"), "FESTIVAL " + meet.getX() + " " + meet.getY() + " " + meet.getZ());
+        return true;
+    }
+
+    private boolean festivalTick(long now) {
+        if (++projectTicks > 1500) {
+            project = Project.NONE;
+            festivalCooldown = now + 24000;
+            return false;
+        }
+        if (project == Project.FEAST_GOTO) {
+            if (Motor.horizontalDistance(self.position(), Vec3.atCenterOf(meet)) > 4) {
+                motor.navigate(Vec3.atBottomCenterOf(meet), 3.0, false);
+                if (motor.stuckCount() > 6) {
+                    project = Project.NONE;
+                    festivalCooldown = now + 6000;
+                    return false;
+                }
+                return true;
+            }
+            project = Project.FEAST;
+            projectTicks = 0;
+            return true;
+        }
+        motor.stop();
+        if (projectTicks % 40 == 0 && self.onGround()) {
+            motor.jump(); // a little hop: it is a party
+        }
+        if (projectTicks > 300) {
+            festivals++;
+            project = Project.NONE;
+            festivalCooldown = now + 24000;
+            return false;
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ R-49: a diary in the base chest
+
+    private void diaryTick(long now) {
+        if (self.tickCount < diaryAt) {
+            return;
+        }
+        Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 8);
+        if (base == null) {
+            return;
+        }
+        String name = self.getGameProfile().getName();
+        for (BlockPos pos : base.chests) {
+            if (self.getEyePosition().distanceTo(Vec3.atCenterOf(pos)) > 5 || !(level().getBlockEntity(pos) instanceof Container c)) {
+                continue;
+            }
+            var brain = self.getCloneBrain();
+            String text = "Day " + (level().getDayTime() / 24000L) + " - " + name + ", the " + goalName() + " type.\nHP " + (int) self.getHealth() + ", food "
+                    + self.getFoodData().getFoodLevel() + ", died " + (brain == null ? 0 : brain.deaths) + " times.\nSites seen: "
+                    + (self.controller() == null ? 0 : self.controller().structures().found) + ".";
+            ItemStack book = new ItemStack(Items.WRITTEN_BOOK);
+            var tag = book.getOrCreateTag();
+            tag.putString("title", "Diary of " + name);
+            tag.putString("author", name);
+            ListTag pages = new ListTag();
+            pages.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(text))));
+            tag.put("pages", pages);
+            if (insert(c, book).isEmpty()) {
+                c.setChanged();
+                diaries++;
+            }
+            diaryAt = self.tickCount + 12000;
+            return;
+        }
     }
 
     public boolean projectActive() {

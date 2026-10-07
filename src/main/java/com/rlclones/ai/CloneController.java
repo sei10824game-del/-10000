@@ -553,6 +553,9 @@ public final class CloneController {
         }
         if (((now + self.getId()) % 20) == 0) {
             discovery.watchInventory();
+            if (hungryNoFood()) {
+                persona.wantPantry(); // the base chest may hold food
+            }
             if (farming.needDirt) {
                 farming.needDirt = false;
                 itemAid.need(Items.DIRT, 4); // water to farm by, nothing to make soil from
@@ -2025,6 +2028,7 @@ public final class CloneController {
         portals.reset();
         cleanTarget = null;
         brain().deaths++;
+        Persona.noteDeath(self.blockPosition());
         motor.resetMining();
     }
 
@@ -2056,6 +2060,7 @@ public final class CloneController {
         }
         if ((option == Option.STAIRS || option == Option.SHAFT) && optionTicks % 600 == 1) {
             itemAid.announceDigging(); // R-27
+            persona.announceDig(); // R-44
         }
         if (ORE_REFLEX.contains(option) && oreReflex(now)) {
             optionTicks++;
@@ -2135,7 +2140,7 @@ public final class CloneController {
         if (dig != null) {
             return dig;
         }
-        Option liking = persona.pull(mask, random.nextFloat(), random.nextFloat(), structures.target() != null);
+        Option liking = persona.pull(mask, random.nextFloat(), random.nextFloat(), structures.target() != null, ticksLived < 6000);
         if (liking != null) {
             return liking; // R-34..R-36: its goal / favourite
         }
@@ -3690,6 +3695,10 @@ public final class CloneController {
         Vec3 site = structures.target();
         if (site != null && Senses.threats(perception, self, now(), 16).isEmpty()) {
             return site; // R-20: a structure seen (or told of) and not visited yet
+        }
+        Vec3 dig = persona.digTarget();
+        if (dig != null && Progression.digWanted(self) && ItemAid.bestPickTier(self) < 2 && random.nextFloat() < 0.4f) {
+            return dig; // R-44: a digger told where it is digging: have a look there
         }
         Vec3 best = null;
         double bestScore = -1;

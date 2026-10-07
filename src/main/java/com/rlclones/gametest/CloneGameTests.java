@@ -5413,7 +5413,7 @@ public final class CloneGameTests {
         int fish = 0;
         java.util.Random r = new java.util.Random(7);
         for (int i = 0; i < 400; i++) {
-            var o = p.pull(all, r.nextFloat(), r.nextFloat(), false);
+            var o = p.pull(all, r.nextFloat(), r.nextFloat(), false, false);
             ach += o == opt("ACHIEVE") ? 1 : 0;
             fish += o == opt("FISH") ? 1 : 0;
         }
@@ -5516,6 +5516,136 @@ public final class CloneGameTests {
         h.assertTrue(c.controller().persona().projectActive(), "it took the project up");
         finish(h, c, friend);
         h.succeed();
+    }
+
+    // ------------------------------------------------------------------ Round 14: new ideas (R-41..R-49)
+
+    /** R-43: where a clone died is remembered by all: a new clone steers away from it. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r14death")
+    public static void rememberedDeathSpotsAreAvoided(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        BlockPos spot = h.absolutePos(new BlockPos(12, 2, 12));
+        com.rlclones.ai.Persona.noteDeath(spot);
+        h.assertTrue(c.controller().persona().avoids(Vec3.atCenterOf(spot.offset(2, 0, 2))), "near the death spot: avoided");
+        com.rlclones.ai.Persona.forgetDeaths();
+        h.assertTrue(!c.controller().persona().avoids(Vec3.atCenterOf(spot)), "forgotten again (test cleanup)");
+        finish(h, c);
+        h.succeed();
+    }
+
+    /** R-41: a hungry clone with nothing to eat takes bread from the base chest; a full-handed one puts the surplus in. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r14pantry")
+    public static void takesFoodFromAndStoresFoodInTheBaseChest(GameTestHelper h) {
+        clearBases(h);
+        BlockPos at = new BlockPos(7, 2, 7);
+        baseAt(h, at);
+        var chest = (net.minecraft.world.Container) h.getLevel().getBlockEntity(h.absolutePos(at));
+        chest.setItem(0, new ItemStack(Items.BREAD, 10));
+        ClonePlayer hungry = clone(h, 6.5, 6.5, 0f, false);
+        hungry.getFoodData().setFoodLevel(6);
+        h.onEachTick(() -> {
+            hungry.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            hungry.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(hungry.getInventory().countItem(Items.BREAD) >= 1 && hungry.controller().persona().pantryMoves >= 1, "the hungry clone took bread");
+            finish(h, hungry);
+            clearBases(h);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r14stash")
+    public static void putsSurplusFoodIntoTheBaseChest(GameTestHelper h) {
+        clearBases(h);
+        BlockPos at = new BlockPos(7, 2, 7);
+        baseAt(h, at);
+        var chest = (net.minecraft.world.Container) h.getLevel().getBlockEntity(h.absolutePos(at));
+        ClonePlayer rich = clone(h, 6.5, 6.5, 0f, false);
+        rich.getInventory().add(new ItemStack(Items.COOKED_BEEF, 40));
+        h.onEachTick(() -> {
+            rich.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            rich.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int stored = 0;
+            for (int i = 0; i < chest.getContainerSize(); i++) {
+                stored += chest.getItem(i).is(Items.COOKED_BEEF) ? chest.getItem(i).getCount() : 0;
+            }
+            h.assertTrue(stored >= 20 && rich.getInventory().countItem(Items.COOKED_BEEF) <= 20, "the surplus went into the chest (" + stored + ")");
+            finish(h, rich);
+            clearBases(h);
+        });
+    }
+
+    /** R-44: a digger tells where it is digging: the one that heard has the place as a target. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r14dig")
+    public static void learnsWhereAFriendIsDigging(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer friend = clone(h, 3.5, 3.5, 0f, false);
+        BlockPos at = h.absolutePos(new BlockPos(11, 2, 11));
+        h.assertTrue(c.controller().persona().digTarget() == null, "nothing known at first");
+        c.controller().persona().onChat(friend, "DIGSITE " + at.getX() + " " + at.getY() + " " + at.getZ(), h.getLevel().getGameTime());
+        h.assertTrue(c.controller().persona().digTarget() != null, "the dig site is known now");
+        finish(h, c, friend);
+        h.succeed();
+    }
+
+    /** R-45: a newborn sticks to the grown-ups. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r14young")
+    public static void aNewbornFollowsTheGrownUps(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        int follow = opt("FOLLOW").bit();
+        int n = 0;
+        for (int i = 0; i < 100; i++) {
+            n += c.controller().persona().pull(follow, 0.1f, 0.9f, false, true) == opt("FOLLOW") ? 1 : 0;
+        }
+        h.assertTrue(n == 100 && c.controller().persona().pull(follow, 0.9f, 0.9f, false, true) == null, "young: follows; the odd time it does not");
+        h.assertTrue(c.controller().persona().pull(follow, 0.1f, 0.9f, false, false) == null, "grown up: no such pull");
+        finish(h, c);
+        h.succeed();
+    }
+
+    /** R-47: a friend calls a gathering at the base: the clone walks there, hops about, and counts it. */
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r14feast")
+    public static void joinsAGatheringAtTheBase(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 2.5, 2.5, 0f, false);
+        ClonePlayer friend = clone(h, 12.5, 12.5, 0f, false);
+        BlockPos at = h.absolutePos(new BlockPos(10, 2, 10));
+        c.controller().persona().onChat(friend, "FESTIVAL " + at.getX() + " " + at.getY() + " " + at.getZ(), h.getLevel().getGameTime());
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().persona().festivals >= 1, "it came, stayed a while and went home (festivals " + c.controller().persona().festivals + ")");
+            finish(h, c, friend);
+            clearBases(h);
+        });
+    }
+
+    /** R-49: at the base the clone writes a diary page and leaves the book in the chest. */
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r14diary")
+    public static void leavesADiaryInTheBaseChest(GameTestHelper h) {
+        clearBases(h);
+        BlockPos at = new BlockPos(7, 2, 7);
+        baseAt(h, at);
+        var chest = (net.minecraft.world.Container) h.getLevel().getBlockEntity(h.absolutePos(at));
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        c.controller().persona().diaryAt = 0;
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            boolean book = false;
+            for (int i = 0; i < chest.getContainerSize(); i++) {
+                book |= chest.getItem(i).is(Items.WRITTEN_BOOK);
+            }
+            h.assertTrue(book && c.controller().persona().diaries >= 1, "a diary in the chest");
+            finish(h, c);
+            clearBases(h);
+        });
     }
 
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
