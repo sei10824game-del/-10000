@@ -484,3 +484,4 @@
 - R-20/R-32: 新規 `Structures`。見えているチェストが生成構造物の中(`structureManager().getAllStructuresAt`)なら拠点とは別の「構造物」として記録し、`STRUCT x y z` で共有。`pickExploreGoal` が、128ブロック以内の未訪問の構造物を優先。10ブロック以内に着いたら訪問済み。チェストは既存の LOOT に任せる。**未実装: スポナー・危険度の判断、チェスト以外の人工物(ドア・ベッド等)での発見**
 - テスト(batch r11pit): `laddersDownIntoADeepPit`・`coversADeadlyHoleNearHome`・`headsForAKnownStructureAndVisitsIt`(構造物の通知は `structures().note` で代用。実際の生成構造物の判定はテストしていない)
 - run 37622731125(3fd91a8): S11-4 の3テストは通った。`creativeBuilds…` も通った(S11-2 の run で落ちたのは別の原因だったらしい)。失敗: `learnsHowToUseATrident`(戦闘系・不安定)、`penscows…`(既知)、`cutsATallTreeToTheTop`(足場1つで上の原木2本が残る。原因未特定。水平距離の条件を 3→4 に緩め、失敗メッセージに状態を出すようにした)
+- run 37628860134(466623b): 失敗は `cutsATallTreeToTheTop` のみ(足場3段・原木4本残り、上で止まったまま)。原因の見立て: 下の原木だけ残っても足場の周りに原木があると降りなかった。`logsNear` を「今の足元以上にある、諦めていない原木」に変更

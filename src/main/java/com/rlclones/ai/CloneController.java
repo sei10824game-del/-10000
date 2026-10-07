@@ -3938,9 +3938,12 @@ public final class CloneController {
         return true;
     }
 
+    /** Logs of the tree at or above where we stand (those below are cut after climbing down), not given up on. */
     private boolean logsNear(BlockPos at) {
         ServerLevel level = self.serverLevel();
-        return BlockPos.betweenClosedStream(at.offset(-3, -1, -3), at.offset(3, 6, 3)).anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS));
+        BlockPos from = self.blockPosition();
+        return BlockPos.betweenClosedStream(from.offset(-3, 0, -3), from.offset(3, 6, 3))
+                .anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS) && !skipBlocks.containsKey(p));
     }
 
     /** Take the scaffold down again, topmost first (the block under our feet; we drop onto the next one). True while at it. */
