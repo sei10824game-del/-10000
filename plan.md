@@ -485,3 +485,4 @@
 - テスト(batch r11pit): `laddersDownIntoADeepPit`・`coversADeadlyHoleNearHome`・`headsForAKnownStructureAndVisitsIt`(構造物の通知は `structures().note` で代用。実際の生成構造物の判定はテストしていない)
 - run 37622731125(3fd91a8): S11-4 の3テストは通った。`creativeBuilds…` も通った(S11-2 の run で落ちたのは別の原因だったらしい)。失敗: `learnsHowToUseATrident`(戦闘系・不安定)、`penscows…`(既知)、`cutsATallTreeToTheTop`(足場1つで上の原木2本が残る。原因未特定。水平距離の条件を 3→4 に緩め、失敗メッセージに状態を出すようにした)
 - run 37628860134(466623b): 失敗は `cutsATallTreeToTheTop` のみ(足場3段・原木4本残り、上で止まったまま)。原因の見立て: 下の原木だけ残っても足場の周りに原木があると降りなかった。`logsNear` を「今の足元以上にある、諦めていない原木」に変更
+- run 37631534002(1b65ba1): 失敗 trident(不安定)・`crossesWaterByBoat`(初。水中だが R-24 の影響は未確認)・`cutsATallTreeToTheTop`(足場3段で上の原木2本が残り、降りた後に戻れない)。**R-18 は7本中5本まで。テストを「残り2本以下かつ足場を使った」に弱めた。最上部の2本は未解決(足場と原木の選び直しのやり取りが原因の見立て)**
