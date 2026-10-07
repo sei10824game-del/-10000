@@ -808,6 +808,13 @@ public final class Crafting {
                 best = i;
             }
         }
+        if (best < 0 && spareLogs(p) > 0) {
+            for (int i = 0; i < inv.items.size(); i++) {
+                if (inv.items.get(i).is(ItemTags.LOGS)) {
+                    return i; // R-21: nothing else burns: a spare log fires the furnace (it makes the charcoal)
+                }
+            }
+        }
         if (best < 0) {
             for (int i = 0; i < inv.items.size(); i++) {
                 if (inv.items.get(i).is(Items.LAVA_BUCKET)) {

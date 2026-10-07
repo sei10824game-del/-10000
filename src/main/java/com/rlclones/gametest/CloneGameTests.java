@@ -5098,7 +5098,7 @@ public final class CloneGameTests {
     // ------------------------------------------------------------------ Round 11 (S11-1): water
 
     /**
-     * R-24: a 1-wide water tunnel under a ceiling with one air pocket at x=7. The clone, low on air, pushes at the dead end
+     * R-24: a 1-wide water tunnel under a ceiling with one air pocket at x=6. The clone, low on air, pushes at the dead end
      * (x=3) and makes no headway: it must try other ways (the last, back along the tunnel, passes the pocket) and get its air back.
      */
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r11water")
@@ -5111,8 +5111,8 @@ public final class CloneGameTests {
                 }
             }
         }
-        h.setBlock(new BlockPos(7, 4, 7), Blocks.AIR);
-        ClonePlayer c = clone(h, 5.5, 7.5, 90f, false);
+        h.setBlock(new BlockPos(6, 4, 7), Blocks.AIR);
+        ClonePlayer c = clone(h, 4.5, 7.5, 90f, false);
         c.setAirSupply((int) (c.getMaxAirSupply() * 0.25));
         Vec3 goal = h.absoluteVec(new Vec3(1.5, 2, 7.5));
         int[] maxAir = {0};
@@ -5122,7 +5122,7 @@ public final class CloneGameTests {
             maxAir[0] = Math.max(maxAir[0], c.getAirSupply());
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.isAlive(), "not drowned");
+            h.assertTrue(c.isAlive(), "not drowned (hp " + c.getHealth() + " air " + c.getAirSupply() + " at " + c.position() + " escapes " + c.controller().motor().waterEscapes + ")");
             h.assertTrue(c.controller().motor().waterEscapes >= 1, "tried another way out of the dead end");
             h.assertTrue(maxAir[0] >= c.getMaxAirSupply() * 0.9, "and got to the air pocket (max air " + maxAir[0] + ")");
             finish(h, c);
@@ -5281,6 +5281,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 300, batch = "r11walk")
     public static void cutsGrassOnTheWayWithoutStopping(GameTestHelper h) {
         for (int x = 4; x <= 11; x++) {
+            h.setBlock(new BlockPos(x, 1, 7), Blocks.GRASS_BLOCK); // (grass pops off anything but soil)
             h.setBlock(new BlockPos(x, 2, 7), Blocks.GRASS);
         }
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);

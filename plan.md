@@ -475,3 +475,5 @@
 - R-17: `Motor.sweep()`(その tick だけ有効)と `sweepAhead`: 歩行中、前方2.5ブロック・±45°の草(`REPLACEABLE_PLANTS`で硬さ0)を `destroyBlock` で刈る(1tick1つ。視線は向けない)。`Farming` の SEEDS 作業の移動中に `motor.sweep()`。テスト `cutsGrassOnTheWayWithoutStopping`
 - R-27: 掘る側(STAIRS/SHAFT)が 600tick ごとに `DIGGING <tier>`(`ItemAid.announceDigging`)。受けた側が、掘っておらず16ブロック以内で自分の最良ツルハシがより高格なら、`offered` の Ask を作り、既存の FEED/`helpTick` で渡す(1本しか無くても渡す)。**未実装: 古いツルハシを渡した側へ投げ返す**。テスト `handsABetterPickaxeToTheDigger`
 - 次: S11-4(R-19・R-20/R-32)
+- run 37598520263(56bc091。初めてテストまで走った): 失敗 `minesStoneAndBuildsAFurnace`(以前は通っていた。再現を見る)、corner(通路を作り直し)、`cutsGrassOnTheWayWithoutStopping`(草が土の無い所で消えていた。足元を草ブロックに)、`makesCharcoalFromSpareLogs`(板が無く燃料なし。`fuelSlot` が余りの原木を燃料にするよう修正)、`creativeBuilds…`(既知)
+- ジョブログは取れない。`.github/workflows/build.yml` がコンパイルエラーを注釈に出す。読むのは `gh api repos/<repo>/check-runs/<job id>/annotations`
