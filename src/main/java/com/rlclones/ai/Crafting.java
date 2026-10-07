@@ -766,11 +766,12 @@ public final class Crafting {
         List<Integer> out = new ArrayList<>();
         ServerLevel level = (ServerLevel) p.level();
         Inventory inv = p.getInventory();
+        int logAt = -1;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
             if (s.is(ItemTags.LOGS)) {
-                if (spareLogs(p) > 0 && out.stream().noneMatch(j -> inv.items.get(j).is(ItemTags.LOGS))) {
-                    out.add(i); // R-21: charcoal from spare logs (nothing else to burn)
+                if (spareLogs(p) > 0 && logAt < 0) {
+                    logAt = i; // R-21: charcoal from spare logs (nothing else to burn): after everything else
                 }
                 continue;
             }
@@ -781,6 +782,9 @@ public final class Crafting {
             if (r.isPresent() && usefulSmeltResult(r.get().getResultItem(level.registryAccess()))) {
                 out.add(i);
             }
+        }
+        if (logAt >= 0) {
+            out.add(logAt);
         }
         return out;
     }
