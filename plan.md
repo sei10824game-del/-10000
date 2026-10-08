@@ -504,3 +504,8 @@
 - すべて `Persona` に追加。R-41: 拠点チェストの近くで食べ物12個超を入れ、空腹(<14)で無一文なら8個取る。無一文で空腹なら拠点へ戻る(`wantPantry`→`hungryRun`)。R-43: `onDeath` で死亡地点を全体の共有リストへ(`avoids` が見る)。R-44: STAIRS/SHAFT の掘り手が600tickごとに `DIGSITE x y z`、鉄ツルハシ未満で掘る必要があるクローンは40%でそこを探索の行き先に。R-45: 生後6000tick未満は FOLLOW を50%で選ぶ。R-46: 雷雨で空が見えるなら拠点へ。R-47: 拠点近くで0.3%/秒で `FESTIVAL`、聞いた仲間が集まって300tick跳ねる。R-49: 生後6000tick以降、拠点チェストに本(日記)を12000tickごとに1冊
 - ローカルでコンパイル不可。CIで確認
 - run 37657374429(73955f5): 必須の失敗は pearls(既知)のみ。ソーク死亡2(溶岩 EXPLORE・壁の中)、iron_pick 1。run 37658582880(4d738f3): R-41〜49 の新テストは全て通過。失敗 TNT(不安定)・coward…(戦闘・不安定)・`cutsGrassForSeedsThenFarms`(R-17 の草刈りが刈った跡を踏まず種を拾い損ねる疑い→刈られて消えた SEEDS の対象の跡を15tick歩いて拾うように)
+
+## 34. 戦闘:mod モブへの対応(R-51)
+- 戦闘の学習(`EnemyKnowledge`・種類ごとの `QTable`)は、元から種類 ID で観察して学ぶ作りで、mod のモブにも効く。足りなかった所だけ補った: 敵の判定が `Enemy` 頼みだった(→観察で2回以上傷つけた種類は敵)、未知の種類の危険度が一律2.0だった(→攻撃力・体力から)、新しい種類のQ表が空だった(→同じ型の経験から転移)、仲間を殺した種類への警戒(→危険度×最大3)
+- テスト(batch r15*): `learnsThatAnUnlistedMobIsHostile`(Pig を「Enemy でない mod のモブ」の代役に)・`expectsMoreOfAStrongerUnknownMob`・`aNewMobTypeStartsFromItsLikes`。実際の mod のモブでは検証していない
+- 未実装: 戦う前の準備・退路・地形利用・修繕・夜の防衛(アイディアの 1,3,5,8,9)

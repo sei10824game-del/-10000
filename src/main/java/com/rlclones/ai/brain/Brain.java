@@ -325,7 +325,45 @@ public final class Brain {
     }
 
     public QTable combatTable(String type) {
-        return combat.computeIfAbsent(type, t -> new QTable(CombatAction.COUNT));
+        QTable have = combat.get(type);
+        if (have != null) {
+            return have;
+        }
+        QTable fresh = new QTable(CombatAction.COUNT);
+        QTable donor = donorFor(type);
+        if (donor != null) {
+            // a type never met (a modded mob...) starts from what was learned against its likes - lightly, so its own experience takes over fast
+            fresh.mergeFrom(donor);
+            for (var e : fresh.entries()) {
+                for (int a = 0; a < e.getValue().n.length; a++) {
+                    e.getValue().n[a] = Math.min(e.getValue().n[a], 2);
+                    e.getValue().demo[a] = 0;
+                }
+                e.getValue().visits = Math.min(e.getValue().visits, 2);
+            }
+        }
+        combat.put(type, fresh);
+        return fresh;
+    }
+
+    /** "ranged" / "boom" / "melee", and big or small: which enemies are alike for the purpose of fighting them. */
+    private String archetype(String type) {
+        EnemyKnowledge k = knowledge(type);
+        return (k.isExplosive() ? "boom" : k.isRanged() ? "ranged" : "melee") + (k.health.get() >= 60 ? "-big" : "-small");
+    }
+
+    /** The best-practised combat table of a type of the same archetype (or null). */
+    @javax.annotation.Nullable
+    private QTable donorFor(String type) {
+        String want = archetype(type);
+        QTable best = null;
+        for (Map.Entry<String, QTable> e : combat.entrySet()) {
+            if (!e.getKey().equals(type) && e.getValue().size() >= 20 && (best == null || e.getValue().size() > best.size())
+                    && archetype(e.getKey()).equals(want)) {
+                best = e.getValue();
+            }
+        }
+        return best;
     }
 
     public QTable strategyTable() {

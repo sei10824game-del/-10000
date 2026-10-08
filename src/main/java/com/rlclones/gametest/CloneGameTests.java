@@ -5648,6 +5648,54 @@ public final class CloneGameTests {
         });
     }
 
+    // ------------------------------------------------------------------ Round 15: fighting what it has not met (mod mobs)
+
+    /** A mob that is no Enemy (any mod's) but is seen hurting again and again counts as hostile; before that it does not. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r15hostile")
+    public static void learnsThatAnUnlistedMobIsHostile(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        Pig stand_in = pig(h, 9.5, 7.5); // stands in for a modded mob that is no Enemy
+        h.assertTrue(!com.rlclones.ai.Senses.isHostileTo(stand_in, c), "unknown: not hostile");
+        var k = c.getCloneBrain().knowledge(com.rlclones.ai.Perception.typeId(stand_in));
+        k.meleeDamage.add(4.0);
+        k.meleeDamage.add(5.0);
+        h.assertTrue(com.rlclones.ai.Senses.isHostileTo(stand_in, c), "seen hurting twice: hostile");
+        finish(h, c);
+        h.succeed();
+    }
+
+    /** What to expect of a kind not met before is read off the mob: a ravager is far worse than a zombie. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r15prior")
+    public static void expectsMoreOfAStrongerUnknownMob(GameTestHelper h) {
+        var ravager = h.spawn(EntityType.RAVAGER, new Vec3(9.5, 2, 7.5));
+        var zombie = h.spawn(EntityType.ZOMBIE, new Vec3(5.5, 2, 7.5));
+        ravager.setNoAi(true);
+        zombie.setNoAi(true);
+        double r = com.rlclones.ai.Senses.priorDps(ravager);
+        double z = com.rlclones.ai.Senses.priorDps(zombie);
+        h.assertTrue(r >= 2 * z, "ravager " + r + " vs zombie " + z);
+        h.killAllEntities();
+        h.succeed();
+    }
+
+    /** A kind met for the first time starts from the fighting experience gathered against its likes, lightly. */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r15transfer")
+    public static void aNewMobTypeStartsFromItsLikes(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var brain = c.getCloneBrain();
+        var husk = brain.combatTable("minecraft:husk");
+        for (int s = 0; s < 40; s++) {
+            var e = husk.get(s, com.rlclones.ai.brain.QTable.Prior.ZERO);
+            e.q[0] = 1.5f;
+            e.n[0] = 9;
+        }
+        var modded = brain.combatTable("somemod:crawler");
+        var e0 = modded.peek(3);
+        h.assertTrue(modded.size() >= 40 && e0 != null && e0.q[0] > 1.0f && e0.n[0] <= 2, "seeded: size " + modded.size());
+        finish(h, c);
+        h.succeed();
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {

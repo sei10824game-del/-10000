@@ -83,7 +83,15 @@ public final class Senses {
         if (e instanceof NeutralMob) {
             return false;
         }
-        return e instanceof Enemy;
+        if (e instanceof Enemy) {
+            return true;
+        }
+        // a mob of a kind that is no Enemy (a modded one...) but has been seen hurting people again and again is hostile all the same
+        if (agent instanceof com.rlclones.clone.ClonePlayer c && c.getCloneBrain() != null) {
+            EnemyKnowledge k = c.getCloneBrain().knowledgeIfPresent(Perception.typeId(e));
+            return k != null && k.meleeDamage.count() + k.rangedDamage.count() + k.blastRadius.count() >= 2;
+        }
+        return false;
     }
 
     public static boolean isFoodAnimal(Entity e) {
@@ -196,6 +204,16 @@ public final class Senses {
         return out;
     }
 
+    /** What to expect of a kind of mob not met before (a modded one...): its attack and health, read off the mob itself. */
+    public static double priorDps(Entity e) {
+        if (!(e instanceof LivingEntity le)) {
+            return 2.0;
+        }
+        double atk = le.getAttributes().hasAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)
+                ? le.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) : 2.0;
+        return Math.max(2.0, atk) * Math.max(1.0, Math.min(3.0, le.getMaxHealth() / 40.0));
+    }
+
     public static int threatLevel(Perception observer, Player agent, Brain brain, long now) {
         List<Perception.Seen> threats = threats(observer, agent, now, 24);
         if (threats.isEmpty()) {
@@ -204,7 +222,10 @@ public final class Senses {
         double danger = 0;
         for (Perception.Seen s : threats) {
             EnemyKnowledge k = brain.knowledgeIfPresent(s.typeId);
-            double dps = k != null ? k.dps() : 2.0;
+            double dps = k != null ? k.dps() : priorDps(s.entity);
+            if (k != null && k.agentsKilled > 0) {
+                dps *= 1 + Math.min(2, k.agentsKilled); // it has killed one of us before: all the more care
+            }
             double g = gap(agent, s.entity);
             danger += dps / Math.max(1.0, g / 4.0);
             if (isWindingUp(s.entity) && g < 5 && k != null && k.isExplosive()) {
