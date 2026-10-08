@@ -5611,7 +5611,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().persona().signsPlaced >= 1, "a sign put up");
+            h.assertTrue(c.controller().persona().signsPlaced >= 1, "a sign put up (" + c.controller().persona().signWhy + ")");
             finish(h, c);
             clearBases(h);
         });

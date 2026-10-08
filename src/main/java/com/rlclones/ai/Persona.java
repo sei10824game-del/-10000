@@ -787,6 +787,8 @@ public final class Persona {
     /** Signs put up (tests). */
     public int signsPlaced;
     private boolean signDone;
+    /** Why no sign went up (tests). */
+    public String signWhy = "";
 
     /** With a sign in the bag, standing by a base chest on firm ground: put it up there, saying whose chest it is. */
     private void signTick() {
@@ -803,11 +805,14 @@ public final class Persona {
         Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 6);
         BlockPos feet = self.blockPosition();
         if (slot < 0 || base == null || !level().getBlockState(feet).canBeReplaced() || !level().getBlockState(feet.below()).isFaceSturdy(level(), feet.below(), net.minecraft.core.Direction.UP)) {
+            signWhy = "slot=" + slot + " base=" + (base != null) + " feet=" + level().getBlockState(feet).getBlock() + " below=" + level().getBlockState(feet.below()).getBlock();
             return;
         }
         int before = self.getInventory().selected;
         Equipment.select(self, slot);
-        if (motor.useOnTopFace(feet.below()) && level().getBlockEntity(feet) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) {
+        boolean used = motor.useOnTopFace(feet.below());
+        signWhy = "used=" + used + " held=" + self.getMainHandItem().getItem() + " now=" + level().getBlockState(feet).getBlock();
+        if (used && level().getBlockEntity(feet) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) {
             String name = self.getGameProfile().getName();
             sign.updateText(t -> t.setMessage(0, Component.literal(name)).setMessage(1, Component.literal("lives here")), true);
             signsPlaced++;
