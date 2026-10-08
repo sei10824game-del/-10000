@@ -549,3 +549,13 @@
 - REQUIREMENTS.md の表に出るテスト名・シンボル(camelCase)は全てソースに存在。R-17〜R-53 の「実装済」が名指すシンボル(`SITE_GAP`・`noPickUntil`・`bareSlot`・`decorTick`・`pantryTick`・`noteDeath`・`DIGSITE`・`FESTIVAL`・`stormTick`・`breathSteer`・`DoorBreath` など)も存在。
 - 本当に未実装: R-38 の餌やり、R-50(看板・地図・交易・競争)、R-52 の準備・修繕・夜の防衛(R-53 で一部)・集団戦術、誘い込みと水での追跡切り、D-4・D-6・D-7、P-05 の横掘り、R-26 の一部(湧き潰し)。
 - R-46(天候)はテストなし。R-28〜R-53 の「CI待ち」は更新していない(CI の合否を確認していないため)。
+
+### 39. 要求の追加実装(2026-10-08、CI 未確認: run 37827281727)
+- R-38 餌やり: `Persona.feedPet`(傷ついたペットに好物を1つ与え回復4)。テスト `feedsAHurtFavouriteAnimal`
+- R-26 湧き潰し: `Lighting.proofTick`(松明16本超・REST・拠点12ブロック以内で、暗い床へ歩く。置くのは既存の `tick()`)。専用テストなし(アリーナが狭く松明1本で全体が明るくなる)
+- R-50 看板: `Persona.signTick`(看板を持っていれば拠点の近くで名前を書いて立てる)。看板は作らないので拾った場合のみ。テスト `putsUpASignByTheBase`
+- R-50 交易: 新規 `Trading`(取引画面を使わず `MerchantOffer` を直接処理。余った作物等を売り、食料・鉄/ダイヤ装備を買う)。`CloneController` の itemBusy 連鎖(REST のとき)。テスト `sellsSurplusWheatToAVillager`
+- 地図は未実装(使い道の航行が無い)。競争は不要とされた
+- 実装済みだった(plan の未実装記述は古い): D-4・D-6・D-7・P-05
+- まだ未実装: 戦闘の準備・修繕・夜の防衛・集団戦術・誘い込み・水での追跡切り(RL 行動の追加で大きい。上の CI が通ってから)
+- 次の確認: コンパイルエラー(`SignBlockEntity.updateText`・`MerchantOffer` の API は blind で書いた)、新規4テストの合否
