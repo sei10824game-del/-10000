@@ -1220,6 +1220,11 @@ public final class CreativePlay {
                 start(Job.NETHER_PORTAL);
                 return true;
             }
+            if (!log.contains("NP-nosite")) {
+                log += " NP-nosite"; // (tests: why no Nether portal was started)
+            }
+        } else if (!tooMany(Job.NETHER_PORTAL) && !log.contains("NP-skip")) {
+            log += " NP-skip(project=" + bases.hasProject(dim, "nether_portal", a, 48) + ")";
         }
         List<Animal> animals = level().getEntitiesOfClass(Animal.class, new AABB(a).inflate(16), Animal::isAlive);
         if (animals.size() < 6 && !bases.hasProject(dim, "mobs", a, 32) && !tooMany(Job.MOBS)) {
