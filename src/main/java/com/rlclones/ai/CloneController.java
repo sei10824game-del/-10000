@@ -724,7 +724,7 @@ public final class CloneController {
     public final StringBuilder harvestTrace = new StringBuilder();
 
     private void traceHarvest(String what) {
-        if (harvestTrace.length() < 600) {
+        if (harvestTrace.length() < 1500) {
             harvestTrace.append(' ').append(what).append('@').append(optionTicks);
         }
     }
@@ -3983,14 +3983,17 @@ public final class CloneController {
             if (self.getY() >= scafBase.getY() + 1.0 && level.getBlockState(scafBase).canBeReplaced()) {
                 Equipment.select(self, Equipment.pillarBlockSlot(self));
                 if (motor.useOnTopFace(scafBase.below())) {
+                    traceHarvest("scaf+");
                     scafPlaced = true;
                     scaffold.addLast(scafBase);
                     scaffoldsPlaced++;
                 } else {
+                    traceHarvest("scaf-fail y" + String.format("%.2f", self.getY()));
                     scafBase = null;
                     return ++scafFails < 3;
                 }
             } else if (scafTicks > 14) {
+                traceHarvest("scaf-slow y" + String.format("%.2f", self.getY()));
                 scafBase = null;
                 return ++scafFails < 6;
             }
@@ -4114,6 +4117,7 @@ public final class CloneController {
                     return false; // a high log: pillar up beside the trunk
                 }
                 scafFails = 0;
+                traceHarvest("scaf-skip");
                 skipBlocks.put(blockTarget.immutable(), now());
                 perception.forgetBlock(blockTarget);
                 blockTarget = null;
