@@ -693,7 +693,11 @@ public final class Persona {
     // ------------------------------------------------------------------ R-46: out of a thunderstorm
 
     private boolean stormTick(long now) {
-        if (!level().isThundering() || !level().canSeeSky(self.blockPosition()) || now < weatherCooldown) {
+        boolean storm = level().isThundering() && level().canSeeSky(self.blockPosition());
+        // R-53: after dark, one with no weapon or badly hurt does not wander about: home to the base, where the doors are
+        boolean night = level().dimension() == net.minecraft.world.level.Level.OVERWORLD && level().getDayTime() % 24000L >= 13000L
+                && (!Equipment.isArmed(self) || self.getHealth() < self.getMaxHealth() * 0.6f);
+        if (!(storm || night) || now < weatherCooldown) {
             return false;
         }
         Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 80);

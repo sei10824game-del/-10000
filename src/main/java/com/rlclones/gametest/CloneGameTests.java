@@ -5715,6 +5715,26 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-53: night, no weapon: the clone makes for the base instead of wandering about in the dark. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r15night")
+    public static void staysHomeAtNightWithoutAWeapon(GameTestHelper h) {
+        clearBases(h);
+        baseAt(h, new BlockPos(12, 2, 7));
+        long before = h.getLevel().getDayTime();
+        h.getLevel().setDayTime(before - before % 24000L + 15000L); // the middle of the night
+        ClonePlayer c = clone(h, 3.5, 7.5, 0f, false);
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + ")");
+            h.getLevel().setDayTime(before);
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {
