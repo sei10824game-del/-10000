@@ -531,7 +531,7 @@
 2. 落ち続けるテスト: `makesAndPutsDownAFurnaceForRawFood`(かまどを作るが置けない。かまど並行の影響か確認)、`creativeBuildsPortalsAndAnEnchantingRoom`・`crossesWaterByBoat`(直近の run で連続して失敗)。不安定: `climbsUpToShoot…`・`asksForFood…`・`penscowsWhenWheatPilesUp`・`usesTntInAFight…`
 3. ソーク: 鉄インゴットは 6 体中 1〜4 体、鉄ツルハシ・ダイヤは 0。進行を上げる案(会話で出したもの): 各段階の到達tickを報酬にする・`escape`(約1/6)と `none` を減らす・成功した個体のQ表を共有・Q表を次のソークへ引き継ぐ・洞窟を優先して探す。強化学習で適応する方針で、手順の決め打ちはしない
 4. ソークの落下死: (3233〜3234, 77, 34〜35) で2体が高さ21の落下。採集だけでなく移動でも死亡地点を避けるか検討
-5. 未実装の要求: R-23(ドアで息継ぎ)・戦闘の準備/修繕/集団戦術・看板/地図/交易(REQUIREMENTS.md に ID なし。登録から)
+5. 未実装の要求(R-23 は `DoorBreath` で実装済み。35章の記述は誤り): 戦闘の準備/修繕/集団戦術・看板/地図/交易(REQUIREMENTS.md に ID なし。登録から)
 
 ### 36. cutsATallTreeToTheTop の原因(e98b1bf の run 37788880748)
 - 原因A: ジャンプの頂点で目が届く距離に入り、`runHarvest` が採掘に切り替わって `scaffoldStep()` が足場を置けなかった → 足場作業中(`scafBase != null`)は完了まで続ける。
@@ -544,3 +544,8 @@
 - Opus の推測(未確認): `Crafting.furnaceNearby()`/`stationToPlace()` が歩いて行けない記憶上のかまど(24ブロック内)を数え、`urgent()` が false になる。ログ(gametest-logs)が Forbidden で読めず確証なし。
 - 案(未実装): 歩いて行けるかまどだけ数える(`Motor.canWalkNear`+200tickキャッシュ)。確証なしに熱い判定へ経路探索を足さないため見送り。次に落ちたら失敗時の `furnaceNearby` の中身をテストの失敗メッセージに足して原因を確定する。
 - `lightsUpWhereMonstersCouldSpawn`・`makesSoilBesideBareWaterAndLightsThePlot`(ともに明かり系)は同じ run で落ちた。不安定扱い。
+
+### 38. 要求と実装の突き合わせ(静的、2026-10-08)
+- REQUIREMENTS.md の表に出るテスト名・シンボル(camelCase)は全てソースに存在。R-17〜R-53 の「実装済」が名指すシンボル(`SITE_GAP`・`noPickUntil`・`bareSlot`・`decorTick`・`pantryTick`・`noteDeath`・`DIGSITE`・`FESTIVAL`・`stormTick`・`breathSteer`・`DoorBreath` など)も存在。
+- 本当に未実装: R-38 の餌やり、R-50(看板・地図・交易・競争)、R-52 の準備・修繕・夜の防衛(R-53 で一部)・集団戦術、誘い込みと水での追跡切り、D-4・D-6・D-7、P-05 の横掘り、R-26 の一部(湧き潰し)。
+- R-46(天候)はテストなし。R-28〜R-53 の「CI待ち」は更新していない(CI の合否を確認していないため)。
