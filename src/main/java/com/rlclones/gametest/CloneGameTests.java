@@ -5696,6 +5696,25 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    /** Hurt and chased with a base to the east: the flight bends towards it instead of running straight away. */
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r15refuge")
+    public static void fleesTowardsTheBaseWhenHurt(GameTestHelper h) {
+        clearBases(h);
+        baseAt(h, new BlockPos(13, 2, 7));
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        c.setHealth(6f);
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        slowHusk(h, 6.5, 2, 2.5); // north of it: straight away would be south
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FLEE;
+        h.runAfterDelay(10, () -> wake(h, c));
+        double startX = c.getX();
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().fledHome >= 1 && c.getX() > startX + 2.5, "the flight bent east to the base (dx " + (c.getX() - startX) + ", fledHome " + c.controller().fledHome + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {

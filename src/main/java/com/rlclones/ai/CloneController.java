@@ -3334,6 +3334,9 @@ public final class CloneController {
 
     // ------------------------------------------------------------------ other options
 
+    /** Times a flight was bent towards the base (tests). */
+    public int fledHome;
+
     private boolean runFlee(long now) {
         List<Perception.Seen> threats = Senses.threats(perception, self, now, 24);
         if (threats.isEmpty()) {
@@ -3364,6 +3367,14 @@ public final class CloneController {
             if (ally != null && ally.pos.distanceTo(self.position()) > 6) {
                 Vec3 toAlly = ally.pos.subtract(self.position());
                 away = away.add(new Vec3(toAlly.x, 0, toAlly.z).normalize().scale(0.7)).normalize();
+            }
+            // badly hurt: run for home if there is a base within 48 blocks (the doors, the chests, the friends)
+            com.rlclones.clone.Bases.Base refuge = self.getHealth() < self.getMaxHealth() * 0.5f
+                    ? com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), self.position(), 48) : null;
+            if (refuge != null && Motor.horizontalDistance(self.position(), Vec3.atCenterOf(refuge.center)) > 6) {
+                Vec3 toBase = Vec3.atCenterOf(refuge.center).subtract(self.position());
+                away = away.add(new Vec3(toBase.x, 0, toBase.z).normalize().scale(0.9)).normalize();
+                fledHome++;
             }
             Vec3 cover = threats.isEmpty() ? null : findCover(threats, away);
             if (cover != null) {

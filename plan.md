@@ -509,3 +509,4 @@
 - 戦闘の学習(`EnemyKnowledge`・種類ごとの `QTable`)は、元から種類 ID で観察して学ぶ作りで、mod のモブにも効く。足りなかった所だけ補った: 敵の判定が `Enemy` 頼みだった(→観察で2回以上傷つけた種類は敵)、未知の種類の危険度が一律2.0だった(→攻撃力・体力から)、新しい種類のQ表が空だった(→同じ型の経験から転移)、仲間を殺した種類への警戒(→危険度×最大3)
 - テスト(batch r15*): `learnsThatAnUnlistedMobIsHostile`(Pig を「Enemy でない mod のモブ」の代役に)・`expectsMoreOfAStrongerUnknownMob`・`aNewMobTypeStartsFromItsLikes`。実際の mod のモブでは検証していない
 - 未実装: 戦う前の準備・退路・地形利用・修繕・夜の防衛(アイディアの 1,3,5,8,9)
+- R-52 退路: `runFlee` が HP半分未満で48ブロック以内に拠点があれば逃げる向きを拠点へ曲げる(`fledHome`)。テスト `fleesTowardsTheBaseWhenHurt`。ソーク(fe88bba): 死亡0・鉄ツルハシ2体
