@@ -691,15 +691,28 @@ public final class CloneController {
                 return;
             }
             pos = new Vec3(x, y, z);
-            String[] parts = path.split("\\.");
-            String kind = parts.length > 1 ? parts[1] : "";
-            source = null;
-            double best = Double.MAX_VALUE;
-            for (LivingEntity e : level.getEntitiesOfClass(LivingEntity.class, new net.minecraft.world.phys.AABB(pos, pos).inflate(2.5), e -> e != self && e.isAlive())) {
-                double d = e.position().distanceToSqr(pos) - (Perception.typeId(e).endsWith(":" + kind) ? 100 : 0);
-                if (d < best) {
-                    best = d;
-                    source = e;
+            // every clone in earshot gets this same packet: who made the sound is worked out once a tick and shared (the answer does not depend on the listener)
+            long gt = level.getGameTime();
+            if (gt != soundSourceTick) {
+                SOUND_SOURCES.clear();
+                soundSourceTick = gt;
+            }
+            String key = level.dimension().location() + path + x + y + z;
+            source = SOUND_SOURCES.get(key);
+            if (source == null || !source.isAlive()) {
+                String[] parts = path.split("\\.");
+                String kind = parts.length > 1 ? parts[1] : "";
+                source = null;
+                double best = Double.MAX_VALUE;
+                for (LivingEntity e : level.getEntitiesOfClass(LivingEntity.class, new net.minecraft.world.phys.AABB(pos, pos).inflate(2.5), LivingEntity::isAlive)) {
+                    double d = e.position().distanceToSqr(pos) - (Perception.typeId(e).endsWith(":" + kind) ? 100 : 0);
+                    if (d < best) {
+                        best = d;
+                        source = e;
+                    }
+                }
+                if (source != null) {
+                    SOUND_SOURCES.put(key, source);
                 }
             }
         }
@@ -722,6 +735,8 @@ public final class CloneController {
     }
 
     public long heardSounds;
+    private static long soundSourceTick = Long.MIN_VALUE;
+    private static final java.util.HashMap<String, Entity> SOUND_SOURCES = new java.util.HashMap<>();
     public int quarried;
     public String harvestDebug = "";
     /** Not skipped for now, and - for planks / logs of buildings - not part of somebody's base. */
