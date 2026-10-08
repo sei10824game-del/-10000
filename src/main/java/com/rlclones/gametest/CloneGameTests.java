@@ -4164,6 +4164,30 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r10swim")
+    public static void getsOutOfAnUnderwaterCorner(GameTestHelper h) {
+        deepPool(h, 2, 12);
+        for (int z = 5; z <= 7; z++) {
+            for (int y = -1; y <= 1; y++) {
+                h.setBlock(new BlockPos(6, y, z), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 3.5, 6.5, -90f, false);
+        Vec3 start = h.absoluteVec(new Vec3(3.5, 0.2, 6.5));
+        c.teleportTo(h.getLevel(), start.x, start.y, start.z, -90f, 0f);
+        Vec3 goal = h.absoluteVec(new Vec3(10.5, 0, 6.5));
+        h.onEachTick(() -> {
+            c.controller().motor().moveToward(goal);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.isAlive() && c.getX() >= goal.x - 1.5, "past the wall (x " + (c.getX() - start.x) + " z " + (c.getZ() - start.z)
+                    + " escapes " + c.controller().motor().cornerEscapes + ")");
+            h.assertTrue(c.controller().motor().cornerEscapes >= 1, "escape used");
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 900, batch = "r10fish")
     public static void huntsFishInTheWater(GameTestHelper h) {
         deepPool(h, 4, 10);

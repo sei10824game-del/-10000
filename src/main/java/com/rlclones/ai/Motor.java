@@ -68,6 +68,13 @@ public final class Motor {
     @Nullable
     private Vec3 strokeFrom;
     private long strokeOffUntil = Long.MIN_VALUE;
+    /** Underwater corner escape (R-24): no headway for 20 ticks -> try left, right, up, back for 30 ticks each. */
+    public int cornerEscapes;
+    private int cornerTicks;
+    private int cornerPhase = -1;
+    private long cornerPhaseEnd;
+    @Nullable
+    private Vec3 cornerFrom;
     /** Where the path leads next / the destination, while in water (this tick's navigate call). */
     @Nullable
     private Vec3 swimSteer;
@@ -808,8 +815,57 @@ public final class Motor {
         return (float) Mth.clamp(-Math.toDegrees(Math.atan2(dy, horiz)), -40, 50);
     }
 
+    /** Steers round a corner the clone is pressed against under water; true while an escape move is in force. */
+    private boolean cornerEscape() {
+        long now = self.level().getGameTime();
+        if (!self.isInWater() || moveDir == null || self.isPassenger() || self.isInLava()) {
+            cornerTicks = 0;
+            cornerPhase = -1;
+            cornerFrom = null;
+            return false;
+        }
+        if (cornerPhase < 0) {
+            if (cornerFrom == null) {
+                cornerFrom = self.position();
+            }
+            if (++cornerTicks < 20) {
+                return false;
+            }
+            boolean stuck = cornerFrom.distanceTo(self.position()) < 0.3;
+            cornerFrom = self.position();
+            cornerTicks = 0;
+            if (!stuck) {
+                return false;
+            }
+            cornerPhase = 0;
+            cornerPhaseEnd = now + 30;
+            cornerEscapes++;
+        } else if (now >= cornerPhaseEnd) {
+            if (++cornerPhase > 3) {
+                cornerPhase = -1;
+                cornerFrom = null;
+                return false;
+            }
+            cornerPhaseEnd = now + 30;
+        }
+        boolean lowAir = self.getAirSupply() < self.getMaxAirSupply() * 0.3;
+        int[] order = lowAir ? new int[] {2, 0, 1, 3} : new int[] {0, 1, 2, 3};
+        switch (order[cornerPhase]) {
+            case 0 -> moveDir = new Vec3(moveDir.z, 0, -moveDir.x);
+            case 1 -> moveDir = new Vec3(-moveDir.z, 0, moveDir.x);
+            case 2 -> {
+                jump = true;
+                self.setDeltaMovement(self.getDeltaMovement().add(0, 0.04, 0));
+            }
+            default -> moveDir = new Vec3(-moveDir.x, 0, -moveDir.z);
+        }
+        strokeOffUntil = now + 2;
+        return true;
+    }
+
     public void tick() {
         flight();
+        cornerEscape();
         boolean stroke = swimStroke();
         // rotation
         float yaw = self.getYRot();
