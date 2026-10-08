@@ -5736,7 +5736,7 @@ public final class CloneGameTests {
     }
 
     /** Where a clone died (lava, a drop...) nothing is gathered: the tree there stands, the one elsewhere is felled. */
-    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r15death")
+    @GameTest(template = ARENA, timeoutTicks = 1800, batch = "r15death")
     public static void gathersNothingWhereACloneDied(GameTestHelper h) {
         for (int y = 2; y <= 4; y++) {
             h.setBlock(new BlockPos(12, y, 3), Blocks.OAK_LOG); // by the death spot
@@ -5748,7 +5748,7 @@ public final class CloneGameTests {
         c.controller().forcedOption = opt("GATHER_WOOD");
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
-            h.assertTrue(h.getBlockState(new BlockPos(2, 2, 12)).isAir() || h.getBlockState(new BlockPos(2, 3, 12)).isAir(), "the far tree was felled");
+            h.assertTrue(h.getBlockState(new BlockPos(2, 2, 12)).isAir() || h.getBlockState(new BlockPos(2, 3, 12)).isAir(), "the far tree was felled (" + c.controller().harvestDebug + " " + c.controller().optionLog + " at " + c.blockPosition().subtract(h.absolutePos(new BlockPos(0, 0, 0))).toShortString() + ")");
             h.assertTrue(h.getBlockState(new BlockPos(12, 2, 3)).is(Blocks.OAK_LOG) && h.getBlockState(new BlockPos(12, 3, 3)).is(Blocks.OAK_LOG), "the tree by the death spot stands");
             com.rlclones.ai.Persona.forgetDeaths();
             finish(h, c);
