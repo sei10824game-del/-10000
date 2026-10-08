@@ -5600,7 +5600,7 @@ public final class CloneGameTests {
     }
 
     /** R-50: a sign in the bag by the base: it is put up, with the clone's name on it. */
-    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r12pet")
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r12sign")
     public static void putsUpASignByTheBase(GameTestHelper h) {
         clearBases(h);
         baseAt(h, new BlockPos(7, 2, 7));
@@ -5897,7 +5897,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + ")");
+            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " time " + h.getLevel().getDayTime() % 24000L + ")");
             h.getLevel().setDayTime(before);
             finish(h, c);
             clearBases(h);
