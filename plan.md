@@ -514,3 +514,21 @@
 - run 37737018361(1650082): R-53 のテストは通過。ソーク: 死亡4(溺死 EXPLORE・落下3(y=49〜50,拠点付近))、鉄インゴット0。落下の原因調査のため、死亡ログに落下距離・Pits/DoorBreath の状態・直近の行動・加害者を足した
 - run 37754759926(8ff39dd): ソーク死亡2(溶岩 GATHER_WOOD (3189,65,35)・落下 fall=3 STORE (3176,53,50) 加害者なし)。溶岩の死亡は (3187〜3189, 65〜81, 23〜35) の一帯で何度も繰り返す。対策: 採集の対象(`harvestable`)から、死亡・落下地点の10ブロック以内を外した(`Persona.avoids`)。テスト `gathersNothingWhereACloneDied`
 - run 37757607730(2cca9f3): `gathersNothingWhereACloneDied` 失敗(遠い木が切られない。診断追加・制限時間延長)、`standsUpItsSittingPet`(初)、climbsUp…(不安定)、cutsATallTree。ソーク死亡1(壁の中・満腹度3)・鉄インゴット1
+
+## 35. 引き継ぎ(2026-10-08 のセッション終了時点)
+作業ブランチは `claude/s11-1-implementation-ib5d52`(`claude/rl-clones-mod` は古い。R-21・R-24 の重複コミットがあるだけで、触らない)。この環境では Forge の Maven が組織ポリシーで拒否され、`./gradlew test` は実行できない。検証の正は CI。失敗したテスト名は `gh api repos/sei10824game-del/-10000/check-runs/<build の job ID>/annotations --paginate --jq '.[]|select(.title|test("GameTest failed|SOAK-SUMMARY|Soak"))|.message'` で読む(`gh run view --log-failed` は Forbidden)。
+
+### このセッションで入れたもの(CI 未確認のものあり)
+- かまどの並行: 焼いている最中に同じ素材を持って近く(8ブロック以内)を通れば追加(`Crafting.topUp`・`furnaceItem`)。テスト `topsUpARunningFurnace`
+- 戦闘の立地: `combat/Terrain`(壁・高所・危険)、状態に地形の桁(最上位)、行動 `POSITION`。事前値は小さい。テスト `takesTheAlcoveInAFight`。未実装: ドアを使った誘い込み・水での追跡切り
+- R-18(木の一番上): 空中の原木は根元まで歩く。足場のジャンプは接地中に毎tick要求(最初の1tickだけだと失われた)。テストは木の全高(`logsLeft`)を数える。`cutsATallTreeToTheTop` は直前の run まで落ちていた。トレースに足場の記録を足してある
+- 低い天井の下で溺れる: `Motor.breathSteer`(空気 50% 未満で真上に水面が無いとき、水と空気のマスを BFS して最寄りの空気へ泳ぐ)。テスト `swimsToAnAirPocketUnderACeiling`
+- ツルハシなしで掘り続ける: `runStrategy` の判定を毎tick・待機期間中にも効かせた(階段を上がっている最中だけ例外)。テスト `doesNotDigWithoutAPickaxe`
+- CLAUDE.md: 「CI失敗の修正は1セッション1回」の行は削除済み
+
+### 未確認・次にやること
+1. run 37788880748(`e98b1bf`)と 37789598237(`98e0841`)の結果を読む。見るもの: `cutsATallTreeToTheTop`・`swimsToAnAirPocketUnderACeiling`・`doesNotDigWithoutAPickaxe`・`topsUpARunningFurnace`・`takesTheAlcoveInAFight` の合否、ソークの死亡数
+2. 落ち続けるテスト: `makesAndPutsDownAFurnaceForRawFood`(かまどを作るが置けない。かまど並行の影響か確認)、`creativeBuildsPortalsAndAnEnchantingRoom`・`crossesWaterByBoat`(直近の run で連続して失敗)。不安定: `climbsUpToShoot…`・`asksForFood…`・`penscowsWhenWheatPilesUp`・`usesTntInAFight…`
+3. ソーク: 鉄インゴットは 6 体中 1〜4 体、鉄ツルハシ・ダイヤは 0。進行を上げる案(会話で出したもの): 各段階の到達tickを報酬にする・`escape`(約1/6)と `none` を減らす・成功した個体のQ表を共有・Q表を次のソークへ引き継ぐ・洞窟を優先して探す。強化学習で適応する方針で、手順の決め打ちはしない
+4. ソークの落下死: (3233〜3234, 77, 34〜35) で2体が高さ21の落下。採集だけでなく移動でも死亡地点を避けるか検討
+5. 未実装の要求: R-23(ドアで息継ぎ)・戦闘の準備/修繕/集団戦術・看板/地図/交易(REQUIREMENTS.md に ID なし。登録から)
