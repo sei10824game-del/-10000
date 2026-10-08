@@ -5735,6 +5735,26 @@ public final class CloneGameTests {
         });
     }
 
+    /** Where a clone died (lava, a drop...) nothing is gathered: the tree there stands, the one elsewhere is felled. */
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r15death")
+    public static void gathersNothingWhereACloneDied(GameTestHelper h) {
+        for (int y = 2; y <= 4; y++) {
+            h.setBlock(new BlockPos(12, y, 3), Blocks.OAK_LOG); // by the death spot
+            h.setBlock(new BlockPos(2, y, 12), Blocks.OAK_LOG); // far from it
+        }
+        com.rlclones.ai.Persona.forgetDeaths();
+        com.rlclones.ai.Persona.noteDeath(h.absolutePos(new BlockPos(12, 2, 4)));
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.controller().forcedOption = opt("GATHER_WOOD");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(h.getBlockState(new BlockPos(2, 2, 12)).isAir() || h.getBlockState(new BlockPos(2, 3, 12)).isAir(), "the far tree was felled");
+            h.assertTrue(h.getBlockState(new BlockPos(12, 2, 3)).is(Blocks.OAK_LOG) && h.getBlockState(new BlockPos(12, 3, 3)).is(Blocks.OAK_LOG), "the tree by the death spot stands");
+            com.rlclones.ai.Persona.forgetDeaths();
+            finish(h, c);
+        });
+    }
+
     /** R-21: no coal, logs to spare: charcoal from the surplus, then the iron is smelted with it. */
     @GameTest(template = ARENA, timeoutTicks = 9000, batch = "r11goods")
     public static void makesCharcoalFromSpareLogs(GameTestHelper h) {

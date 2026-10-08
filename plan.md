@@ -512,3 +512,4 @@
 - R-52 退路: `runFlee` が HP半分未満で48ブロック以内に拠点があれば逃げる向きを拠点へ曲げる(`fledHome`)。テスト `fleesTowardsTheBaseWhenHurt`。ソーク(fe88bba): 死亡0・鉄ツルハシ2体
 - R-53: 夜(13000〜)、武器が無いか HP6割未満なら拠点へ帰る(`Persona.stormTick` を雷雨と共用)。テスト `staysHomeAtNightWithoutAWeapon`。戦闘アイディアの未実装: 準備(回復薬・矢の点検)・地形(通路で1対1)・修繕(金床)・集団戦術
 - run 37737018361(1650082): R-53 のテストは通過。ソーク: 死亡4(溺死 EXPLORE・落下3(y=49〜50,拠点付近))、鉄インゴット0。落下の原因調査のため、死亡ログに落下距離・Pits/DoorBreath の状態・直近の行動・加害者を足した
+- run 37754759926(8ff39dd): ソーク死亡2(溶岩 GATHER_WOOD (3189,65,35)・落下 fall=3 STORE (3176,53,50) 加害者なし)。溶岩の死亡は (3187〜3189, 65〜81, 23〜35) の一帯で何度も繰り返す。対策: 採集の対象(`harvestable`)から、死亡・落下地点の10ブロック以内を外した(`Persona.avoids`)。テスト `gathersNothingWhereACloneDied`
