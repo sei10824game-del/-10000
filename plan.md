@@ -538,3 +538,9 @@
 - 原因B: `Perception.isTreeLog` が5ブロック上までしか葉を見ず、高い幹の下の原木(y2,y3)が建材扱いになった → 幹の天辺まで辿って葉を探す。
 - `lightsUpWhereMonstersCouldSpawn` は直前の run では通っていた(並列テストの明かりの影響の疑い、不安定扱い)。
 - 未確認: この修正の CI。`makesAndPutsDownAFurnaceForRawFood`・`creativeBuildsPortalsAndAnEnchantingRoom` は引き続き失敗。
+
+### 37. makesAndPutsDownAFurnaceForRawFood は不安定(修正は入れていない)
+- 5つの run(98e0841・7017d65・76de712・53b74c9・642d95d)で通り、4つで落ちる。失敗は2通り: A=クラフトが一度も選ばれない(`urgentCrafts=0`)、B=かまどを作るが置かない。
+- Opus の推測(未確認): `Crafting.furnaceNearby()`/`stationToPlace()` が歩いて行けない記憶上のかまど(24ブロック内)を数え、`urgent()` が false になる。ログ(gametest-logs)が Forbidden で読めず確証なし。
+- 案(未実装): 歩いて行けるかまどだけ数える(`Motor.canWalkNear`+200tickキャッシュ)。確証なしに熱い判定へ経路探索を足さないため見送り。次に落ちたら失敗時の `furnaceNearby` の中身をテストの失敗メッセージに足して原因を確定する。
+- `lightsUpWhereMonstersCouldSpawn`・`makesSoilBesideBareWaterAndLightsThePlot`(ともに明かり系)は同じ run で落ちた。不安定扱い。
