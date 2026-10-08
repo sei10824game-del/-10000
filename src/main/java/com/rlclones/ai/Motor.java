@@ -963,9 +963,85 @@ public final class Motor {
         }
     }
 
+    private int breathSteps;
+
+    public int breathStepsTaken() {
+        return breathSteps;
+    }
+
+    /**
+     * Low on air with water all the way up to a ceiling, going straight up is useless: swim along the water to the nearest
+     * air pocket (searched through water and air cells). False when the surface is right above, or no air is reachable.
+     */
+    private boolean breathSteer() {
+        if (!self.isInWater() || self.isPassenger() || self.isInLava() || self.hasEffect(MobEffects.WATER_BREATHING) || self.canBreatheUnderwater()
+                || self.getAirSupply() >= self.getMaxAirSupply() * 0.5) {
+            return false;
+        }
+        BlockPos head = BlockPos.containing(self.getEyePosition());
+        if (!water(head)) {
+            return false;
+        }
+        BlockPos up = head;
+        while (water(up) && up.getY() < head.getY() + 40) {
+            up = up.above();
+        }
+        if (airCell(up)) {
+            return false; // the surface is straight above
+        }
+        java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
+        java.util.HashMap<BlockPos, BlockPos> from = new java.util.HashMap<>();
+        queue.add(head);
+        from.put(head, head);
+        BlockPos found = null;
+        while (!queue.isEmpty() && from.size() < 2500 && found == null) {
+            BlockPos cur = queue.poll();
+            for (Direction d : Direction.values()) {
+                BlockPos n = cur.relative(d);
+                if (from.containsKey(n) || Math.abs(n.getX() - head.getX()) + Math.abs(n.getZ() - head.getZ()) > 16 || Math.abs(n.getY() - head.getY()) > 12) {
+                    continue;
+                }
+                if (airCell(n)) {
+                    from.put(n, cur);
+                    found = n;
+                    break;
+                }
+                if (water(n)) {
+                    from.put(n, cur);
+                    queue.add(n);
+                }
+            }
+        }
+        if (found == null) {
+            return false;
+        }
+        BlockPos step = found;
+        while (!from.get(step).equals(head)) {
+            step = from.get(step);
+        }
+        Vec3 to = Vec3.atCenterOf(step).subtract(self.position().add(0, self.getBbHeight() / 2, 0));
+        Vec3 flat = new Vec3(to.x, 0, to.z);
+        moveDir = flat.lengthSqr() > 0.09 ? flat.normalize() : null;
+        if (to.y > 0.3) {
+            jump = true;
+            self.setDeltaMovement(self.getDeltaMovement().add(0, 0.04, 0));
+        } else if (to.y < -0.3) {
+            self.setDeltaMovement(self.getDeltaMovement().add(0, -0.04, 0));
+        }
+        breathSteps++;
+        return true;
+    }
+
+    /** Open air we can breathe in: no solid block, no fluid. */
+    private boolean airCell(BlockPos p) {
+        var st = self.level().getBlockState(p);
+        return st.getFluidState().isEmpty() && st.getCollisionShape(self.level(), p).isEmpty();
+    }
+
     public void tick() {
         flight();
         waterEscape();
+        breathSteer();
         sweepAhead();
         boolean stroke = swimStroke();
         // rotation
