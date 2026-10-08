@@ -76,6 +76,10 @@ public final class Crafting {
     @Nullable
     private BlockPos furnace;
     private long furnaceReadyAt;
+    /** What the furnace is cooking: more of the same is added while passing by instead of waiting for the batch to end. */
+    @Nullable
+    private Item furnaceItem;
+    private long topUpAt;
 
     public int crafted;
     public int smelted;
@@ -829,7 +833,18 @@ public final class Crafting {
         return best;
     }
 
+    /** The furnace nearby is still cooking and the bag holds more of the same: add it (smelting goes on while we do other things). */
+    private boolean topUp() {
+        if (self.level().getGameTime() < topUpAt || furnace == null || furnaceItem == null || self.blockPosition().distSqr(furnace) > 8 * 8 || self.level().getGameTime() >= furnaceReadyAt) {
+            return false;
+        }
+        return count(self, furnaceItem) > 0;
+    }
+
     private boolean smeltWork() {
+        if (topUp()) {
+            return true;
+        }
         return self.level().getGameTime() >= stationBlockedUntil && (furnace == null || furnaceFar()) && !smeltables(self).isEmpty() && fuelSlot(self) >= 0
                 && (nearest(Perception.BlockKind.FURNACE, 24) != null || count(self, Items.FURNACE) > 0);
     }
@@ -1105,6 +1120,21 @@ public final class Crafting {
             smelted++;
         }
         boolean inputEmpty = menu.getSlot(0).getItem().isEmpty();
+        int cooking = menu.getSlot(0).getItem().getCount();
+        if (!inputEmpty && furnaceItem != null && menu.getSlot(0).getItem().is(furnaceItem)) {
+            for (int i = 0; i < self.getInventory().items.size(); i++) {
+                if (self.getInventory().items.get(i).is(furnaceItem)) {
+                    shiftClickInventorySlot(menu, i); // top up the running batch
+                }
+            }
+            int added = menu.getSlot(0).getItem().getCount() - cooking;
+            if (added > 0) {
+                furnaceReadyAt += 200L * added;
+            }
+            topUpAt = self.level().getGameTime() + 200;
+            self.closeContainer();
+            return;
+        }
         // 2) load new input + fuel with shift-clicks from the inventory part of the screen
         if (inputEmpty) {
             List<Integer> todo = smeltables(self);
@@ -1121,6 +1151,7 @@ public final class Crafting {
         ItemStack input = menu.getSlot(0).getItem();
         if (!input.isEmpty()) {
             furnace = station;
+            furnaceItem = input.getItem();
             furnaceReadyAt = self.level().getGameTime() + 200L * input.getCount() + 20;
         } else {
             furnace = null;
