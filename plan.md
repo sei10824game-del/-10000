@@ -532,3 +532,9 @@
 3. ソーク: 鉄インゴットは 6 体中 1〜4 体、鉄ツルハシ・ダイヤは 0。進行を上げる案(会話で出したもの): 各段階の到達tickを報酬にする・`escape`(約1/6)と `none` を減らす・成功した個体のQ表を共有・Q表を次のソークへ引き継ぐ・洞窟を優先して探す。強化学習で適応する方針で、手順の決め打ちはしない
 4. ソークの落下死: (3233〜3234, 77, 34〜35) で2体が高さ21の落下。採集だけでなく移動でも死亡地点を避けるか検討
 5. 未実装の要求: R-23(ドアで息継ぎ)・戦闘の準備/修繕/集団戦術・看板/地図/交易(REQUIREMENTS.md に ID なし。登録から)
+
+### 36. cutsATallTreeToTheTop の原因(e98b1bf の run 37788880748)
+- 原因A: ジャンプの頂点で目が届く距離に入り、`runHarvest` が採掘に切り替わって `scaffoldStep()` が足場を置けなかった → 足場作業中(`scafBase != null`)は完了まで続ける。
+- 原因B: `Perception.isTreeLog` が5ブロック上までしか葉を見ず、高い幹の下の原木(y2,y3)が建材扱いになった → 幹の天辺まで辿って葉を探す。
+- `lightsUpWhereMonstersCouldSpawn` は直前の run では通っていた(並列テストの明かりの影響の疑い、不安定扱い)。
+- 未確認: この修正の CI。`makesAndPutsDownAFurnaceForRawFood`・`creativeBuildsPortalsAndAnEnchantingRoom` は引き続き失敗。

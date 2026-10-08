@@ -4111,7 +4111,8 @@ public final class CloneController {
             return false;
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
-        if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3) {
+        // (a pillar jump under way is finished first: its peak brings the eye into reach, and switching to mining there lost every placement)
+        if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3 || kind == Perception.BlockKind.LOG && scafBase != null) {
             if (kind == Perception.BlockKind.LOG && center.y - self.getEyeY() > 0.5 && Motor.horizontalDistance(self.position(), center) < 4.0
                     && scaffold.size() < 8 && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && !self.isInWater()) {
                 if (scaffoldStep()) {
@@ -4124,6 +4125,7 @@ public final class CloneController {
                 blockTarget = null;
                 return false;
             }
+            scafBase = null;
             // a log up in the air cannot be walked to: go to the foot of the trunk (then scaffold up if it is still out of reach)
             motor.navigate(kind == Perception.BlockKind.LOG ? new Vec3(center.x, Math.min(center.y, self.getY()), center.z) : motor.approachPoint(blockTarget),
                     kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);

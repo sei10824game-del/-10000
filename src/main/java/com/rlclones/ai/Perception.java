@@ -320,7 +320,11 @@ public final class Perception {
     }
 
     private static boolean isTreeLog(Level level, BlockPos pos) {
-        for (BlockPos p : BlockPos.betweenClosed(pos.offset(-2, 0, -2), pos.offset(2, 5, 2))) {
+        BlockPos top = pos; // the crown sits on top of the trunk: a low log of a tall trunk is a tree log too
+        while (top.getY() - pos.getY() < 32 && level.getBlockState(top.above()).is(BlockTags.LOGS)) {
+            top = top.above();
+        }
+        for (BlockPos p : BlockPos.betweenClosed(pos.offset(-2, 0, -2), top.offset(2, 5, 2))) {
             BlockState s = level.getBlockState(p);
             if (s.getBlock() instanceof LeavesBlock && s.hasProperty(LeavesBlock.PERSISTENT) && !s.getValue(LeavesBlock.PERSISTENT)) {
                 return true;
