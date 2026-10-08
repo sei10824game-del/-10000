@@ -499,6 +499,25 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 1500)
+    public static void makesCharcoalFromSpareLogs(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.FURNACE));
+        c.getInventory().add(new ItemStack(Items.OAK_LOG, 16));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        c.getInventory().add(new ItemStack(Items.RAW_IRON, 3));
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.CHARCOAL) >= 1 && c.getInventory().countItem(Items.OAK_LOG) >= 8,
+                    "charcoal from the spare logs only: charcoal " + c.getInventory().countItem(Items.CHARCOAL) + " logs " + c.getInventory().countItem(Items.OAK_LOG));
+            h.assertTrue(c.getInventory().countItem(Items.IRON_INGOT) >= 1, "then iron smelts, has " + c.getInventory().countItem(Items.IRON_INGOT));
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void clonesGlideWithElytra(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
