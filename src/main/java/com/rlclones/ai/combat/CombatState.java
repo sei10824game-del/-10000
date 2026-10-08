@@ -14,7 +14,9 @@ public final class CombatState {
     public static final int WINDUP = 2; // enemy is charging something (creeper fuse, bow draw)
     public static final int CROWD = 3;  // hostiles around me: 1 / 2-3 / 4+
     public static final int ELEV = 3;   // enemy below / level / above
-    public static final int SIZE = DIST * OWN * ENEMY * HP * WINDUP * CROWD * ELEV;
+    public static final int TERRAIN = 3; // open / walls at the sides / hazard near (the most significant digit: older saved tables keep their keys)
+    private static final int BASE = DIST * OWN * ENEMY * HP * WINDUP * CROWD * ELEV;
+    public static final int SIZE = BASE * TERRAIN;
 
     public static final String[] DIST_NAMES = {"deep", "enemy_reach", "my_reach", "near", "far"};
 
@@ -22,6 +24,10 @@ public final class CombatState {
     }
 
     public static int encode(int dist, int own, int enemy, int hp, int windup, int crowd, int elev) {
+        return encode(dist, own, enemy, hp, windup, crowd, elev, 0);
+    }
+
+    public static int encode(int dist, int own, int enemy, int hp, int windup, int crowd, int elev, int terrain) {
         int k = clamp(dist, DIST);
         k = k * OWN + clamp(own, OWN);
         k = k * ENEMY + clamp(enemy, ENEMY);
@@ -29,12 +35,14 @@ public final class CombatState {
         k = k * WINDUP + clamp(windup, WINDUP);
         k = k * CROWD + clamp(crowd, CROWD);
         k = k * ELEV + clamp(elev, ELEV);
-        return k;
+        return clamp(terrain, TERRAIN) * BASE + k;
     }
 
-    /** Returns {dist, own, enemy, hp, windup, crowd, elev}. */
+    /** Returns {dist, own, enemy, hp, windup, crowd, elev, terrain}. */
     public static int[] decode(int key) {
-        int[] v = new int[7];
+        int[] v = new int[8];
+        v[7] = key / BASE;
+        key %= BASE;
         v[6] = key % ELEV;
         key /= ELEV;
         v[5] = key % CROWD;
@@ -57,8 +65,8 @@ public final class CombatState {
 
     public static String describe(int key) {
         int[] v = decode(key);
-        return String.format(Locale.ROOT, "dist=%s own=%d enemy=%d hp=%d windup=%d crowd=%d elev=%d",
-                DIST_NAMES[v[0]], v[1], v[2], v[3], v[4], v[5], v[6]);
+        return String.format(Locale.ROOT, "dist=%s own=%d enemy=%d hp=%d windup=%d crowd=%d elev=%d terrain=%d",
+                DIST_NAMES[v[0]], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
     }
 
     /**
@@ -73,6 +81,7 @@ public final class CombatState {
         int hp = v[3];
         boolean windup = v[4] == 1;
         int crowd = v[5];
+        int terrain = v[7];
         boolean inMyReach = dist <= 2;
         boolean far = dist >= 3;
 
@@ -89,6 +98,9 @@ public final class CombatState {
         q[CombatAction.SHOOT.ordinal()] = far ? (explosive ? 0.8f : 0.4f) : -0.3f;
         q[CombatAction.USE_ITEM.ordinal()] = own < 2 ? 0.25f : 0.1f;
         q[CombatAction.PILLAR.ordinal()] = crowd >= 1 && hp == 0 ? 0.3f : -0.1f;
+
+        // a better spot is worth a few steps when exposed to a crowd or beside a hazard; the table learns the rest
+        q[CombatAction.POSITION.ordinal()] = terrain == Terrain.HAZARD ? 0.5f : terrain == Terrain.OPEN && crowd >= 1 ? 0.35f : -0.1f;
 
         if (hp == 0) {
             q[CombatAction.APPROACH.ordinal()] -= 0.3f;

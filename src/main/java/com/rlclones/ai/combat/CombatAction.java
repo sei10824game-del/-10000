@@ -14,7 +14,9 @@ public enum CombatAction {
     SHOOT(40),
     PILLAR(14),
     /** Right-click the held special weapon (modded ability, gun, staff...); the effect is learned per enemy. */
-    USE_ITEM(45);
+    USE_ITEM(45),
+    /** Walk to a better spot nearby (walls at the sides, height over the enemy, away from hazards); see {@link Terrain}. */
+    POSITION(40);
 
     public static final CombatAction[] VALUES = values();
     public static final int COUNT = VALUES.length;

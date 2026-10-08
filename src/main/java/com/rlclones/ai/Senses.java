@@ -147,7 +147,7 @@ public final class Senses {
         int crowdBin = crowd <= 1 ? 0 : crowd <= 3 ? 1 : 2;
         double dy = enemy.getY() - agent.getY();
         int elev = dy < -1.5 ? 0 : dy > 1.5 ? 2 : 1;
-        return CombatState.encode(dist, own, enemyReady, hp, windup, crowdBin, elev);
+        return CombatState.encode(dist, own, enemyReady, hp, windup, crowdBin, elev, com.rlclones.ai.combat.Terrain.state(agent.level(), agent.blockPosition()));
     }
 
     /** Number of hostiles the observer can see within 6 blocks of the agent. */

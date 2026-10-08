@@ -2614,6 +2614,14 @@ public final class CloneController {
                 }
             }
             case USE_ITEM -> useMode = -1;
+            case POSITION -> {
+                spot = target == null ? null : com.rlclones.ai.combat.Terrain.bestSpot(self, target);
+                if (spot == null) {
+                    actionDone = true;
+                } else {
+                    positions++;
+                }
+            }
             default -> {
             }
         }
@@ -2708,8 +2716,20 @@ public final class CloneController {
             }
             case USE_ITEM -> useLearned(t);
             case PILLAR -> pillar();
+            case POSITION -> {
+                motor.lookAt(t);
+                if (spot == null || Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(spot)) < 0.7) {
+                    actionDone = true;
+                } else {
+                    motor.navigate(Vec3.atBottomCenterOf(spot), 0.6, true);
+                }
+            }
         }
     }
+
+    /** The better spot a POSITION action is walking to / how many were started (tests). */
+    private BlockPos spot;
+    public int positions;
 
     /** Fire whatever ranged weapon we carry, operated the way that weapon type is operated by a player. */
     private void shoot(Entity t, double gap) {

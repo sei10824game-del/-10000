@@ -2327,6 +2327,34 @@ public final class CloneGameTests {
         });
     }
 
+    /** Terrain in a fight: open ground reads as open, an alcove as covered, a lava edge as hazard; POSITION walks into the alcove. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "weapons2")
+    public static void takesTheAlcoveInAFight(GameTestHelper h) {
+        // a 1-wide alcove at x 3..4, z 3 (stone on both sides and behind)
+        for (int x = 2; x <= 5; x++) {
+            for (int y = 2; y <= 3; y++) {
+                h.setBlock(new BlockPos(x, y, 2), Blocks.STONE);
+                h.setBlock(new BlockPos(x, y, 4), Blocks.STONE);
+            }
+        }
+        for (int y = 2; y <= 3; y++) {
+            h.setBlock(new BlockPos(2, y, 3), Blocks.STONE);
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        h.assertTrue(com.rlclones.ai.combat.Terrain.state(h.getLevel(), h.absolutePos(new BlockPos(3, 2, 3))) == com.rlclones.ai.combat.Terrain.COVERED, "alcove reads as covered");
+        h.assertTrue(com.rlclones.ai.combat.Terrain.state(h.getLevel(), h.absolutePos(new BlockPos(9, 2, 9))) == com.rlclones.ai.combat.Terrain.OPEN, "open ground reads as open");
+        c.controller().forcedAction = com.rlclones.ai.combat.CombatAction.POSITION;
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.FIGHT;
+        dummy(h, 11.5, 7.5);
+        h.succeedWhen(() -> {
+            BlockPos at = c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO));
+            h.assertTrue(c.controller().positions >= 1 && at.getZ() == 3 && at.getX() <= 5, "walked into the alcove, at " + at.toShortString() + " positions " + c.controller().positions);
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 400, batch = "weapons2")
     public static void sweepsACrowdWithTheSword(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, -90f, true);
