@@ -571,3 +571,8 @@
 - 実装済み(CI 未確認): 聴覚。位置つきの音(`ClientboundSoundPacket`)の発生源の特定を、tick ごとに1回だけ行い共有(`CloneController.SOUND_SOURCES`)。結果は聞く側に依らない。ついでに「自分の音を近くの他者の音と取り違える」を直した(自分を除外していた)
 - 共有しないもの: 視野・視線の判定(`canSee`)、ブロック走査(`scanBlocks` は各クローンの FOV の光線10本)、記憶(`Perception.memory`)。これらはクローンごとの認知そのもの。
 - 実装済み(CI 未確認): `isTreeLog` の tick 内キャッシュ(`Perception.isTreeLogOnce`)、音の名前の分割結果キャッシュ(`CloneController.SOUND_KINDS`)。残りの候補: 自分由来の音の早期 return。
+
+### 42. run 37827281727 の結果(R-38・R-26・R-50 の最初の実装)
+- コンパイルは通った。`feedsAHurtFavouriteAnimal`・`sellsSurplusWheatToAVillager` は通過。
+- 落ちた: `putsUpASignByTheBase`(理由不明 → `Persona.signWhy` を失敗メッセージに足した)、`cutsATallTreeToTheTop`(前の run では通過。y2 の最下段が残り、足場の上げ下げを繰り返して時間切れ。不安定の疑い)、`stayshomeatnightwithoutaweapon`・`goesForAnAdvancementWhenIdle`(今回初。日時が全テストで共有されるための干渉か、要確認)、`lightsUpWhereMonstersCouldSpawn`(不安定)。
+- ソーク: 死亡 4 体(6 体中)。
