@@ -2014,8 +2014,15 @@ public final class CloneController {
     /** How the clone last died (for diagnostics). */
     public String lastDeath = "";
 
+    private String lastOptionsShort() {
+        String log = String.valueOf(optionLog);
+        return log.length() > 120 ? log.substring(log.length() - 120) : log;
+    }
+
     public void onDeath(DamageSource source) {
-        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel();
+        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel()
+                + " fall=" + (int) self.fallDistance + " pits=" + pits.busy() + " doorBreath=" + doorBreath.busy() + " lastOpts=" + lastOptionsShort()
+                + " attacker=" + (source.getEntity() == null ? "-" : Perception.typeId(source.getEntity()));
         com.rlclones.RLClones.LOGGER.info("CLONE-DEATH {} {} t={}", self.getGameProfile().getName(), lastDeath, self.level().getGameTime());
         if (option != null) {
             finishOption(true);
