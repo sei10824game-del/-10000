@@ -283,6 +283,7 @@ public final class Persona {
         tidyTick(now);
         pantryTick(now);
         diaryTick(now);
+        signTick();
         if (stormTick(now) || pantryRun > 0 && hungryRun(now)) {
             return true;
         }
@@ -779,6 +780,42 @@ public final class Persona {
             return false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------ R-50: a sign by the base chest
+
+    /** Signs put up (tests). */
+    public int signsPlaced;
+    private boolean signDone;
+
+    /** With a sign in the bag, standing by a base chest on firm ground: put it up there, saying whose chest it is. */
+    private void signTick() {
+        if (signDone || !Config.get(Config.ALLOW_BLOCK_PLACING, true)) {
+            return;
+        }
+        int slot = -1;
+        for (int i = 0; i < self.getInventory().items.size(); i++) {
+            if (self.getInventory().items.get(i).is(ItemTags.SIGNS)) {
+                slot = i;
+                break;
+            }
+        }
+        Bases.Base base = Bases.get(self.getServer()).nearest(level().dimension(), self.position(), 6);
+        BlockPos feet = self.blockPosition();
+        if (slot < 0 || base == null || !level().getBlockState(feet).canBeReplaced() || !level().getBlockState(feet.below()).isFaceSturdy(level(), feet.below(), net.minecraft.core.Direction.UP)) {
+            return;
+        }
+        int before = self.getInventory().selected;
+        Equipment.select(self, slot);
+        if (motor.useOnTopFace(feet.below()) && level().getBlockEntity(feet) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) {
+            String name = self.getGameProfile().getName();
+            sign.updateText(t -> t.setMessage(0, Component.literal(name)).setMessage(1, Component.literal("lives here")), true);
+            signsPlaced++;
+            signDone = true;
+        }
+        if (before < net.minecraft.world.entity.player.Inventory.getSelectionSize()) {
+            self.getInventory().selected = before;
+        }
     }
 
     // ------------------------------------------------------------------ R-49: a diary in the base chest

@@ -82,6 +82,7 @@ public final class CloneController {
     private final DoorBreath doorBreath;
     private final Structures structures;
     private final Pits pits;
+    private final Trading trading;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -190,6 +191,7 @@ public final class CloneController {
         this.doorBreath = new DoorBreath(self, motor);
         this.structures = new Structures(self);
         this.pits = new Pits(self, motor);
+        this.trading = new Trading(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -332,6 +334,10 @@ public final class CloneController {
 
     public Persona persona() {
         return persona;
+    }
+
+    public Trading trading() {
+        return trading;
     }
 
     public Pits pits() {
@@ -599,6 +605,9 @@ public final class CloneController {
         }
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = lighting.proofTick(now); // R-26: spare torches go round the base
+        }
+        if (!itemBusy && option == Option.REST && !escaping) {
+            itemBusy = trading.tick(now); // R-50: a villager near: sell the surplus, buy food / gear
         }
         Prof.add(Prof.REFLEXES, pr);
         long pt = Prof.t();

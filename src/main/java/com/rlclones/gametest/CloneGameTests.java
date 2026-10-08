@@ -5579,6 +5579,44 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-50: surplus wheat and a villager buying it: the clone walks over and sells it for an emerald. */
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r12pet")
+    public static void sellsSurplusWheatToAVillager(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WHEAT, 64));
+        net.minecraft.world.entity.npc.Villager v = h.spawn(EntityType.VILLAGER, new Vec3(11.5, 2, 7.5));
+        v.setNoAi(true);
+        v.getOffers().clear();
+        v.getOffers().add(new net.minecraft.world.item.trading.MerchantOffer(new ItemStack(Items.WHEAT, 20), new ItemStack(Items.EMERALD, 1), 16, 2, 0.05f));
+        h.onEachTick(() -> {
+            c.controller().trading().tick(h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().trading().deals >= 1 && c.getInventory().countItem(Items.EMERALD) >= 1, "wheat sold for an emerald (deals " + c.controller().trading().deals + ")");
+            finish(h, c);
+        });
+    }
+
+    /** R-50: a sign in the bag by the base: it is put up, with the clone's name on it. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r12pet")
+    public static void putsUpASignByTheBase(GameTestHelper h) {
+        clearBases(h);
+        baseAt(h, new BlockPos(7, 2, 7));
+        ClonePlayer c = clone(h, 6.5, 6.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_SIGN));
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().persona().signsPlaced >= 1, "a sign put up");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     /** R-38: a hurt favourite animal and its food in the bag: the clone feeds it. */
     @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r12pet")
     public static void feedsAHurtFavouriteAnimal(GameTestHelper h) {
