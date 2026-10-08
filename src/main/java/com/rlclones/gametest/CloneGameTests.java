@@ -4221,6 +4221,29 @@ public final class CloneGameTests {
         });
     }
 
+    /** Low on air, water up to the ceiling above: swim along to the air pocket instead of pushing up against the roof. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r10swim")
+    public static void swimsToAnAirPocketUnderACeiling(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 4; z <= 10; z++) {
+                for (int y = -2; y <= 3; y++) {
+                    boolean wall = x == 1 || x == 13 || z == 4 || z == 10 || y == -2 || y == 3 || (y == 2 && x <= 9);
+                    h.setBlock(new BlockPos(x, y, z), wall ? Blocks.STONE : y == 2 ? Blocks.AIR : Blocks.WATER);
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
+        Vec3 start = h.absoluteVec(new Vec3(3.5, 0.5, 7.5));
+        c.teleportTo(h.getLevel(), start.x, start.y, start.z, -90f, 0f);
+        c.setAirSupply(60);
+        h.onEachTick(() -> c.controller().motor().tick());
+        h.succeedWhen(() -> {
+            h.assertTrue(c.isAlive() && c.getAirSupply() >= c.getMaxAirSupply() * 0.9, "breathing in the pocket (air " + c.getAirSupply() + " x " + (c.getX() - start.x)
+                    + " steps " + c.controller().motor().breathStepsTaken() + ")");
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 900, batch = "r10fish")
     public static void huntsFishInTheWater(GameTestHelper h) {
         deepPool(h, 4, 10);
