@@ -700,8 +700,10 @@ public final class CloneController {
             String key = level.dimension().location() + path + x + y + z;
             source = SOUND_SOURCES.get(key);
             if (source == null || !source.isAlive()) {
-                String[] parts = path.split("\\.");
-                String kind = parts.length > 1 ? parts[1] : "";
+                String kind = SOUND_KINDS.computeIfAbsent(path, pa -> {
+                    String[] parts = pa.split("\\.");
+                    return parts.length > 1 ? parts[1] : "";
+                });
                 source = null;
                 double best = Double.MAX_VALUE;
                 for (LivingEntity e : level.getEntitiesOfClass(LivingEntity.class, new net.minecraft.world.phys.AABB(pos, pos).inflate(2.5), LivingEntity::isAlive)) {
@@ -735,6 +737,7 @@ public final class CloneController {
     }
 
     public long heardSounds;
+    private static final java.util.HashMap<String, String> SOUND_KINDS = new java.util.HashMap<>(); // sound name -> the creature part of it
     private static long soundSourceTick = Long.MIN_VALUE;
     private static final java.util.HashMap<String, Entity> SOUND_SOURCES = new java.util.HashMap<>();
     public int quarried;

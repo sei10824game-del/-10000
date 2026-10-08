@@ -570,4 +570,4 @@
 - 方針(ユーザー): 確認していないのに分かるのは不自然。クローンが得る情報は、そのクローンの視野(FOV)・視線・聴覚の範囲に限る。クローン同士の情報共有は、既存の会話(`Chat`・`DANGER`・`DIGSITE` など)を通すものだけ。
 - 実装済み(CI 未確認): 聴覚。位置つきの音(`ClientboundSoundPacket`)の発生源の特定を、tick ごとに1回だけ行い共有(`CloneController.SOUND_SOURCES`)。結果は聞く側に依らない。ついでに「自分の音を近くの他者の音と取り違える」を直した(自分を除外していた)
 - 共有しないもの: 視野・視線の判定(`canSee`)、ブロック走査(`scanBlocks` は各クローンの FOV の光線10本)、記憶(`Perception.memory`)。これらはクローンごとの認知そのもの。
-- 次の候補(いずれも結果が聞く側・見る側に依らない計算だけ): ブロック分類 `classify`/`isTreeLog` の tick 内キャッシュ(同じ座標を多数が見る場合)、足音など自分由来の音を自分で聞かない早期 return、`path.split` の結果キャッシュ。
+- 実装済み(CI 未確認): `isTreeLog` の tick 内キャッシュ(`Perception.isTreeLogOnce`)、音の名前の分割結果キャッシュ(`CloneController.SOUND_KINDS`)。残りの候補: 自分由来の音の早期 return。

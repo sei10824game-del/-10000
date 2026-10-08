@@ -313,10 +313,31 @@ public final class Perception {
     /** Like {@link #classify(BlockState)}, but logs only count when they belong to a natural tree (not a house wall). */
     public static BlockKind classify(Level level, BlockPos pos) {
         BlockKind kind = classify(level.getBlockState(pos));
-        if (kind == BlockKind.LOG && !isTreeLog(level, pos)) {
+        if (kind == BlockKind.LOG && !isTreeLogOnce(level, pos)) {
             return BlockKind.WOOD; // a log that is part of something built
         }
         return kind;
+    }
+
+    private static long treeTick = Long.MIN_VALUE;
+    private static Level treeLevel;
+    private static final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap TREE_LOGS = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
+
+    /** The same log is looked at by every clone in a grove, every time: worked out once a tick (it depends on the world only, not on who asks). */
+    private static boolean isTreeLogOnce(Level level, BlockPos pos) {
+        long gt = level.getGameTime();
+        if (gt != treeTick || level != treeLevel) {
+            TREE_LOGS.clear();
+            treeTick = gt;
+            treeLevel = level;
+        }
+        long key = pos.asLong();
+        if (TREE_LOGS.containsKey(key)) {
+            return TREE_LOGS.get(key);
+        }
+        boolean r = isTreeLog(level, pos);
+        TREE_LOGS.put(key, r);
+        return r;
     }
 
     private static boolean isTreeLog(Level level, BlockPos pos) {
