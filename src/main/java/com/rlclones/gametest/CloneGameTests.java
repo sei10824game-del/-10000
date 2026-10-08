@@ -5579,6 +5579,24 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-38: a hurt favourite animal and its food in the bag: the clone feeds it. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r12pet")
+    public static void feedsAHurtFavouriteAnimal(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 3.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.CARROT, 4));
+        Pig pig = pig(h, 11.5, 7.5);
+        pig.setHealth(3f);
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().persona().petsFed >= 1 && pig.getHealth() > 3f, "the hurt animal was fed (fed " + c.controller().persona().petsFed + ")");
+            finish(h, c);
+        });
+    }
+
     /** R-39: an untidy base chest next to the clone is put in order: food first, tools next, stacks merged. */
     @GameTest(template = ARENA, timeoutTicks = 300, batch = "r12tidy")
     public static void sortsTheBaseChest(GameTestHelper h) {

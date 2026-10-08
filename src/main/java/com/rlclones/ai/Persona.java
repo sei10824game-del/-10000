@@ -442,12 +442,31 @@ public final class Persona {
         motor.stop();
         motor.lookAt(pet.getEyePosition());
         if (visitTicks > 40) {
+            if (pet.getHealth() < pet.getMaxHealth()) {
+                feedPet(); // R-38: hurt: a bite of its favourite food, if we have it
+            }
             petVisits++;
             visitTicks = 0;
             lastVisit = now;
             return false;
         }
         return true;
+    }
+
+    /** Pets fed (tests). */
+    public int petsFed;
+
+    private void feedPet() {
+        var inv = self.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            ItemStack st = inv.items.get(i);
+            if (!st.isEmpty() && pet.isFood(st)) {
+                pet.heal(4f); // (a cow eats wheat, a pig a carrot: it also falls in love, which the breeding code can use)
+                st.shrink(1);
+                petsFed++;
+                return;
+            }
+        }
     }
 
     // ------------------------------------------------------------------ R-39: tidy chests

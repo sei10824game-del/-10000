@@ -72,4 +72,40 @@ public final class Lighting {
         }
         return true;
     }
+
+    private BlockPos proofSpot;
+
+    /** R-26: more than 16 spare torches and resting by a base: walk to a dark spot round it (the tick above then puts one down). True while walking. */
+    public boolean proofTick(long now) {
+        if (torchSlot(self) < 0 || self.getInventory().countItem(Items.TORCH) <= 16 || !self.onGround() || !Config.get(Config.ALLOW_BLOCK_PLACING, true)) {
+            proofSpot = null;
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        if (proofSpot != null && level.getBrightness(LightLayer.BLOCK, proofSpot) > 0) {
+            proofSpot = null; // lit meanwhile
+        }
+        if (proofSpot == null) {
+            if ((now + self.getId()) % 100 != 0 || com.rlclones.clone.Bases.get(self.getServer()).nearest(level.dimension(), self.position(), 12) == null) {
+                return false;
+            }
+            BlockPos feet = self.blockPosition();
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-8, -1, -8), feet.offset(8, 1, 8))) {
+                if (level.getBrightness(LightLayer.BLOCK, p) == 0 && level.getBlockState(p).isAir() && level.getBlockState(p.below()).isFaceSturdy(level, p.below(), Direction.UP)
+                        && level.getBrightness(LightLayer.SKY, p) < 8) {
+                    proofSpot = p.immutable();
+                    break;
+                }
+            }
+            if (proofSpot == null) {
+                return false;
+            }
+        }
+        if (self.blockPosition().distSqr(proofSpot) <= 2) {
+            proofSpot = null; // there: tick() puts the torch down
+            return false;
+        }
+        motor.navigate(net.minecraft.world.phys.Vec3.atBottomCenterOf(proofSpot), 1.0, false);
+        return true;
+    }
 }

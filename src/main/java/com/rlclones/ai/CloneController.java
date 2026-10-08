@@ -597,6 +597,9 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE && ((now + self.getId()) % 20) == 7 && !self.isUsingItem()) {
             itemBusy = lighting.tick(); // a torch where monsters could spawn
         }
+        if (!itemBusy && option == Option.REST && !escaping) {
+            itemBusy = lighting.proofTick(now); // R-26: spare torches go round the base
+        }
         Prof.add(Prof.REFLEXES, pr);
         long pt = Prof.t();
         // look once a second, but only while standing (a hop out of a stuck walk must not hide the hole we are in)
