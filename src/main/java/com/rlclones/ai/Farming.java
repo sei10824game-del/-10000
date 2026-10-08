@@ -445,6 +445,10 @@ public final class Farming {
             case SOIL -> dirtSlot() >= 0 && (bank(level, target) || st.canBeReplaced() && !level.getBlockState(target.below()).getCollisionShape(level, target.below()).isEmpty());
         };
         if (!stillValid) {
+            if (job == Job.SEEDS && !isGrass(st) && collect == 0) {
+                collect = 15; // cut on the way (R-17) or by someone: walk over where it fell to pick the seeds up
+                return Status.WORKING;
+            }
             target = null;
             return Status.WORKING;
         }
