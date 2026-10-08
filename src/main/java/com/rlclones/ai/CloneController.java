@@ -2058,8 +2058,9 @@ public final class CloneController {
             return;
         }
         if ((option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY) && !hasPickFor(null) && !self.isCreative()
-                && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && noPickUntil < now) {
-            if (!toolUp(null)) {
+                && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && !(option == Option.STAIRS && stairs.isAscending())) {
+            // (checked every tick, also while the pickaxe breaks half way down or a "no pickaxe" pause is running)
+            if (noPickUntil < now && !toolUp(null)) {
                 noPickUntil = now + 1200; // R-30: no pickaxe and none to be made: food and the like for a while, not digging by hand
             }
             finishOption(false); // (toolUp true: it chose crafting / wood as the next option)

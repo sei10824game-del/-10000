@@ -4244,6 +4244,30 @@ public final class CloneGameTests {
         });
     }
 
+    /** No pickaxe (and none to be made): a digging option ends at once instead of breaking stone by hand. */
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "r10swim")
+    public static void doesNotDigWithoutAPickaxe(GameTestHelper h) {
+        for (int x = 9; x <= 11; x++) {
+            for (int z = 7; z <= 9; z++) {
+                h.setBlock(new BlockPos(x, 2, z), Blocks.STONE);
+            }
+        }
+        ClonePlayer c = clone(h, 7.5, 8.5, -90f, false);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.QUARRY;
+        c.setAiEnabled(true);
+        h.runAfterDelay(150, () -> {
+            int stone = 0;
+            for (int x = 9; x <= 11; x++) {
+                for (int z = 7; z <= 9; z++) {
+                    stone += h.getBlockState(new BlockPos(x, 2, z)).is(Blocks.STONE) ? 1 : 0;
+                }
+            }
+            h.assertTrue(stone == 9, "no stone broken by hand, " + stone + " left of 9");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 900, batch = "r10fish")
     public static void huntsFishInTheWater(GameTestHelper h) {
         deepPool(h, 4, 10);

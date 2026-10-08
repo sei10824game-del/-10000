@@ -669,6 +669,11 @@ public final class StairMining {
         return null;
     }
 
+    /** Walking back up an existing staircase (no digging needed, so no pickaxe needed). */
+    public boolean isAscending() {
+        return ascending;
+    }
+
     public boolean busy() {
         return stairs != null && stage >= 0;
     }
