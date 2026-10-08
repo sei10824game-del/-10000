@@ -3977,8 +3977,8 @@ public final class CloneController {
         }
         scafTicks++;
         if (!scafPlaced) {
-            if (scafTicks <= 1 && self.onGround()) {
-                motor.jump();
+            if (self.onGround()) {
+                motor.jump(); // (a jump asked for on the first tick only was lost when we were not quite on the ground yet)
             }
             if (self.getY() >= scafBase.getY() + 1.0 && level.getBlockState(scafBase).canBeReplaced()) {
                 Equipment.select(self, Equipment.pillarBlockSlot(self));
