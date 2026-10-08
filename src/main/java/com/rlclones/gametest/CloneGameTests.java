@@ -483,6 +483,34 @@ public final class CloneGameTests {
         });
     }
 
+    /** More raw iron found while a batch cooks is added to the running furnace (no waiting for the batch to end). */
+    @GameTest(template = ARENA, timeoutTicks = 1500)
+    public static void topsUpARunningFurnace(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.FURNACE));
+        c.getInventory().add(new ItemStack(Items.RAW_IRON, 2));
+        c.getInventory().add(new ItemStack(Items.COAL, 2));
+        boolean[] added = {false};
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+            if (!added[0]) {
+                for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 0, 1)), h.absolutePos(new BlockPos(13, 4, 13)))) {
+                    if (h.getLevel().getBlockEntity(p) instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity f
+                            && !f.getItem(0).isEmpty()) {
+                        c.getInventory().add(new ItemStack(Items.RAW_IRON, 2));
+                        added[0] = true;
+                    }
+                }
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(added[0] && c.getInventory().countItem(Items.IRON_INGOT) >= 4, "all 4 smelted, has " + c.getInventory().countItem(Items.IRON_INGOT)
+                    + " added=" + added[0] + " raw=" + c.getInventory().countItem(Items.RAW_IRON));
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 1000)
     public static void smeltsInAFurnace(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
