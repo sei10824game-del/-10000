@@ -4119,7 +4119,9 @@ public final class CloneController {
                 blockTarget = null;
                 return false;
             }
-            motor.navigate(kind == Perception.BlockKind.LOG ? center : motor.approachPoint(blockTarget), kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
+            // a log up in the air cannot be walked to: go to the foot of the trunk (then scaffold up if it is still out of reach)
+            motor.navigate(kind == Perception.BlockKind.LOG ? new Vec3(center.x, Math.min(center.y, self.getY()), center.z) : motor.approachPoint(blockTarget),
+                    kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
             if (motor.stuckCount() > 3) {
                 traceHarvest("stuck " + self.blockPosition().toShortString());
                 skipBlocks.put(blockTarget.immutable(), now());
