@@ -5901,7 +5901,7 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " path" + path + " time " + h.getLevel().getDayTime() % 24000L + " bases " + com.rlclones.clone.Bases.get(h.getLevel().getServer()).bases.stream().map(b -> b.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + ")");
+            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " path" + path + " ahead " + h.getBlockState(new BlockPos(5, 2, 7)).getBlock() + "/" + h.getBlockState(new BlockPos(5, 3, 7)).getBlock() + " near " + h.getLevel().getEntities(c, c.getBoundingBox().inflate(4)).stream().map(e -> e.getType().toShortString() + "@" + e.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + " time " + h.getLevel().getDayTime() % 24000L + " bases " + com.rlclones.clone.Bases.get(h.getLevel().getServer()).bases.stream().map(b -> b.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + ")");
             h.getLevel().setDayTime(before);
             finish(h, c);
             clearBases(h);
