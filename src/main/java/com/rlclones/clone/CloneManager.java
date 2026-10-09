@@ -210,8 +210,19 @@ public final class CloneManager {
         return errorCount;
     }
 
+    /** The first AI exception of the run, short (test diagnostics: the stack trace itself is only in the log). */
+    public static String firstError;
+
     public static void reportError(ClonePlayer clone, Throwable t) {
         errorCount++;
+        if (firstError == null) {
+            StringBuilder sb = new StringBuilder(clone.getGameProfile().getName() + ": " + t);
+            for (int i = 0; i < Math.min(8, t.getStackTrace().length); i++) {
+                sb.append(" < ").append(t.getStackTrace()[i].getClassName().replaceAll("^.*\\.", "")).append('.').append(t.getStackTrace()[i].getMethodName())
+                        .append(':').append(t.getStackTrace()[i].getLineNumber());
+            }
+            firstError = sb.toString();
+        }
         if (errorCount <= 10 || errorCount % 200 == 0) {
             RLClones.LOGGER.error("Clone {} AI error (#{})", clone.getGameProfile().getName(), errorCount, t);
         }

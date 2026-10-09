@@ -129,7 +129,7 @@ public final class CloneGameTests {
                 manager(h).remove(live, true, Component.literal("test finished"));
             }
         }
-        h.assertTrue(CloneManager.errors() == 0, "clone AI threw " + CloneManager.errors() + " errors (see log)");
+        h.assertTrue(CloneManager.errors() == 0, "clone AI threw " + CloneManager.errors() + " errors (first: " + CloneManager.firstError + ")");
         // finished arenas stay in the world (behind see-through barriers): leave no mobs there to distract later tests
         h.killAllEntities();
         clearAbove(h);
