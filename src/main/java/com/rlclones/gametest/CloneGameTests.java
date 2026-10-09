@@ -5897,7 +5897,7 @@ public final class CloneGameTests {
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " time " + h.getLevel().getDayTime() % 24000L + ")");
+            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " time " + h.getLevel().getDayTime() % 24000L + " bases " + com.rlclones.clone.Bases.get(h.getLevel().getServer()).bases.stream().map(b -> b.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + ")");
             h.getLevel().setDayTime(before);
             finish(h, c);
             clearBases(h);
