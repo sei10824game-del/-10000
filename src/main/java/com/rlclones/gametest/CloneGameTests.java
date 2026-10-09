@@ -6196,7 +6196,9 @@ public final class CloneGameTests {
                                 + " stairs=" + live.controller().stairs().stepsDug + "g" + live.controller().stairs().giveUps + "a" + live.controller().stairs().abandoned
                                 + " tunnel=" + live.controller().stairs().tunnelDug + " esc=" + live.controller().escapeStarts + " cd=" + live.controller().churnCooldowns
                                 + " dig=" + live.controller().digDrives + " | " + live.controller().stairs().debug + " | " + live.controller().crafting().smeltTrace()
-                                + " store=" + live.controller().storage().deposits + "/" + live.controller().storage().withdrawals + " food=" + com.rlclones.ai.FoodAid.foodItems(live));
+                                + " store=" + live.controller().storage().deposits + "/" + live.controller().storage().withdrawals + " food=" + com.rlclones.ai.FoodAid.foodItems(live)
+                                + " walls=" + live.controller().persona().plansStarted + "/" + live.controller().persona().plansHelped + "/" + live.controller().persona().plansRepaired
+                                + " placed=" + live.controller().persona().planWork().placed);
                     }
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
                     RLClones.LOGGER.info("SOAK-NONE (what the clone was busy with when no option ran) {}", nones);
