@@ -63,6 +63,89 @@ public class Bases extends SavedData {
 
     public final List<Pen> pens = new ArrayList<>();
 
+    /**
+     * R-59: a big job shared by several clones. The blocks are laid in order, in segments; a clone takes the first segment nobody
+     * has (a claim nobody has touched for 3000 ticks is up for grabs again) and works it through. Not saved: a plan lives for the session.
+     */
+    public static final class Plan {
+        public final int id;
+        public final ResourceKey<Level> dimension;
+        public final String kind;
+        public final List<BlockPos> blocks;
+        public final int segSize;
+        public final Map<Integer, java.util.UUID> claims = new HashMap<>();
+        private final Map<Integer, Long> claimedAt = new HashMap<>();
+        private final java.util.Set<Integer> done = new java.util.HashSet<>();
+
+        Plan(int id, ResourceKey<Level> dimension, String kind, List<BlockPos> blocks, int segSize) {
+            this.id = id;
+            this.dimension = dimension;
+            this.kind = kind;
+            this.blocks = blocks;
+            this.segSize = segSize;
+        }
+
+        public int segments() {
+            return (blocks.size() + segSize - 1) / segSize;
+        }
+
+        /** The segment to work: the one this clone already holds, else the first one that is free. -1 when none is left. */
+        public int claim(java.util.UUID who, long now) {
+            for (int s = 0; s < segments(); s++) {
+                Long at = claimedAt.get(s);
+                java.util.UUID by = claims.get(s);
+                if (!done.contains(s) && (by == null || by.equals(who) || at == null || now - at > 3000)) {
+                    claims.put(s, who);
+                    claimedAt.put(s, now);
+                    return s;
+                }
+            }
+            return -1;
+        }
+
+        public void touch(int segment, long now) {
+            claimedAt.put(segment, now);
+        }
+
+        public void finish(int segment) {
+            done.add(segment);
+        }
+
+        public boolean complete() {
+            return done.size() >= segments();
+        }
+    }
+
+    public final List<Plan> plans = new ArrayList<>();
+    private int nextPlanId = 1;
+
+    public Plan addPlan(ResourceKey<Level> dim, String kind, List<BlockPos> blocks, int segSize) {
+        Plan plan = new Plan(nextPlanId++, dim, kind, blocks, segSize);
+        plans.add(plan);
+        return plan;
+    }
+
+    @Nullable
+    public Plan plan(int id) {
+        for (Plan p : plans) {
+            if (p.id == id) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /** An unfinished plan of this kind near {@code pos}. */
+    @Nullable
+    public Plan openPlanNear(ResourceKey<Level> dim, Vec3 pos, double radius) {
+        for (Plan p : plans) {
+            if (p.dimension == dim && !p.complete() && Vec3.atCenterOf(p.blocks.get(0)).distanceTo(pos) < radius) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     /** Nether portals the clones know about ({@code pos}: a portal block at the bottom of the opening). */
     public record Portal(ResourceKey<Level> dimension, BlockPos pos) {
     }

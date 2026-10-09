@@ -980,6 +980,7 @@ public final class CloneGameTests {
         b.staircases.clear();
         b.shafts.clear();
         b.projects.clear();
+        b.plans.clear();
         b.setDirty();
     }
 
@@ -2115,6 +2116,41 @@ public final class CloneGameTests {
                     net.minecraft.world.entity.animal.Chicken::isBaby).isEmpty();
             h.assertTrue(baby || (c1.isInLove() && c2.isInLove()), "penned chickens get seeds to breed");
             finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** R-59: a wall of 12 blocks in 3 segments, two clones with stone: both work, no segment twice, the wall stands whole. */
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r16plan")
+    public static void buildsAWallTogether(GameTestHelper h) {
+        clearBases(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        java.util.List<BlockPos> line = new java.util.ArrayList<>();
+        for (int x = 2; x <= 13; x++) {
+            line.add(h.absolutePos(new BlockPos(x, 2, 11)));
+        }
+        var plan = bases.addPlan(h.getLevel().dimension(), "WALL", line, 4);
+        ClonePlayer a = clone(h, 3.5, 8.5, 0f, false);
+        ClonePlayer b = clone(h, 11.5, 8.5, 0f, false);
+        a.getInventory().add(new ItemStack(Items.COBBLESTONE, 24));
+        b.getInventory().add(new ItemStack(Items.COBBLESTONE, 24));
+        a.controller().persona().joinPlan(plan);
+        b.controller().persona().joinPlan(plan);
+        h.onEachTick(() -> {
+            for (ClonePlayer c : new ClonePlayer[]{a, b}) {
+                c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+                c.controller().motor().tick();
+            }
+        });
+        h.succeedWhen(() -> {
+            int stones = 0;
+            for (BlockPos p : line) {
+                stones += h.getLevel().getBlockState(p).isAir() ? 0 : 1;
+            }
+            h.assertTrue(stones == 12 && plan.complete(), "the whole wall stands (" + stones + "/12, a " + a.controller().persona().planWork().placed + " b "
+                    + b.controller().persona().planWork().placed + " " + a.controller().persona().planWork().debug + b.controller().persona().planWork().debug + ")");
+            h.assertTrue(new java.util.HashSet<>(plan.claims.values()).size() == 2, "and both of them worked on it");
+            finish(h, a, b);
             clearBases(h);
         });
     }

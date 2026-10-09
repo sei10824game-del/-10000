@@ -72,7 +72,7 @@ public final class Persona {
     public int dangersNoted;
 
     // project (a hamlet)
-    private enum Project {NONE, GOTO, BUILD, FEAST_GOTO, FEAST}
+    private enum Project {NONE, GOTO, BUILD, FEAST_GOTO, FEAST, PLAN}
     private Project project = Project.NONE;
     private BlockPos meet;
     private Builder builder;
@@ -180,6 +180,17 @@ public final class Persona {
             }
             return true;
         }
+        if (text.startsWith("PLAN ")) {
+            try {
+                Bases.Plan pl = Bases.get(self.getServer()).plan(Integer.parseInt(text.split(" ")[1]));
+                if (sender != self && pl != null && !pl.complete() && project == Project.NONE && now >= projectCooldown && Builder.buildingBlocks(self) >= pl.segSize
+                        && pl.dimension == level().dimension() && Vec3.atCenterOf(pl.blocks.get(0)).distanceTo(self.position()) < 64) {
+                    joinPlan(pl);
+                }
+            } catch (RuntimeException ignored) {
+            }
+            return true;
+        }
         if (text.startsWith("PROJECT ")) {
             String[] p = text.split(" ");
             if (sender != self && project == Project.NONE && now >= projectCooldown && Builder.buildingBlocks(self) >= Builder.BLOCKS) {
@@ -271,6 +282,9 @@ public final class Persona {
         if (project == Project.FEAST_GOTO || project == Project.FEAST) {
             return festivalTick(now);
         }
+        if (project == Project.PLAN) {
+            return planStep(now);
+        }
         if (project != Project.NONE) {
             return projectTick(now);
         }
@@ -294,6 +308,9 @@ public final class Persona {
             return true;
         }
         if (now >= projectCooldown && proposeProject(now)) {
+            return true;
+        }
+        if (now >= projectCooldown && proposeWall(now)) {
             return true;
         }
         return decorTick(now);
@@ -596,6 +613,69 @@ public final class Persona {
             return false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------ R-59: a big job shared with others
+
+    private PlanWork planWork;
+    /** Plans made / finished by walls (tests). */
+    public int plansStarted;
+    public int plansHelped;
+
+    public PlanWork planWork() {
+        if (planWork == null) {
+            planWork = new PlanWork(self, motor);
+        }
+        return planWork;
+    }
+
+    /** Take part in a plan (called when a call for hands is heard, and by tests). */
+    public void joinPlan(Bases.Plan plan) {
+        planWork().begin(plan);
+        project = Project.PLAN;
+        projectTicks = 0;
+        plansHelped++;
+    }
+
+    private boolean planStep(long now) {
+        PlanWork.Status st = planWork().tick();
+        if (st != PlanWork.Status.WORKING) {
+            project = Project.NONE;
+            projectCooldown = now + 6000;
+            return false;
+        }
+        return true;
+    }
+
+    /** A wall of 12 blocks along the ground (3 segments of 4) beside the base: something for several to do at once. */
+    private boolean proposeWall(long now) {
+        Bases bases = Bases.get(self.getServer());
+        Bases.Base base = bases.nearest(level().dimension(), self.position(), 24);
+        if (base == null || Builder.buildingBlocks(self) < 12 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || self.getRandom().nextFloat() > 0.01f
+                || bases.openPlanNear(level().dimension(), self.position(), 64) != null) {
+            return false;
+        }
+        for (int[] d : new int[][]{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}) {
+            List<BlockPos> line = new ArrayList<>();
+            BlockPos o = base.center.offset(-d[0] * 3 + 4 * (d[1] != 0 ? 1 : 0), 0, -d[1] * 3 + 4 * (d[0] != 0 ? 1 : 0));
+            for (int i = 0; i < 12; i++) {
+                BlockPos p = o.offset(d[0] * i, 0, d[1] * i);
+                if (!level().getBlockState(p).canBeReplaced() || !level().getBlockState(p.below()).isFaceSturdy(level(), p.below(), net.minecraft.core.Direction.UP)) {
+                    line = null;
+                    break;
+                }
+                line.add(p);
+            }
+            if (line != null) {
+                Bases.Plan plan = bases.addPlan(level().dimension(), "WALL", line, 4);
+                plansStarted++;
+                joinPlan(plan);
+                Chat.say(self, Component.literal("PLAN"), "PLAN " + plan.id);
+                return true;
+            }
+        }
+        projectCooldown = now + 6000;
+        return false;
     }
 
     // ------------------------------------------------------------------ R-41: the pantry
