@@ -2155,6 +2155,34 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-54: a finished wall with a block knocked out: a clone with stone nearby mends it. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r16plan")
+    public static void mendsABrokenWall(GameTestHelper h) {
+        clearBases(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        java.util.List<BlockPos> line = new java.util.ArrayList<>();
+        for (int x = 2; x <= 13; x++) {
+            line.add(h.absolutePos(new BlockPos(x, 2, 11)));
+            h.setBlock(new BlockPos(x, 2, 11), Blocks.COBBLESTONE);
+        }
+        var plan = bases.addPlan(h.getLevel().dimension(), "WALL", line, 4);
+        for (int sgm = 0; sgm < plan.segments(); sgm++) {
+            plan.finish(sgm);
+        }
+        h.setBlock(new BlockPos(8, 2, 11), Blocks.AIR);
+        ClonePlayer c = clone(h, 8.5, 8.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 8));
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(!h.getBlockState(new BlockPos(8, 2, 11)).isAir() && c.controller().persona().plansRepaired >= 1, "the gap in the wall is filled again");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

@@ -310,6 +310,9 @@ public final class Persona {
         if (now >= projectCooldown && proposeProject(now)) {
             return true;
         }
+        if (repairTick(now)) {
+            return true;
+        }
         if (now >= projectCooldown && proposeWall(now)) {
             return true;
         }
@@ -646,6 +649,34 @@ public final class Persona {
         }
         return true;
     }
+
+    /** R-54: a finished plan near us with blocks missing (broken, burnt, blown up): its segments are open again and we mend them. */
+    private boolean repairTick(long now) {
+        if (Builder.buildingBlocks(self) < 4 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || (now + self.getId()) % 100 != 0) {
+            return false;
+        }
+        for (Bases.Plan plan : Bases.get(self.getServer()).plans) {
+            if (plan.dimension != level().dimension() || !plan.complete() || Vec3.atCenterOf(plan.blocks.get(0)).distanceTo(self.position()) > 48) {
+                continue;
+            }
+            boolean any = false;
+            for (int i = 0; i < plan.blocks.size(); i++) {
+                if (level().getBlockState(plan.blocks.get(i)).canBeReplaced()) {
+                    plan.reopen(i / plan.segSize);
+                    any = true;
+                }
+            }
+            if (any) {
+                joinPlan(plan);
+                plansRepaired++;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Plans reopened for repair (tests). */
+    public int plansRepaired;
 
     /** A wall of 12 blocks along the ground (3 segments of 4) beside the base: something for several to do at once. */
     private boolean proposeWall(long now) {

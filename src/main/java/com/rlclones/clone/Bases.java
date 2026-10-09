@@ -114,6 +114,13 @@ public class Bases extends SavedData {
         public boolean complete() {
             return done.size() >= segments();
         }
+
+        /** A finished segment that has been broken into again is open for work. */
+        public void reopen(int segment) {
+            done.remove(segment);
+            claims.remove(segment);
+            claimedAt.remove(segment);
+        }
     }
 
     public final List<Plan> plans = new ArrayList<>();
