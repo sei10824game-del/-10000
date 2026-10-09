@@ -443,7 +443,7 @@ public final class Persona {
         motor.stop();
         motor.lookAt(pet.getEyePosition());
         if (visitTicks > 40) {
-            if (false && pet.getHealth() < pet.getMaxHealth()) { // EXPERIMENT (bisect night test): R-38 off
+            if (pet.getHealth() < pet.getMaxHealth()) {
                 feedPet(); // R-38: hurt: a bite of its favourite food, if we have it
             }
             petVisits++;
