@@ -183,7 +183,7 @@ public final class Persona {
         if (text.startsWith("PLAN ")) {
             try {
                 Bases.Plan pl = Bases.get(self.getServer()).plan(Integer.parseInt(text.split(" ")[1]));
-                if (sender != self && pl != null && !pl.complete() && project == Project.NONE && now >= projectCooldown && Builder.buildingBlocks(self) >= pl.segSize
+                if (sender != self && pl != null && !pl.complete() && project == Project.NONE && now >= projectCooldown && Builder.buildingBlocks(self) >= Builder.BLOCKS
                         && pl.dimension == level().dimension() && Vec3.atCenterOf(pl.blocks.get(0)).distanceTo(self.position()) < 64) {
                     joinPlan(pl);
                 }
@@ -652,7 +652,7 @@ public final class Persona {
 
     /** R-54: a finished plan near us with blocks missing (broken, burnt, blown up): its segments are open again and we mend them. */
     private boolean repairTick(long now) {
-        if (Builder.buildingBlocks(self) < 4 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || (now + self.getId()) % 100 != 0) {
+        if (Builder.buildingBlocks(self) < 16 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || (now + self.getId()) % 100 != 0) {
             return false;
         }
         for (Bases.Plan plan : Bases.get(self.getServer()).plans) {
@@ -682,7 +682,7 @@ public final class Persona {
     private boolean proposeWall(long now) {
         Bases bases = Bases.get(self.getServer());
         Bases.Base base = bases.nearest(level().dimension(), self.position(), 24);
-        if (base == null || Builder.buildingBlocks(self) < 12 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || self.getRandom().nextFloat() > 0.01f
+        if (base == null || Builder.buildingBlocks(self) < Builder.BLOCKS || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || self.getRandom().nextFloat() > 0.01f
                 || bases.openPlanNear(level().dimension(), self.position(), 64) != null) {
             return false;
         }

@@ -2171,13 +2171,14 @@ public final class CloneGameTests {
         }
         h.setBlock(new BlockPos(8, 2, 11), Blocks.AIR);
         ClonePlayer c = clone(h, 8.5, 8.5, 0f, false);
-        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 8));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
         h.onEachTick(() -> {
             c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(!h.getBlockState(new BlockPos(8, 2, 11)).isAir() && c.controller().persona().plansRepaired >= 1, "the gap in the wall is filled again");
+            h.assertTrue(!h.getBlockState(new BlockPos(8, 2, 11)).isAir() && c.controller().persona().plansRepaired >= 1, "the gap in the wall is filled again (repaired " + c.controller().persona().plansRepaired + " placed "
+                    + c.controller().persona().planWork().placed + " " + c.controller().persona().planWork().debug + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             finish(h, c);
             clearBases(h);
         });
@@ -2188,7 +2189,7 @@ public final class CloneGameTests {
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
         java.util.List<net.minecraft.world.entity.animal.Cow> cows = new java.util.ArrayList<>();
         for (int i = 0; i < n; i++) {
-            var cow = h.spawn(EntityType.COW, new Vec3(5.5 + (i % 3) * 1.5, 2, 5.5 + (i / 3) * 1.5));
+            var cow = h.spawn(EntityType.COW, new Vec3(6.5 + (i % 3) * 1.2, 2, 6.5 + (i / 3) * 1.2)); // (inside the pen: 1..4 from its corner)
             cow.setNoAi(true);
             cows.add(cow);
         }
