@@ -2172,7 +2172,7 @@ public final class CloneGameTests {
     public static void breedsCowsBelowTheTarget(GameTestHelper h) {
         clearBases(h);
         var cows = cowsInPen(h, 2);
-        ClonePlayer c = clone(h, 7.5, 9.5, 0f, false);
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false); // (facing the pen: the cows must be in its view)
         c.getInventory().add(new ItemStack(Items.WHEAT, 8));
         animalLoop(h, c);
         h.succeedWhen(() -> {
@@ -2189,7 +2189,7 @@ public final class CloneGameTests {
     public static void doesNotBreedPastTheTarget(GameTestHelper h) {
         clearBases(h);
         var cows = cowsInPen(h, 4);
-        ClonePlayer c = clone(h, 7.5, 9.5, 0f, false);
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false); // (facing the pen: the cows must be in its view)
         c.getInventory().add(new ItemStack(Items.WHEAT, 8));
         animalLoop(h, c);
         h.runAfterDelay(300, () -> {
@@ -2207,7 +2207,7 @@ public final class CloneGameTests {
         clearBases(h);
         var cows = cowsInPen(h, 6);
         cows.get(0).setCustomName(Component.literal("Daisy"));
-        ClonePlayer c = clone(h, 7.5, 9.5, 0f, false);
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, false); // (facing the pen: the cows must be in its view)
         animalLoop(h, c);
         h.succeedWhen(() -> {
             long alive = cows.stream().filter(net.minecraft.world.entity.Entity::isAlive).count();
