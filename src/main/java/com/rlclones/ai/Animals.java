@@ -37,7 +37,7 @@ import java.util.function.Predicate;
 public final class Animals {
     public enum Status {WORKING, DONE, FAILED}
 
-    private enum Job {TAME, BREED, PEN, EGGS, RIDE, STAND, LIVESTOCK}
+    private enum Job {TAME, BREED, PEN, EGGS, RIDE, STAND, LIVESTOCK, CULL}
 
     public static final int PEN_FENCES = 15;
     /** Bigger animals get a bigger pen: 7x7 (5x5 inside) - room for two of them and the clone leading them in. */
@@ -141,6 +141,61 @@ public final class Animals {
         return Bases.get(self.getServer()).penAt(self.level().dimension(), a.position()) != null;
     }
 
+    /** R-60: how many of one kind we keep (within 16 blocks); breeding stops there, and two more than that are culled. */
+    public static int targetFor(net.minecraft.world.entity.EntityType<?> type) {
+        if (type == net.minecraft.world.entity.EntityType.CHICKEN) {
+            return 6;
+        }
+        return type == net.minecraft.world.entity.EntityType.PIG ? 3 : 4;
+    }
+
+    private int tally(net.minecraft.world.entity.EntityType<?> type) {
+        int n = 0;
+        for (Perception.Seen s : perception.remembered()) {
+            if (s.entity instanceof Animal a && a.isAlive() && a.getType() == type && a.distanceTo(self) < 16 && ours(a)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** The oldest unnamed adult of a kind that is two over its target (named pets and tamed animals are never culled). */
+    @Nullable
+    private Animal cullCandidate() {
+        Animal best = null;
+        for (Perception.Seen s : perception.remembered()) {
+            if (s.entity instanceof Animal a && a.isAlive() && !a.hasCustomName() && !(a instanceof TamableAnimal) && a.getAge() >= 0 && a.distanceTo(self) < 16
+                    && ours(a) && (best == null || a.tickCount > best.tickCount) && tally(a.getType()) >= targetFor(a.getType()) + 2) {
+                best = a;
+            }
+        }
+        return best;
+    }
+
+    /** Animals culled (tests). */
+    public int culled;
+
+    private Status cullTick() {
+        if (target == null || !target.isAlive()) {
+            if (target != null) {
+                culled++;
+            }
+            cooldown = 100;
+            return Status.DONE;
+        }
+        if (target.distanceTo(self) > 2.5) {
+            motor.navigate(target.position(), 1.5, false);
+            return Status.WORKING;
+        }
+        motor.stop();
+        motor.lookAt(target.getEyePosition());
+        if (ticks % 12 == 0) {
+            self.attack(target);
+            self.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        }
+        return Status.WORKING;
+    }
+
     /** Two of our own animals of one kind that can breed now, and food for both. */
     @Nullable
     private Animal[] breedPair() {
@@ -155,7 +210,7 @@ public final class Animals {
             for (int j = i + 1; j < ready.size(); j++) {
                 Animal a = ready.get(i);
                 Animal b = ready.get(j);
-                if (a.getType() == b.getType() && count(a::isFood) >= 2) {
+                if (a.getType() == b.getType() && count(a::isFood) >= 2 && tally(a.getType()) < targetFor(a.getType())) {
                     return new Animal[]{a, b};
                 }
             }
@@ -213,7 +268,7 @@ public final class Animals {
             return false;
         }
         return tameCandidate() != null || breedPair() != null || canBuildPen() || eggsForPen() || rideCandidate() != null
-                || sittingPet() != null || livestockReady();
+                || sittingPet() != null || livestockReady() || cullCandidate() != null;
     }
 
     /** A horse / donkey / mule to ride: a wild one (we carry a saddle) or our own saddled one standing about. */
@@ -340,6 +395,7 @@ public final class Animals {
         var steed = rideCandidate();
         TamableAnimal sitting = sittingPet();
         Livestock stock = livestockWanted();
+        Animal cull = cullCandidate();
         if (sitting != null) {
             job = Job.STAND;
             target = sitting;
@@ -353,6 +409,9 @@ public final class Animals {
             job = Job.BREED;
             target = pair[0];
             mate = pair[1];
+        } else if (cull != null) {
+            job = Job.CULL;
+            target = cull;
         } else if (canBuildPen()) {
             job = Job.PEN;
         } else if (stock != null && count(s -> s.is(ItemTags.WOODEN_FENCES)) >= LIVESTOCK_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1
@@ -379,6 +438,7 @@ public final class Animals {
             case RIDE -> rideTick();
             case STAND -> standTick();
             case LIVESTOCK -> livestockTick();
+            case CULL -> cullTick();
         };
     }
 

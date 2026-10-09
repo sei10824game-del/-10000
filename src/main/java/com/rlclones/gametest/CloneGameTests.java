@@ -2119,6 +2119,69 @@ public final class CloneGameTests {
         });
     }
 
+    private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
+        java.util.List<net.minecraft.world.entity.animal.Cow> cows = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            var cow = h.spawn(EntityType.COW, new Vec3(5.5 + (i % 3) * 1.5, 2, 5.5 + (i / 3) * 1.5));
+            cow.setNoAi(true);
+            cows.add(cow);
+        }
+        return cows;
+    }
+
+    /** R-60: 2 cows in the pen and wheat in the bag: below the target of 4, so they are bred. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r16herd")
+    public static void breedsCowsBelowTheTarget(GameTestHelper h) {
+        clearBases(h);
+        var cows = cowsInPen(h, 2);
+        ClonePlayer c = clone(h, 7.5, 9.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WHEAT, 8));
+        animalLoop(h, c);
+        h.succeedWhen(() -> {
+            boolean baby = !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.animal.Cow.class, cows.get(0).getBoundingBox().inflate(8),
+                    net.minecraft.world.entity.animal.Cow::isBaby).isEmpty();
+            h.assertTrue(baby || cows.get(0).isInLove() && cows.get(1).isInLove(), "two cows below the target are fed and bred");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** R-60: 4 cows already (the target): wheat in the bag, but no breeding. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r16herd")
+    public static void doesNotBreedPastTheTarget(GameTestHelper h) {
+        clearBases(h);
+        var cows = cowsInPen(h, 4);
+        ClonePlayer c = clone(h, 7.5, 9.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WHEAT, 8));
+        animalLoop(h, c);
+        h.runAfterDelay(300, () -> {
+            boolean any = cows.stream().anyMatch(net.minecraft.world.entity.animal.Animal::isInLove) || c.getInventory().countItem(Items.WHEAT) < 8;
+            h.assertFalse(any, "at the target the herd is left alone");
+            finish(h, c);
+            clearBases(h);
+            h.succeed();
+        });
+    }
+
+    /** R-60: 6 cows (two over the target of 4), one of them named: the oldest unnamed one is culled, the pet stays. */
+    @GameTest(template = ARENA, timeoutTicks = 1500, batch = "r16herd")
+    public static void cullsTheSurplusButNotAPet(GameTestHelper h) {
+        clearBases(h);
+        var cows = cowsInPen(h, 6);
+        cows.get(0).setCustomName(Component.literal("Daisy"));
+        ClonePlayer c = clone(h, 7.5, 9.5, 0f, false);
+        animalLoop(h, c);
+        h.succeedWhen(() -> {
+            long alive = cows.stream().filter(net.minecraft.world.entity.Entity::isAlive).count();
+            h.assertTrue(c.controller().animals().culled >= 1 && alive == 5, "one cow culled (alive " + alive + ", culled " + c.controller().animals().culled + ")");
+            h.assertTrue(cows.get(0).isAlive(), "the named one stays");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "huntexp")
     public static void callsAHuntingPartyForABoss(GameTestHelper h) {
         var ravager = h.spawn(EntityType.RAVAGER, new Vec3(12.5, 2, 12.5));
