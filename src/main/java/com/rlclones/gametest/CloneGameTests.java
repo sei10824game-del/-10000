@@ -160,7 +160,7 @@ public final class CloneGameTests {
         for (int x = 0; x <= 14; x++) {
             for (int z = 0; z <= 14; z++) {
                 for (int y = 6; y <= 12; y++) {
-                    if (!h.getBlockState(new BlockPos(x, y, z)).isAir()) {
+                    if (!h.getBlockState(new BlockPos(x, y, z)).isAir() && !h.getBlockState(new BlockPos(x, y, z)).is(Blocks.BARRIER)) { // (the barrier walls stop other arenas' water)
                         h.setBlock(new BlockPos(x, y, z), Blocks.AIR);
                     }
                 }
