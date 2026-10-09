@@ -636,3 +636,10 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 推測: 壁(バリア)は y=5(相対 6)までで、他のテスト(y=8 に水を置くもの等)の水が壁の上を越えて隣のアリーナへ流れる。失敗したテストは `clearAbove` に届かず水が残る。
 - 対処(CI 未確認): `arena.nbt` の壁を高さ 13 まで伸ばし(バリア)、内側の y=6〜12 も空気にした。`clearAbove` はバリアを消さない。
 - 戻し方: 前のテンプレートは `git show HEAD~0:...` ではなく、この変更の直前のコミットから。テストが全滅したら最初に疑う。
+
+### 47. R-54〜R-60 の実装状況(2026-10-09)
+- R-60: `Animals.targetFor`(牛4・羊4・豚3・鶏6)、`tally`、`cullCandidate`(目標+2で最古の名前なし成体を間引く)、`Job.CULL`。繁殖は目標未満のときだけ。テスト `breedsCowsBelowTheTarget`・`doesNotBreedPastTheTarget`・`cullsTheSurplusButNotAPet`(最初の run は牛がクローンの背後で見えず失敗 → 位置を直した)。
+- R-59: `Bases.Plan`(区画の取り合い・3000tick で担当失効)・`PlanWork`(区画の中のブロックを順に置く)・`Persona.proposeWall`/`joinPlan`/`planStep`・チャット `PLAN <番号>`。テスト `buildsAWallTogether`(run 37913266169 で通過)。
+- R-54: 補修 `Persona.repairTick`(完成済みの計画に欠けがあれば区画を再び開いて直す)。テスト `mendsABrokenWall`。橋・塔・堀は未実装(立つ位置の工夫が要る)。
+- R-55: 交易は既存。治療・防衛は未実装。R-57(レッドストーン)・R-56(ネザー/エンド)は未着手。R-58 は既存で代替。
+- アリーナ(`arena.nbt`)の壁を高さ13に伸ばした変更は、夜・落下・矢・明かりのテストを通した(run 37913266169)。
