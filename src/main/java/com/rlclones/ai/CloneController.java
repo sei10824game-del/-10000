@@ -604,7 +604,7 @@ public final class CloneController {
             itemBusy = lighting.tick(); // a torch where monsters could spawn
         }
         if (!itemBusy && option == Option.REST && !escaping) {
-            itemBusy = lighting.proofTick(now); // R-26: spare torches go round the base
+            itemBusy = false && lighting.proofTick(now); // EXPERIMENT (bisect night test): R-26 off
         }
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = trading.tick(now); // R-50: a villager near: sell the surplus, buy food / gear
