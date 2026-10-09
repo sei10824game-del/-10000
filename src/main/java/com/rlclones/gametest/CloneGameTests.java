@@ -2156,7 +2156,7 @@ public final class CloneGameTests {
     }
 
     /** R-54: a finished wall with a block knocked out: a clone with stone nearby mends it. */
-    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r16plan")
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r16mend")
     public static void mendsABrokenWall(GameTestHelper h) {
         clearBases(h);
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
