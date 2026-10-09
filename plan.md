@@ -576,3 +576,9 @@
 - コンパイルは通った。`feedsAHurtFavouriteAnimal`・`sellsSurplusWheatToAVillager` は通過。
 - 落ちた: `putsUpASignByTheBase`(理由不明 → `Persona.signWhy` を失敗メッセージに足した)、`cutsATallTreeToTheTop`(前の run では通過。y2 の最下段が残り、足場の上げ下げを繰り返して時間切れ。不安定の疑い)、`stayshomeatnightwithoutaweapon`・`goesForAnAdvancementWhenIdle`(今回初。日時が全テストで共有されるための干渉か、要確認)、`lightsUpWhereMonstersCouldSpawn`(不安定)。
 - ソーク: 死亡 4 体(6 体中)。
+
+### 43. stayshomeatnightwithoutaweapon の切り分け(2026-10-09)
+- 150e487(R-38・R-26)以降、毎回落ちる。拠点は `[12,2,7]` の1つだけ、クローンは (4,2,2) で詰まり 0 回・夜(15601)のまま、拠点と逆方向(北)へ動いている。
+- R-38(feedPet)と R-26(proofTick)の呼び出しを外した実験 run 37870267073 でも同じに落ちた → この2つは原因ではない。実験は revert 済み。
+- 同じ時期から新しく落ち始めたもの: `fallDamageLikeAPlayer`・`lobsArrowsOverAFriend`・`goesForAnAdvancementWhenIdle`(その後は出たり消えたり)・`holdsTotemInOffhandWhenNearDeath`。物理・移動に関わるテストが多い → テストの追加でアリーナの並びや実行順が変わった影響か、CI 環境の差の疑い。未確認。
+- 次の手: 夜のテストでクローンの位置を20tickごとに残す(経路の途中)。または、このテストを1つだけ走らせる(`--tests` 相当の絞り込み)手段を調べる。
