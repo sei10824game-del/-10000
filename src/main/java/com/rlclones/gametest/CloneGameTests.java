@@ -5894,6 +5894,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 3.5, 7.5, 0f, false);
         StringBuilder path = new StringBuilder();
         StringBuilder waterAt = new StringBuilder();
+        StringBuilder sources = new StringBuilder();
         h.onEachTick(() -> {
             c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
             c.controller().motor().tick();
@@ -5905,13 +5906,26 @@ public final class CloneGameTests {
                     }
                 }
                 waterAt.append(' ').append(w);
+                if (w > 0 && sources.length() == 0) {
+                    for (int y = 1; y <= 12; y++) {
+                        for (int x = 0; x <= 14; x++) {
+                            for (int z = 0; z <= 14; z++) {
+                                var fs = h.getLevel().getFluidState(h.absolutePos(new BlockPos(x, y, z)));
+                                if (fs.isSource() && sources.length() < 120) {
+                                    sources.append(' ').append(x).append(',').append(y).append(',').append(z);
+                                }
+                            }
+                        }
+                    }
+                    sources.append(" @t").append(h.getLevel().getGameTime() % 100000L);
+                }
             }
             if (h.getLevel().getGameTime() % 20 == 0 && path.length() < 400) {
                 path.append(' ').append(c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).append(c.onGround() ? "" : "^");
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " path" + path + " water(y2 cells every 40t)" + waterAt + " origin " + h.absolutePos(BlockPos.ZERO).toShortString() + " grid " + java.util.stream.Stream.of(new BlockPos(5, 2, 5), new BlockPos(5, 2, 6), new BlockPos(5, 2, 8), new BlockPos(6, 2, 7), new BlockPos(2, 2, 7), new BlockPos(2, 5, 7), new BlockPos(9, 2, 9)).map(q -> h.getBlockState(q).getBlock().getDescriptionId().replace("block.minecraft.", "")).toList() + " ahead " + h.getBlockState(new BlockPos(5, 2, 7)).getBlock() + "/" + h.getBlockState(new BlockPos(5, 3, 7)).getBlock() + " near " + h.getLevel().getEntities(c, c.getBoundingBox().inflate(4)).stream().map(e -> e.getType().toShortString() + "@" + e.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + " time " + h.getLevel().getDayTime() % 24000L + " bases " + com.rlclones.clone.Bases.get(h.getLevel().getServer()).bases.stream().map(b -> b.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + ")");
+            h.assertTrue(c.controller().persona().stormRuns >= 1 && c.distanceToSqr(h.absoluteVec(new Vec3(12.5, 2, 7.5))) < 36, "walked to the base at night (runs " + c.controller().persona().stormRuns + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + " stuck " + c.controller().motor().stuckCount() + " path" + path + " sources[" + sources + "] water(y2 cells every 40t)" + waterAt + " origin " + h.absolutePos(BlockPos.ZERO).toShortString() + " grid " + java.util.stream.Stream.of(new BlockPos(5, 2, 5), new BlockPos(5, 2, 6), new BlockPos(5, 2, 8), new BlockPos(6, 2, 7), new BlockPos(2, 2, 7), new BlockPos(2, 5, 7), new BlockPos(9, 2, 9)).map(q -> h.getBlockState(q).getBlock().getDescriptionId().replace("block.minecraft.", "")).toList() + " ahead " + h.getBlockState(new BlockPos(5, 2, 7)).getBlock() + "/" + h.getBlockState(new BlockPos(5, 3, 7)).getBlock() + " near " + h.getLevel().getEntities(c, c.getBoundingBox().inflate(4)).stream().map(e -> e.getType().toShortString() + "@" + e.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + " time " + h.getLevel().getDayTime() % 24000L + " bases " + com.rlclones.clone.Bases.get(h.getLevel().getServer()).bases.stream().map(b -> b.center.subtract(h.absolutePos(BlockPos.ZERO)).toShortString()).toList() + ")");
             h.getLevel().setDayTime(before);
             finish(h, c);
             clearBases(h);
