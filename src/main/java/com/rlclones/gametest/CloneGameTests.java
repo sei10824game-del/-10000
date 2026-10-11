@@ -5250,7 +5250,9 @@ public final class CloneGameTests {
     /** Dry land with trees about, well away from the test arenas (which sit underground by the world spawn). */
     private static BlockPos soakSite(GameTestHelper h) {
         var level = h.getLevel();
-        BlockPos origin = h.absolutePos(BlockPos.ZERO);
+        // a fixed spot, not the soak arena's own position: that one moves whenever tests are added, and with it the terrain the soak runs on
+        // (the results of runs before and after a change could not be compared)
+        BlockPos origin = new BlockPos(100000, 0, 100000);
         int[][] offs = {{3000, 0}, {-3000, 0}, {0, 3000}, {0, -3000}, {6000, 0}, {-6000, 0}, {0, 6000}, {0, -6000}, {4500, 4500}, {-4500, -4500}, {4500, -4500}, {-4500, 4500}};
         BlockPos fallback = null;
         for (int[] o : offs) {
