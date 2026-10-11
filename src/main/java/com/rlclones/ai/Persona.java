@@ -310,10 +310,10 @@ public final class Persona {
         if (now >= projectCooldown && proposeProject(now)) {
             return true;
         }
-        if (repairTick(now)) {
+        if (false && repairTick(now)) { // EXPERIMENT (soak): R-59 off
             return true;
         }
-        if (now >= projectCooldown && proposeWall(now)) {
+        if (false && now >= projectCooldown && proposeWall(now)) { // EXPERIMENT (soak): R-59 off
             return true;
         }
         return decorTick(now);
