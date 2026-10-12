@@ -1099,6 +1099,11 @@ public final class Crafting {
             stage = 0;
             return;
         }
+        if (menu instanceof AbstractFurnaceMenu) {
+            self.closeContainer(); // a furnace screen left open (a smelt broken off): a crafting recipe cannot be laid out in it
+            stage = 0;
+            return;
+        }
         if (recipe == null || !(menu instanceof RecipeBookMenu<?> book)) {
             stage = 0;
             return;
