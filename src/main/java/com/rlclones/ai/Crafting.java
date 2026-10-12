@@ -193,6 +193,11 @@ public final class Crafting {
         return furnace != null && self.blockPosition().distSqr(furnace) > 40 * 40;
     }
 
+    /** A smelt is waiting on us (ore and fuel and a furnace to hand, or a batch ready to take): long jobs break off for it (same pacing as {@link #urgent}). */
+    public boolean smeltDue() {
+        return (smeltWork() || furnaceReady()) && self.level().getGameTime() - smeltUrgentAt >= 400;
+    }
+
     private boolean furnaceReady() {
         return furnace != null && !furnaceFar() && self.level().getGameTime() >= furnaceReadyAt;
     }

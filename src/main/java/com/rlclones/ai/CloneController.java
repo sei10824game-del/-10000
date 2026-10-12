@@ -2448,7 +2448,10 @@ public final class CloneController {
                 return true;
             }
         }
-        return false;
+        // a smelt waiting (ore in the bag and a furnace at hand, or iron ready in it): digging and the like give way, or the iron is never taken
+        // (the soak left raw iron in the bag and finished batches in the furnace for thousands of ticks)
+        return optionTicks > 200 && (option == Option.STAIRS || option == Option.SHAFT || option == Option.QUARRY || option == Option.MINE || option == Option.EXPLORE)
+                && crafting.smeltDue();
     }
 
     // ------------------------------------------------------------------ fighting (per enemy type Q-table)
