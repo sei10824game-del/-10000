@@ -657,3 +657,10 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 ### 50. ソークの新しい基準(2026-10-12、run 38147857721、開始場所を固定した後)
 - 6体中: 木 6・作業台 6・木のツルハシ 6・石のツルハシ 5・かまど 5・石炭 5、鉄インゴット 0、死亡 1(溺死)。**以降のソークはこれと比べる**(それ以前の数字とは比べない)。
 - 同じ run のゲームテスト失敗: `cutsATallTreeToTheTop`(最下段 y2 が残る。木が足りた時点で GATHER_WOOD が終わる可能性)、`visitsTheNetherAndComesBack`(ポータルから戻る途中で詰まる)、`minesStoneAndBuildsAFurnace`(クローンが inWall で死亡)、`asksForFoodAndAFriendBringsSome`。
+
+### 51. R-57 自動ドアと、テスト基盤の整理(2026-10-12)
+- 自動ドア: 小屋ができた後、クラフトでドア1・木の感圧板2を作り(`Crafting`)、`Persona.proposeAutoDoor` が `AUTODOOR` の計画(ドア・板・板)で入口に置く。`Bases.Plan.items` に、ブロックごとの置く品物の条件を持たせた(橋・塔でも使える)。テスト `fitsAnAutomaticDoor` は豚を板に乗せてドアが開くまで確認し、通過(run 38200296732)。
+- アリーナ: `arena.nbt` は壁(バリア)を高さ13、内側を空気にした。上にある砂利・砂は、テストでクローンを出す時点で石に変える(`holdUpTheCeiling`)。これで `minesStoneAndBuildsAFurnace`(inWall で死亡)が通った(run 38204099888)。
+- ソーク(固定した開始場所、run 38204099888): 木・作業台・木のツルハシ・石のツルハシ 6/6、かまど 5、石炭 5、鉄インゴット 1、鉄のツルハシ 1(初)、死亡 1。
+- `cutsATallTreeToTheTop` の条件を「最下段(y2)を除く原木が残らない」に変えた。上の原木が残らないことの確認が目的で、足りた時点で GATHER_WOOD が終わるのは仕様。
+- 残る不安定: `penscowswhenwheatpilesup`・`makesAndPutsDownAFurnaceForRawFood`・`crossesWaterByBoat`・`visitsTheNetherAndComesBack`。

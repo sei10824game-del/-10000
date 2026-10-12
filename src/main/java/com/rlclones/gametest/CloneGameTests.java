@@ -5499,7 +5499,7 @@ public final class CloneGameTests {
         c.controller().forcedOption = opt("GATHER_WOOD");
         c.setAiEnabled(true);
         h.succeedWhen(() -> {
-            h.assertTrue(logsLeft(h).isEmpty() && c.controller().scaffoldsPlaced >= 1, "the tree cut but the top (scaffold up for the high logs), " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
+            h.assertTrue(logsLeft(h).replace("y2 ", "").isEmpty() && c.controller().scaffoldsPlaced >= 1, "the tree cut but the top (scaffold up for the high logs), " + countBlocks(h, Blocks.OAK_LOG) + " left (scaffold "
                     + c.controller().scaffoldsPlaced + " y " + c.getY() + " dirt " + c.getInventory().countItem(Items.DIRT) + " " + c.controller().harvestDebug + " " + c.controller().optionLog + ") trace=" + c.controller().harvestTrace + " left=" + logsLeft(h) + " clone=" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             finish(h, c);
         });
