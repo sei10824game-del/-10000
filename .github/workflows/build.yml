@@ -49,12 +49,12 @@ jobs:
             echo "### Failure messages"
             grep -a 'LogTestReporter' "$log" | grep -a ' failed!' | cut -c1-1500 || true
             echo "### Soak"
-            grep -a -E 'SOAK-(SUMMARY|NONE|OPTIONS|CLONE)|CLONE-DEATH' "$log" | cut -c1-1500 || true
+            grep -a -E 'SOAK-(SUMMARY|NONE|OPTIONS|ESCAPES|CLONE)|CLONE-DEATH' "$log" | cut -c1-1500 || true
           } | tee -a "$GITHUB_STEP_SUMMARY"
           # (GitHub keeps 10 notices and 10 errors per step: one notice per kind, long ones joined)
           esc() { sed 's/%/%25/g' | cut -c1-1200 | awk 'BEGIN{ORS="%0A"} {print}'; }
           grep -a 'LogTestReporter' "$log" | grep -a ' failed!' | head -9 | sed 's/%/%25/g' | cut -c1-1500 | while IFS= read -r l; do echo "::error title=GameTest failed::$l"; done || true
-          for k in SUMMARY NONE OPTIONS; do
+          for k in SUMMARY NONE OPTIONS ESCAPES; do
             m=$(grep -a "SOAK-$k" "$log" | tail -1 | sed 's/%/%25/g' | cut -c1-1500)
             if [ -n "$m" ]; then echo "::notice title=Soak $k::$m"; fi
           done

@@ -465,6 +465,8 @@ public final class CloneController {
     /** Falls into holes (soak diagnostics): how often the escape began and what it began on. */
     public int escapeStarts;
     public String escapeWhy = "";
+    /** Why escapes started (block under the feet, height band, the option running): counted for the soak. */
+    public final java.util.Map<String, Integer> escapeReasons = new java.util.TreeMap<>();
     /** Where the last escape began, when, and how many in a row began within 3 blocks of it (a pit we keep going back to). */
     private BlockPos lastEscapeAt;
     private long lastEscapeTick = Long.MIN_VALUE / 2;
@@ -628,6 +630,8 @@ public final class CloneController {
                 escaping = true;
                 escapeStarts++;
                 escapeWhy = self.level().getBlockState(self.blockPosition().below()).getBlock() + " y=" + self.getBlockY();
+                escapeReasons.merge(self.level().getBlockState(self.blockPosition().below()).getBlock().getDescriptionId().replace("block.minecraft.", "") + " y" + Math.floorDiv(self.getBlockY(), 16) * 16 + " in:"
+                        + (option == null ? "none" : option.name()), 1, Integer::sum);
                 escape.start(motor.recentGoal(), onEscapeStart(now));
             }
         }

@@ -6262,6 +6262,14 @@ public final class CloneGameTests {
                                 + " walls=" + live.controller().persona().plansStarted + "/" + live.controller().persona().plansHelped + "/" + live.controller().persona().plansRepaired
                                 + " placed=" + live.controller().persona().planWork().placed);
                     }
+                    java.util.Map<String, Integer> escapes = new java.util.TreeMap<>();
+                    for (String n : names) {
+                        ClonePlayer live = manager(h).byName(n);
+                        if (live != null) {
+                            live.controller().escapeReasons.forEach((k, v) -> escapes.merge(k, v, Integer::sum));
+                        }
+                    }
+                    RLClones.LOGGER.info("SOAK-ESCAPES (why escapes started: block under the feet, height band, option) {}", escapes);
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
                     RLClones.LOGGER.info("SOAK-NONE (what the clone was busy with when no option ran) {}", nones);
                     int full = 0;
