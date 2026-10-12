@@ -634,6 +634,21 @@ public final class Crafting {
                 }
             }
         }
+        // R-57: a hut with no automatic door yet: a door and two pressure plates for it
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && tableAccess && c.controller().persona().wantsAutoDoor()) {
+            if (countTag(p, ItemTags.WOODEN_DOORS) < 1) {
+                CraftingRecipe r = craftable(p, s -> s.is(ItemTags.WOODEN_DOORS));
+                if (r != null) {
+                    return r;
+                }
+            }
+            if (countTag(p, ItemTags.WOODEN_PRESSURE_PLATES) < 2) {
+                CraftingRecipe r = craftable(p, s -> s.is(ItemTags.WOODEN_PRESSURE_PLATES));
+                if (r != null) {
+                    return r;
+                }
+            }
+        }
         // curiosity: make something never made before (cheap materials only)
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null) {
             return c.controller().crafting().curiosity(tableAccess);

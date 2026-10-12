@@ -74,6 +74,8 @@ public class Bases extends SavedData {
         public final List<BlockPos> blocks;
         public final int segSize;
         public final Map<Integer, java.util.UUID> claims = new HashMap<>();
+        /** What lays block i (null / missing = any building block). Doors, pressure plates ... */
+        public List<java.util.function.Predicate<ItemStack>> items = new ArrayList<>();
         private final Map<Integer, Long> claimedAt = new HashMap<>();
         private final java.util.Set<Integer> done = new java.util.HashSet<>();
 

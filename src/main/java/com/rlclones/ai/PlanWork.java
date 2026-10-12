@@ -96,7 +96,17 @@ public final class PlanWork {
             cooldown--;
             return Status.WORKING;
         }
-        int slot = Equipment.pillarBlockSlot(self);
+        int slot = -1;
+        int idx = plan.blocks.indexOf(next);
+        if (idx >= 0 && idx < plan.items.size() && plan.items.get(idx) != null) {
+            for (int i = 0; i < self.getInventory().items.size() && slot < 0; i++) {
+                if (!self.getInventory().items.get(i).isEmpty() && plan.items.get(idx).test(self.getInventory().items.get(i))) {
+                    slot = i;
+                }
+            }
+        } else {
+            slot = Equipment.pillarBlockSlot(self);
+        }
         if (slot < 0) {
             debug += " nomaterial";
             return Status.FAILED;

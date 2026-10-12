@@ -310,6 +310,9 @@ public final class Persona {
         if (now >= projectCooldown && proposeProject(now)) {
             return true;
         }
+        if (proposeAutoDoor(now)) {
+            return true;
+        }
         if (repairTick(now)) {
             return true;
         }
@@ -647,6 +650,52 @@ public final class Persona {
             projectCooldown = now + 6000;
             return false;
         }
+        return true;
+    }
+
+    /** R-57: doors made / fitted (tests). */
+    public int autoDoors;
+
+    private static boolean isDoor(ItemStack s) {
+        return s.is(net.minecraft.tags.ItemTags.WOODEN_DOORS);
+    }
+
+    private static boolean isPlate(ItemStack s) {
+        return s.is(net.minecraft.tags.ItemTags.WOODEN_PRESSURE_PLATES);
+    }
+
+    /** A hut stands and has no automatic door yet: crafting makes a door and two pressure plates for it. */
+    public boolean wantsAutoDoor() {
+        return hutsBuilt >= 1 && autoDoors == 0 && !huts.isEmpty();
+    }
+
+    /** A door in the hut's doorway with a wooden pressure plate each side of it: anything stepping up to it (a clone, a villager) opens it. */
+    private boolean proposeAutoDoor(long now) {
+        if (!wantsAutoDoor() || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || self.getRandom().nextFloat() > 0.2f) {
+            return false;
+        }
+        int doors = 0;
+        int plates = 0;
+        for (ItemStack s : self.getInventory().items) {
+            doors += isDoor(s) ? s.getCount() : 0;
+            plates += isPlate(s) ? s.getCount() : 0;
+        }
+        BlockPos hut = huts.get(huts.size() - 1);
+        if (doors < 1 || plates < 2 || hut.distSqr(self.blockPosition()) > 24 * 24) {
+            return false;
+        }
+        BlockPos door = hut.offset(0, 0, -2); // the doorway of the hut: the middle of its front wall (Builder leaves it open)
+        List<BlockPos> blocks = List.of(door, door.north(), door.south());
+        for (BlockPos b : blocks) {
+            if (!level().getBlockState(b).canBeReplaced()) {
+                autoDoors++; // already something there: not ours to fit
+                return false;
+            }
+        }
+        Bases.Plan plan = Bases.get(self.getServer()).addPlan(level().dimension(), "AUTODOOR", new ArrayList<>(blocks), 3);
+        plan.items = new ArrayList<>(List.of(Persona::isDoor, Persona::isPlate, Persona::isPlate));
+        autoDoors++;
+        joinPlan(plan);
         return true;
     }
 

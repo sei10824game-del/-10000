@@ -2184,6 +2184,49 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-57: a door in a doorway with a wooden pressure plate each side: the clone fits them, and an animal stepping on a plate opens the door. */
+    @GameTest(template = ARENA, timeoutTicks = 1200, batch = "r16door")
+    public static void fitsAnAutomaticDoor(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 3; x <= 11; x++) {
+            if (x != 7) {
+                h.setBlock(new BlockPos(x, 2, 7), Blocks.STONE);
+                h.setBlock(new BlockPos(x, 3, 7), Blocks.STONE);
+            }
+        }
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        BlockPos door = h.absolutePos(new BlockPos(7, 2, 7));
+        var plan = bases.addPlan(h.getLevel().dimension(), "AUTODOOR", new java.util.ArrayList<>(java.util.List.of(door, door.north(), door.south())), 3);
+        plan.items = new java.util.ArrayList<>(java.util.List.of(
+                (java.util.function.Predicate<ItemStack>) st -> st.is(net.minecraft.tags.ItemTags.WOODEN_DOORS),
+                (java.util.function.Predicate<ItemStack>) st -> st.is(net.minecraft.tags.ItemTags.WOODEN_PRESSURE_PLATES),
+                (java.util.function.Predicate<ItemStack>) st -> st.is(net.minecraft.tags.ItemTags.WOODEN_PRESSURE_PLATES)));
+        ClonePlayer c = clone(h, 7.5, 10.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.OAK_DOOR, 1));
+        c.getInventory().add(new ItemStack(Items.OAK_PRESSURE_PLATE, 2));
+        c.controller().persona().joinPlan(plan);
+        boolean[] stepped = {false};
+        h.onEachTick(() -> {
+            c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+            c.controller().motor().tick();
+            if (plan.complete() && !stepped[0]) {
+                stepped[0] = true;
+                var pig = h.spawn(EntityType.PIG, new Vec3(7.5, 2.2, 5.5)); // onto the plate in front of the door
+                pig.setNoAi(true);
+            }
+        });
+        h.succeedWhen(() -> {
+            var st = h.getBlockState(new BlockPos(7, 2, 7));
+            h.assertTrue(st.getBlock() instanceof net.minecraft.world.level.block.DoorBlock, "the door stands in the doorway (" + st.getBlock() + ", plan done " + plan.complete() + " "
+                    + c.controller().persona().planWork().debug + ")");
+            h.assertTrue(h.getBlockState(new BlockPos(7, 2, 6)).getBlock() instanceof net.minecraft.world.level.block.PressurePlateBlock
+                    && h.getBlockState(new BlockPos(7, 2, 8)).getBlock() instanceof net.minecraft.world.level.block.PressurePlateBlock, "and a pressure plate each side");
+            h.assertTrue(st.getValue(net.minecraft.world.level.block.DoorBlock.OPEN), "and it opens for the animal on the plate");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
