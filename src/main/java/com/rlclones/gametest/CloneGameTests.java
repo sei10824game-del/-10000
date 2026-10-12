@@ -58,7 +58,24 @@ public final class CloneGameTests {
         return CloneManager.get(h.getLevel().getServer());
     }
 
+    /**
+     * The arena template is air up to height 12: the natural terrain above it (gravel, sand) lost its support when the structure was placed
+     * and would come down on the clone (death by inWall). Turned to stone before it has had a tick to fall.
+     */
+    private static void holdUpTheCeiling(GameTestHelper h) {
+        for (int x = 0; x <= 14; x++) {
+            for (int z = 0; z <= 14; z++) {
+                for (int y = 13; y <= 40; y++) {
+                    if (h.getBlockState(new BlockPos(x, y, z)).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
+                        h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                    }
+                }
+            }
+        }
+    }
+
     private static ClonePlayer clone(GameTestHelper h, double x, double z, float yaw, boolean ai) {
+        holdUpTheCeiling(h);
         // the arenas are dark: without this, zombies would spawn in them and wander into unrelated tests
         var spawning = h.getLevel().getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING);
         if (spawning.get()) {
