@@ -615,6 +615,18 @@ public final class Motor {
         return false;
     }
 
+    /** A leaf block the line of sight to {@code pos} meets first (a player breaks it to get at the log behind it), or null. */
+    @javax.annotation.Nullable
+    public BlockPos blockingLeaf(BlockPos pos) {
+        ServerLevel level = self.serverLevel();
+        BlockHitResult hit = level.clip(new ClipContext(self.getEyePosition(), Vec3.atCenterOf(pos), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+        if (hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(pos)
+                && level.getBlockState(hit.getBlockPos()).getBlock() instanceof net.minecraft.world.level.block.LeavesBlock) {
+            return hit.getBlockPos();
+        }
+        return null;
+    }
+
     private int dryTicks;
 
     /**

@@ -5505,6 +5505,31 @@ public final class CloneGameTests {
         });
     }
 
+    /** The foot of a tree hidden behind leaves: the top logs are seen and cut, then the foot (known to be there) is cut too, the leaves in the way broken first. */
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r17foot")
+    public static void cutsTheFootOfATreeHiddenByLeaves(GameTestHelper h) {
+        for (int y = 2; y <= 6; y++) {
+            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG);
+        }
+        for (int x = 8; x <= 10; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 7, z), Blocks.OAK_LEAVES);
+                for (int y = 2; y <= 4; y++) {
+                    if (x != 9 || z != 7) {
+                        h.setBlock(new BlockPos(x, y, z), Blocks.OAK_LEAVES); // the foliage round the foot of the trunk
+                    }
+                }
+            }
+        }
+        ClonePlayer c = clone(h, 9.5, 2.5, 0f, false);
+        c.controller().forcedOption = opt("GATHER_WOOD");
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(logsLeft(h).isEmpty(), "every log cut, the hidden foot too (left " + logsLeft(h) + " " + c.controller().harvestDebug + " trace=" + c.controller().harvestTrace + ")");
+            finish(h, c);
+        });
+    }
+
     private static String logsLeft(GameTestHelper h) {
         StringBuilder sb = new StringBuilder();
         for (int y = 0; y <= 12; y++) {
