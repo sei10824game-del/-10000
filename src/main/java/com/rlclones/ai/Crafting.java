@@ -56,6 +56,7 @@ public final class Crafting {
     private static final Item[] SWORDS = {Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.WOODEN_SWORD};
     private static final Item[] PICKAXES = {Items.DIAMOND_PICKAXE, Items.IRON_PICKAXE, Items.STONE_PICKAXE, Items.WOODEN_PICKAXE};
     private static final Item[] AXES = {Items.DIAMOND_AXE, Items.IRON_AXE, Items.STONE_AXE, Items.WOODEN_AXE};
+    private static final Item[] SHOVELS = {Items.DIAMOND_SHOVEL, Items.IRON_SHOVEL, Items.STONE_SHOVEL, Items.WOODEN_SHOVEL};
     private static final Item[] ARMOR = {Items.DIAMOND_HELMET, Items.DIAMOND_CHESTPLATE, Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS,
             Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS, Items.IRON_BOOTS};
 
@@ -310,6 +311,12 @@ public final class Crafting {
         for (Item it : AXES) {
             if (((TieredItem) it).getTier().getLevel() > axe) {
                 out.add(it);
+            }
+        }
+        int shovel = tierOf(p, net.minecraft.world.item.ShovelItem.class);
+        for (Item it : SHOVELS) {
+            if (((TieredItem) it).getTier().getLevel() > shovel && ((TieredItem) it).getTier().getLevel() <= Math.max(pick, 0) + 1) {
+                out.add(it); // dirt, sand and gravel go fast with it (stairs and shafts dig a lot of them); never a better one than the pickaxe
             }
         }
         for (Item it : ARMOR) {

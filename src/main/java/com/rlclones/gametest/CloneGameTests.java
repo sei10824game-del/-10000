@@ -5532,6 +5532,32 @@ public final class CloneGameTests {
         });
     }
 
+    /** The foot of a trunk is cut away: the clone steps into the gap where the logs were and cuts the rest from there, looking up. */
+    @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r17column")
+    public static void stepsIntoTheCutFootOfATrunk(GameTestHelper h) {
+        for (int y = 4; y <= 8; y++) {
+            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG); // (the two lowest logs, y2 and y3, are already gone)
+        }
+        for (int x = 8; x <= 10; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 9, z), Blocks.OAK_LEAVES);
+            }
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
+        c.controller().forcedOption = opt("GATHER_WOOD");
+        c.setAiEnabled(true);
+        boolean[] inColumn = {false};
+        h.onEachTick(() -> {
+            BlockPos at = c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO));
+            inColumn[0] |= at.getX() == 9 && at.getZ() == 7 && at.getY() <= 3;
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(logsLeft(h).isEmpty() && inColumn[0], "every log cut, from inside the trunk's column (left " + logsLeft(h) + ", was in the column " + inColumn[0] + " "
+                    + c.controller().harvestDebug + " trace=" + c.controller().harvestTrace + ")");
+            finish(h, c);
+        });
+    }
+
     private static String logsLeft(GameTestHelper h) {
         StringBuilder sb = new StringBuilder();
         for (int y = 0; y <= 12; y++) {

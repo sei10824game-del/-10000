@@ -4041,6 +4041,25 @@ public final class CloneController {
         return true;
     }
 
+    /** Nothing solid in the column of {@code target} from our feet up to just under it, and firm ground under our feet there: the cut-away foot of its trunk. */
+    private boolean trunkColumnClear(BlockPos target) {
+        ServerLevel level = self.serverLevel();
+        int feetY = self.blockPosition().getY();
+        if (target.getY() - feetY < 1 || target.getY() - feetY > 12) {
+            return false;
+        }
+        BlockPos below = new BlockPos(target.getX(), feetY - 1, target.getZ());
+        if (!level.getBlockState(below).isFaceSturdy(level, below, net.minecraft.core.Direction.UP)) {
+            return false;
+        }
+        for (int y = feetY; y < target.getY(); y++) {
+            if (!level.getBlockState(new BlockPos(target.getX(), y, target.getZ())).canBeReplaced()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Logs of the tree at or above where we stand (those below are cut after climbing down), not given up on. */
     private boolean logsNear(BlockPos at) {
         ServerLevel level = self.serverLevel();
@@ -4150,6 +4169,12 @@ public final class CloneController {
         Vec3 center = Vec3.atCenterOf(blockTarget);
         // (a pillar jump under way is finished first: its peak brings the eye into reach, and switching to mining there lost every placement)
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3 || kind == Perception.BlockKind.LOG && scafBase != null) {
+            // the logs below this one are gone: stand in the trunk's column (where they were) and look up - the rest is within reach from there
+            if (kind == Perception.BlockKind.LOG && scafBase == null && trunkColumnClear(blockTarget)
+                    && Motor.horizontalDistance(self.position(), center) > 0.35 && motor.stuckCount() <= 3) {
+                motor.navigate(new Vec3(center.x, self.getY(), center.z), 0.3, false);
+                return false;
+            }
             if (kind == Perception.BlockKind.LOG && center.y - self.getEyeY() > 0.5 && Motor.horizontalDistance(self.position(), center) < 4.0
                     && scaffold.size() < 8 && Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.pillarBlockSlot(self) >= 0 && !self.isInWater()) {
                 if (scaffoldStep()) {
