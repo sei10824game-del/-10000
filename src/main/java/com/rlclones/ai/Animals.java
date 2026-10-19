@@ -233,7 +233,8 @@ public final class Animals {
         }
         boolean chickens = count(s -> s.is(Items.EGG)) > 0;
         boolean materials = count(s -> s.is(ItemTags.WOODEN_FENCES)) >= PEN_FENCES && count(s -> s.is(ItemTags.FENCE_GATES)) >= 1;
-        return chickens && (materials || woodPlanks() >= 40);
+        boolean fencesMade = count(s -> s.is(ItemTags.WOODEN_FENCES)) >= PEN_FENCES; // (making them used the planks up: the gate is still to come, the pen is still wanted)
+        return chickens && (materials || fencesMade || woodPlanks() >= 40);
     }
 
     /** Crafting asks this: fences / a gate still to be made for the pen. */
