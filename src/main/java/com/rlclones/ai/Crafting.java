@@ -315,7 +315,8 @@ public final class Crafting {
         }
         int shovel = tierOf(p, net.minecraft.world.item.ShovelItem.class);
         for (Item it : SHOVELS) {
-            if (((TieredItem) it).getTier().getLevel() > shovel && ((TieredItem) it).getTier().getLevel() <= Math.max(pick, 0) + 1) {
+            if (((TieredItem) it).getTier().getLevel() > shovel && ((TieredItem) it).getTier().getLevel() <= Math.max(pick, 0) + 1
+                    && countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4 >= 12) { // (only from spare wood: the pen's gate, the table... come first)
                 out.add(it); // dirt, sand and gravel go fast with it (stairs and shafts dig a lot of them); never a better one than the pickaxe
             }
         }

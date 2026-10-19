@@ -62,6 +62,15 @@ public final class CloneGameTests {
      * The arena template is air up to height 12: the natural terrain above it (gravel, sand) lost its support when the structure was placed
      * and would come down on the clone (death by inWall). Turned to stone before it has had a tick to fall.
      */
+    /** A roof of barriers over the arena (for tests that do not go high): natural water above the arena would pour in through its open top. */
+    private static void sealRoof(GameTestHelper h) {
+        for (int x = 0; x <= 14; x++) {
+            for (int z = 0; z <= 14; z++) {
+                h.setBlock(new BlockPos(x, 13, z), Blocks.BARRIER);
+            }
+        }
+    }
+
     private static void holdUpTheCeiling(GameTestHelper h) {
         for (int x = 0; x <= 14; x++) {
             for (int z = 0; z <= 14; z++) {
@@ -6130,6 +6139,7 @@ public final class CloneGameTests {
     /** R-53: night, no weapon: the clone makes for the base instead of wandering about in the dark. */
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r15night")
     public static void staysHomeAtNightWithoutAWeapon(GameTestHelper h) {
+        sealRoof(h);
         clearBases(h);
         baseAt(h, new BlockPos(12, 2, 7));
         long before = h.getLevel().getDayTime();
