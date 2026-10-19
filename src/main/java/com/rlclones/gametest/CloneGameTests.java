@@ -5246,6 +5246,8 @@ public final class CloneGameTests {
 
     /** Game ticks the soak runs by default (an hour of game time); a number alone on a line of soak.flag overrides it. */
     private static final int SOAK_TICKS = 72000;
+    /** Clones in the soak: more of them, so that one run says more (the numbers of runs with 6 swung from 0 to 3 of 6 on the same code). */
+    private static final int SOAK_CLONES = 12;
     /** The most a soak.flag may ask for (the test's time limit). */
     private static final int SOAK_MAX_TICKS = 300000;
     private static final String[] SOAK_STEPS = {"wood", "table", "wood_pick", "stone_pick", "furnace", "coal", "iron_ingot", "iron_pick", "iron_gear",
@@ -6203,9 +6205,9 @@ public final class CloneGameTests {
         final int total = soakTicks();
         BlockPos site = soakSite(h);
         List<String> names = new ArrayList<>();
-        for (int i = 0; i < 6; i++) {
-            int x = site.getX() + (i % 3) * 3;
-            int z = site.getZ() + (i / 3) * 3;
+        for (int i = 0; i < SOAK_CLONES; i++) {
+            int x = site.getX() + (i % 4) * 3;
+            int z = site.getZ() + (i / 4) * 3;
             int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
             ClonePlayer c = manager(h).summon(null, level, new Vec3(x + 0.5, y, z + 0.5), i * 60f);
             if (c == null) {

@@ -58,7 +58,7 @@ jobs:
             m=$(grep -a "SOAK-$k" "$log" | tail -1 | sed 's/%/%25/g' | cut -c1-1500)
             if [ -n "$m" ]; then echo "::notice title=Soak $k::$m"; fi
           done
-          c=$(grep -a 'SOAK-CLONE' "$log" | tail -8 | esc)
+          c=$(grep -a 'SOAK-CLONE' "$log" | tail -12 | esc)
           if [ -n "$c" ]; then echo "::notice title=Soak clones::$c"; fi
           d=$(grep -a 'CLONE-DEATH' "$log" | grep -a -v ', -58, ' | tail -8 | esc)
           if [ -n "$d" ]; then echo "::notice title=Soak deaths::$d"; fi
