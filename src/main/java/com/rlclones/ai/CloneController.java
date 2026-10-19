@@ -4217,13 +4217,14 @@ public final class CloneController {
             blockTarget = null;
             // (a trunk goes on down to the ground: its foot is known to be there even when the leaves hide it)
             int down = kind == Perception.BlockKind.LOG ? -12 : -1;
-            for (BlockPos p : BlockPos.betweenClosed(done.offset(-1, down, -1), done.offset(1, 2, 1))) {
+            int up = kind == Perception.BlockKind.LOG ? 12 : 2; // (and up to the crown: logs left hanging in the middle of a trunk are part of the same tree)
+            for (BlockPos p : BlockPos.betweenClosed(done.offset(-1, down, -1), done.offset(1, up, 1))) {
                 if (Perception.classify(level.getBlockState(p)) == harvestKind) {
                     perception.noteBlock(p);
                 }
             }
             boolean moreTree = kind == Perception.BlockKind.LOG && harvestKind == Perception.BlockKind.LOG
-                    && BlockPos.betweenClosedStream(done.offset(-1, down, -1), done.offset(1, 2, 1)).anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS));
+                    && BlockPos.betweenClosedStream(done.offset(-1, down, -1), done.offset(1, up, 1)).anyMatch(p -> level.getBlockState(p).is(net.minecraft.tags.BlockTags.LOGS));
             return blocksDone >= (moreTree ? 24 : 8); // R-18: a tree half cut is cut to the top
         }
         return false;
