@@ -2345,6 +2345,28 @@ public final class CloneGameTests {
         });
     }
 
+    /** Any block will do: the cheap one goes first - dirt, then planks, then logs (a log is four planks), never the dear one while a cheap one is in the bag. */
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "r17value")
+    public static void buildsWithTheCheapestBlockFirst(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        var inv = c.getInventory();
+        inv.add(new ItemStack(Items.OAK_LOG, 16));
+        inv.add(new ItemStack(Items.OAK_PLANKS, 16));
+        inv.add(new ItemStack(Items.COBBLESTONE, 16));
+        inv.add(new ItemStack(Items.DIRT, 16));
+        h.runAfterDelay(2, () -> {
+            h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.DIRT), "dirt first");
+            inv.clearOrCountMatchingItems(s -> s.is(Items.DIRT), -1, inv);
+            h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.COBBLESTONE), "then cobblestone (" + com.rlclones.ai.ItemValue.of(h.getLevel(), Items.COBBLESTONE) + " against planks "
+                    + com.rlclones.ai.ItemValue.of(h.getLevel(), Items.OAK_PLANKS) + ")");
+            inv.clearOrCountMatchingItems(s -> s.is(Items.COBBLESTONE), -1, inv);
+            h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.OAK_PLANKS), "then planks, before the logs (" + com.rlclones.ai.ItemValue.of(h.getLevel(), Items.OAK_PLANKS)
+                    + " against " + com.rlclones.ai.ItemValue.of(h.getLevel(), Items.OAK_LOG) + ")");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

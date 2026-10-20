@@ -480,14 +480,22 @@ public final class Equipment {
                 && c.getCloneBrain().isHarmful(Perception.blockId(((BlockItem) s.getItem()).getBlock().defaultBlockState())));
     }
 
+    /** The building block to use when any will do: the cheapest by {@link ItemValue} (dirt before planks before logs); the first of equals. */
     public static int pillarBlockSlot(Player p) {
         Inventory inv = p.getInventory();
+        int best = -1;
+        double bestValue = Double.MAX_VALUE;
         for (int i = 0; i < inv.items.size(); i++) {
-            if (isBuildingBlock(p, inv.items.get(i))) {
-                return i;
+            ItemStack s = inv.items.get(i);
+            if (isBuildingBlock(p, s)) {
+                double v = ItemValue.of(p.level(), s);
+                if (v < bestValue - 1.0e-9) {
+                    bestValue = v;
+                    best = i;
+                }
             }
         }
-        return -1;
+        return best;
     }
 
     public static int bestToolSlot(Player p, BlockState state) {
