@@ -721,3 +721,9 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - `SOAK-DIGGATE`(12体、2 run): 掘りに行った 82/62、1200tick の待ち 568/360、食料の準備 188/42、木材の準備 50/22、体力 5/11、backoff 1/0。待ちで止められる回数が、行く回数の 5〜7 倍。
 - 変更(CI 確認中): 待ち 1200 → 300tick(3回続けて進まなければ 6000tick の退避が別にある)、食料の条件 食料度<18 かつ食料<6 → 食料度<14 かつ食料<4(空腹ならクローンは自分で食べる)。
 - 報酬の追加(進み具合の点 `Progression.score`)の3 run: 鉄インゴット 4/7/4、鉄のツルハシ 2/3/4(12体中。平均 25%)。鉄のツルハシの到達時刻は 59000〜71000tick と遅い(ソークの終わりごろ)。
+
+### 61. 区切り(2026-10-21): 12体のソークの積み上げと、残るテスト
+- 直近のソーク(12体、鉱石の認識・進み具合の報酬・掘り始めの緩和・製錬の割り込み・足場の撤去込み): 鉄インゴット 2/8/5/9、鉄のツルハシ 2/7/1/3(平均 インゴット約6/12・ツルハシ約3/12)。基準(開始場所を固定した直後)はインゴット約4/12・ツルハシ約1.8/12。死亡 0〜4。ダイヤ 0(鉄のツルハシの到達時刻が遅い。59000〜71000tick)。
+- ゲームテスト: `lightsUpWhereMonstersCouldSpawn` は石の部屋で通った。`leavesNoScaffoldBehindATallTree`・`stepsIntoTheCutFootOfATrunk`・`cutsTheFootOfATreeHiddenByLeaves`・`noticesAnOreShowingInATunnelWall`・`fitsAnAutomaticDoor` など新しいテストは通過。
+- 残る失敗: `penscowswhenwheatpilesup`(ほぼ毎回。牛が誘導に乗らない: `lured 0`。stage 5 で止まる。原因未調査)、`visitsTheNetherAndComesBack`(ときどき。ネザーから戻る途中で、ポータルの出口近く (95,48,26) で詰まる `st=FAILED stuck=130台`。R-56 の前提なので直す価値あり)、`setsTntOffWithFlintAndSteel`・`makesSoilBesideBareWaterAndLightsThePlot`・`fleesTowardsTheBaseWhenHurt` が出たり消えたり。
+- 次の候補: ①ネザーからの帰り(`Portals.travelTick`)、②牛の誘導(`Animals` stage 4〜5)、③鉄のツルハシに届く時刻を早める(ダイヤへ)、④R-56 の最初の一歩(ネザーに入って戻れる割合を測る)。
