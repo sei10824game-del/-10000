@@ -861,7 +861,7 @@ public final class Crafting {
         if (count(p, Items.COAL) + count(p, Items.CHARCOAL) > 0) {
             return 0;
         }
-        return Math.min(8, countTag(p, ItemTags.LOGS) - 8);
+        return Math.min(12, countTag(p, ItemTags.LOGS) - 8);
     }
 
     private static int fuelSlot(Player p) {
@@ -901,7 +901,7 @@ public final class Crafting {
         if (self.level().getGameTime() < topUpAt || furnace == null || furnaceItem == null || self.blockPosition().distSqr(furnace) > 8 * 8 || self.level().getGameTime() >= furnaceReadyAt) {
             return false;
         }
-        return count(self, furnaceItem) > 0;
+        return !new ItemStack(furnaceItem).is(ItemTags.LOGS) && count(self, furnaceItem) > 0;
     }
 
     private boolean smeltWork() {
@@ -1227,7 +1227,7 @@ public final class Crafting {
         }
         boolean inputEmpty = menu.getSlot(0).getItem().isEmpty();
         int cooking = menu.getSlot(0).getItem().getCount();
-        if (!inputEmpty && furnaceItem != null && menu.getSlot(0).getItem().is(furnaceItem)) {
+        if (!inputEmpty && furnaceItem != null && menu.getSlot(0).getItem().is(furnaceItem) && !menu.getSlot(0).getItem().is(ItemTags.LOGS)) {
             for (int i = 0; i < self.getInventory().items.size(); i++) {
                 if (self.getInventory().items.get(i).is(furnaceItem)) {
                     shiftClickInventorySlot(menu, i); // top up the running batch
@@ -1265,21 +1265,35 @@ public final class Crafting {
         self.closeContainer();
     }
 
-    /** Put {@code n} logs of an inventory slot into the furnace input (pick the stack up, right-click them in one by one, put the rest back). */
-    private void loadSpareLogs(AbstractContainerMenu menu, int inventoryIndex, int n) {
+    /**
+     * Charcoal from {@code total} spare logs with nothing else to burn: about 3/5 go in as input and the rest as fuel (a log burns 300 ticks, a
+     * smelt takes 200: two logs of fuel for three of input). Logs go in one by one (pick the stack up, right-click them in, put the rest back).
+     */
+    private void loadSpareLogs(AbstractContainerMenu menu, int inventoryIndex, int total) {
         Slot from = null;
         for (Slot slot : menu.slots) {
             if (slot.container == self.getInventory() && slot.getContainerSlot() == inventoryIndex) {
                 from = slot;
             }
         }
-        if (from == null || n <= 0) {
+        if (from == null || total <= 0) {
             return;
         }
-        n = Math.min(n, from.getItem().getCount());
+        total = Math.min(total, from.getItem().getCount());
+        int input = Math.max(1, total * 3 / 5);
+        int fuel = Math.max(1, (2 * input + 2) / 3);
+        if (input + fuel > from.getItem().getCount()) {
+            fuel = from.getItem().getCount() - input;
+        }
+        if (fuel < 1) {
+            return; // not even one log to burn: do not load a furnace that cannot run
+        }
         menu.clicked(from.index, 0, ClickType.PICKUP, self);
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < input; i++) {
             menu.clicked(0, 1, ClickType.PICKUP, self);
+        }
+        for (int i = 0; i < fuel; i++) {
+            menu.clicked(1, 1, ClickType.PICKUP, self);
         }
         menu.clicked(from.index, 0, ClickType.PICKUP, self);
         if (!menu.getCarried().isEmpty()) {
