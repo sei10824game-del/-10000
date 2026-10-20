@@ -2383,6 +2383,17 @@ public final class CloneGameTests {
     public static void lightsUpWhereMonstersCouldSpawn(GameTestHelper h) {
         clearBases(h);
         com.rlclones.clone.Bases.get(h.getLevel().getServer()).add(h.getLevel().dimension(), h.absolutePos(new BlockPos(3, 2, 3)), "someone");
+        // a stone room round the clone: the arena walls are barriers, which let the light of a neighbouring arena's torches through
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                for (int y = 2; y <= 5; y++) {
+                    boolean wall = Math.abs(dx) == 2 || Math.abs(dz) == 2;
+                    if (wall && y <= 4 || y == 5) {
+                        h.setBlock(new BlockPos(7 + dx, y, 7 + dz), Blocks.STONE);
+                    }
+                }
+            }
+        }
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.TORCH, 8));
         BlockPos feet = c.blockPosition();
