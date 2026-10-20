@@ -5560,12 +5560,12 @@ public final class CloneGameTests {
     /** The foot of a trunk is cut away: the clone steps into the gap where the logs were and cuts the rest from there, looking up. */
     @GameTest(template = ARENA, timeoutTicks = 2400, batch = "r17column")
     public static void stepsIntoTheCutFootOfATrunk(GameTestHelper h) {
-        for (int y = 4; y <= 8; y++) {
-            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG); // (the two lowest logs, y2 and y3, are already gone)
+        for (int y = 4; y <= 7; y++) {
+            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG); // (the two lowest logs, y2 and y3, are already gone; the top log, y7, is out of reach from beside the trunk but not from inside its column)
         }
         for (int x = 8; x <= 10; x++) {
             for (int z = 6; z <= 8; z++) {
-                h.setBlock(new BlockPos(x, 9, z), Blocks.OAK_LEAVES);
+                h.setBlock(new BlockPos(x, 8, z), Blocks.OAK_LEAVES);
             }
         }
         ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
