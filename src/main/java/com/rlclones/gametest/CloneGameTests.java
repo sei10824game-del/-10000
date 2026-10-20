@@ -2393,26 +2393,26 @@ public final class CloneGameTests {
         });
     }
 
-    /** What a clone keeps running short of grows dear to it: planks wanted and not there make planks dearer, and the logs (four planks' worth) are then the cheaper block to build with. */
+    /** What a clone keeps running short of grows dear to it: planks wanted and not there make planks dearer, so it builds with stone (the same price by the recipes) and keeps the planks. */
     @GameTest(template = ARENA, timeoutTicks = 900, batch = "r17value2")
     public static void learnsWhatItRunsShortOf(GameTestHelper h) {
         com.rlclones.ai.ItemValue.forget();
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         var inv = c.getInventory();
-        inv.add(new ItemStack(Items.OAK_LOG, 16));
         inv.add(new ItemStack(Items.OAK_PLANKS, 16));
+        inv.add(new ItemStack(Items.STONE, 16));
         h.runAfterDelay(2, () -> {
-            h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.OAK_PLANKS), "to begin with the planks (cheaper by the recipes) go first");
-            // it wanted planks over and over and had none: five such moments, a second apart
+            h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.OAK_PLANKS), "to begin with the first of equals goes first: the planks ("
+                    + com.rlclones.ai.ItemValue.of(c, new ItemStack(Items.OAK_PLANKS)) + " against stone " + com.rlclones.ai.ItemValue.of(c, new ItemStack(Items.STONE)) + ")");
+            // it wanted planks over and over and had none: six such moments, a little over five seconds apart
             for (int i = 0; i < 6; i++) {
-                final int k = i;
-                h.runAfterDelay(4 + k * 101, () -> com.rlclones.ai.ItemValue.noteShort(c, Items.OAK_PLANKS));
+                h.runAfterDelay(4 + i * 101, () -> com.rlclones.ai.ItemValue.noteShort(c, Items.OAK_PLANKS));
             }
             h.runAfterDelay(4 + 6 * 101 + 2, () -> {
                 double learned = com.rlclones.ai.ItemValue.learned(c, Items.OAK_PLANKS);
                 h.assertTrue(learned > 1.0, "the planks have grown dear to it (" + learned + ")");
-                h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.OAK_LOG), "so the logs go first now (planks "
-                        + com.rlclones.ai.ItemValue.of(c, new ItemStack(Items.OAK_PLANKS)) + " against logs " + com.rlclones.ai.ItemValue.of(c, new ItemStack(Items.OAK_LOG)) + ")");
+                h.assertTrue(inv.items.get(com.rlclones.ai.Equipment.pillarBlockSlot(c)).is(Items.STONE), "so it builds with the stone now and keeps its planks (planks "
+                        + com.rlclones.ai.ItemValue.of(c, new ItemStack(Items.OAK_PLANKS)) + " against stone " + com.rlclones.ai.ItemValue.of(c, new ItemStack(Items.STONE)) + ")");
                 finish(h, c);
                 h.succeed();
             });
