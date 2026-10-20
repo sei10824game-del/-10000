@@ -727,3 +727,8 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - ゲームテスト: `lightsUpWhereMonstersCouldSpawn` は石の部屋で通った。`leavesNoScaffoldBehindATallTree`・`stepsIntoTheCutFootOfATrunk`・`cutsTheFootOfATreeHiddenByLeaves`・`noticesAnOreShowingInATunnelWall`・`fitsAnAutomaticDoor` など新しいテストは通過。
 - 残る失敗: `penscowswhenwheatpilesup`(ほぼ毎回。牛が誘導に乗らない: `lured 0`。stage 5 で止まる。原因未調査)、`visitsTheNetherAndComesBack`(ときどき。ネザーから戻る途中で、ポータルの出口近く (95,48,26) で詰まる `st=FAILED stuck=130台`。R-56 の前提なので直す価値あり)、`setsTntOffWithFlintAndSteel`・`makesSoilBesideBareWaterAndLightsThePlot`・`fleesTowardsTheBaseWhenHurt` が出たり消えたり。
 - 次の候補: ①ネザーからの帰り(`Portals.travelTick`)、②牛の誘導(`Animals` stage 4〜5)、③鉄のツルハシに届く時刻を早める(ダイヤへ)、④R-56 の最初の一歩(ネザーに入って戻れる割合を測る)。
+
+### 62. 塔(R-54)と R-56 の第一歩(2026-10-21)
+- 塔: 3×3の中空の柱 高さ3、1層=1区画、`Plan.ordered`(前の区画が終わるまで次を取れない。待つ側は `PlanWork` が待機)。`Persona.proposeTower`(建材55以上、拠点の近く、確率0.5%)。テスト `buildsATowerTogether`(2体、扉口が空いたまま全部立つ)。
+- R-56: 進み具合の点(`Progression.score`)に、ネザー初訪問(+3)・ブレイズロッド(1本+2、4本まで)・エンダーパール(+1、6個まで)・エンダーの目(+3、3個まで)を足した。段階への強化学習の報酬(新しい最高点だけ)にそのまま乗る。
+- 見送り: 牛の誘導(原因未特定)、R-55 の治療(弱体化ポーション+金のリンゴ)・村の防衛(脅威の判断は既存の hostile 判定に含まれる)、R-57 の罠・ホッパー。
