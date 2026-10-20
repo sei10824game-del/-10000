@@ -5588,6 +5588,41 @@ public final class CloneGameTests {
         });
     }
 
+    /** The tall tree is cut with a scaffold of dirt beside it: once the wood is in, no pillar of dirt is left standing. */
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "r17scaffold")
+    public static void leavesNoScaffoldBehindATallTree(GameTestHelper h) {
+        for (int y = 2; y <= 8; y++) {
+            h.setBlock(new BlockPos(9, y, 7), Blocks.OAK_LOG);
+        }
+        for (int x = 8; x <= 10; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 9, z), Blocks.OAK_LEAVES);
+            }
+        }
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.DIRT, 16));
+        c.controller().forcedOption = opt("GATHER_WOOD");
+        c.setAiEnabled(true);
+        boolean[] over = {false};
+        long[] overAt = {0};
+        h.onEachTick(() -> {
+            if (!over[0] && logsLeft(h).replace("y2 ", "").isEmpty() && c.controller().scaffoldsPlaced >= 1) {
+                over[0] = true;
+                overAt[0] = h.getLevel().getGameTime();
+                c.controller().forcedOption = null; // the tree is done: the clone is free to do other things (the cleanup must not need the tree option)
+            }
+        });
+        h.succeedWhen(() -> {
+            int dirt = 0;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 9, 13)))) {
+                dirt += h.getLevel().getBlockState(p).is(Blocks.DIRT) ? 1 : 0;
+            }
+            h.assertTrue(over[0] && h.getLevel().getGameTime() - overAt[0] > 200 && dirt == 0, "no dirt left standing once the tree is done (dirt " + dirt + ", over " + over[0]
+                    + ", scaffolds " + c.controller().scaffoldsPlaced + " taken down later " + c.controller().scaffoldsTakenDown + ")");
+            finish(h, c);
+        });
+    }
+
     private static String logsLeft(GameTestHelper h) {
         StringBuilder sb = new StringBuilder();
         for (int y = 0; y <= 12; y++) {

@@ -611,6 +611,9 @@ public final class CloneController {
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = lighting.proofTick(now); // R-26: spare torches go round the base
         }
+        if (!itemBusy && !scaffold.isEmpty() && option != Option.GATHER_WOOD && option != Option.FIGHT && option != Option.FLEE && !escaping && !threatened) {
+            itemBusy = scaffoldCleanup(); // a pillar of dirt left beside a tree: taken down, as a tidy player does
+        }
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = trading.tick(now); // R-50: a villager near: sell the surplus, buy food / gear
         }
@@ -4127,6 +4130,42 @@ public final class CloneController {
         }
         return true;
     }
+
+    private int cleanupTicks;
+
+    /** Scaffold blocks left standing when the tree work ended: walk back, take them down topmost first; give up (and leave them) after 600 ticks. */
+    private boolean scaffoldCleanup() {
+        BlockPos top = scaffold.peekLast();
+        ServerLevel level = self.serverLevel();
+        if (top == null) {
+            return false;
+        }
+        if (level.getBlockState(top).isAir() || level.getBlockState(top).canBeReplaced()) {
+            scaffold.pollLast();
+            return false;
+        }
+        if (++cleanupTicks > 600 || top.distSqr(self.blockPosition()) > 40 * 40) {
+            scaffold.clear();
+            cleanupTicks = 0;
+            motor.resetMining();
+            return false;
+        }
+        Vec3 c = Vec3.atCenterOf(top);
+        if (self.getEyePosition().distanceTo(c) > Motor.BLOCK_REACH - 0.5) {
+            motor.navigate(Vec3.atBottomCenterOf(top), 2.5, false);
+            return true;
+        }
+        Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(top)));
+        if (motor.mine(top)) {
+            scaffold.pollLast();
+            cleanupTicks = 0;
+            scaffoldsTakenDown++;
+        }
+        return true;
+    }
+
+    /** Scaffold blocks taken down after the tree work was over (tests). */
+    public int scaffoldsTakenDown;
 
     private boolean runHarvest(Perception.BlockKind kind) {
         ServerLevel level = self.serverLevel();
