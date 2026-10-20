@@ -3888,7 +3888,7 @@ public final class CloneController {
             return dig; // R-44: a digger told where it is digging: have a look there
         }
         Vec3 best = null;
-        double bestScore = -1;
+        double bestScore = -Double.MAX_VALUE;
         for (int i = 0; i < 6; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
             double dist = 12 + random.nextDouble() * 12;

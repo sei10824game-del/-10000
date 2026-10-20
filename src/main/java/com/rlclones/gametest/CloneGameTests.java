@@ -2461,7 +2461,11 @@ public final class CloneGameTests {
         baseAt(h, new BlockPos(6, 2, 8));
         ClonePlayer c = clone(h, 6.5, 5.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.CHEST));
-        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 40)); // something to put away
+        c.getInventory().add(new ItemStack(Items.BONE, 3)); // something to put away (five kinds of loot)
+        c.getInventory().add(new ItemStack(Items.STRING, 4));
+        c.getInventory().add(new ItemStack(Items.GUNPOWDER, 2));
+        c.getInventory().add(new ItemStack(Items.FEATHER, 5));
+        c.getInventory().add(new ItemStack(Items.SPIDER_EYE, 2));
         runStorage(h, c, com.rlclones.ai.Storage.Mode.STORE, new boolean[1]);
         h.succeedWhen(() -> {
             int chests = 0;

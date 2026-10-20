@@ -75,7 +75,7 @@ public final class Spawners {
     private BlockPos find() {
         ServerLevel level = level();
         BlockPos c = self.blockPosition();
-        if (level.getBrightness(LightLayer.SKY, c) >= 8) {
+        if (level.canSeeSky(c)) {
             return null; // out in the open: dungeons are underground
         }
         for (BlockPos p : BlockPos.betweenClosed(c.offset(-12, -5, -12), c.offset(12, 5, 12))) {
