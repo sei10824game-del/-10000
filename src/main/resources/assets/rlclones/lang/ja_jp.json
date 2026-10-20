@@ -52,6 +52,7 @@
   "rlclones.chat.rally": "【集合】X:%s Y:%s Z:%s に集合！未開拓地（X:%s Z:%s）へ向かう。%s人来てほしい",
   "rlclones.chat.depart": "%s人の仲間と出発！ついて来て（目的地 X:%s Z:%s）",
   "rlclones.chat.join": "%s の遠征に参加する！集合地点 X:%s Y:%s Z:%s に向かう",
+  "rlclones.chat.village": "村を見つけた（X:%s Z:%s）。みんな来て！",
   "rlclones.chat.expedition_end": "遠征完了（X:%s Z:%s）。ありがとう、解散！",
   "rlclones.cmd.limit": "クローンの上限: %s",
   "rlclones.cmd.limit_set": "クローンの上限を %s に設定しました",

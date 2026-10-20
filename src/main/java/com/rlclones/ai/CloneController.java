@@ -2407,7 +2407,7 @@ public final class CloneController {
                         expedition.leadHunt(foe.blockPosition(), (Integer) hunt[1], net.minecraft.world.entity.EntityType.getKey(foe.getType()).toString());
                     } else {
                         BlockPos t = expedition.pickTarget(visitedChunks::contains);
-                        if (t != null && !expedition.villageKnown && !trading.met && random.nextFloat() < 0.5f) {
+                        if (t != null && !expedition.villageKnown && !structures.villageKnown && !trading.met && random.nextFloat() < 0.5f) {
                             expedition.leadVillage(t, expedition.companionsNeeded(t, brain())); // no village known yet: look for one
                         } else if (t != null) {
                             expedition.lead(t, expedition.companionsNeeded(t, brain()));

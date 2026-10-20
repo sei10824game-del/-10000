@@ -2630,6 +2630,25 @@ public final class CloneGameTests {
         });
     }
 
+    /** A villager in plain sight: the clone knows there is a village and tells the others where (VILLAGE x y z); one told takes it as a place to visit. */
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "r17village")
+    public static void reportsAVillageItSees(GameTestHelper h) {
+        var villager = h.spawn(EntityType.VILLAGER, new Vec3(9.5, 2, 7.5));
+        villager.setNoAi(true);
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        ClonePlayer friend = clone(h, 3.5, 3.5, 0f, false);
+        h.onEachTick(() -> {
+            c.controller().perception().update(h.getLevel().getGameTime());
+            c.controller().structures().tick(h.getLevel().getGameTime() + (40 - (h.getLevel().getGameTime() + c.getId()) % 40) % 40, c.controller().perception());
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().structures().villageKnown, "the clone saw the villager and knows of a village");
+            friend.controller().structures().onChat("VILLAGE 10 2 10");
+            h.assertTrue(friend.controller().structures().villageKnown && friend.controller().structures().target() != null, "a friend told of it knows it too");
+            finish(h, c, friend);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

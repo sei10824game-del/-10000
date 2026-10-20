@@ -34,6 +34,9 @@ public final class Structures {
     /** Sites noted / visited (diagnostics, tests). */
     public int found;
     public int visits;
+    /** A village is known (seen by this clone or told of by a friend). */
+    public boolean villageKnown;
+    private boolean villageSaid;
 
     public Structures(ClonePlayer self) {
         this.self = self;
@@ -70,6 +73,18 @@ public final class Structures {
                 Chat.say(self, Component.literal("STRUCT"), "STRUCT " + p.getX() + " " + p.getY() + " " + p.getZ());
             }
         }
+        if (!villageSaid) {
+            for (net.minecraft.world.entity.npc.Villager v : level.getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, self.getBoundingBox().inflate(32), net.minecraft.world.entity.LivingEntity::isAlive)) {
+                if (perception.canSee(v)) { // seen with its own eyes, not just near
+                    BlockPos p = v.blockPosition();
+                    villageSaid = true;
+                    villageKnown = true;
+                    add(p);
+                    Chat.say(self, Component.translatable("rlclones.chat.village", p.getX(), p.getZ()), "VILLAGE " + p.getX() + " " + p.getY() + " " + p.getZ());
+                    break;
+                }
+            }
+        }
         for (Site s : sites) {
             if (!s.visited && Motor.horizontalDistance(self.position(), Vec3.atCenterOf(s.pos)) < VISIT && Math.abs(self.getY() - s.pos.getY()) < 12) {
                 s.visited = true;
@@ -80,6 +95,11 @@ public final class Structures {
 
     /** "STRUCT x y z" from a friend. */
     public boolean onChat(String text) {
+        if (text.startsWith("VILLAGE ")) {
+            villageKnown = true; // a friend found one: it is a place to visit (and no trip to look for one)
+            villageSaid = true; // (the finder has said it: not again)
+            return onChat("STRUCT " + text.substring(8));
+        }
         if (!text.startsWith("STRUCT ")) {
             return false;
         }
