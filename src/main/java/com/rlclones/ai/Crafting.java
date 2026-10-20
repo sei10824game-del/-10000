@@ -358,6 +358,11 @@ public final class Crafting {
         if (!hasItem(p, Items.FLINT_AND_STEEL) && hasItem(p, Items.IRON_INGOT) && hasItem(p, Items.FLINT) && count(p, Items.OBSIDIAN) >= 10) {
             out.add(Items.FLINT_AND_STEEL); // to light the portal frame
         }
+        // a base with no furnace by it: one for the house (cobblestone to spare; it is put down by the clone like any station)
+        if (p instanceof com.rlclones.clone.ClonePlayer hc && count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && !furnaceNearby(p)
+                && com.rlclones.clone.Bases.get(hc.getServer()).nearest(hc.level().dimension(), hc.position(), 12) != null) {
+            out.add(Items.FURNACE);
+        }
         if (count(p, Items.IRON_INGOT) >= 3 && !hasBucket(p)) {
             // (an iron pickaxe that can be made now comes first: the first three ingots were going into the bucket, and diamonds wait for the pickaxe)
             if (firstBucketWanted(p) && (pick >= 2 || !makeable(p, Items.IRON_PICKAXE))) {

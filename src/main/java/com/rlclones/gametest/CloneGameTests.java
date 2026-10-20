@@ -2324,6 +2324,27 @@ public final class CloneGameTests {
         });
     }
 
+    /** No base, a bag full of planks and a table, nothing to store: the clone still builds itself a house with a chest (a base the others can find). */
+    @GameTest(template = ARENA, timeoutTicks = 4000, batch = "r17home")
+    public static void buildsAHomeWhenItHasPlentyOfWood(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        h.succeedWhen(() -> {
+            var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+            boolean chest = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 4, 13)))) {
+                chest |= h.getLevel().getBlockState(p).is(Blocks.CHEST);
+            }
+            h.assertTrue(!bases.bases.isEmpty() && chest, "a base with a chest stands (" + bases.bases.size() + " bases, " + c.controller().optionLog + " " + c.controller().storage().stageLog
+                    + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

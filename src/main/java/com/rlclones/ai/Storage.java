@@ -345,7 +345,19 @@ public final class Storage {
         return freeSlots(self) >= 2 && strayChest() != null;
     }
 
+    /**
+     * No base within reach and plenty to build one from: a house is wanted even if there is nothing to put away yet (the soak gave clones endless
+     * wood and nobody built anything: storing is what starts a base, and nothing needed storing).
+     */
+    public boolean homeWanted() {
+        return Config.get(Config.ALLOW_BLOCK_PLACING, true) && !self.isCreative() && Builder.buildingBlocks(self) >= Builder.BLOCKS
+                && Bases.get(self.getServer()).nearest(self.level().dimension(), self.position(), 96) == null;
+    }
+
     public boolean canStore() {
+        if (homeWanted()) {
+            return true;
+        }
         if (!needsStore(self)) {
             return false;
         }
