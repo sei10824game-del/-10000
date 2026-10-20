@@ -2056,7 +2056,10 @@ public final class CloneController {
     public void onDeath(DamageSource source) {
         lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel()
                 + " fall=" + (int) self.fallDistance + " pits=" + pits.busy() + " doorBreath=" + doorBreath.busy() + " lastOpts=" + lastOptionsShort()
-                + " attacker=" + (source.getEntity() == null ? "-" : Perception.typeId(source.getEntity()));
+                + " attacker=" + (source.getEntity() == null ? "-" : Perception.typeId(source.getEntity()))
+                + " feet=" + self.level().getBlockState(self.blockPosition()).getBlock().getDescriptionId().replace("block.minecraft.", "")
+                + " head=" + self.level().getBlockState(BlockPos.containing(self.getEyePosition())).getBlock().getDescriptionId().replace("block.minecraft.", "")
+                + " scaf=" + scaffold.size();
         com.rlclones.RLClones.LOGGER.info("CLONE-DEATH {} {} t={}", self.getGameProfile().getName(), lastDeath, self.level().getGameTime());
         if (option != null) {
             finishOption(true);
@@ -4045,7 +4048,7 @@ public final class CloneController {
     private boolean trunkColumnClear(BlockPos target) {
         ServerLevel level = self.serverLevel();
         int feetY = self.blockPosition().getY();
-        if (target.getY() - feetY < 1 || target.getY() - feetY > 12) {
+        if (target.getY() - feetY < 2 || target.getY() - feetY > 12) { // (2: the cell at head height must be free too, or the head is in the log)
             return false;
         }
         BlockPos below = new BlockPos(target.getX(), feetY - 1, target.getZ());
