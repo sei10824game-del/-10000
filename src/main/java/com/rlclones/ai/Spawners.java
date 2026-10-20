@@ -69,7 +69,7 @@ public final class Spawners {
     /** A weapon in the hand or in the bag (the torch in the hand while torching is not a reason to give up). */
     private boolean armed() {
         int w = Equipment.bestWeaponSlot(self);
-        return Equipment.isArmed(self) || w >= 0 && Equipment.attackDamage(self.getInventory().items.get(w)) >= 4.0;
+        return Equipment.isArmed(self) || w >= 0 && Equipment.attackDamage(self.getInventory().items.get(w)) >= 2.5; // (any sword: a wooden one is 2.5)
     }
 
     private boolean fit() {
