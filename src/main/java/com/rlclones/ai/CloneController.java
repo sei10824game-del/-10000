@@ -1,6 +1,7 @@
 package com.rlclones.ai;
 
 import com.rlclones.Config;
+import net.minecraft.core.Direction;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.brain.EnemyKnowledge;
 import com.rlclones.ai.combat.CombatAction;
@@ -3537,6 +3538,62 @@ public final class CloneController {
     /** Times a flight was bent towards the base (tests). */
     public int fledHome;
 
+    private long plugCooldown;
+    private long plugSince;
+    /** Corridors shut behind the clone while it fled with no friend about (tests, soak). */
+    public int corridorPlugs;
+
+    /**
+     * Running from an enemy with no friend near, in a passage one block wide and two high: a block (two) across it between us and the enemy,
+     * so it cannot follow. Walls it cannot break; zombies that break doors are no worse off than before.
+     * ponytail: straight corridors only, nothing against enemies that dig or fly; the block stays (it is dug out when the way is wanted).
+     */
+    private boolean plugCorridor(Perception.Seen threat, long now) {
+        if (now < plugCooldown || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(self) < 0
+                || Senses.nearestAlly(perception, self, self, now, 16) != null) {
+            return false;
+        }
+        double dist = Senses.gap(self, threat.entity);
+        if (dist < 1.8 || dist > 9) {
+            return false;
+        }
+        Vec3 d = threat.entity.position().subtract(self.position());
+        Direction dir = Direction.getNearest(d.x, 0, d.z);
+        BlockPos lower = self.blockPosition().relative(dir);
+        BlockPos upper = lower.above();
+        ServerLevel level = self.serverLevel();
+        Direction side = dir.getClockWise();
+        for (BlockPos c : new BlockPos[]{lower, upper}) {
+            boolean walls = !level.getBlockState(c.relative(side)).getCollisionShape(level, c.relative(side)).isEmpty()
+                    && !level.getBlockState(c.relative(side.getOpposite())).getCollisionShape(level, c.relative(side.getOpposite())).isEmpty();
+            if (!walls) {
+                return false; // not a one-wide passage
+            }
+        }
+        if (now - plugSince > 40) {
+            plugSince = now; // a new try: at most two seconds of it
+        } else if (now - plugSince > 30) {
+            plugCooldown = now + 200;
+            return false;
+        }
+        Equipment.select(self, Equipment.pillarBlockSlot(self));
+        motor.stop();
+        motor.lookAt(Vec3.atCenterOf(lower));
+        if (level.getBlockState(lower).canBeReplaced() ? motor.placeBlockAt(lower) : false) {
+            return true;
+        }
+        if (!level.getBlockState(lower).canBeReplaced() && level.getBlockState(upper).canBeReplaced() && motor.placeBlockAt(upper)) {
+            corridorPlugs++;
+            plugCooldown = now + 200;
+            return true;
+        }
+        if (!level.getBlockState(lower).canBeReplaced() && !level.getBlockState(upper).canBeReplaced()) {
+            plugCooldown = now + 200; // shut
+            return false;
+        }
+        return true;
+    }
+
     private boolean runFlee(long now) {
         List<Perception.Seen> threats = Senses.threats(perception, self, now, 24);
         if (threats.isEmpty()) {
@@ -3607,6 +3664,9 @@ public final class CloneController {
                     && (nearest == null || t.entity.distanceTo(self) < nearest.entity.distanceTo(self))) {
                 nearest = t;
             }
+        }
+        if (nearest != null && plugCorridor(nearest, now)) {
+            return false; // laying blocks across the passage between us and it
         }
         if (nearest != null && (now % 20) == 0) {
             double d = nearest.entity.distanceTo(self);

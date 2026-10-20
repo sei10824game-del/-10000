@@ -2565,6 +2565,26 @@ public final class CloneGameTests {
         });
     }
 
+    /** Alone in a one-wide passage with an enemy coming along it: the clone shuts the passage behind it with blocks. */
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r17plug")
+    public static void shutsAPassageBehindItWhenFleeingAlone(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int y = 2; y <= 3; y++) {
+                h.setBlock(new BlockPos(x, y, 6), Blocks.STONE);
+                h.setBlock(new BlockPos(x, y, 8), Blocks.STONE);
+            }
+        }
+        Husk husk = dummy(h, 11.5, 7.5);
+        ClonePlayer c = clone(h, 4.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 16));
+        c.controller().forcedOption = opt("FLEE");
+        h.onEachTick(() -> c.controller().perception().update(h.getLevel().getGameTime()));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().corridorPlugs >= 1, "a block across the passage (" + c.controller().corridorPlugs + " " + c.controller().optionLog + ")");
+            finish(h, c);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
