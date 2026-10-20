@@ -179,6 +179,21 @@ public final class StairMining {
         return false;
     }
 
+    /** Two or more other clones close about the top of the staircase we are making for, and we are not on it yet: a queue. */
+    private boolean queueAtTop() {
+        Bases.Staircase s = stairs;
+        if (s == null || self.blockPosition().distManhattan(s.top) <= 1) {
+            return false;
+        }
+        int others = 0;
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.blockPosition().distManhattan(s.top) <= 5 && p.blockPosition().distManhattan(self.blockPosition()) <= 6) {
+                others++;
+            }
+        }
+        return others >= 2;
+    }
+
     /** Staircases branched off because the hole was crowded (tests, soak). */
     public int branches;
 
@@ -384,6 +399,17 @@ public final class StairMining {
         } else {
             stuck = 0;
             lastFeet = feet;
+        }
+        if (stuck > 40 && stairs != null && stage == 0 && queueAtTop()) {
+            // a queue at the top of one staircase (the shared dig site draws everybody to it): a new staircase here, beside the others, instead of waiting in line
+            debug = "queue at the top: a new staircase from " + feet.toShortString();
+            trace("queue-branch@" + feet.toShortString());
+            stairs = null;
+            branches++;
+            toStage(2);
+            stuck = 0;
+            motor.resetStuck();
+            return Status.WORKING;
         }
         if (stuck > 60 && stairs != null && crowdedHere()) {
             // pushed against another digger in the hole and not getting anywhere: a new staircase from right here (the old one stays for the others)
