@@ -2501,6 +2501,31 @@ public final class CloneGameTests {
         });
     }
 
+    /** An enemy known (heard) to be behind a stone wall: the clone does not ram the wall for ever, it gives that enemy up for a while and goes on. */
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r17wall")
+    public static void givesUpOnAnEnemyBehindAWall(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int y = 2; y <= 6; y++) {
+                h.setBlock(new BlockPos(x, y, 9), Blocks.STONE);
+            }
+        }
+        Husk husk = dummy(h, 7.5, 11.5); // on the far side of the wall
+        ClonePlayer c = clone(h, 7.5, 5.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = opt("FIGHT");
+        h.onEachTick(() -> {
+            if (h.getLevel().getGameTime() % 10 == 0) {
+                c.controller().perception().hear(husk, husk.position(), h.getLevel().getGameTime()); // heard through the wall, never seen
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().unreachableGiveUps >= 1 && c.controller().unreachable(husk, h.getLevel().getGameTime()),
+                    "the enemy behind the wall was given up on (" + c.controller().unreachableGiveUps + " " + c.controller().optionLog + ")");
+            finish(h, c);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

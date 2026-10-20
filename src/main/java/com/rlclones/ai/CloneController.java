@@ -2548,7 +2548,7 @@ public final class CloneController {
         Entity best = null;
         double bestScore = Double.MAX_VALUE;
         for (Perception.Seen s : perception.remembered()) {
-            if (now - s.lastSeen > 60 || !s.alive() || !Senses.isHostileTo(s.entity, self)) {
+            if (now - s.lastSeen > 60 || !s.alive() || !Senses.isHostileTo(s.entity, self) || unreachable(s.entity, now)) {
                 continue;
             }
             double score = Senses.gap(self, s.entity);
@@ -2571,7 +2571,43 @@ public final class CloneController {
         return best;
     }
 
+    /** Mobs given up on for a while: heard or remembered behind walls, the clone made no headway towards them (id -> until). */
+    private final java.util.Map<Integer, Long> unreachableMobs = new java.util.HashMap<>();
+    private double fightBest = Double.MAX_VALUE;
+    private long fightBestAt;
+    /** Fights given up because the enemy could not be got at (tests, soak). */
+    public int unreachableGiveUps;
+
+    public boolean unreachable(Entity e, long now) {
+        Long t = unreachableMobs.get(e.getId());
+        if (t == null) {
+            return false;
+        }
+        if (now >= t) {
+            unreachableMobs.remove(e.getId());
+            return false;
+        }
+        return true;
+    }
+
     private boolean runFight(long now, boolean hunt) {
+        if (target != null) {
+            double d = self.distanceTo(target);
+            if (d < fightBest - 1.0) {
+                fightBest = d;
+                fightBestAt = now;
+            }
+            if (now - fightBestAt > 120 && d > 2.5 && !perception.isVisible(target)) {
+                // it is behind a wall or a ceiling (heard, remembered): ramming the block between us gets nowhere - left alone for two minutes
+                unreachableMobs.put(target.getId(), now + 2400);
+                unreachableGiveUps++;
+                closeCombatStep(true, false);
+                target = null;
+                dropVantage();
+                fightBest = Double.MAX_VALUE;
+                return true;
+            }
+        }
         if (target != null && !validTarget(target, hunt, now)) {
             closeCombatStep(true, false);
             target = null;
@@ -2587,6 +2623,8 @@ public final class CloneController {
             if (target == null) {
                 return true;
             }
+            fightBest = Double.MAX_VALUE;
+            fightBestAt = now;
             targetType = Perception.typeId(target);
             combatState = -1;
             action = null;

@@ -197,7 +197,8 @@ public final class Senses {
             if (now - s.lastSeen > 60 || !s.alive() || s.entity == agent) {
                 continue;
             }
-            if (isHostileTo(s.entity, agent) && s.pos.distanceTo(agent.position()) <= radius) {
+            if (isHostileTo(s.entity, agent) && s.pos.distanceTo(agent.position()) <= radius
+                    && !(agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().unreachable(s.entity, now))) {
                 out.add(s);
             }
         }
