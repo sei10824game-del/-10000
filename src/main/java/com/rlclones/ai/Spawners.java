@@ -66,8 +66,14 @@ public final class Spawners {
         return -1;
     }
 
+    /** A weapon in the hand or in the bag (the torch in the hand while torching is not a reason to give up). */
+    private boolean armed() {
+        int w = Equipment.bestWeaponSlot(self);
+        return Equipment.isArmed(self) || w >= 0 && Equipment.attackDamage(self.getInventory().items.get(w)) >= 4.0;
+    }
+
     private boolean fit() {
-        return Config.get(Config.ALLOW_BLOCK_PLACING, true) && Equipment.isArmed(self) && self.getHealth() >= self.getMaxHealth() * 0.7f
+        return Config.get(Config.ALLOW_BLOCK_PLACING, true) && armed() && self.getHealth() >= self.getMaxHealth() * 0.7f
                 && self.getFoodData().getFoodLevel() >= 10 && slotOf(Items.TORCH) >= 0;
     }
 
@@ -102,7 +108,7 @@ public final class Spawners {
                 return false;
             }
             if (!fit()) {
-                debug = "not fit (armed " + Equipment.isArmed(self) + " hp " + self.getHealth() + " food " + self.getFoodData().getFoodLevel() + " torch " + slotOf(Items.TORCH) + ")";
+                debug = "not fit (armed " + armed() + " hp " + self.getHealth() + " food " + self.getFoodData().getFoodLevel() + " torch " + slotOf(Items.TORCH) + ")";
                 return false;
             }
             spawner = find();

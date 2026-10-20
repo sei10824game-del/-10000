@@ -2579,6 +2579,7 @@ public final class CloneController {
     private double fightBest = Double.MAX_VALUE;
     private long fightBestAt;
     private int fightDigs;
+    public String fightDebug = "";
     private int lastFightId = -1;
     private long lastFightAt;
     /** Fights given up because the enemy could not be got at (tests, soak). */
@@ -2607,6 +2608,7 @@ public final class CloneController {
                 fightBest = d;
                 fightBestAt = now;
             }
+            fightDebug = String.format("d=%.1f best=%.1f since=%d vis=%s digs=%d", d, fightBest, now - fightBestAt, perception.isVisible(target), fightDigs);
             if (now - fightBestAt > 120 && d > 2.5 && d <= 6 && fightDigs < 6 && !perception.isVisible(target)) {
                 // dig through the terrain between us (never the walls of a base) before giving up
                 BlockPos wall = motor.obstruction(target.blockPosition().above());

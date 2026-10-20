@@ -2541,7 +2541,7 @@ public final class CloneGameTests {
                 }
             }
             h.assertTrue(c.controller().unreachableGiveUps >= 1 && c.controller().unreachable(husk, h.getLevel().getGameTime()) || dug,
-                    "the enemy behind the wall was given up on or dug to (" + c.controller().unreachableGiveUps + " " + c.controller().optionLog + ")");
+                    "the enemy behind the wall was given up on or dug to (" + c.controller().fightDebug + " " + c.controller().unreachableGiveUps + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
