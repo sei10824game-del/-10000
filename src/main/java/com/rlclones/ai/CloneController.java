@@ -2575,6 +2575,7 @@ public final class CloneController {
     private final java.util.Map<Integer, Long> unreachableMobs = new java.util.HashMap<>();
     private double fightBest = Double.MAX_VALUE;
     private long fightBestAt;
+    private int fightDigs;
     /** Fights given up because the enemy could not be got at (tests, soak). */
     public int unreachableGiveUps;
 
@@ -2597,6 +2598,19 @@ public final class CloneController {
                 fightBest = d;
                 fightBestAt = now;
             }
+            if (now - fightBestAt > 120 && d > 2.5 && d <= 6 && fightDigs < 6 && !perception.isVisible(target)) {
+                // dig through the terrain between us (never the walls of a base) before giving up
+                BlockPos wall = motor.obstruction(target.blockPosition().above());
+                if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && !BlockClaims.takenByOther(wall, self.getUUID(), now)
+                        && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(wall), 12) == null) {
+                    BlockClaims.claim(wall, self.getUUID(), now);
+                    if (motor.mine(wall)) {
+                        fightDigs++;
+                        fightBestAt = now;
+                    }
+                    return true;
+                }
+            }
             if (now - fightBestAt > 120 && d > 2.5 && !perception.isVisible(target)) {
                 // it is behind a wall or a ceiling (heard, remembered): ramming the block between us gets nowhere - left alone for two minutes
                 unreachableMobs.put(target.getId(), now + 2400);
@@ -2605,6 +2619,7 @@ public final class CloneController {
                 target = null;
                 dropVantage();
                 fightBest = Double.MAX_VALUE;
+                fightDigs = 0;
                 return true;
             }
         }
@@ -2625,6 +2640,7 @@ public final class CloneController {
             }
             fightBest = Double.MAX_VALUE;
             fightBestAt = now;
+            fightDigs = 0;
             targetType = Perception.typeId(target);
             combatState = -1;
             action = null;
