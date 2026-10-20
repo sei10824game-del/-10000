@@ -30,6 +30,44 @@ public final class ItemValue {
 
     public static void forget() {
         CACHE.clear();
+        SHORT.clear();
+    }
+
+    /**
+     * What a clone has learned about prices from its own life: a thing it was short of when it wanted to make something is dearer to it than the
+     * recipes say, and the memory fades (half in ten minutes). Kept for the session, per clone.
+     */
+    private static final Map<java.util.UUID, Map<Item, double[]>> SHORT = new HashMap<>();
+
+    private static double faded(double[] e, long now) {
+        return e[0] * Math.pow(0.5, (now - (long) e[1]) / 12000.0);
+    }
+
+    /** The clone wanted to craft and lacked this: noted (at most once in five seconds for the same thing, so a long wait does not run the price up). */
+    public static void noteShort(net.minecraft.world.entity.player.Player p, Item item) {
+        long now = p.level().getGameTime();
+        Map<Item, double[]> m = SHORT.computeIfAbsent(p.getUUID(), k -> new HashMap<>());
+        double[] e = m.computeIfAbsent(item, k -> new double[]{0, now - 1000});
+        if (now - (long) e[1] < 100) {
+            return;
+        }
+        e[0] = Math.min(2.0, faded(e, now) + 0.3);
+        e[1] = now;
+    }
+
+    /** The price to this clone: the recipes' price, up to three times that for what it keeps running short of. */
+    public static double of(net.minecraft.world.entity.player.Player p, ItemStack s) {
+        double base = of(p.level(), s.getItem());
+        Map<Item, double[]> m = SHORT.get(p.getUUID());
+        double[] e = m == null ? null : m.get(s.getItem());
+        return e == null ? base : base * (1 + faded(e, p.level().getGameTime()));
+    }
+
+    /** How much dearer than the recipes say (0 = not at all), for diagnostics. */
+    public static double learned(net.minecraft.world.entity.player.Player p, Item item) {
+        Map<Item, double[]> m = SHORT.get(p.getUUID());
+        double[] e = m == null ? null : m.get(item);
+        return e == null ? 0 : faded(e, p.level().getGameTime());
     }
 
     public static double of(Level level, ItemStack s) {

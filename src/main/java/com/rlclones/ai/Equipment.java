@@ -488,7 +488,7 @@ public final class Equipment {
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
             if (isBuildingBlock(p, s)) {
-                double v = ItemValue.of(p.level(), s);
+                double v = ItemValue.of(p, s);
                 if (v < bestValue - 1.0e-9) {
                     bestValue = v;
                     best = i;

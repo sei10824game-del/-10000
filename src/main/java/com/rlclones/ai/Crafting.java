@@ -521,12 +521,41 @@ public final class Crafting {
 
     @Nullable
     private static CraftingRecipe craftable(ServerPlayer p, java.util.function.Predicate<ItemStack> result) {
+        CraftingRecipe first = null;
         for (CraftingRecipe r : recipesFor(p, result)) {
             if (canCraft(p, r)) {
                 return r;
             }
+            if (first == null) {
+                first = r;
+            }
+        }
+        if (first != null) {
+            noteMissing(p, first); // wanted and could not be made: what was lacking is dearer to this clone from now on
         }
         return null;
+    }
+
+    /** The ingredients of {@code r} that nothing in the bag fits: noted as short (the price the clone puts on them rises, see ItemValue). */
+    private static void noteMissing(ServerPlayer p, CraftingRecipe r) {
+        for (net.minecraft.world.item.crafting.Ingredient ing : r.getIngredients()) {
+            if (ing.isEmpty()) {
+                continue;
+            }
+            boolean have = false;
+            for (ItemStack s : p.getInventory().items) {
+                if (!s.isEmpty() && ing.test(s)) {
+                    have = true;
+                    break;
+                }
+            }
+            if (!have) {
+                ItemStack[] options = ing.getItems();
+                if (options.length > 0) {
+                    ItemValue.noteShort(p, options[0].getItem());
+                }
+            }
+        }
     }
 
     /** Next recipe to craft (all ingredients in the inventory), or null. */
