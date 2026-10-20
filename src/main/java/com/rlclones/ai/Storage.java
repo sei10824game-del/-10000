@@ -619,8 +619,22 @@ public final class Storage {
                     motor.navigate(Vec3.atBottomCenterOf(base.center), 0.5, false);
                     return motor.stuckCount() > 6 ? Status.FAILED : Status.WORKING;
                 }
+                // beside a single chest, facing the way it faces: the two become one large chest (the soak left chests strewn about in heaps)
+                BlockPos merge = mergeSpot();
+                if (merge != null) {
+                    spot = merge;
+                    Vec3 stand = Vec3.atBottomCenterOf(merge.relative(mergeFacing, 2)); // in front of where it goes, looking at it: it takes the same facing
+                    if (Motor.horizontalDistance(self.position(), stand) > 0.9 && ++mergeTries < 200) {
+                        motor.navigate(stand, 0.6, false);
+                        return Status.WORKING;
+                    }
+                }
                 Equipment.select(self, slotOf(Items.CHEST));
                 if (motor.placeBlockAt(spot)) {
+                    if (merge != null) {
+                        mergedChests++;
+                    }
+                    mergeTries = 0;
                     if (stage == 10) {
                         base = bases.add(self.level().dimension(), spot, self.getGameProfile().getName());
                         report("BASE", "rlclones.chat.base", spot, Map.of());
@@ -697,6 +711,37 @@ public final class Storage {
     }
 
     @Nullable
+    private int mergeTries;
+    private net.minecraft.core.Direction mergeFacing = net.minecraft.core.Direction.NORTH;
+    /** Chests that went down beside another to make a large one (tests). */
+    public int mergedChests;
+
+    /** A free cell beside a single chest within 10 blocks, on the side where a chest with the same facing joins it into a large chest. */
+    @javax.annotation.Nullable
+    private BlockPos mergeSpot() {
+        ServerLevel level = self.serverLevel();
+        BlockPos c = self.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-10, -2, -10), c.offset(10, 2, 10))) {
+            var st = level.getBlockState(p);
+            if (!st.is(net.minecraft.world.level.block.Blocks.CHEST) || st.getValue(net.minecraft.world.level.block.ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+                continue;
+            }
+            net.minecraft.core.Direction f = st.getValue(net.minecraft.world.level.block.ChestBlock.FACING);
+            for (net.minecraft.core.Direction side : new net.minecraft.core.Direction[]{f.getClockWise(), f.getCounterClockWise()}) {
+                BlockPos cell = p.relative(side);
+                BlockPos front = cell.relative(f, 2);
+                if (level.getBlockState(cell).canBeReplaced() && level.getBlockState(cell.above()).canBeReplaced()
+                        && level.getBlockState(cell.below()).isFaceSturdy(level, cell.below(), net.minecraft.core.Direction.UP)
+                        && level.getBlockState(cell.relative(side)).getBlock() != net.minecraft.world.level.block.Blocks.CHEST
+                        && level.getBlockState(front).getCollisionShape(level, front).isEmpty()) {
+                    mergeFacing = f;
+                    return cell.immutable();
+                }
+            }
+        }
+        return null;
+    }
+
     private BlockPos freeChestSpot(Bases.Base b) {
         BlockPos origin = b.center.offset(-2, 0, -2);
         for (BlockPos p : Builder.chestSpots(origin)) {

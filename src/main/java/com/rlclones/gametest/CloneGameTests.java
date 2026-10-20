@@ -2452,6 +2452,55 @@ public final class CloneGameTests {
         });
     }
 
+    /** A chest to put down and a single one already standing: it goes beside it and the two make a large chest. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r17chest")
+    public static void putsAChestBesideAnotherToMakeALargeOne(GameTestHelper h) {
+        clearBases(h);
+        h.setBlock(new BlockPos(6, 2, 8), Blocks.CHEST.defaultBlockState().setValue(net.minecraft.world.level.block.ChestBlock.FACING, net.minecraft.core.Direction.NORTH));
+        baseAt(h, new BlockPos(6, 2, 8));
+        ClonePlayer c = clone(h, 6.5, 5.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.CHEST));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 40)); // something to put away
+        c.controller().forcedOption = opt("STORE");
+        h.succeedWhen(() -> {
+            int chests = 0;
+            boolean large = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 3, 13)))) {
+                var st = h.getLevel().getBlockState(p);
+                if (st.is(Blocks.CHEST)) {
+                    chests++;
+                    large |= st.getValue(net.minecraft.world.level.block.ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE;
+                }
+            }
+            h.assertTrue(chests >= 2 && large, "the new chest joined the old one into a large chest (" + chests + " chests, merged " + c.controller().storage().mergedChests + " "
+                    + c.controller().storage().stageLog + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
+    /** A crafting table already stands a few blocks away (not in view): the clone goes to it, no second table beside it. */
+    @GameTest(template = ARENA, timeoutTicks = 800, batch = "r17table")
+    public static void usesTheCraftingTableThatStandsNearInsteadOfPlacingAnother(GameTestHelper h) {
+        h.setBlock(new BlockPos(11, 2, 11), Blocks.CRAFTING_TABLE);
+        ClonePlayer c = clone(h, 3.5, 3.5, 180f, false); // looking away from it
+        c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 16));
+        c.getInventory().add(new ItemStack(Items.CRAFTING_TABLE)); // it could put one down itself
+        c.controller().crafting().forcedTarget = Items.WOODEN_PICKAXE;
+        h.onEachTick(() -> {
+            c.controller().crafting().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            int tables = 0;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(1, 2, 1)), h.absolutePos(new BlockPos(13, 3, 13)))) {
+                tables += h.getLevel().getBlockState(p).is(Blocks.CRAFTING_TABLE) ? 1 : 0;
+            }
+            h.assertTrue(c.getInventory().countItem(Items.WOODEN_PICKAXE) >= 1 && tables == 1, "the pickaxe made at the table that was there (" + tables + " tables, " + c.controller().crafting().debug() + ")");
+            finish(h, c);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

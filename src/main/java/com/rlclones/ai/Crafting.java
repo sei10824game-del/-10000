@@ -1050,6 +1050,20 @@ public final class Crafting {
             stage = -1;
             return;
         }
+        BlockPos existing = existingStation(item);
+        if (existing != null) {
+            // one stands within a dozen blocks (not necessarily in view): use it, do not put down another beside it
+            perception.noteBlock(existing);
+            if (placeOnly) {
+                placeOnly = false;
+                placeItem = null;
+                stage = 0;
+            } else {
+                station = existing;
+                stage = 2;
+            }
+            return;
+        }
         Equipment.select(self, slot);
         ServerLevel level = self.serverLevel();
         BlockPos feet = self.blockPosition();
@@ -1081,6 +1095,30 @@ public final class Crafting {
         }
         placeDebug = sb.toString().replace("Block{minecraft:", "").replace("}", "");
         stage = -1;
+    }
+
+    /** A crafting table (or furnace) of the same kind already standing within 12 blocks, the nearest, looked for in the world itself, not only in what the clone has seen. */
+    @javax.annotation.Nullable
+    private BlockPos existingStation(Item item) {
+        net.minecraft.world.level.block.Block want = item == Items.CRAFTING_TABLE ? net.minecraft.world.level.block.Blocks.CRAFTING_TABLE
+                : item == Items.FURNACE ? net.minecraft.world.level.block.Blocks.FURNACE : null;
+        if (want == null) {
+            return null;
+        }
+        ServerLevel level = self.serverLevel();
+        BlockPos c = self.blockPosition();
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-12, -3, -12), c.offset(12, 3, 12))) {
+            if (level.getBlockState(p).is(want)) {
+                double d = p.distSqr(c);
+                if (d < bestD) {
+                    bestD = d;
+                    best = p.immutable();
+                }
+            }
+        }
+        return best;
     }
 
     private void placed(BlockPos spot) {
