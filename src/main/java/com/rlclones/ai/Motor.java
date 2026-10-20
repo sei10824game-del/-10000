@@ -1050,7 +1050,34 @@ public final class Motor {
         return st.getFluidState().isEmpty() && st.getCollisionShape(self.level(), p).isEmpty();
     }
 
+    /**
+     * On a ladder and the goal is higher up: face the wall the ladder hangs on and press into it (that is what climbs). With the goal straight above
+     * there is no sideways part to steer by, and clones stood on the ladder facing the other way, going nowhere.
+     */
+    private void ladderAssist() {
+        if (!self.onClimbable() || lastGoal == null || self.level().getGameTime() - lastGoalTick > 5 || sneak) {
+            return;
+        }
+        BlockPos cell = self.blockPosition();
+        net.minecraft.world.level.block.state.BlockState st = self.level().getBlockState(cell);
+        if (!(st.getBlock() instanceof net.minecraft.world.level.block.LadderBlock)) {
+            return;
+        }
+        net.minecraft.core.Direction wall = st.getValue(net.minecraft.world.level.block.LadderBlock.FACING).getOpposite(); // the ladder hangs on the wall behind it
+        if (lastGoal.y > self.getY() + 0.7) {
+            lookAt(Vec3.atCenterOf(cell.relative(wall)));
+            moveDir = null;
+            forward = 1f;
+            jump = true;
+            ladderClimbs++;
+        }
+    }
+
+    /** Ticks spent climbing a ladder with the assist (tests). */
+    public int ladderClimbs;
+
     public void tick() {
+        ladderAssist();
         flight();
         waterEscape();
         breathSteer();

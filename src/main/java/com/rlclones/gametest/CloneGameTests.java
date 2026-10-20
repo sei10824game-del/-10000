@@ -2367,6 +2367,32 @@ public final class CloneGameTests {
         });
     }
 
+    /** A 1x1 shaft with a ladder on its far wall; the clone stands in it facing the other way and has to get to the top: it turns to the ladder and climbs. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r17ladder")
+    public static void climbsALadderFacingTheOtherWay(GameTestHelper h) {
+        for (int x = 6; x <= 8; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = 2; y <= 9; y++) {
+                    h.setBlock(new BlockPos(x, y, z), x == 7 && z == 7 ? Blocks.AIR : Blocks.STONE);
+                }
+            }
+        }
+        for (int y = 2; y <= 9; y++) {
+            h.setBlock(new BlockPos(7, y, 7), Blocks.LADDER.defaultBlockState().setValue(net.minecraft.world.level.block.LadderBlock.FACING, net.minecraft.core.Direction.SOUTH)); // on the north wall
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false); // yaw 0: looking south, away from the ladder's wall
+        Vec3 top = h.absoluteVec(new Vec3(7.5, 10, 7.5));
+        h.onEachTick(() -> {
+            c.controller().motor().navigate(top, 0.5, false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getY() >= h.absoluteVec(new Vec3(7.5, 8.5, 7.5)).y, "up the ladder though it started facing the other way (y "
+                    + (c.getY() - h.absoluteVec(Vec3.ZERO).y) + ", climbing ticks " + c.controller().motor().ladderClimbs + ")");
+            finish(h, c);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
