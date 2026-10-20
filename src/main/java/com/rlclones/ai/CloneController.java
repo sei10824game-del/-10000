@@ -83,6 +83,7 @@ public final class CloneController {
     private final Structures structures;
     private final Pits pits;
     private final Trading trading;
+    private final Spawners spawners;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -195,6 +196,7 @@ public final class CloneController {
         this.structures = new Structures(self);
         this.pits = new Pits(self, motor);
         this.trading = new Trading(self, motor);
+        this.spawners = new Spawners(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -337,6 +339,10 @@ public final class CloneController {
 
     public Persona persona() {
         return persona;
+    }
+
+    public Spawners spawners() {
+        return spawners;
     }
 
     public Trading trading() {
@@ -616,6 +622,9 @@ public final class CloneController {
         }
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = trading.tick(now); // R-50: a villager near: sell the surplus, buy food / gear
+        }
+        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
+            itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
         }
         Prof.add(Prof.REFLEXES, pr);
         long pt = Prof.t();

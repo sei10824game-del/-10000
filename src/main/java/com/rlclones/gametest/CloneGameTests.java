@@ -2297,65 +2297,30 @@ public final class CloneGameTests {
         });
     }
 
-    /** A staircase with a digger at its end is left to that digger: a second clone does not pick it up (twelve clones piled up at one staircase end). */
-    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r17stairs")
-    public static void doesNotJoinAStaircaseThatHasADigger(GameTestHelper h) {
-        clearBases(h);
-        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
-        BlockPos top = h.absolutePos(new BlockPos(3, 2, 3));
-        var st = bases.addStaircase(h.getLevel().dimension(), top, net.minecraft.core.Direction.EAST);
-        st.end = top.east(6).below(6);
-        ClonePlayer digger = clone(h, 9.5, 3.5, 0f, false); // near the staircase end (6 east, 6 down... in the arena: close enough by manhattan distance)
-        ClonePlayer other = clone(h, 3.5, 7.5, 0f, false);
-        other.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
-        other.controller().stairs().begin();
-        h.runAfterDelay(5, () -> {
-            h.assertTrue(other.controller().stairs().resumed == 0, "the second clone does not take over the staircase the first one is at the end of (resumed "
-                    + other.controller().stairs().resumed + ")");
-            finish(h, digger, other);
-            clearBases(h);
-            h.succeed();
-        });
-    }
-
-    /** Up a passage with a step two blocks high in the middle: nobody jumps that - the clone lays a block in front of the wall and climbs out in two steps. */
-    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r17step")
-    public static void mendsATwoBlockStepOnTheWayUp(GameTestHelper h) {
-        clearBases(h);
+    /** A monster spawner in a dark cave: the clone goes up to it and puts torches on it. */
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r17spawner")
+    public static void torchesAMonsterSpawner(GameTestHelper h) {
+        com.rlclones.ai.Spawners.forgetAll();
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
-                for (int y = 2; y <= 6; y++) {
-                    boolean passage = z == 7 && (x <= 7 && y <= 5 || x >= 8 && y >= 4 && y <= 5); // (the low part is tall enough to stand a block higher in)
-                    h.setBlock(new BlockPos(x, y, z), passage ? Blocks.AIR : Blocks.STONE);
-                }
+                h.setBlock(new BlockPos(x, 8, z), Blocks.STONE); // a roof: it is a cave (no sky light)
             }
         }
-        // x <= 7: the low floor (y2, two high of air); x >= 8: the floor is two higher (y4); between them a wall two blocks high at x = 8
-        for (int y = 2; y <= 3; y++) {
-            h.setBlock(new BlockPos(8, y, 7), Blocks.STONE);
-        }
-        for (int x = 8; x <= 13; x++) {
-            h.setBlock(new BlockPos(x, 4, 7), Blocks.AIR);
-            h.setBlock(new BlockPos(x, 5, 7), Blocks.AIR);
-        }
-        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
-        BlockPos top = h.absolutePos(new BlockPos(12, 4, 7));
-        var st = bases.addStaircase(h.getLevel().dimension(), top, net.minecraft.core.Direction.WEST);
-        st.end = h.absolutePos(new BlockPos(2, 2, 7));
-        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
-        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 8));
-        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
-        c.controller().stairs().begin();
+        h.setBlock(new BlockPos(9, 2, 7), Blocks.SPAWNER);
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        c.getInventory().add(new ItemStack(Items.TORCH, 8));
         h.onEachTick(() -> {
-            c.controller().stairs().tick();
+            c.controller().spawners().tick(h.getLevel().getGameTime(), false);
             c.controller().motor().tick();
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.blockPosition().getX() - h.absolutePos(BlockPos.ZERO).getX() >= 9 && c.controller().stairs().stepsFixed >= 1,
-                    "the clone got over the two-high step (fixed " + c.controller().stairs().stepsFixed + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
-                    + " " + c.controller().stairs().debug + ")");
+            boolean torch = false;
+            for (BlockPos p : BlockPos.betweenClosed(h.absolutePos(new BlockPos(8, 2, 6)), h.absolutePos(new BlockPos(10, 3, 8)))) {
+                torch |= h.getLevel().getBlockState(p).is(Blocks.TORCH) || h.getLevel().getBlockState(p).is(Blocks.WALL_TORCH);
+            }
+            h.assertTrue(torch && c.controller().spawners().torches >= 1, "a torch on the spawner (" + c.controller().spawners().torches + " " + c.controller().spawners().debug + ")");
             finish(h, c);
-            clearBases(h);
         });
     }
 

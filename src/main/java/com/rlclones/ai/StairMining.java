@@ -166,22 +166,21 @@ public final class StairMining {
 
     private boolean usable(Bases.Staircase s) {
         Long t = avoid.get(s.top);
-        return (t == null || self.level().getGameTime() >= t) && (s == stairs || !crowded(s));
+        return t == null || self.level().getGameTime() >= t;
     }
 
-    /**
-     * Another clone is at the working end of this staircase (its tip, or the tunnel off it): a 1-wide hole holds one digger. Twelve clones taking
-     * the nearest unfinished staircase all piled up at its end, pushing each other about and unable to turn back. Staircases left for the one there.
-     */
-    private boolean crowded(Bases.Staircase s) {
-        BlockPos tip = s.tunnelEnd != null ? s.tunnelEnd : s.end;
+    /** Another clone right beside us (we share a 1-wide hole and have not moved for a while): neither can pass the other. */
+    private boolean crowdedHere() {
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
-            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.blockPosition().distManhattan(tip) <= 10) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.distanceTo(self) < 1.6) {
                 return true;
             }
         }
         return false;
     }
+
+    /** Staircases branched off because the hole was crowded (tests, soak). */
+    public int branches;
 
     /** Staircases with their top or bottom within {@code radius} of {@code pos} are left alone until {@code until} (a pit we keep falling into). */
     public void avoidNear(BlockPos pos, int radius, long until) {
@@ -385,6 +384,17 @@ public final class StairMining {
         } else {
             stuck = 0;
             lastFeet = feet;
+        }
+        if (stuck > 60 && stairs != null && crowdedHere()) {
+            // pushed against another digger in the hole and not getting anywhere: a new staircase from right here (the old one stays for the others)
+            debug = "crowded at " + feet.toShortString() + ": a new staircase from here";
+            trace("branch@" + feet.toShortString());
+            stairs = null;
+            branches++;
+            toStage(2);
+            stuck = 0;
+            motor.resetStuck();
+            return Status.WORKING;
         }
         if (ticks % 100 == 1) {
             trace("s" + stage + "@" + feet.toShortString() + (stage == 0 ? " " + motor.mineDebug.length() + "/" + motor.stuckCount() : ""));
