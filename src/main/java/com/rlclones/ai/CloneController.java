@@ -159,6 +159,9 @@ public final class CloneController {
     private BlockPos blockTarget;
     private int blockTicks;
     private int blocksDone;
+    /** Best Progression.score the clone has had (-1 = not looked at yet) and how many times it rose (diagnostics). */
+    private float bestProgress = -1f;
+    public int progressRewards;
     private boolean eatStarted;
     private int closeTicks;
 
@@ -2396,6 +2399,17 @@ public final class CloneController {
         long now = now();
         if (option == Option.STAIRS || option == Option.SHAFT) {
             noteDigEnd(now, died);
+        }
+        if (!died) {
+            // the road to iron and diamonds: a new best (raw iron, ingots, the iron pickaxe, diamonds) is rewarded to the option that got there
+            float score = Progression.score(self);
+            if (bestProgress < 0) {
+                bestProgress = score; // (what the clone starts with is not an achievement)
+            } else if (score > bestProgress) {
+                optionReward += (score - bestProgress) * 3f;
+                progressRewards++;
+                bestProgress = score;
+            }
         }
         noteOptionEnd(option, optionTicks, optionReward, died, now);
         if (died) {

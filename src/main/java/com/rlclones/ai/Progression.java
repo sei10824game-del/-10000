@@ -22,6 +22,31 @@ public final class Progression {
     /** What the player lacks most: a pickaxe, stone for the next one, iron for the gear, diamonds for the gear, nothing. */
     public enum Need {NONE, WOOD, STONE, IRON, DIAMOND}
 
+    /**
+     * How far along the iron / diamond road the bag shows (a single number for the reward): raw iron, ingots, an iron pickaxe, diamonds, a
+     * diamond pickaxe. The caller rewards only the rise above the best it has ever had, so spending the iron on gear costs nothing.
+     */
+    public static float score(Player p) {
+        int raw = 0;
+        int ingots = 0;
+        int diamonds = 0;
+        float tools = 0;
+        for (ItemStack s : p.getInventory().items) {
+            if (s.is(Items.RAW_IRON)) {
+                raw += s.getCount();
+            } else if (s.is(Items.IRON_INGOT)) {
+                ingots += s.getCount();
+            } else if (s.is(Items.DIAMOND)) {
+                diamonds += s.getCount();
+            } else if (s.is(Items.IRON_PICKAXE)) {
+                tools = Math.max(tools, 4f);
+            } else if (s.is(Items.DIAMOND_PICKAXE)) {
+                tools = Math.max(tools, 10f);
+            }
+        }
+        return Math.min(raw, 3) * 0.5f + Math.min(ingots, 6) * 1.0f + Math.min(diamonds, 3) * 3f + tools;
+    }
+
     private static final EquipmentSlot[] SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
     /** Ingots (or diamonds) for helmet, chestplate, leggings, boots. */
     private static final int[] ARMOR_COST = {5, 8, 7, 4};

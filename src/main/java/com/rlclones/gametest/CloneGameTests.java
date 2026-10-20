@@ -6346,7 +6346,7 @@ public final class CloneGameTests {
                                 + " store=" + live.controller().storage().deposits + "/" + live.controller().storage().withdrawals + " food=" + com.rlclones.ai.FoodAid.foodItems(live)
                                 + " walls=" + live.controller().persona().plansStarted + "/" + live.controller().persona().plansHelped + "/" + live.controller().persona().plansRepaired
                                 + " placed=" + live.controller().persona().planWork().placed
-                                + " craft=" + live.controller().crafting().crafted + "/" + live.controller().crafting().smelted + "/gu" + live.controller().crafting().giveUps);
+                                + " prog=" + live.controller().progressRewards + " craft=" + live.controller().crafting().crafted + "/" + live.controller().crafting().smelted + "/gu" + live.controller().crafting().giveUps);
                     }
                     java.util.Map<String, Integer> escapes = new java.util.TreeMap<>();
                     for (String n : names) {
