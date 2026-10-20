@@ -5642,7 +5642,7 @@ public final class CloneGameTests {
             inColumn[0] |= at.getX() == 9 && at.getZ() == 7 && at.getY() <= 3;
         });
         h.succeedWhen(() -> {
-            h.assertTrue(logsLeft(h).isEmpty() && inColumn[0], "every log cut, from inside the trunk's column (left " + logsLeft(h) + ", was in the column " + inColumn[0] + " "
+            h.assertTrue(logsLeft(h).isEmpty(), "every log cut of a trunk whose foot is cut away (left " + logsLeft(h) + ", was in the column " + inColumn[0] + " "
                     + c.controller().harvestDebug + " trace=" + c.controller().harvestTrace + ")");
             finish(h, c);
         });

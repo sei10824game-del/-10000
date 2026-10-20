@@ -25,6 +25,7 @@ public final class PlanWork {
     private int ticks;
     private int stuckOn;
     private int cooldown;
+    private int retries;
     private final Set<BlockPos> skipped = new HashSet<>();
     /** Blocks laid / segments finished by this clone (tests). */
     public int placed;
@@ -41,6 +42,7 @@ public final class PlanWork {
         segment = -1;
         ticks = 0;
         stuckOn = 0;
+        retries = 0;
         debug = "";
     }
 
@@ -74,6 +76,11 @@ public final class PlanWork {
                 next = p;
                 break;
             }
+        }
+        if (next == null && !skipped.isEmpty() && retries < 3) {
+            retries++;
+            skipped.clear(); // blocks given up on (the other clone stood in the way, a bad angle) get another go once the rest is done
+            return Status.WORKING;
         }
         if (next == null) {
             plan.finish(segment);
