@@ -166,7 +166,21 @@ public final class StairMining {
 
     private boolean usable(Bases.Staircase s) {
         Long t = avoid.get(s.top);
-        return t == null || self.level().getGameTime() >= t;
+        return (t == null || self.level().getGameTime() >= t) && (s == stairs || !crowded(s));
+    }
+
+    /**
+     * Another clone is at the working end of this staircase (its tip, or the tunnel off it): a 1-wide hole holds one digger. Twelve clones taking
+     * the nearest unfinished staircase all piled up at its end, pushing each other about and unable to turn back. Staircases left for the one there.
+     */
+    private boolean crowded(Bases.Staircase s) {
+        BlockPos tip = s.tunnelEnd != null ? s.tunnelEnd : s.end;
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.blockPosition().distManhattan(tip) <= 10) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Staircases with their top or bottom within {@code radius} of {@code pos} are left alone until {@code until} (a pit we keep falling into). */
