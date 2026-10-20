@@ -635,6 +635,7 @@ public final class Storage {
                         mergedChests++;
                     }
                     mergeTries = 0;
+                    joinChests(spot);
                     if (stage == 10) {
                         base = bases.add(self.level().dimension(), spot, self.getGameProfile().getName());
                         report("BASE", "rlclones.chat.base", spot, Map.of());
@@ -740,6 +741,35 @@ public final class Storage {
             }
         }
         return null;
+    }
+
+    /**
+     * A chest just put down beside a single chest that faces another way does not join it (only chests facing the same way do): turn it to face the
+     * neighbour's way and make the two one large chest (the chests in the base stood side by side, every one facing differently).
+     */
+    private void joinChests(BlockPos spot) {
+        ServerLevel level = self.serverLevel();
+        var st = level.getBlockState(spot);
+        if (!st.is(net.minecraft.world.level.block.Blocks.CHEST) || st.getValue(net.minecraft.world.level.block.ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+            return;
+        }
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            BlockPos np = spot.relative(d);
+            var ns = level.getBlockState(np);
+            if (!ns.is(net.minecraft.world.level.block.Blocks.CHEST) || ns.getValue(net.minecraft.world.level.block.ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+                continue;
+            }
+            net.minecraft.core.Direction f = ns.getValue(net.minecraft.world.level.block.ChestBlock.FACING);
+            if (d.getAxis() == f.getAxis()) {
+                continue; // in front of / behind it: not a side by side pair
+            }
+            boolean mine = d == f.getClockWise(); // the neighbour is on my clockwise side: I am the left half
+            var type = mine ? net.minecraft.world.level.block.state.properties.ChestType.LEFT : net.minecraft.world.level.block.state.properties.ChestType.RIGHT;
+            level.setBlock(spot, st.setValue(net.minecraft.world.level.block.ChestBlock.FACING, f).setValue(net.minecraft.world.level.block.ChestBlock.TYPE, type), 3);
+            level.setBlock(np, ns.setValue(net.minecraft.world.level.block.ChestBlock.TYPE, type.getOpposite()), 3);
+            mergedChests++;
+            return;
+        }
     }
 
     private BlockPos freeChestSpot(Bases.Base b) {
