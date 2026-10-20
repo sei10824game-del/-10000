@@ -2297,6 +2297,27 @@ public final class CloneGameTests {
         });
     }
 
+    /** A staircase with a digger at its end is left to that digger: a second clone does not pick it up (twelve clones piled up at one staircase end). */
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r17stairs")
+    public static void doesNotJoinAStaircaseThatHasADigger(GameTestHelper h) {
+        clearBases(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        BlockPos top = h.absolutePos(new BlockPos(3, 2, 3));
+        var st = bases.addStaircase(h.getLevel().dimension(), top, net.minecraft.core.Direction.EAST);
+        st.end = top.east(6).below(6);
+        ClonePlayer digger = clone(h, 9.5, 3.5, 0f, false); // near the staircase end (6 east, 6 down... in the arena: close enough by manhattan distance)
+        ClonePlayer other = clone(h, 3.5, 7.5, 0f, false);
+        other.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        other.controller().stairs().begin();
+        h.runAfterDelay(5, () -> {
+            h.assertTrue(other.controller().stairs().resumed == 0, "the second clone does not take over the staircase the first one is at the end of (resumed "
+                    + other.controller().stairs().resumed + ")");
+            finish(h, digger, other);
+            clearBases(h);
+            h.succeed();
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
