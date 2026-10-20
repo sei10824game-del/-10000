@@ -359,7 +359,8 @@ public final class Crafting {
             out.add(Items.FLINT_AND_STEEL); // to light the portal frame
         }
         if (count(p, Items.IRON_INGOT) >= 3 && !hasBucket(p)) {
-            if (firstBucketWanted(p)) {
+            // (an iron pickaxe that can be made now comes first: the first three ingots were going into the bucket, and diamonds wait for the pickaxe)
+            if (firstBucketWanted(p) && (pick >= 2 || !makeable(p, Items.IRON_PICKAXE))) {
                 out.add(0, Items.BUCKET); // never had one: the bucket first (water for a field, putting out fire...)
             } else {
                 out.add(Items.BUCKET);
