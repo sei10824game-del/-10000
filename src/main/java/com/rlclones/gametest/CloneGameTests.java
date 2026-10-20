@@ -6355,6 +6355,14 @@ public final class CloneGameTests {
                             live.controller().escapeReasons.forEach((k, v) -> escapes.merge(k, v, Integer::sum));
                         }
                     }
+                    java.util.Map<String, Integer> gate = new java.util.TreeMap<>();
+                    for (String n : names) {
+                        ClonePlayer live = manager(h).byName(n);
+                        if (live != null) {
+                            live.controller().digGate.forEach((k, v) -> gate.merge(k, v, Integer::sum));
+                        }
+                    }
+                    RLClones.LOGGER.info("SOAK-DIGGATE (why the dig drive did or did not send a clone digging) {}", gate);
                     RLClones.LOGGER.info("SOAK-ESCAPES (why escapes started: block under the feet, height band, option) {}", escapes);
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
                     RLClones.LOGGER.info("SOAK-NONE (what the clone was busy with when no option ran) {}", nones);

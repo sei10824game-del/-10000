@@ -1506,21 +1506,41 @@ public final class CloneController {
     private Option digDrive(long now, int mask) {
         boolean stairsOk = (mask & Option.STAIRS.bit()) != 0;
         boolean shaftOk = (mask & Option.SHAFT.bit()) != 0;
-        if (!(stairsOk || shaftOk) || !digPending(now) || now - lastDigEnd < 1200 || self.getHealth() < self.getMaxHealth() * 0.7f) {
+        if (!(stairsOk || shaftOk)) {
+            return null;
+        }
+        if (!digPending(now)) {
+            if (Progression.digWanted(self)) {
+                digGate.merge(now < digBackoffUntil ? "backoff" : stairs.pending() ? "notPending" : "noDepthLeft", 1, Integer::sum);
+            }
+            return null;
+        }
+        if (now - lastDigEnd < 1200) {
+            digGate.merge("cooldown", 1, Integer::sum);
+            return null;
+        }
+        if (self.getHealth() < self.getMaxHealth() * 0.7f) {
+            digGate.merge("health", 1, Integer::sum);
             return null;
         }
         if (self.getFoodData().getFoodLevel() < 18 && FoodAid.foodItems(self) < 6) { // enough for a long way down: food first
+            digGate.merge("food", 1, Integer::sum);
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
             }
             return (mask & Option.FARM.bit()) != 0 ? Option.FARM : null;
         }
         if (Crafting.woodUnits(self) < 12 && (mask & Option.GATHER_WOOD.bit()) != 0) { // a spare pickaxe's worth and a table
+            digGate.merge("wood", 1, Integer::sum);
             return Option.GATHER_WOOD; // a table, sticks, ladders: from wood
         }
+        digGate.merge("go", 1, Integer::sum);
         digDrives++;
         return stairsOk ? Option.STAIRS : Option.SHAFT;
     }
+
+    /** Why the dig drive did (go) or did not (the rest) send the clone digging, each time it was asked while iron / diamonds were wanted (soak). */
+    public final java.util.Map<String, Integer> digGate = new java.util.TreeMap<>();
 
     private boolean othersOnline() {
         for (net.minecraft.server.level.ServerPlayer p : self.getServer().getPlayerList().getPlayers()) {
