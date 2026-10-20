@@ -1515,7 +1515,7 @@ public final class CloneController {
             }
             return null;
         }
-        if (now - lastDigEnd < 1200) {
+        if (now - lastDigEnd < 300) { // (1200 before: the soak asked 7 times for every time it went; three digs that get nowhere already bring a 6000-tick backoff)
             digGate.merge("cooldown", 1, Integer::sum);
             return null;
         }
@@ -1523,7 +1523,7 @@ public final class CloneController {
             digGate.merge("health", 1, Integer::sum);
             return null;
         }
-        if (self.getFoodData().getFoodLevel() < 18 && FoodAid.foodItems(self) < 6) { // enough for a long way down: food first
+        if (self.getFoodData().getFoodLevel() < 14 && FoodAid.foodItems(self) < 4) { // enough for a long way down: food first (the clone eats on its own when hungry)
             digGate.merge("food", 1, Integer::sum);
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
