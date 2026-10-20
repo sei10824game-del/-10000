@@ -2600,6 +2600,36 @@ public final class CloneGameTests {
         });
     }
 
+    /** A hole in the ground that opens to the sky and goes down into a hollow: found as a cave to look in. */
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "r17cave")
+    public static void findsACaveMouthToLookIn(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 12; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
+        for (int y = 12; y >= 2; y--) {
+            h.setBlock(new BlockPos(7, y, 7), Blocks.AIR); // the shaft down
+        }
+        for (int x = 4; x <= 7; x++) {
+            h.setBlock(new BlockPos(x, 2, 7), Blocks.AIR); // a hollow at the bottom
+            h.setBlock(new BlockPos(x, 3, 7), Blocks.AIR);
+        }
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        h.runAfterDelay(5, () -> {
+            var found = com.rlclones.ai.Caves.find(c, new java.util.Random(1));
+            boolean any = false;
+            for (int i = 0; i < 30 && !any; i++) {
+                any = com.rlclones.ai.Caves.find(c, new java.util.Random(i)) != null;
+            }
+            h.assertTrue(any, "a cave was found (" + found + ")");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

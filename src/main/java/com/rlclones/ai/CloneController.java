@@ -3967,6 +3967,9 @@ public final class CloneController {
         return arrived || motor.stuckCount() > 3;
     }
 
+    /** Explorations that set out for a cave (tests, soak). */
+    public int caveVisits;
+
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
         Vec3 site = structures.target();
@@ -3976,6 +3979,13 @@ public final class CloneController {
         Vec3 dig = persona.digTarget();
         if (dig != null && Progression.digWanted(self) && ItemAid.bestPickTier(self) < 2 && random.nextFloat() < 0.4f) {
             return dig; // R-44: a digger told where it is digging: have a look there
+        }
+        if (Progression.digWanted(self) && ItemAid.bestPickTier(self) >= 1 && random.nextFloat() < 0.3f) {
+            Vec3 cave = Caves.find(self, random); // ores show in the walls of caves: have a look in one
+            if (cave != null) {
+                caveVisits++;
+                return cave;
+            }
         }
         Vec3 best = null;
         double bestScore = -Double.MAX_VALUE;
