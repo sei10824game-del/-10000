@@ -2301,6 +2301,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 900, batch = "r17spawner")
     public static void torchesAMonsterSpawner(GameTestHelper h) {
         com.rlclones.ai.Spawners.forgetAll();
+        sealRoof(h);
         for (int x = 1; x <= 13; x++) {
             for (int z = 1; z <= 13; z++) {
                 h.setBlock(new BlockPos(x, 8, z), Blocks.STONE); // a roof: it is a cave (no sky light)
@@ -2308,7 +2309,7 @@ public final class CloneGameTests {
         }
         h.setBlock(new BlockPos(9, 2, 7), Blocks.SPAWNER);
         ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
-        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        c.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.WOODEN_SWORD));
         c.getInventory().add(new ItemStack(Items.TORCH, 8));
         h.onEachTick(() -> {
             c.controller().spawners().tick(h.getLevel().getGameTime(), false);
@@ -2446,7 +2447,7 @@ public final class CloneGameTests {
             }
         });
         h.runAfterDelay(300, () -> {
-            h.assertTrue(differed[0], "both had a target of their own");
+            h.assertTrue(differed[0], "both had a target of their own (" + a.controller().optionLog + " | " + b.controller().optionLog + " " + a.controller().harvestDebug + ")");
             finish(h, a, b);
             h.succeed();
         });
@@ -2461,7 +2462,7 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 6.5, 5.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.CHEST));
         c.getInventory().add(new ItemStack(Items.COBBLESTONE, 40)); // something to put away
-        c.controller().forcedOption = opt("STORE");
+        runStorage(h, c, com.rlclones.ai.Storage.Mode.STORE, new boolean[1]);
         h.succeedWhen(() -> {
             int chests = 0;
             boolean large = false;
@@ -2509,7 +2510,7 @@ public final class CloneGameTests {
                 h.setBlock(new BlockPos(x, y, 9), Blocks.STONE);
             }
         }
-        Husk husk = dummy(h, 7.5, 11.5); // on the far side of the wall
+        Husk husk = dummy(h, 7.5, 12.5); // (beyond digging reach) on the far side of the wall
         ClonePlayer c = clone(h, 7.5, 5.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
