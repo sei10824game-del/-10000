@@ -6244,6 +6244,7 @@ public final class CloneGameTests {
         for (int i = 0; i < SOAK_CLONES; i++) {
             int x = site.getX() + (i % 4) * 3;
             int z = site.getZ() + (i / 4) * 3;
+            level.getChunk(x >> 4, z >> 4); // (the soak area spans chunks: one not generated yet has no ground - the clone there fell out of the world, run after run)
             int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
             ClonePlayer c = manager(h).summon(null, level, new Vec3(x + 0.5, y, z + 0.5), i * 60f);
             if (c == null) {
