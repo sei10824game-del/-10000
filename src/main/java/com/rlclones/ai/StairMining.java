@@ -411,6 +411,17 @@ public final class StairMining {
             stuck = 0;
             lastFeet = feet;
         }
+        if (stuck > 20 && ticks % 4 == 0) {
+            // an empty boat / minecart left in the hole is in the way (it neither lets us pass nor takes a block laid in its cell): break it up
+            for (net.minecraft.world.entity.Entity e : self.level().getEntities(self, self.getBoundingBox().inflate(2.5, 1.5, 2.5),
+                    x -> (x instanceof net.minecraft.world.entity.vehicle.Boat || x instanceof net.minecraft.world.entity.vehicle.AbstractMinecart) && x.isAlive() && x.getPassengers().isEmpty())) {
+                motor.stop();
+                motor.lookAt(e.getBoundingBox().getCenter());
+                motor.attack(e);
+                debug = "breaking a " + e.getType().getDescriptionId() + " in the way";
+                return Status.WORKING;
+            }
+        }
         if (stuck > 40 && stairs != null && stage == 0 && queueAtTop()) {
             // a queue at the top of one staircase (the shared dig site draws everybody to it): a new staircase here, beside the others, instead of waiting in line
             debug = "queue at the top: a new staircase from " + feet.toShortString();
