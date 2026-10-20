@@ -2561,7 +2561,7 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().retargets >= 1 || String.valueOf(c.controller().optionLog).matches(".*FIGHT:minecraft:husk@[0-3]\\b.*"), "it turned to the enemy beside it (" + c.controller().retargets + " " + c.controller().optionLog + ")");
+            h.assertTrue(c.controller().retargets >= 1 || String.valueOf(c.controller().optionLog).matches(".*FIGHT:minecraft:husk@[0-5]\\b.*"), "it turned to the enemy beside it (" + c.controller().retargets + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }

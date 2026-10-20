@@ -108,7 +108,7 @@ public final class Spawners {
                 return false;
             }
             if (!fit()) {
-                debug = "not fit (armed " + armed() + " hp " + self.getHealth() + " food " + self.getFoodData().getFoodLevel() + " torch " + slotOf(Items.TORCH) + ")";
+                debug = "not fit (armed " + armed() + " hand " + self.getMainHandItem() + "=" + Equipment.attackDamage(self.getMainHandItem()) + " best " + Equipment.bestWeaponSlot(self) + " hp " + self.getHealth() + " food " + self.getFoodData().getFoodLevel() + " torch " + slotOf(Items.TORCH) + ")";
                 return false;
             }
             spawner = find();

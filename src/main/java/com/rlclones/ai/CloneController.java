@@ -2609,12 +2609,13 @@ public final class CloneController {
                 fightBestAt = now;
             }
             fightDebug = String.format("d=%.1f best=%.1f since=%d vis=%s digs=%d", d, fightBest, now - fightBestAt, perception.isVisible(target), fightDigs);
-            if (now - fightBestAt > 120 && d > 2.5 && d <= 6 && fightDigs < 6 && !perception.isVisible(target)) {
+            if (now - fightBestAt > 120 && now - fightBestAt < 400 && d > 2.5 && d <= 6 && fightDigs < 6 && !perception.isVisible(target)) {
                 // dig through the terrain between us (never the walls of a base) before giving up
                 BlockPos wall = motor.obstruction(target.blockPosition().above());
                 if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && !BlockClaims.takenByOther(wall, self.getUUID(), now)
                         && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(wall), 12) == null) {
                     BlockClaims.claim(wall, self.getUUID(), now);
+                    Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)));
                     if (motor.mine(wall)) {
                         fightDigs++;
                         fightBestAt = now;
