@@ -490,15 +490,34 @@ public final class Portals {
         }
         Vec3 c = Vec3.atBottomCenterOf(portal);
         if (Motor.horizontalDistance(self.position(), c) > 0.35 || Math.abs(self.getY() - portal.getY()) > 0.6) {
-            motor.navigate(c, 0.2, false);
-            if (Motor.horizontalDistance(self.position(), c) < 1.5) {
+            Vec3 goal = c;
+            if (enterSide > 0) {
+                // the straight way in is shut (the frame, a wall, a drop): round to another face of the portal first, then in
+                BlockPos front = portal.relative(Direction.from2DDataValue(enterSide % 4), 2);
+                if (!isPortal(front) && Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(front)) > 1.3) {
+                    goal = Vec3.atBottomCenterOf(front);
+                }
+            }
+            motor.navigate(goal, goal == c ? 0.2 : 1.0, false);
+            if (goal == c && Motor.horizontalDistance(self.position(), c) < 1.5) {
                 motor.moveToward(c);
             }
-            return motor.stuckCount() > 8 ? Status.FAILED : Status.WORKING;
+            if (motor.stuckCount() > 8) {
+                motor.resetStuck();
+                if (++enterSide > 4) {
+                    enterSide = 0;
+                    return Status.FAILED; // all four faces tried
+                }
+            }
+            return Status.WORKING;
         }
+        enterSide = 0;
         motor.stop(); // standing in the purple: the trip starts in a few seconds
         return Status.WORKING;
     }
+
+    /** Which face of the portal we try to go in by (0 = straight at it; 1..4 = round to the front on that side first). */
+    private int enterSide;
 
     private Status visitTick() {
         if (visited() || level().dimension() != Level.OVERWORLD) {
