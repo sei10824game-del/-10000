@@ -21,6 +21,8 @@ public final class Trading {
     private final ClonePlayer self;
     private final Motor motor;
     private Villager shop;
+    /** A villager has been about at some time (the clone knows there are villagers). */
+    public boolean met;
     private long cooldownUntil;
     /** Deals made (tests). */
     public int deals;
@@ -41,6 +43,7 @@ public final class Trading {
                 return false;
             }
             for (Villager v : self.level().getEntitiesOfClass(Villager.class, self.getBoundingBox().inflate(24), AbstractVillager::isAlive)) {
+                met = true;
                 if (!v.isBaby() && !v.getOffers().isEmpty() && (shop == null || v.distanceToSqr(self) < shop.distanceToSqr(self))) {
                     shop = v;
                 }

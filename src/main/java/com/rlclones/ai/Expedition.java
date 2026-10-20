@@ -58,6 +58,12 @@ public final class Expedition {
     private BlockPos target;
     /** What the trip is for: explore unknown land, or hunt down a strong enemy / a crowd of enemies. */
     private String kind = "EXPLORE";
+    /** A trip to find a village: on arrival it goes on in the same direction until a villager is about (a few legs at most). */
+    private boolean villageSearch;
+    private int legsLeft;
+    /** A village has been found by this clone on a trip (it stops going out to look for one). */
+    public boolean villageKnown;
+
     private String foe = "";
     private int calmTicks;
     /** Is something hostile still around this spot? (given by the controller: what the clone itself perceives) */
@@ -242,7 +248,19 @@ public final class Expedition {
         hunts++;
     }
 
+    /** Lead a party out to look for a village (no villager seen yet by this clone). */
+    public void leadVillage(BlockPos target, int need) {
+        lead(target, need);
+        villageSearch = true;
+        legsLeft = 6;
+    }
+
+    private boolean villageNear() {
+        return !self.level().getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, self.getBoundingBox().inflate(40), net.minecraft.world.entity.LivingEntity::isAlive).isEmpty();
+    }
+
     public void lead(BlockPos target, int need) {
+        this.villageSearch = false;
         this.kind = "EXPLORE";
         this.foe = "";
         this.calmTicks = 0;
@@ -274,7 +292,15 @@ public final class Expedition {
         }
         totalTicks++;
         phaseTicks++;
-        if (totalTicks > 12000) {
+        if (totalTicks > (villageSearch ? 30000 : 12000)) {
+            end();
+            return Status.DONE;
+        }
+        if (villageSearch && phase >= 2 && villageNear()) {
+            villageKnown = true;
+            villageSearch = false;
+            completed++;
+            finished = true;
             end();
             return Status.DONE;
         }
@@ -350,6 +376,21 @@ public final class Expedition {
                     if (Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(target)) > 6) {
                         motor.navigate(Vec3.atBottomCenterOf(target), 4, false);
                     }
+                    return Status.WORKING;
+                }
+                if (villageSearch && legsLeft > 0) {
+                    // no village here: on in the same direction (the others follow the leader)
+                    legsLeft--;
+                    double dx = target.getX() - rally.getX();
+                    double dz = target.getZ() - rally.getZ();
+                    double len = Math.max(1, Math.sqrt(dx * dx + dz * dz));
+                    int nx = Mth.floor(target.getX() + dx / len * 150);
+                    int nz = Mth.floor(target.getZ() + dz / len * 150);
+                    int ny = self.level().hasChunk(nx >> 4, nz >> 4) ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, nx, nz) : self.getBlockY();
+                    target = new BlockPos(nx, ny, nz);
+                    phase = 2;
+                    phaseTicks = 0;
+                    waitTicks = 0;
                     return Status.WORKING;
                 }
                 // look around the new land together
