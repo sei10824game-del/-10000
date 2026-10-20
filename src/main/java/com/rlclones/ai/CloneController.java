@@ -761,9 +761,14 @@ public final class CloneController {
     private static final java.util.HashMap<String, Entity> SOUND_SOURCES = new java.util.HashMap<>();
     public int quarried;
     public String harvestDebug = "";
+
+    /** The block this clone is going for or breaking in the harvest (tests). */
+    public BlockPos harvestTarget() {
+        return blockTarget;
+    }
     /** Not skipped for now, and - for planks / logs of buildings - not part of somebody's base. */
     private boolean harvestable(Perception.BlockKind kind, BlockPos p) {
-        return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && (kind != Perception.BlockKind.WOOD
+        return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && !BlockClaims.takenByOther(p, self.getUUID(), now()) && (kind != Perception.BlockKind.WOOD
                 || com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(p), 12) == null);
     }
 
@@ -4209,6 +4214,7 @@ public final class CloneController {
             if (blockTarget == null) {
                 return true;
             }
+            BlockClaims.claim(blockTarget, self.getUUID(), now()); // mine, says the clone: the others take another
             if ((kind == Perception.BlockKind.ORE || kind == Perception.BlockKind.STONE) && !hasPickFor(level.getBlockState(blockTarget))) {
                 if (toolUp(level.getBlockState(blockTarget))) {
                     blockTarget = null;
@@ -4244,6 +4250,10 @@ public final class CloneController {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget)));
         }
         blockTicks++;
+        if (!BlockClaims.claim(blockTarget, self.getUUID(), now())) {
+            blockTarget = null; // another clone got there first (the same moment): look for another block
+            return false;
+        }
         if ((blockTicks & 7) == 1) {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget))); // the right tool for the job
         }
@@ -4302,6 +4312,7 @@ public final class CloneController {
             }
             BlockPos done = blockTarget;
             perception.forgetBlock(done);
+            BlockClaims.release(done, self.getUUID());
             blockTarget = null;
             // (a trunk goes on down to the ground: its foot is known to be there even when the leaves hide it)
             int down = kind == Perception.BlockKind.LOG ? -12 : -1;

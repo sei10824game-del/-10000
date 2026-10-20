@@ -2419,6 +2419,39 @@ public final class CloneGameTests {
         });
     }
 
+    /** Two clones sent to the same rock do not go for the same block: each takes one nobody else has. */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r17claims")
+    public static void twoClonesTakeDifferentBlocks(GameTestHelper h) {
+        com.rlclones.ai.BlockClaims.forgetAll();
+        for (int x = 10; x <= 12; x++) {
+            for (int z = 6; z <= 8; z++) {
+                h.setBlock(new BlockPos(x, 2, z), Blocks.STONE);
+                h.setBlock(new BlockPos(x, 3, z), Blocks.STONE);
+            }
+        }
+        ClonePlayer a = clone(h, 6.5, 6.5, -90f, false);
+        ClonePlayer b = clone(h, 6.5, 8.5, -90f, false);
+        for (ClonePlayer c : new ClonePlayer[]{a, b}) {
+            c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+            c.controller().forcedOption = opt("QUARRY");
+            c.setAiEnabled(true);
+        }
+        boolean[] differed = {false};
+        h.onEachTick(() -> {
+            BlockPos ta = a.controller().harvestTarget();
+            BlockPos tb = b.controller().harvestTarget();
+            if (ta != null && tb != null) {
+                differed[0] |= !ta.equals(tb);
+                h.assertFalse(ta.equals(tb), "the same block is not both clones' target at once (" + ta.subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
+            }
+        });
+        h.runAfterDelay(300, () -> {
+            h.assertTrue(differed[0], "both had a target of their own");
+            finish(h, a, b);
+            h.succeed();
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
