@@ -44,7 +44,16 @@ public final class Progression {
                 tools = Math.max(tools, 10f);
             }
         }
-        return Math.min(raw, 3) * 0.5f + Math.min(ingots, 6) * 1.0f + Math.min(diamonds, 3) * 3f + tools;
+        // beyond the overworld (R-56): the first visit to the Nether, blaze rods, ender pearls, eyes of ender
+        float far = 0;
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.getCloneBrain() != null && c.getCloneBrain().hasFlag(Portals.NETHER_FLAG)) {
+            far += 3f;
+        }
+        int rods = p.getInventory().countItem(Items.BLAZE_ROD);
+        int pearls = p.getInventory().countItem(Items.ENDER_PEARL);
+        int eyes = p.getInventory().countItem(Items.ENDER_EYE);
+        far += Math.min(rods, 4) * 2f + Math.min(pearls, 6) * 1f + Math.min(eyes, 3) * 3f;
+        return Math.min(raw, 3) * 0.5f + Math.min(ingots, 6) * 1.0f + Math.min(diamonds, 3) * 3f + tools + far;
     }
 
     private static final EquipmentSlot[] SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};

@@ -57,6 +57,10 @@ public final class PlanWork {
         if (segment < 0) {
             segment = plan.claim(self.getUUID(), now);
             if (segment < 0) {
+                if (plan.ordered && !plan.complete()) {
+                    motor.stop();
+                    return Status.WORKING; // the next segment waits for the one before it: stand by
+                }
                 return Status.DONE; // nothing left that is not taken
             }
         }

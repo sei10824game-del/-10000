@@ -76,6 +76,8 @@ public class Bases extends SavedData {
         public final Map<Integer, java.util.UUID> claims = new HashMap<>();
         /** What lays block i (null / missing = any building block). Doors, pressure plates ... */
         public List<java.util.function.Predicate<ItemStack>> items = new ArrayList<>();
+        /** True: a segment can be taken only when every earlier one is done (a tower: the next layer needs the one below it to rest on). */
+        public boolean ordered;
         private final Map<Integer, Long> claimedAt = new HashMap<>();
         private final java.util.Set<Integer> done = new java.util.HashSet<>();
 
@@ -94,6 +96,9 @@ public class Bases extends SavedData {
         /** The segment to work: the one this clone already holds, else the first one that is free. -1 when none is left. */
         public int claim(java.util.UUID who, long now) {
             for (int s = 0; s < segments(); s++) {
+                if (ordered && s > 0 && !done.contains(s - 1)) {
+                    return -1; // the one before is still being worked: wait for it
+                }
                 Long at = claimedAt.get(s);
                 java.util.UUID by = claims.get(s);
                 if (!done.contains(s) && (by == null || by.equals(who) || at == null || now - at > 3000)) {

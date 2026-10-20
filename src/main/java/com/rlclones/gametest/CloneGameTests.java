@@ -2253,6 +2253,50 @@ public final class CloneGameTests {
         });
     }
 
+    /** R-54: a hollow tower, three layers, laid in order: two clones share it (a layer each), the walls stand whole with the doorway open. */
+    @GameTest(template = ARENA, timeoutTicks = 3000, batch = "r16tower")
+    public static void buildsATowerTogether(GameTestHelper h) {
+        clearBases(h);
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        java.util.List<BlockPos> blocks = new java.util.ArrayList<>();
+        BlockPos o = new BlockPos(6, 2, 6);
+        for (int y = 0; y < 3; y++) {
+            for (int x = 0; x < 3; x++) {
+                for (int z = 0; z < 3; z++) {
+                    if (x == 1 && z == 1 || x == 1 && z == 0 && y < 2) {
+                        continue;
+                    }
+                    blocks.add(h.absolutePos(o.offset(x, y, z)));
+                }
+            }
+        }
+        var plan = bases.addPlan(h.getLevel().dimension(), "TOWER", blocks, blocks.size() / 3);
+        plan.ordered = true;
+        ClonePlayer a = clone(h, 3.5, 3.5, 0f, false);
+        ClonePlayer b = clone(h, 11.5, 3.5, 0f, false);
+        a.getInventory().add(new ItemStack(Items.COBBLESTONE, 40));
+        b.getInventory().add(new ItemStack(Items.COBBLESTONE, 40));
+        a.controller().persona().joinPlan(plan);
+        b.controller().persona().joinPlan(plan);
+        h.onEachTick(() -> {
+            for (ClonePlayer c : new ClonePlayer[]{a, b}) {
+                c.controller().persona().tick(h.getLevel().getGameTime(), opt("REST"), false);
+                c.controller().motor().tick();
+            }
+        });
+        h.succeedWhen(() -> {
+            int stones = 0;
+            for (BlockPos p : blocks) {
+                stones += h.getLevel().getBlockState(p).isAir() ? 0 : 1;
+            }
+            h.assertTrue(stones == blocks.size() && plan.complete(), "the tower stands (" + stones + "/" + blocks.size() + ", a " + a.controller().persona().planWork().placed + " b "
+                    + b.controller().persona().planWork().placed + " " + a.controller().persona().planWork().debug + b.controller().persona().planWork().debug + ")");
+            h.assertTrue(h.getBlockState(new BlockPos(7, 2, 6)).isAir() && h.getBlockState(new BlockPos(7, 3, 6)).isAir(), "with the doorway open");
+            finish(h, a, b);
+            clearBases(h);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

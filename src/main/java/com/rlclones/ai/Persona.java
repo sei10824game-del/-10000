@@ -316,7 +316,7 @@ public final class Persona {
         if (repairTick(now)) {
             return true;
         }
-        if (now >= projectCooldown && proposeWall(now)) {
+        if (now >= projectCooldown && (proposeWall(now) || proposeTower(now))) {
             return true;
         }
         return decorTick(now);
@@ -696,6 +696,39 @@ public final class Persona {
         plan.items = new ArrayList<>(List.of(Persona::isDoor, Persona::isPlate, Persona::isPlate));
         autoDoors++;
         joinPlan(plan);
+        return true;
+    }
+
+    /** A tower by the base: a hollow 3x3 column three high, one layer to a segment, each layer laid only once the one below it stands. */
+    private boolean proposeTower(long now) {
+        Bases bases = Bases.get(self.getServer());
+        Bases.Base base = bases.nearest(level().dimension(), self.position(), 24);
+        if (base == null || Builder.buildingBlocks(self) < Builder.BLOCKS || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || self.getRandom().nextFloat() > 0.005f
+                || bases.openPlanNear(level().dimension(), self.position(), 64) != null) {
+            return false;
+        }
+        BlockPos o = base.center.offset(6, 0, 6);
+        List<BlockPos> blocks = new ArrayList<>();
+        for (int y = 0; y < 3; y++) {
+            for (int x = 0; x < 3; x++) {
+                for (int z = 0; z < 3; z++) {
+                    if (x == 1 && z == 1 || x == 1 && z == 0 && y < 2) {
+                        continue; // the middle is hollow; a doorway (two high) in the front
+                    }
+                    BlockPos p = o.offset(x, y, z);
+                    if (y == 0 && (!level().getBlockState(p).canBeReplaced() || !level().getBlockState(p.below()).isFaceSturdy(level(), p.below(), net.minecraft.core.Direction.UP))) {
+                        projectCooldown = now + 6000;
+                        return false;
+                    }
+                    blocks.add(p);
+                }
+            }
+        }
+        Bases.Plan plan = bases.addPlan(level().dimension(), "TOWER", blocks, blocks.size() / 3);
+        plan.ordered = true;
+        plansStarted++;
+        joinPlan(plan);
+        Chat.say(self, Component.literal("PLAN"), "PLAN " + plan.id);
         return true;
     }
 
