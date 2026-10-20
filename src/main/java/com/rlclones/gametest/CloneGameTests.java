@@ -2318,6 +2318,47 @@ public final class CloneGameTests {
         });
     }
 
+    /** Up a passage with a step two blocks high in the middle: nobody jumps that - the clone lays a block in front of the wall and climbs out in two steps. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r17step")
+    public static void mendsATwoBlockStepOnTheWayUp(GameTestHelper h) {
+        clearBases(h);
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 6; y++) {
+                    boolean passage = z == 7 && (x <= 7 && y <= 5 || x >= 8 && y >= 4 && y <= 5); // (the low part is tall enough to stand a block higher in)
+                    h.setBlock(new BlockPos(x, y, z), passage ? Blocks.AIR : Blocks.STONE);
+                }
+            }
+        }
+        // x <= 7: the low floor (y2, two high of air); x >= 8: the floor is two higher (y4); between them a wall two blocks high at x = 8
+        for (int y = 2; y <= 3; y++) {
+            h.setBlock(new BlockPos(8, y, 7), Blocks.STONE);
+        }
+        for (int x = 8; x <= 13; x++) {
+            h.setBlock(new BlockPos(x, 4, 7), Blocks.AIR);
+            h.setBlock(new BlockPos(x, 5, 7), Blocks.AIR);
+        }
+        var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
+        BlockPos top = h.absolutePos(new BlockPos(12, 4, 7));
+        var st = bases.addStaircase(h.getLevel().dimension(), top, net.minecraft.core.Direction.WEST);
+        st.end = h.absolutePos(new BlockPos(2, 2, 7));
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 8));
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        c.controller().stairs().begin();
+        h.onEachTick(() -> {
+            c.controller().stairs().tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.blockPosition().getX() - h.absolutePos(BlockPos.ZERO).getX() >= 9 && c.controller().stairs().stepsFixed >= 1,
+                    "the clone got over the two-high step (fixed " + c.controller().stairs().stepsFixed + " at " + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString()
+                    + " " + c.controller().stairs().debug + ")");
+            finish(h, c);
+            clearBases(h);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

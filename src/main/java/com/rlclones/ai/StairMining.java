@@ -298,6 +298,49 @@ public final class StairMining {
         return false;
     }
 
+    /** The cell we are putting a block into to make a two-high step climbable, and how long we have been at it. */
+    private BlockPos stepFix;
+    private int stepFixTicks;
+    /** Two-high steps mended (tests). */
+    public int stepsFixed;
+
+    /**
+     * Going up and a wall two blocks high is in the way (the floor beyond it is two higher than ours): nobody can jump that. The cell we stand in gets a
+     * block - we step back, lay it there - and the wall is one block high from its top. True while at it.
+     */
+    private boolean fixHighStep(BlockPos feet, Bases.Staircase s) {
+        net.minecraft.core.Direction toTop = net.minecraft.core.Direction.getNearest(s.top.getX() - feet.getX(), 0, s.top.getZ() - feet.getZ());
+        if (stepFix == null) {
+            BlockPos ahead = feet.relative(toTop);
+            if (!solid(ahead) || !solid(ahead.above()) || solid(ahead.above(2)) || solid(feet.above(2)) || Equipment.pillarBlockSlot(self) < 0
+                    || !Config.get(Config.ALLOW_BLOCK_PLACING, true)) {
+                return false; // not a two-high step (or nothing to build it with)
+            }
+            stepFix = feet.immutable();
+            stepFixTicks = 0;
+        }
+        if (++stepFixTicks > 120) {
+            stepFix = null;
+            return false;
+        }
+        BlockPos back = stepFix.relative(toTop.getOpposite());
+        if (self.blockPosition().equals(stepFix) || Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(stepFix)) < 0.9) {
+            if (solid(back) || !solid(back.below())) {
+                stepFix = null;
+                return false; // nowhere to step back to
+            }
+            motor.moveToward(Vec3.atBottomCenterOf(back)); // one step back, out of the cell
+            return true;
+        }
+        Equipment.select(self, Equipment.pillarBlockSlot(self));
+        if (motor.placeBlockAt(stepFix)) {
+            stepsFixed++;
+            stepFix = null;
+            motor.resetStuck();
+        }
+        return true;
+    }
+
     private boolean solid(BlockPos p) {
         ServerLevel level = self.serverLevel();
         return level.getFluidState(p).isEmpty() && !level.getBlockState(p).getCollisionShape(level, p).isEmpty();
@@ -366,6 +409,8 @@ public final class StairMining {
                     }
                     toStage(1);
                     motor.resetStuck();
+                } else if (motor.stuckCount() > 3 && fixHighStep(feet, s)) {
+                    return Status.WORKING; // a step two high on the way up: a block is put down to make it two steps of one
                 } else if (motor.stuckCount() > 8) {
                     return failStairs("cannot reach the top " + s.top.toShortString() + " from " + feet.toShortString());
                 }
