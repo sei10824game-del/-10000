@@ -2579,6 +2579,8 @@ public final class CloneController {
     private double fightBest = Double.MAX_VALUE;
     private long fightBestAt;
     private int fightDigs;
+    private int lastFightId = -1;
+    private long lastFightAt;
     /** Fights given up because the enemy could not be got at (tests, soak). */
     public int unreachableGiveUps;
     /** Times the clone turned to a nearer enemy in the middle of a fight (tests, soak). */
@@ -2598,6 +2600,8 @@ public final class CloneController {
 
     private boolean runFight(long now, boolean hunt) {
         if (target != null) {
+            lastFightId = target.getId();
+            lastFightAt = now;
             double d = self.distanceTo(target);
             if (d < fightBest - 1.0) {
                 fightBest = d;
@@ -2663,9 +2667,11 @@ public final class CloneController {
             if (target == null) {
                 return true;
             }
-            fightBest = Double.MAX_VALUE;
-            fightBestAt = now;
-            fightDigs = 0;
+            if (target.getId() != lastFightId || now - lastFightAt > 300) {
+                fightBest = Double.MAX_VALUE; // (the same enemy picked up again after a restart of the option keeps its count: no headway is no headway)
+                fightBestAt = now;
+                fightDigs = 0;
+            }
             targetType = Perception.typeId(target);
             combatState = -1;
             action = null;
