@@ -643,7 +643,7 @@ public final class Crafting {
                 return r;
             }
         }
-        if (logs > 0 && planks < 8) {
+        if (logs > 0 && (planks < 8 || logs > 8 && planks < Builder.BLOCKS)) { // (and a house wants ~55 blocks: logs beyond 8 kept for the log-only recipes become planks)
             CraftingRecipe r = craftable(p, s -> s.is(ItemTags.PLANKS));
             if (r != null) {
                 return r;
