@@ -2386,9 +2386,14 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.TORCH, 8));
         BlockPos feet = c.blockPosition();
-        h.assertTrue(c.controller().lighting().darkSpot(), "pitch dark here at first");
+        long start = h.getLevel().getGameTime();
         h.onEachTick(() -> {
-            if (h.getLevel().getGameTime() % 20 == 0) {
+            long t = h.getLevel().getGameTime() - start;
+            if (t == 20) {
+                // (not at the very first tick: the light of a torch an earlier test left in this arena has not been taken away by the light engine yet)
+                h.assertTrue(c.controller().lighting().darkSpot(), "pitch dark here at first");
+            }
+            if (t > 20 && h.getLevel().getGameTime() % 20 == 0) {
                 c.controller().lighting().tick();
             }
             c.controller().motor().tick();
