@@ -169,6 +169,17 @@ public final class StairMining {
         return t == null || self.level().getGameTime() >= t;
     }
 
+    /** Break {@code p} unless another clone is already at it (then wait: the crowd rules branch us off a new staircase if it takes long). */
+    private void mineClaimed(BlockPos p) {
+        if (!BlockClaims.claim(p, self.getUUID(), self.level().getGameTime())) {
+            debug = "waits: " + p.toShortString() + " is being broken by another";
+            return;
+        }
+        if (motor.mine(p)) {
+            BlockClaims.release(p, self.getUUID());
+        }
+    }
+
     /** Another clone right beside us (we share a 1-wide hole and have not moved for a while): neither can pass the other. */
     private boolean crowdedHere() {
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
@@ -559,7 +570,7 @@ public final class StairMining {
                 }
                 motor.stop();
                 Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
-                motor.mine(p);
+                mineClaimed(p);
                 return Status.WORKING;
             }
         }
@@ -722,7 +733,7 @@ public final class StairMining {
                 }
                 motor.stop();
                 Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
-                motor.mine(p);
+                mineClaimed(p);
                 return Status.WORKING;
             }
             if (!dry(p)) {
