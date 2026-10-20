@@ -2551,6 +2551,20 @@ public final class CloneGameTests {
         });
     }
 
+    /** A block is never put down on top of a chest (a crafting table there shut the chest in). */
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "r17nochestlid")
+    public static void neverPlacesABlockOnTopOfAChest(GameTestHelper h) {
+        h.setBlock(new BlockPos(7, 2, 8), Blocks.CHEST);
+        ClonePlayer c = clone(h, 7.5, 5.5, 0f, false);
+        c.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.CRAFTING_TABLE));
+        h.runAfterDelay(5, () -> {
+            boolean placed = c.controller().motor().placeBlockAt(h.absolutePos(new BlockPos(7, 3, 8)));
+            h.assertFalse(placed || !h.getBlockState(new BlockPos(7, 3, 8)).isAir(), "nothing went on top of the chest");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

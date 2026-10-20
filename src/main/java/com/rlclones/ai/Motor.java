@@ -729,6 +729,10 @@ public final class Motor {
         if (self.getBoundingBox().intersects(new AABB(target))) {
             return false;
         }
+        if (level.getBlockState(target.below()).getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+                || level.getBlockState(target.below()).getBlock() instanceof net.minecraft.world.level.block.BarrelBlock) {
+            return false; // never on top of a chest or barrel: it could not be opened any more
+        }
         Direction[] order = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP};
         for (Direction toSupport : order) {
             BlockPos support = target.relative(toSupport);
