@@ -5567,6 +5567,27 @@ public final class CloneGameTests {
         });
     }
 
+    /** An iron ore showing in the wall of a dark tunnel, off to the side but in view: noticed at once (the random rays alone would take long). */
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "r17ore")
+    public static void noticesAnOreShowingInATunnelWall(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int z = 1; z <= 13; z++) {
+                for (int y = 2; y <= 5; y++) {
+                    boolean tunnel = z == 7 && y <= 3;
+                    h.setBlock(new BlockPos(x, y, z), tunnel ? Blocks.AIR : Blocks.STONE);
+                }
+            }
+        }
+        h.setBlock(new BlockPos(9, 3, 6), Blocks.IRON_ORE); // in the wall beside the tunnel, a little ahead
+        ClonePlayer c = clone(h, 6.5, 7.5, -90f, false); // inside the tunnel, facing along it (east)
+        h.onEachTick(() -> c.controller().perception().update(h.getLevel().getGameTime()));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().perception().blocks().get(h.absolutePos(new BlockPos(9, 3, 6))) == com.rlclones.ai.Perception.BlockKind.ORE,
+                    "the ore in the wall is noticed (noticed " + c.controller().perception().oresNoticed + ")");
+            finish(h, c);
+        });
+    }
+
     private static String logsLeft(GameTestHelper h) {
         StringBuilder sb = new StringBuilder();
         for (int y = 0; y <= 12; y++) {

@@ -181,6 +181,9 @@ public final class Perception {
         if (((now / 4) & 1) == 0) {
             scanBlocks();
         }
+        if ((now & 7) == (self.getId() & 7)) {
+            scanNearOres();
+        }
     }
 
     // ------------------------------------------------------------------ vision checks
@@ -279,6 +282,44 @@ public final class Perception {
     }
 
     // ------------------------------------------------------------------ blocks
+
+    /**
+     * Underground, an ore showing in the wall of the cave or tunnel is plain to see for anyone looking that way: ten random rays a few times a
+     * second miss most of them. Ores within 6 blocks, in front of us (the field of view), with an open face and a clear line, are noticed.
+     */
+    private void scanNearOres() {
+        Level level = self.level();
+        BlockPos c = self.blockPosition();
+        if (level.getBrightness(net.minecraft.world.level.LightLayer.SKY, c) >= 8) {
+            return; // out in the open: the rays do well enough
+        }
+        Vec3 eye = self.getEyePosition();
+        Vec3 look = self.getViewVector(1.0F);
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-6, -4, -6), c.offset(6, 4, 6))) {
+            if (blocks.containsKey(p) || !level.getBlockState(p).is(Tags.Blocks.ORES)) {
+                continue;
+            }
+            Vec3 to = Vec3.atCenterOf(p).subtract(eye);
+            if (to.lengthSqr() > 1.0e-4 && to.normalize().dot(look) < 0.5) {
+                continue; // behind or beside us
+            }
+            boolean open = false;
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+                open |= !level.getBlockState(p.relative(d)).canOcclude();
+            }
+            if (!open) {
+                continue;
+            }
+            BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+            if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
+                noteBlock(p);
+                oresNoticed++;
+            }
+        }
+    }
+
+    /** Ores noticed by the close-range look (diagnostics, tests). */
+    public int oresNoticed;
 
     private void scanBlocks() {
         Level level = self.level();
