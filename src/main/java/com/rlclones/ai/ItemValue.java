@@ -78,7 +78,7 @@ public final class ItemValue {
     /** The price of a raw thing, or -1 if it is to be worked out from its recipe. */
     private static double raw(Item item) {
         ItemStack s = new ItemStack(item);
-        if (s.is(ItemTags.LOGS) || s.is(ItemTags.LOGS_THAT_BURN) && !s.is(ItemTags.PLANKS) && item.getDescriptionId().endsWith("_stem")) {
+        if (s.is(ItemTags.LOGS)) {
             return 4.0; // a log: four planks, and a tree to find
         }
         if (item == Items.DIRT || item == Items.GRASS_BLOCK || item == Items.COARSE_DIRT || item == Items.NETHERRACK) {
