@@ -98,11 +98,16 @@ public final class Spawners {
     /** True while busy with a spawner (the caller leaves the clone to it). */
     public boolean tick(long now, boolean threatened) {
         if (stage == Stage.IDLE) {
-            if (now < cooldownUntil || threatened || (now + self.getId()) % 80 != 0 || !fit()) {
+            if (now < cooldownUntil || threatened || (now + self.getId()) % 80 != 0) {
+                return false;
+            }
+            if (!fit()) {
+                debug = "not fit (armed " + Equipment.isArmed(self) + " hp " + self.getHealth() + " food " + self.getFoodData().getFoodLevel() + " torch " + slotOf(Items.TORCH) + ")";
                 return false;
             }
             spawner = find();
             if (spawner == null) {
+                debug = "none found (sky " + level().canSeeSky(self.blockPosition()) + ")";
                 return false;
             }
             stage = Stage.APPROACH;

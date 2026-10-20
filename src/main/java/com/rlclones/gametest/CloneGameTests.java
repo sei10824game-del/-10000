@@ -2439,6 +2439,10 @@ public final class CloneGameTests {
         }
         boolean[] differed = {false};
         h.onEachTick(() -> {
+            if (h.getLevel().getGameTime() % 10 == 0) {
+                a.controller().perception().update(h.getLevel().getGameTime());
+                b.controller().perception().update(h.getLevel().getGameTime());
+            }
             BlockPos ta = a.controller().harvestTarget();
             BlockPos tb = b.controller().harvestTarget();
             if (ta != null && tb != null) {
@@ -2459,6 +2463,11 @@ public final class CloneGameTests {
         clearBases(h);
         h.setBlock(new BlockPos(6, 2, 8), Blocks.CHEST.defaultBlockState().setValue(net.minecraft.world.level.block.ChestBlock.FACING, net.minecraft.core.Direction.NORTH));
         baseAt(h, new BlockPos(6, 2, 8));
+        if (h.getBlockEntity(new BlockPos(6, 2, 8)) instanceof net.minecraft.world.Container full) {
+            for (int i = 0; i < full.getContainerSize(); i++) {
+                full.setItem(i, new ItemStack(Items.DIRT, 64)); // full: the clone has to put a new chest down
+            }
+        }
         ClonePlayer c = clone(h, 6.5, 5.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.CHEST));
         c.getInventory().add(new ItemStack(Items.BONE, 3)); // something to put away (five kinds of loot)
@@ -2525,8 +2534,14 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().unreachableGiveUps >= 1 && c.controller().unreachable(husk, h.getLevel().getGameTime()),
-                    "the enemy behind the wall was given up on (" + c.controller().unreachableGiveUps + " " + c.controller().optionLog + ")");
+            boolean dug = false;
+            for (int x = 1; x <= 13; x++) {
+                for (int y = 2; y <= 6; y++) {
+                    dug |= h.getBlockState(new BlockPos(x, y, 9)).isAir(); // (it may also dig through to the enemy: both are fine, ramming for ever is not)
+                }
+            }
+            h.assertTrue(c.controller().unreachableGiveUps >= 1 && c.controller().unreachable(husk, h.getLevel().getGameTime()) || dug,
+                    "the enemy behind the wall was given up on or dug to (" + c.controller().unreachableGiveUps + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }

@@ -2628,7 +2628,7 @@ public final class CloneController {
                 return true;
             }
         }
-        if (target != null && !hunt && now % 10 == 0 && !(target instanceof Mob tm && tm.getTarget() == self && Senses.gap(self, target) <= 3.0)) {
+        if (target != null && !hunt && optionTicks % 10 == 0 && !(target instanceof Mob tm && tm.getTarget() == self && Senses.gap(self, target) <= 3.0)) {
             // another enemy is much nearer than the one being gone for (close beside us, or in front of us): that one first
             Entity near = pickHostile(now);
             if (near != null && near != target && near.isAlive()) {
