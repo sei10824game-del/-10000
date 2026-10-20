@@ -2580,6 +2580,8 @@ public final class CloneController {
     private int fightDigs;
     /** Fights given up because the enemy could not be got at (tests, soak). */
     public int unreachableGiveUps;
+    /** Times the clone turned to a nearer enemy in the middle of a fight (tests, soak). */
+    public int retargets;
 
     public boolean unreachable(Entity e, long now) {
         Long t = unreachableMobs.get(e.getId());
@@ -2623,6 +2625,26 @@ public final class CloneController {
                 fightBest = Double.MAX_VALUE;
                 fightDigs = 0;
                 return true;
+            }
+        }
+        if (target != null && !hunt && now % 10 == 0 && !(target instanceof Mob tm && tm.getTarget() == self && Senses.gap(self, target) <= 3.0)) {
+            // another enemy is much nearer than the one being gone for (close beside us, or in front of us): that one first
+            Entity near = pickHostile(now);
+            if (near != null && near != target && near.isAlive()) {
+                double gn = Senses.gap(self, near);
+                double gt = Senses.gap(self, target);
+                if (gn <= 3.5 && gt > gn + 1.5 || gn + 3 < gt) {
+                    closeCombatStep(false, false);
+                    target = near;
+                    targetType = Perception.typeId(near);
+                    combatState = -1;
+                    action = null;
+                    fightBest = Double.MAX_VALUE;
+                    fightBestAt = now;
+                    fightDigs = 0;
+                    dropVantage();
+                    retargets++;
+                }
             }
         }
         if (target != null && !validTarget(target, hunt, now)) {

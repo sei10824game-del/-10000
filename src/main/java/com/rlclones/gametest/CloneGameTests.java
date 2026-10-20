@@ -2531,6 +2531,26 @@ public final class CloneGameTests {
         });
     }
 
+    /** Going for an enemy some way off, another one turns up right beside the clone: it turns to that one (it ran past it to the far one and died). */
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "r17retarget")
+    public static void turnsToANearerEnemyInTheMiddleOfAFight(GameTestHelper h) {
+        Husk far = dummy(h, 7.5, 12.5);
+        ClonePlayer c = clone(h, 7.5, 3.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
+        c.controller().forcedOption = opt("FIGHT");
+        h.runAfterDelay(40, () -> dummy(h, 8.5, 5.5)); // right beside it, after the far one was chosen
+        h.onEachTick(() -> {
+            if (h.getLevel().getGameTime() % 10 == 0) {
+                c.controller().perception().update(h.getLevel().getGameTime());
+            }
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().retargets >= 1, "it turned to the enemy beside it (" + c.controller().retargets + " " + c.controller().optionLog + ")");
+            finish(h, c);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
