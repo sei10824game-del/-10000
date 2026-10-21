@@ -6790,6 +6790,8 @@ public final class CloneGameTests {
             spawning.set(false, level.getServer()); // (the other tests rely on dark arenas staying free of monsters)
         }
         final int total = soakTicks();
+        com.rlclones.ai.Prof.reset();
+        com.rlclones.ai.Prof.on = true; // (SOAK-PROF: where a clone's time goes over the whole soak)
         BlockPos site = soakSite(h);
         List<String> names = new ArrayList<>();
         for (int i = 0; i < SOAK_CLONES; i++) {
@@ -6922,6 +6924,8 @@ public final class CloneGameTests {
                         }
                         reached.put(step, n);
                     }
+                    com.rlclones.ai.Prof.on = false;
+                    RLClones.LOGGER.info("SOAK-PROF {}", com.rlclones.ai.Prof.report());
                     RLClones.LOGGER.info("SOAK-SUMMARY ticks={} clones={} gone={} full_diamond_armor={}/{} errors={} reached={}", total, names.size(), gone.size(), full, names.size(),
                             CloneManager.errors(), reached);
                     for (String n : names) {
