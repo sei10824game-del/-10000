@@ -787,3 +787,8 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 ```
 - 効果: 門の前・門の中で、4.5より遠い牛がいれば止まって小麦を見せて待つ(TemptGoal は2.5まで寄ってくる)→全員近づいたら中へ→後ろについて入る→段階7。160tick来なければ段階4で迎えに行く(既存)。
 - リスク: 小。門をくぐる途中で牛が遅れると門の中で止まるが、牛は後ろ(北)なので通り道はふさがない。`blocked` の変更で、進路上の牛に小麦が見える時間が増える(押し合いは起きうるが、無限にしまったままよりまし)。ほかのテスト(鶏の囲い)は段階5を通らないので影響なし。だめなら次は `ticks < 1200` を段階4専用のカウンタに分ける。
+
+#### 66b. 状況(2026-10-21、run 39564582639 全件成功)
+- `penscowswhenwheatpilesup` は 66a の修正で通った。不安定な3件は同 run で通過(失敗ログなし、再発したらその都度読む)。
+- 追加機能の確認: GameTest `scoopsLavaIntoAnEmptyBucket`・`setsItsRespawnPointAtABed`・`findsACaveMouthToLookIn`・`picksAPlaceDeeperInACave`・`reportsAVillageItSees`・`expeditionRalliesAndFollows` が CI で通過。実機(長時間ソーク)での確認は未。
+- 残り: 村での拠点づくりの先、200体の負荷測定。
