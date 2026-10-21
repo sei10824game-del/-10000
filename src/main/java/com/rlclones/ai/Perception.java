@@ -130,6 +130,7 @@ public final class Perception {
         Vec3 eye = self.getEyePosition();
         double range2 = range * range;
         // (nothing further than the view range can pass canSee: those are left out before sorting)
+        long pe = Prof.t();
         List<Entity> candidates = level.getEntities(self, box, e -> e.isAlive() && !e.isSpectator()
                 && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
                 || isRetrievable(e)) && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2);
@@ -147,6 +148,8 @@ public final class Perception {
             }
             candidates = sorted;
         }
+        Prof.add(Prof.P_ENTITIES, pe);
+        long pv = Prof.t();
         int checked = 0;
         for (Entity e : candidates) {
             if (checked++ >= 64) {
@@ -178,13 +181,26 @@ public final class Perception {
             }
         }
         memory.values().removeIf(s -> now - s.lastSeen > MEMORY_TICKS || (s.entity.isRemoved() && now - s.lastSeen > 20));
+        if (now % 40 == 0) {
+            lines.values().removeIf(l -> now - l.at > LINE_TTL);
+        }
+        Prof.add(Prof.P_VISION, pv);
+        long pb = Prof.t();
         if (((now / 4) & 1) == 0) {
             scanBlocks();
         }
         if ((now & 7) == (self.getId() & 7)) {
             scanNearOres();
         }
+        Prof.add(Prof.P_BLOCKS, pb);
     }
+
+    /** An answer to "is there a clear line?", good while neither the clone's eye nor the entity has moved (items on the ground, sleepers, a clone mining). */
+    private record Line(Vec3 eye, Vec3 pos, long at, boolean clear) {
+    }
+
+    private static final int LINE_TTL = 4;
+    private final Int2ObjectOpenHashMap<Line> lines = new Int2ObjectOpenHashMap<>();
 
     // ------------------------------------------------------------------ vision checks
 
@@ -224,7 +240,14 @@ public final class Perception {
         if (bb.contains(eye)) {
             return true;
         }
-        return clearLine(eye, e.getEyePosition()) || clearLine(eye, center) || clearLine(eye, new Vec3(center.x, bb.minY + 0.1, center.z));
+        long gt = self.level().getGameTime();
+        Line l = lines.get(e.getId());
+        if (l != null && gt - l.at() < LINE_TTL && l.eye().equals(eye) && l.pos().equals(e.position())) {
+            return l.clear();
+        }
+        boolean clear = clearLine(eye, e.getEyePosition()) || clearLine(eye, center) || clearLine(eye, new Vec3(center.x, bb.minY + 0.1, center.z));
+        lines.put(e.getId(), new Line(eye, e.position(), gt, clear));
+        return clear;
     }
 
     /** Human-readable breakdown of the vision check (for debugging and test diagnostics). */
