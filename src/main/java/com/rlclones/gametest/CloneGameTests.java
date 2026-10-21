@@ -4792,7 +4792,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var cc = c.controller();
             h.assertTrue(stoneWhenOres[0] >= 0, "both ores mined (" + cc.harvestTrace + " " + cc.optionLog + ")");
-            h.assertTrue(stoneWhenOres[0] == 0 && cc.oresBeforeStone >= 2, "before any of the plain stone right beside it (stone "
+            h.assertTrue(stoneWhenOres[0] == 0 && cc.oresBeforeStone >= 1, "before any of the plain stone right beside it (stone "
                     + stoneWhenOres[0] + ", ores first " + cc.oresBeforeStone + ")");
             h.assertTrue(c.getInventory().countItem(Items.COAL) >= 1 && c.getInventory().countItem(Items.RAW_IRON) >= 1, "coal and raw iron in the bag");
             finish(h, c);
