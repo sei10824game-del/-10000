@@ -126,14 +126,37 @@ public final class Perception {
         visible.clear();
         double range = maxRange();
         Level level = self.level();
-        AABB box = self.getBoundingBox().inflate(range);
         Vec3 eye = self.getEyePosition();
         double range2 = range * range;
         // (nothing further than the view range can pass canSee: those are left out before sorting)
         long pe = Prof.t();
-        List<Entity> candidates = level.getEntities(self, box, e -> e.isAlive() && !e.isSpectator()
+        // within NEAR blocks every tick; the whole view range only every FAR_EVERY ticks (staggered by id): the big box is what costs
+        // (what lies further out is a few ticks late in turning up; the entities themselves are read live)
+        boolean full = range <= NEAR || (now + self.getId()) % FAR_EVERY == 0;
+        double reach = full ? range : NEAR;
+        java.util.function.Predicate<Entity> wanted = e -> e.isAlive() && !e.isSpectator()
                 && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
-                || isRetrievable(e)) && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2);
+                || isRetrievable(e));
+        List<Entity> candidates = new java.util.ArrayList<>();
+        for (Entity e : level.getEntities(self, self.getBoundingBox().inflate(reach), wanted)) {
+            if (e.getBoundingBox().getCenter().distanceToSqr(eye) <= reach * reach) {
+                candidates.add(e);
+            }
+        }
+        if (full) {
+            farSeen.clear();
+            for (Entity e : candidates) {
+                if (e.getBoundingBox().getCenter().distanceToSqr(eye) > NEAR * NEAR) {
+                    farSeen.add(e);
+                }
+            }
+        } else {
+            for (Entity e : farSeen) {
+                if (e.isAlive() && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2) {
+                    candidates.add(e);
+                }
+            }
+        }
         if (candidates.size() > 1) {
             double[] keys = new double[candidates.size()];
             Integer[] order = new Integer[keys.length];
@@ -194,6 +217,11 @@ public final class Perception {
         }
         Prof.add(Prof.P_BLOCKS, pb);
     }
+
+    private static final double NEAR = 24.0;
+    private static final int FAR_EVERY = 4;
+    /** What the last full-range look found beyond NEAR blocks. */
+    private final List<Entity> farSeen = new java.util.ArrayList<>();
 
     /** An answer to "is there a clear line?", good while neither the clone's eye nor the entity has moved (items on the ground, sleepers, a clone mining). */
     private record Line(Vec3 eye, Vec3 pos, long at, boolean clear) {
