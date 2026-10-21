@@ -126,16 +126,14 @@ public final class Perception {
         visible.clear();
         double range = maxRange();
         Level level = self.level();
-        double range2 = range * range;
+        AABB box = self.getBoundingBox().inflate(range);
         Vec3 eye = self.getEyePosition();
+        double range2 = range * range;
         // (nothing further than the view range can pass canSee: those are left out before sorting)
         long pe = Prof.t();
-        List<Entity> candidates = new java.util.ArrayList<>();
-        for (Entity e : nearbyEntities(level, now, range)) {
-            if (e != self && e.isAlive() && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2) {
-                candidates.add(e);
-            }
-        }
+        List<Entity> candidates = level.getEntities(self, box, e -> e.isAlive() && !e.isSpectator()
+                && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
+                || isRetrievable(e)) && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2);
         if (candidates.size() > 1) {
             double[] keys = new double[candidates.size()];
             Integer[] order = new Integer[keys.length];
@@ -195,32 +193,6 @@ public final class Perception {
             scanNearOres();
         }
         Prof.add(Prof.P_BLOCKS, pb);
-    }
-
-    /** One entity query per tick for all the clones in the same 32-block cell (the box reaches the view range and a cell's width beyond): each clone then picks out its own. */
-    private record Cell(Level level, long tick, List<Entity> entities) {
-    }
-
-    private static final java.util.Map<Long, Cell> CELLS = new java.util.HashMap<>();
-
-    private List<Entity> nearbyEntities(Level level, long now, double range) {
-        long key = (((long) self.getBlockX() >> 5) * 73856093L) ^ (((long) self.getBlockZ() >> 5) * 19349663L) ^ ((long) (int) range << 40) ^ level.dimension().location().hashCode();
-        Cell c = CELLS.get(key);
-        if (c == null || c.level() != level || c.tick() != now) {
-            double cx = ((self.getBlockX() >> 5) << 5) + 16;
-            double cz = ((self.getBlockZ() >> 5) << 5) + 16;
-            double r = range + 32;
-            AABB box = new AABB(cx - r, level.getMinBuildHeight(), cz - r, cx + r, level.getMaxBuildHeight(), cz + r);
-            // (the vertical extent is the whole column: a clone's own box is as tall as the range anyway when it is deep or high)
-            c = new Cell(level, now, level.getEntities((Entity) null, box, e -> e.isAlive() && !e.isSpectator()
-                    && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
-                    || isRetrievable(e))));
-            if (CELLS.size() > 256) {
-                CELLS.clear(); // (stale cells hold on to entities)
-            }
-            CELLS.put(key, c);
-        }
-        return c.entities();
     }
 
     /** An answer to "is there a clear line?", good while neither the clone's eye nor the entity has moved (items on the ground, sleepers, a clone mining). */
