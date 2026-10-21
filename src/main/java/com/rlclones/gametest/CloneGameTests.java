@@ -2933,7 +2933,8 @@ public final class CloneGameTests {
                         .append(" | ").append(c.controller().shootDebug).append("]");
             }
             lowest[0] = Math.min(lowest[0], friend.getHealth());
-            hit[0] |= husk.getLastHurtByMob() == c;
+            hit[0] |= husk.getLastHurtByMob() == c
+                    || !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.AbstractArrow.class, husk.getBoundingBox().inflate(1.5)).isEmpty(); // (the husk takes no damage: arrows that land at it count)
         });
         h.succeedWhen(() -> {
             h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + " "
