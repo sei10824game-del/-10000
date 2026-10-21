@@ -750,3 +750,11 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - スポナー: `Spawners`(地下・武器あり・体力7割以上・松明あり。近づいて松明を最大5個、12秒見て、生まれたばかりの敵が2体以上なら壊す。片づけたものは全員で共有 `HANDLED`)。テスト `torchesAMonsterSpawner`。
 - 家: `Storage.homeWanted`(拠点なし・建材55以上)で、しまう物が無くても `STORE`(家+チェスト)を引き出す(`drive`)。拠点の近くにかまど無し・丸石8以上なら作って置く(`Crafting.wanted`)。テスト `buildsAHomeWhenItHasPlentyOfWood`。
 - 物の価値: `ItemValue`(原木4・板約1.2・棒約0.8、土0.3、丸石1、鉄6、ダイヤ30、他は最安のレシピの材料費÷個数+0.2)。`Equipment.pillarBlockSlot` が建材のうち最安を選ぶ(土→丸石→板→原木)。テスト `buildsWithTheCheapestBlockFirst`。価値はレシピからの導出で、クローンごとの学習(足りなかった物の価値を上げる)は未実装。
+
+### 66. 協力・戦闘・遠征の追加(ユーザーの要望、2026-10-21)
+- 掘りの取り合い: `BlockClaims`(狙ったブロックを宣言、他は別のを選ぶ)。階段・トンネルも `mineClaimed`。
+- 設備: チェストは隣の単独チェストと向きをそろえて大型化(`Storage.mergeSpot`・`joinChests`)、作業台・かまどは12ブロック以内にあれば使う(`Crafting.existingStation`)。チェスト・タルの真上には置かない(`Motor.placeBlockAt`)。
+- 敵: ブロック越しの敵は、進展なし約6秒で掘る(拠点の壁は除く、最初の400tickまで)→それでも届かなければ2分あきらめる(`unreachable`)。戦闘中、近い敵があれば切り替える。通路で味方なしの逃走中は後ろをふさぐ(`plugCorridor`)。階段をふさぐ空のボート・トロッコは壊す。
+- 遠征: 村探し(`Expedition.leadVillage`、同じ向きに最大6区間)。村人を見たら `VILLAGE x y z` で報告(`Structures`)。洞窟(`Caves.find`)を鉱石が要るときの探索先に。
+- 木炭: 余った原木は入力3/5・燃料2/5(`Crafting.loadSpareLogs`)。原木は8個残して残りを板材に(家の建材)。
+- 未解決のテスト: `givesUpAStaircaseItCannotFollow`(新しい階段を北向きに掘り始め、石の塊の端から落ちる。向きの選び方 `pickDirection` は固定で、配置との相性か回帰か未切り分け)、`lobsArrowsOverAFriend`(矢が当たらない)。
