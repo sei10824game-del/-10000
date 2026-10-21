@@ -763,3 +763,27 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 既にあって作らなかったもの: 枝掘り(階段の底から横へ)、盾(`BLOCK`)、水のクッション、ポーション、壁の修理・松明、取引で装備を買う、農場、食料の預け入れ。
 - 次のセッションの最初の作業: (1) `penscowswhenwheatpilesup`(牛が柵に入らない。`Animals.java` の誘う段階4と5を行き来する。クローンは牛のそばにいて `lured 0`)。(2) 不安定なテスト `crossesWaterByBoat`・`huntsFishInTheWater`・`visitsTheNetherAndComesBack`。(3) 追加機能が実機で動くかの確認(溶岩のバケツ、ベッド、洞窟、村への遠征)。(4) 未実装: 村での拠点づくりの先、200体の負荷測定。
 - 作業の進め方: CI の結果は `gh run list --branch claude/s11-1-implementation-ib5d52` と `gh run view <id> --log-failed | grep -aoE "LogTestReporter\\]: [a-z0-9]+ failed! .{0,300}"` で絞って読む。ローカルでは `./gradlew` が通らない(オフラインでビルドできない)ので、検証の正は CI。最新の CI は、落ちるのが上の不安定な数件だけ。
+
+#### 66a. Diagnosis & fix: `pensCowsWhenWheatPilesUp`(段階4⇔5の往復、`lured 0`)
+- 根本原因(1, 往復の本体): 段階5の `inGateway` は門の中心線 ±0.8 かつ z が `gate-2.5`〜`gate+1.5`。門の前の待ち位置 `front = gate.north(2)` の中心は z=`gate-1.5` なので、**front 自体が「門の中」扱い**。そのため `straggler != null && !inGateway` の「呼んで待つ」が門の前では一度も効かず、クローンは牛が4.5より遠くても一人で門をくぐる。さらに段階4の「中にいて牛が外→外へ」は `pen.contains(self)` が偽になった時点(門のブロック z=0、ログの `5@3,0,0`)で終わり、そこも `inGateway` → また一人で中央 (3,0,5) へ → `ticks%200==199` で段階4(ログの `4@3,0,5`)…の繰り返し。`ticks` は 5→4 で戻さないので 1200 以降は段階4の「迎えに行く」も効かず、往復だけが残る。
+- 根本原因(2, 最後の詰まり): 外で牛が進路上(2.5以内・前方)にいると `blocked` が毎tick `hideUntil` を延長 → 小麦をずっとしまう → 牛の TemptGoal は止まって calmDown(約100tick)、立ち止まったまま進路をふさぐ → クローン (12,0,-3)、牛 (10,0,-2)/(11,0,-2) で 2400tick まで動けない。
+- 修正案(Animals.java の段階5だけ):
+```diff
+-                        if (blocked || level.getGameTime() < hideUntil) {
+-                            emptyHand(); // one stands in the way: crop away so it stops crowding us, and past it
+-                            if (blocked) {
+-                                hideUntil = level.getGameTime() + 40;
+-                            }
+-                        }
++                        if (blocked && level.getGameTime() >= hideUntil + 160) {
++                            hideUntil = level.getGameTime() + 40; // at most 40 of every 200 ticks: hidden for good, they stand in the way
++                        }
++                        if (level.getGameTime() < hideUntil) {
++                            emptyHand(); // one stands in the way: crop away so it stops crowding us, and past it
++                        }
+@@
+-                    if (straggler != null && !inGateway) {
++                    if (straggler != null) { // also at the front and in the gateway (the front is inside the inGateway box)
+```
+- 効果: 門の前・門の中で、4.5より遠い牛がいれば止まって小麦を見せて待つ(TemptGoal は2.5まで寄ってくる)→全員近づいたら中へ→後ろについて入る→段階7。160tick来なければ段階4で迎えに行く(既存)。
+- リスク: 小。門をくぐる途中で牛が遅れると門の中で止まるが、牛は後ろ(北)なので通り道はふさがない。`blocked` の変更で、進路上の牛に小麦が見える時間が増える(押し合いは起きうるが、無限にしまったままよりまし)。ほかのテスト(鶏の囲い)は段階5を通らないので影響なし。だめなら次は `ticks < 1200` を段階4専用のカウンタに分ける。

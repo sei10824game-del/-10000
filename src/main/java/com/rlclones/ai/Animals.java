@@ -934,11 +934,11 @@ public final class Animals {
                             Vec3 to = a.position().subtract(self.position());
                             blocked |= a.isAlive() && to.horizontalDistance() < 2.5 && way.dot(Consumables.horizontal(to)) > 0.4;
                         }
-                        if (blocked || level.getGameTime() < hideUntil) {
+                        if (blocked && level.getGameTime() >= hideUntil + 160) {
+                            hideUntil = level.getGameTime() + 40; // at most 40 of every 200 ticks: hidden for good, they stand in the way
+                        }
+                        if (level.getGameTime() < hideUntil) {
                             emptyHand(); // one stands in the way: crop away so it stops crowding us, and past it
-                            if (blocked) {
-                                hideUntil = level.getGameTime() + 40;
-                            }
                         }
                         motor.navigate(front, 0.5, false);
                         frontWait = 0;
@@ -951,7 +951,7 @@ public final class Animals {
                             straggler = a;
                         }
                     }
-                    if (straggler != null && !inGateway) {
+                    if (straggler != null) { // also at the front and in the gateway (the front is inside the inGateway box)
                         motor.stop();
                         motor.lookAt(straggler);
                         if (++frontWait > 160) {
