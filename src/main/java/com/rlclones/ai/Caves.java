@@ -86,4 +86,46 @@ public final class Caves {
         }
         return open ? deepest : null;
     }
+
+    /**
+     * Underground in a cave: a place deeper in it to walk to (an air cell 8+ blocks off along the cave that is not near the last places walked to), so the
+     * walls get looked at. Null when the cave is small or out of new places.
+     */
+    @Nullable
+    public static Vec3 interiorGoal(Player p, Random random, java.util.Collection<Vec3> recent) {
+        ServerLevel level = (ServerLevel) p.level();
+        BlockPos start = p.blockPosition();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> seen = new HashSet<>();
+        java.util.List<BlockPos> far = new java.util.ArrayList<>();
+        queue.add(start);
+        seen.add(start);
+        while (!queue.isEmpty() && seen.size() < BFS_LIMIT) {
+            BlockPos c = queue.poll();
+            if (pocket(level, c) && c.distSqr(start) > 64) {
+                boolean fresh = true;
+                for (Vec3 r : recent) {
+                    if (r.distanceToSqr(Vec3.atCenterOf(c)) < 36) {
+                        fresh = false;
+                        break;
+                    }
+                }
+                if (fresh) {
+                    far.add(c);
+                }
+            }
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    BlockPos n = c.relative(d).above(dy);
+                    if (level.getBlockState(n).isAir() && seen.add(n)) {
+                        queue.add(n);
+                    }
+                }
+            }
+        }
+        if (far.isEmpty()) {
+            return null;
+        }
+        return Vec3.atBottomCenterOf(far.get(random.nextInt(far.size())));
+    }
 }

@@ -86,6 +86,7 @@ public final class CloneController {
     private final Trading trading;
     private final Spawners spawners;
     private final Bedding bedding;
+    private final LavaScoop lavaScoop;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -200,6 +201,7 @@ public final class CloneController {
         this.trading = new Trading(self, motor);
         this.spawners = new Spawners(self, motor);
         this.bedding = new Bedding(self, motor);
+        this.lavaScoop = new LavaScoop(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -346,6 +348,10 @@ public final class CloneController {
 
     public Spawners spawners() {
         return spawners;
+    }
+
+    public LavaScoop lavaScoop() {
+        return lavaScoop;
     }
 
     public Bedding bedding() {
@@ -632,6 +638,9 @@ public final class CloneController {
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
+        }
+        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
+            itemBusy = lavaScoop.tick(now, threatened); // an empty bucket and a lava pool near: a bucket of lava (fuel, weapon)
         }
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = bedding.tick(now, threatened); // respawn on: the respawn point is set at a bed near the base
@@ -2215,6 +2224,9 @@ public final class CloneController {
         }
         if ((mask & Option.ANIMALS.bit()) != 0 && (animals.tameCandidate() != null || animals.livestockPending()) && random.nextFloat() < 0.7f) {
             return Option.ANIMALS; // it could be ours: tame it / pen it
+        }
+        if ((mask & Option.STORE.bit()) != 0 && storage.homeWanted() && structures.villageToVisit() != null && (mask & Option.EXPLORE.bit()) != 0 && random.nextFloat() < 0.7f) {
+            return Option.EXPLORE; // a village is known: the home goes up near it (the walk there is the exploring: a village site is a place to visit)
         }
         if ((mask & Option.STORE.bit()) != 0 && storage.homeWanted() && random.nextFloat() < 0.5f) {
             return Option.STORE; // no base and the wood to build one: a house with a chest, as a player makes his first one
@@ -3984,6 +3996,9 @@ public final class CloneController {
 
     /** Explorations that set out for a cave (tests, soak). */
     public int caveVisits;
+    /** Goals taken inside caves (the last twelve are not gone to again) / how many (tests, soak). */
+    private final java.util.List<Vec3> caveGoals = new java.util.ArrayList<>();
+    public int caveSteps;
 
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
@@ -3994,6 +4009,17 @@ public final class CloneController {
         Vec3 dig = persona.digTarget();
         if (dig != null && Progression.digWanted(self) && ItemAid.bestPickTier(self) < 2 && random.nextFloat() < 0.4f) {
             return dig; // R-44: a digger told where it is digging: have a look there
+        }
+        if (Progression.digWanted(self) && !self.serverLevel().canSeeSky(self.blockPosition().above()) && self.getY() < 50 && random.nextFloat() < 0.7f) {
+            Vec3 inside = Caves.interiorGoal(self, random, caveGoals); // in a cave already: on into it, looking at the walls
+            if (inside != null) {
+                caveGoals.add(inside);
+                if (caveGoals.size() > 12) {
+                    caveGoals.remove(0);
+                }
+                caveSteps++;
+                return inside;
+            }
         }
         if (Progression.digWanted(self) && ItemAid.bestPickTier(self) >= 1) {
             Vec3 tip = structures.oreTip(); // iron / diamonds somebody saw: dig there
@@ -4382,8 +4408,13 @@ public final class CloneController {
             blockTarget = null;
             if (kind == Perception.BlockKind.STONE) {
                 // quarrying: an ore in sight is worth far more than plain stone - it goes first
-                blockTarget = Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 16,
-                        p -> harvestable(Perception.BlockKind.ORE, p) && hasPickFor(level.getBlockState(p)) && safeToDig(p));
+                // (diamond ore first, then iron, then any: the one that matters is not left for a coal seam nearer by)
+                for (int rank = 0; rank < 3 && blockTarget == null; rank++) {
+                    final int r = rank;
+                    blockTarget = Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 16,
+                            p -> harvestable(Perception.BlockKind.ORE, p) && hasPickFor(level.getBlockState(p)) && safeToDig(p)
+                                    && (r == 2 || level.getBlockState(p).is(r == 0 ? net.minecraft.tags.BlockTags.DIAMOND_ORES : net.minecraft.tags.BlockTags.IRON_ORES)));
+                }
                 if (blockTarget != null) {
                     harvestKind = Perception.BlockKind.ORE;
                     oresBeforeStone++;

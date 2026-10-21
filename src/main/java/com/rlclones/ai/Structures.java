@@ -40,6 +40,7 @@ public final class Structures {
     /** Ores (iron, diamond) a friend or this clone saw and has not got: where to go digging (max 24). */
     private final List<BlockPos> oreTips = new ArrayList<>();
     private long lastOreSaid;
+    private BlockPos villagePos;
     /** Caves seen or told of (max 16). */
     private final List<BlockPos> caves = new ArrayList<>();
     /** The height a diamond ore was last seen or told of at (the dig for diamonds goes down to it): MIN_VALUE while none was. */
@@ -88,6 +89,7 @@ public final class Structures {
                     BlockPos p = v.blockPosition();
                     villageSaid = true;
                     villageKnown = true;
+                    villagePos = p.immutable();
                     add(p);
                     Chat.say(self, Component.translatable("rlclones.chat.village", p.getX(), p.getZ()), "VILLAGE " + p.getX() + " " + p.getY() + " " + p.getZ());
                     break;
@@ -172,6 +174,16 @@ public final class Structures {
         return true;
     }
 
+    /** A known village 40-160 blocks away that the clone has not been near yet (the place to put a home), or null. */
+    @Nullable
+    public Vec3 villageToVisit() {
+        if (villagePos == null) {
+            return null;
+        }
+        double d = Math.sqrt(villagePos.distSqr(self.blockPosition()));
+        return d > 40 && d < 160 ? Vec3.atBottomCenterOf(villagePos) : null;
+    }
+
     /** The nearest known cave within 128 blocks, or null. */
     @Nullable
     public Vec3 caveTarget() {
@@ -206,6 +218,11 @@ public final class Structures {
             return true;
         }
         if (text.startsWith("VILLAGE ")) {
+            try {
+                String[] vp = text.split(" ");
+                villagePos = new BlockPos(Integer.parseInt(vp[1]), Integer.parseInt(vp[2]), Integer.parseInt(vp[3]));
+            } catch (RuntimeException ignored) {
+            }
             villageKnown = true; // a friend found one: it is a place to visit (and no trip to look for one)
             villageSaid = true; // (the finder has said it: not again)
             return onChat("STRUCT " + text.substring(8));

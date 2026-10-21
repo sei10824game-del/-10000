@@ -2684,6 +2684,46 @@ public final class CloneGameTests {
         });
     }
 
+    /** An empty bucket and a pool of lava near: a bucket of lava (fuel for the furnace, a weapon in a fight). */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r17lava")
+    public static void scoopsLavaIntoAnEmptyBucket(GameTestHelper h) {
+        h.setBlock(new BlockPos(9, 1, 7), Blocks.LAVA); // a source sunk in the floor: it spreads nowhere
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        c.getInventory().add(new ItemStack(Items.BUCKET));
+        h.onEachTick(() -> {
+            long t = h.getLevel().getGameTime();
+            c.controller().lavaScoop().tick(t + (100 - (t + c.getId()) % 100) % 100, false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.LAVA_BUCKET) >= 1, "a bucket of lava (" + c.controller().lavaScoop().debug + ")");
+            finish(h, c);
+        });
+    }
+
+    /** Underground in a cave with a free end 8+ blocks off: a place deeper in it to go to. */
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "r17cavein")
+    public static void picksAPlaceDeeperInACave(GameTestHelper h) {
+        for (int x = 1; x <= 13; x++) {
+            for (int y = 2; y <= 4; y++) {
+                for (int z = 6; z <= 8; z++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
+        for (int x = 2; x <= 12; x++) {
+            h.setBlock(new BlockPos(x, 2, 7), Blocks.AIR); // a tunnel along the stone
+            h.setBlock(new BlockPos(x, 3, 7), Blocks.AIR);
+        }
+        ClonePlayer c = clone(h, 2.5, 7.5, -90f, false);
+        h.runAfterDelay(5, () -> {
+            var goal = com.rlclones.ai.Caves.interiorGoal(c, new java.util.Random(3), java.util.List.of());
+            h.assertTrue(goal != null && goal.distanceTo(c.position()) > 7, "a goal deeper in the tunnel (" + goal + ")");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");
