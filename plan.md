@@ -758,3 +758,8 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 遠征: 村探し(`Expedition.leadVillage`、同じ向きに最大6区間)。村人を見たら `VILLAGE x y z` で報告(`Structures`)。洞窟(`Caves.find`)を鉱石が要るときの探索先に。
 - 木炭: 余った原木は入力3/5・燃料2/5(`Crafting.loadSpareLogs`)。原木は8個残して残りを板材に(家の建材)。
 - 未解決のテスト: `givesUpAStaircaseItCannotFollow`(新しい階段を北向きに掘り始め、石の塊の端から落ちる。向きの選び方 `pickDirection` は固定で、配置との相性か回帰か未切り分け)、`lobsArrowsOverAFriend`(矢が当たらない)。
+
+- 追加(2026-10-21 後半): 鉱石・洞窟の共有(`ORE x y z d|i` / `CAVE x y z`、`Structures.oreTip/caveTarget`)、ダイヤの高さの学習(クローンごと、`Structures.diamondY` → `StairMining.target`)、ベッドでリスポーン地点を固定(リスポーンがオンのときだけ、`Bedding`)、クリーパー優先(`pickHostile`)、溶岩のバケツ(`LavaScoop`)、洞窟の奥の探索(`Caves.interiorGoal`)、採掘順 ダイヤ→鉄→その他(`runHarvest`)、村を見つけたら `VILLAGE x y z` で報告し拠点を村の近くに(`Structures.villageToVisit`)。
+- 既にあって作らなかったもの: 枝掘り(階段の底から横へ)、盾(`BLOCK`)、水のクッション、ポーション、壁の修理・松明、取引で装備を買う、農場、食料の預け入れ。
+- 次のセッションの最初の作業: (1) `penscowswhenwheatpilesup`(牛が柵に入らない。`Animals.java` の誘う段階4と5を行き来する。クローンは牛のそばにいて `lured 0`)。(2) 不安定なテスト `crossesWaterByBoat`・`huntsFishInTheWater`・`visitsTheNetherAndComesBack`。(3) 追加機能が実機で動くかの確認(溶岩のバケツ、ベッド、洞窟、村への遠征)。(4) 未実装: 村での拠点づくりの先、200体の負荷測定。
+- 作業の進め方: CI の結果は `gh run list --branch claude/s11-1-implementation-ib5d52` と `gh run view <id> --log-failed | grep -aoE "LogTestReporter\\]: [a-z0-9]+ failed! .{0,300}"` で絞って読む。ローカルでは `./gradlew` が通らない(オフラインでビルドできない)ので、検証の正は CI。最新の CI は、落ちるのが上の不安定な数件だけ。
