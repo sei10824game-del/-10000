@@ -2562,7 +2562,7 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().retargets >= 1 || String.valueOf(c.controller().optionLog).matches(".*FIGHT:minecraft:husk@[0-5]\\b.*"), "it turned to the enemy beside it (" + c.controller().retargets + " near seen " + (nearOne[0] != null && c.controller().perception().canSee(nearOne[0])) + " remembered " + c.controller().perception().remembered().size() + " " + c.controller().fightDebug + " " + c.controller().optionLog + ")");
+            h.assertTrue(c.controller().retargets >= 1 || c.controller().fightDebug.matches("d=[0-3]\\..*"), "it turned to the enemy beside it (" + c.controller().retargets + " near seen " + (nearOne[0] != null && c.controller().perception().canSee(nearOne[0])) + " remembered " + c.controller().perception().remembered().size() + " " + c.controller().fightDebug + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
