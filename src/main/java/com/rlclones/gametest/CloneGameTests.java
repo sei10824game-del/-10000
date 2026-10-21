@@ -6892,6 +6892,20 @@ public final class CloneGameTests {
                             live.controller().digGate.forEach((k, v) -> gate.merge(k, v, Integer::sum));
                         }
                     }
+                    int[] feat = new int[6]; // lava buckets, beds set, sites found, ore tips given/got, clones knowing a village
+                    for (String n : names) {
+                        ClonePlayer live = manager(h).byName(n);
+                        if (live != null) {
+                            var ctl = live.controller();
+                            feat[0] += ctl.lavaScoop().scooped;
+                            feat[1] += ctl.bedding().set;
+                            feat[2] += ctl.structures().found;
+                            feat[3] += ctl.structures().oreTipsGiven;
+                            feat[4] += ctl.structures().oreTipsGot;
+                            feat[5] += ctl.structures().villageKnown ? 1 : 0;
+                        }
+                    }
+                    RLClones.LOGGER.info("SOAK-FEATURES lavaBuckets={} bedsSet={} sitesFound={} oreTipsGiven={} oreTipsGot={} villageKnown={}", feat[0], feat[1], feat[2], feat[3], feat[4], feat[5]);
                     RLClones.LOGGER.info("SOAK-DIGGATE (why the dig drive did or did not send a clone digging) {}", gate);
                     RLClones.LOGGER.info("SOAK-ESCAPES (why escapes started: block under the feet, height band, option) {}", escapes);
                     RLClones.LOGGER.info("SOAK-OPTIONS (samples every 200 ticks) {}", opts);
