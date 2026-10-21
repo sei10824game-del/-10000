@@ -61,7 +61,7 @@ public final class Breeding {
 
     public boolean canStart() {
         CloneManager m = CloneManager.peek();
-        return m != null && m.isBreeding() && eligible(self) && m.clones().size() < Config.cloneLimit() && findPartner() != null;
+        return m != null && m.isBreeding() && !m.famine(self.level().getGameTime()) && eligible(self) && m.clones().size() < Config.cloneLimit() && findPartner() != null;
     }
 
     public void begin() {

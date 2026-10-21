@@ -99,6 +99,22 @@ public final class CloneManager {
     /** Game time each parent (and newborn) last bred or was born: no breeding again before {@link com.rlclones.ai.Breeding#COOLDOWN} passes. */
     private final java.util.Map<UUID, Long> bredAt = new java.util.HashMap<>();
 
+    private long famineAt = Long.MIN_VALUE;
+    private boolean famine;
+
+    /** A quarter of the clones (at least 5) are hungry with nothing to eat: no breeding, and the hungry spread out to find food. Checked every 100 ticks. */
+    public boolean famine(long now) {
+        if (now - famineAt >= 100) {
+            famineAt = now;
+            int hungry = 0;
+            for (ClonePlayer c : clones()) {
+                hungry += !c.isCreative() && c.getFoodData().getFoodLevel() < 8 && com.rlclones.ai.FoodAid.foodItems(c) == 0 ? 1 : 0;
+            }
+            famine = hungry >= 5 && hungry * 4 >= clones().size();
+        }
+        return famine;
+    }
+
     public boolean coolingDown(net.minecraft.world.entity.player.Player p) {
         Long t = bredAt.get(p.getUUID());
         return t != null && p.level().getGameTime() - t < com.rlclones.ai.Breeding.COOLDOWN;
