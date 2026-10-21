@@ -2654,11 +2654,14 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 40, batch = "r17oretip")
     public static void takesAnOreTipFromAFriend(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        c.controller().structures().onChat("ORE 100 -50 100 d");
+        BlockPos tip = h.absolutePos(new BlockPos(12, 2, 12));
+        c.controller().structures().onChat("ORE " + tip.getX() + " -50 " + tip.getZ() + " d");
         h.runAfterDelay(5, () -> {
-            h.assertTrue(c.controller().structures().oreTip() != null, "an ore tip is known");
-            h.assertTrue(com.rlclones.ai.Progression.digTargetY(com.rlclones.ai.Progression.Need.DIAMOND) == -50, "the diamond height was learnt");
-            com.rlclones.ai.Progression.noteDiamondY(-58); // (back to the usual for the other tests)
+            boolean known = c.controller().structures().oreTip() != null;
+            int y = com.rlclones.ai.Progression.digTargetY(com.rlclones.ai.Progression.Need.DIAMOND);
+            com.rlclones.ai.Progression.noteDiamondY(com.rlclones.ai.Progression.DIAMOND_Y); // (back to the usual for the other tests, whatever comes)
+            h.assertTrue(known, "an ore tip is known");
+            h.assertTrue(y == -50, "the diamond height was learnt (" + y + ")");
             finish(h, c);
             h.succeed();
         });
