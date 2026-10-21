@@ -5485,6 +5485,13 @@ public final class CloneGameTests {
     public static void givesUpAStaircaseItCannotFollow(GameTestHelper h) {
         clearBases(h);
         stoneMass(h);
+        for (int x = 3; x <= 11; x++) {
+            for (int z = 2; z <= 12; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE); // wide: a new staircase in any direction stays in the stone
+                }
+            }
+        }
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         var old = bases.addStaircase(h.getLevel().dimension(), h.absolutePos(new BlockPos(4, 5, 7)), Direction.EAST);
         old.end = h.absolutePos(new BlockPos(7, 2, 7)); // three steps on record, none of them dug
