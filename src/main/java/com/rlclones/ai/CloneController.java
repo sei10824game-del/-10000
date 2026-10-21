@@ -3931,7 +3931,7 @@ public final class CloneController {
     public int offhandMeals;
 
     private boolean runEat() {
-        if (!eatStarted && FoodAid.goodFood(self.getOffhandItem()) && self.canEat(false)) {
+        if (!eatStarted && FoodAid.goodFood(self.getOffhandItem()) && !Equipment.keepForFurnace(self, self.getOffhandItem()) && self.canEat(false)) {
             eatStarted = motor.useHeldItem(InteractionHand.OFF_HAND) && self.isUsingItem(); // food at the ready in the other hand
             offhandMeals += eatStarted ? 1 : 0;
             if (eatStarted) {

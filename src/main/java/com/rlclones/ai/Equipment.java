@@ -434,7 +434,12 @@ public final class Equipment {
     }
 
     /** Raw meat and fish: cooked they restore twice as much (or more), so they are kept for the furnace until the gauge is nearly empty. */
-    private static final java.util.Set<Item> RAW = java.util.Set.of(Items.COD, Items.SALMON, Items.BEEF, Items.PORKCHOP, Items.MUTTON, Items.CHICKEN, Items.RABBIT);
+    private static final java.util.Set<Item> RAW = java.util.Set.of(Items.COD, Items.SALMON, Items.BEEF, Items.PORKCHOP, Items.MUTTON, Items.CHICKEN, Items.RABBIT, Items.POTATO);
+
+    /** Raw and the gauge not nearly empty: keep it for the furnace. */
+    public static boolean keepForFurnace(Player p, ItemStack s) {
+        return RAW.contains(s.getItem()) && p.getFoodData().getFoodLevel() > 2;
+    }
 
     public static int bestFoodSlot(Player p) {
         Inventory inv = p.getInventory();
@@ -446,7 +451,7 @@ public final class Equipment {
                 continue;
             }
             double score = foodScore(p, s);
-            if (RAW.contains(s.getItem()) && p.getFoodData().getFoodLevel() > 2) {
+            if (keepForFurnace(p, s)) {
                 continue; // (to be cooked: eating the catch raw gave back no more than catching it cost)
             }
             if (score > bestScore && (p.canEat(false) || foodCanAlwaysEat(p, s))) {
