@@ -298,6 +298,21 @@ public final class Senses {
         return best;
     }
 
+    /** Two or fewer grown animals of this kind seen within 16 blocks of it (fish excepted): killing one ends the herd. */
+    private static boolean lastPair(Perception observer, Perception.Seen prey, long now) {
+        if (prey.entity instanceof net.minecraft.world.entity.animal.AbstractFish) {
+            return false;
+        }
+        int n = 0;
+        for (Perception.Seen o : observer.remembered()) {
+            if (o.entity.getType() == prey.entity.getType() && o.entity.isAlive() && !(o.entity instanceof Mob m && m.isBaby())
+                    && now - o.lastSeen <= 200 && o.pos.distanceTo(prey.pos) < 16) {
+                n++;
+            }
+        }
+        return n <= 2;
+    }
+
     public static Perception.Seen nearestAnimal(Perception observer, Player agent, long now, double radius) {
         Perception.Seen best = null;
         double bestD = radius;
@@ -307,6 +322,9 @@ public final class Senses {
             }
             if (agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().animals().keepAlive(s.entity)) {
                 continue; // future livestock: we have their food in plenty and mean to pen them
+            }
+            if (lastPair(observer, s, now) && agent.getFoodData().getFoodLevel() > 4) {
+                continue; // the last two of a wild herd stay to breed (unless we are starving)
             }
             double d = s.pos.distanceTo(agent.position());
             if (d < bestD) {
