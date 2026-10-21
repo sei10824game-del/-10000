@@ -2554,14 +2554,15 @@ public final class CloneGameTests {
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6000, 4));
         c.controller().forcedOption = opt("FIGHT");
-        h.runAfterDelay(40, () -> dummy(h, 8.5, 5.5)); // right beside it, after the far one was chosen
+        Husk[] nearOne = new Husk[1];
+        h.runAfterDelay(40, () -> nearOne[0] = dummy(h, 8.5, 5.5)); // right beside it, after the far one was chosen
         h.onEachTick(() -> {
             if (h.getLevel().getGameTime() % 10 == 0) {
                 c.controller().perception().update(h.getLevel().getGameTime());
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().retargets >= 1 || String.valueOf(c.controller().optionLog).matches(".*FIGHT:minecraft:husk@[0-5]\\b.*"), "it turned to the enemy beside it (" + c.controller().retargets + " " + c.controller().optionLog + ")");
+            h.assertTrue(c.controller().retargets >= 1 || String.valueOf(c.controller().optionLog).matches(".*FIGHT:minecraft:husk@[0-5]\\b.*"), "it turned to the enemy beside it (" + c.controller().retargets + " near seen " + (nearOne[0] != null && c.controller().perception().canSee(nearOne[0])) + " remembered " + c.controller().perception().remembered().size() + " " + c.controller().fightDebug + " " + c.controller().optionLog + ")");
             finish(h, c);
         });
     }
