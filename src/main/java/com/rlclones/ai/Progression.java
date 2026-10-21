@@ -183,8 +183,17 @@ public final class Progression {
         return pick >= Tiers.IRON.getLevel() && diamondShort(p) > 0 ? Need.DIAMOND : Need.NONE;
     }
 
+    /** The height a diamond ore was last seen at, by any clone (the dig for diamonds goes down to it): MIN_VALUE while none was seen. */
+    private static volatile int learnedDiamondY = Integer.MIN_VALUE;
+
+    public static void noteDiamondY(int y) {
+        if (y >= -64 && y <= 16) {
+            learnedDiamondY = y;
+        }
+    }
+
     public static int digTargetY(Need need) {
-        return need == Need.DIAMOND ? DIAMOND_Y : IRON_Y;
+        return need == Need.DIAMOND ? (learnedDiamondY != Integer.MIN_VALUE ? learnedDiamondY : DIAMOND_Y) : IRON_Y;
     }
 
     /** Digging down is what the next step needs (iron or diamonds) and the player may break blocks at all. */

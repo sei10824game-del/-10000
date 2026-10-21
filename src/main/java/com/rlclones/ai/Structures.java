@@ -37,6 +37,13 @@ public final class Structures {
     /** A village is known (seen by this clone or told of by a friend). */
     public boolean villageKnown;
     private boolean villageSaid;
+    /** Ores (iron, diamond) a friend or this clone saw and has not got: where to go digging (max 24). */
+    private final List<BlockPos> oreTips = new ArrayList<>();
+    private long lastOreSaid;
+    /** Caves seen or told of (max 16). */
+    private final List<BlockPos> caves = new ArrayList<>();
+    public int oreTipsGiven;
+    public int oreTipsGot;
 
     public Structures(ClonePlayer self) {
         this.self = self;
@@ -85,6 +92,27 @@ public final class Structures {
                 }
             }
         }
+        if (now - lastOreSaid > 400) {
+            for (var e : perception.blocks().entrySet()) {
+                if (e.getValue() != Perception.BlockKind.ORE || e.getKey().distSqr(self.blockPosition()) > 24 * 24) {
+                    continue;
+                }
+                var st = level.getBlockState(e.getKey());
+                boolean diamond = st.is(net.minecraft.tags.BlockTags.DIAMOND_ORES);
+                if ((diamond || st.is(net.minecraft.tags.BlockTags.IRON_ORES)) && !tipNear(e.getKey())) {
+                    BlockPos p = e.getKey();
+                    oreTips.add(p.immutable());
+                    lastOreSaid = now;
+                    oreTipsGiven++;
+                    if (diamond) {
+                        Progression.noteDiamondY(p.getY());
+                    }
+                    Chat.say(self, Component.translatable("rlclones.chat.ore", p.getX(), p.getY(), p.getZ()), "ORE " + p.getX() + " " + p.getY() + " " + p.getZ() + (diamond ? " d" : " i"));
+                    break;
+                }
+            }
+        }
+        oreTips.removeIf(t -> Motor.horizontalDistance(self.position(), Vec3.atCenterOf(t)) < 6 && Math.abs(self.getY() - t.getY()) < 8);
         for (Site s : sites) {
             if (!s.visited && Motor.horizontalDistance(self.position(), Vec3.atCenterOf(s.pos)) < VISIT && Math.abs(self.getY() - s.pos.getY()) < 12) {
                 s.visited = true;
@@ -94,7 +122,77 @@ public final class Structures {
     }
 
     /** "STRUCT x y z" from a friend. */
+    private boolean tipNear(BlockPos p) {
+        for (BlockPos t : oreTips) {
+            if (t.distManhattan(p) <= 12) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The nearest ore tip within 128 blocks (iron / diamond to dig for), or null. */
+    @Nullable
+    public Vec3 oreTip() {
+        BlockPos best = null;
+        double bestD = 128 * 128;
+        for (BlockPos t : oreTips) {
+            double d = t.distSqr(self.blockPosition());
+            if (d < bestD) {
+                bestD = d;
+                best = t;
+            }
+        }
+        return best == null ? null : Vec3.atBottomCenterOf(best);
+    }
+
+    /** A cave found: remembered; true if it is new (the caller tells the others). */
+    public boolean noteCave(BlockPos p) {
+        for (BlockPos c : caves) {
+            if (c.distManhattan(p) <= 24) {
+                return false;
+            }
+        }
+        if (caves.size() >= 16) {
+            caves.remove(0);
+        }
+        caves.add(p.immutable());
+        return true;
+    }
+
+    /** The nearest known cave within 128 blocks, or null. */
+    @Nullable
+    public Vec3 caveTarget() {
+        BlockPos best = null;
+        double bestD = 128 * 128;
+        for (BlockPos c : caves) {
+            double d = c.distSqr(self.blockPosition());
+            if (d > 10 * 10 && d < bestD) {
+                bestD = d;
+                best = c;
+            }
+        }
+        return best == null ? null : Vec3.atBottomCenterOf(best);
+    }
+
     public boolean onChat(String text) {
+        if (text.startsWith("ORE ") || text.startsWith("CAVE ")) {
+            String[] p = text.split(" ");
+            try {
+                BlockPos at = new BlockPos(Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]));
+                if (p[0].equals("CAVE")) {
+                    noteCave(at);
+                } else if (!tipNear(at) && oreTips.size() < 24) {
+                    oreTips.add(at);
+                    oreTipsGot++;
+                    if (p.length > 4 && p[4].equals("d")) {
+                        Progression.noteDiamondY(at.getY());
+                    }
+                }
+            } catch (RuntimeException ignored) {
+            }
+            return true;
+        }
         if (text.startsWith("VILLAGE ")) {
             villageKnown = true; // a friend found one: it is a place to visit (and no trip to look for one)
             villageSaid = true; // (the finder has said it: not again)

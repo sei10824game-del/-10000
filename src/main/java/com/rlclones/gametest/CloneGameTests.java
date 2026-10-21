@@ -2650,6 +2650,38 @@ public final class CloneGameTests {
         });
     }
 
+    /** A friend's "ORE x y z d": the other clone has a tip to dig to, and the diamond height is learnt. */
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "r17oretip")
+    public static void takesAnOreTipFromAFriend(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.controller().structures().onChat("ORE 100 -50 100 d");
+        h.runAfterDelay(5, () -> {
+            h.assertTrue(c.controller().structures().oreTip() != null, "an ore tip is known");
+            h.assertTrue(com.rlclones.ai.Progression.digTargetY(com.rlclones.ai.Progression.Need.DIAMOND) == -50, "the diamond height was learnt");
+            com.rlclones.ai.Progression.noteDiamondY(-58); // (back to the usual for the other tests)
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
+    /** Respawn on and a bed near: the clone goes to it and sets its respawn point there. */
+    @GameTest(template = ARENA, timeoutTicks = 600, batch = "r17bed")
+    public static void setsItsRespawnPointAtABed(GameTestHelper h) {
+        manager(h).setRespawn(true);
+        var bedState = Blocks.RED_BED.defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, net.minecraft.core.Direction.EAST);
+        h.setBlock(new BlockPos(9, 2, 7), bedState.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT));
+        h.setBlock(new BlockPos(10, 2, 7), bedState.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD));
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        h.onEachTick(() -> {
+            c.controller().bedding().tick(h.getLevel().getGameTime() + (200 - (h.getLevel().getGameTime() + c.getId()) % 200) % 200, false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().bedding().set >= 1, "the respawn point was set at the bed");
+            finish(h, c);
+        });
+    }
+
     private static java.util.List<net.minecraft.world.entity.animal.Cow> cowsInPen(GameTestHelper h, int n) {
         var bases = com.rlclones.clone.Bases.get(h.getLevel().getServer());
         bases.addPen(h.getLevel().dimension(), h.absolutePos(new BlockPos(5, 2, 5)), "cow");

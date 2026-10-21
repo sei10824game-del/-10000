@@ -85,6 +85,7 @@ public final class CloneController {
     private final Pits pits;
     private final Trading trading;
     private final Spawners spawners;
+    private final Bedding bedding;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -198,6 +199,7 @@ public final class CloneController {
         this.pits = new Pits(self, motor);
         this.trading = new Trading(self, motor);
         this.spawners = new Spawners(self, motor);
+        this.bedding = new Bedding(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -344,6 +346,10 @@ public final class CloneController {
 
     public Spawners spawners() {
         return spawners;
+    }
+
+    public Bedding bedding() {
+        return bedding;
     }
 
     public Trading trading() {
@@ -626,6 +632,9 @@ public final class CloneController {
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
+        }
+        if (!itemBusy && option == Option.REST && !escaping) {
+            itemBusy = bedding.tick(now, threatened); // respawn on: the respawn point is set at a bed near the base
         }
         Prof.add(Prof.REFLEXES, pr);
         long pt = Prof.t();
@@ -2563,6 +2572,9 @@ public final class CloneController {
             } else if (s.entity instanceof Mob m && m.getTarget() != null) {
                 score -= 2;
             }
+            if (s.entity instanceof net.minecraft.world.entity.monster.Creeper && score < 8) {
+                score -= 3; // a creeper first: it blows up if left
+            }
             if (!s.visible) {
                 score += 4;
             }
@@ -3983,11 +3995,24 @@ public final class CloneController {
         if (dig != null && Progression.digWanted(self) && ItemAid.bestPickTier(self) < 2 && random.nextFloat() < 0.4f) {
             return dig; // R-44: a digger told where it is digging: have a look there
         }
-        if (Progression.digWanted(self) && ItemAid.bestPickTier(self) >= 1 && random.nextFloat() < 0.3f) {
-            Vec3 cave = Caves.find(self, random); // ores show in the walls of caves: have a look in one
-            if (cave != null) {
-                caveVisits++;
-                return cave;
+        if (Progression.digWanted(self) && ItemAid.bestPickTier(self) >= 1) {
+            Vec3 tip = structures.oreTip(); // iron / diamonds somebody saw: dig there
+            if (tip != null && random.nextFloat() < 0.6f) {
+                return tip;
+            }
+            if (random.nextFloat() < 0.3f) {
+                Vec3 cave = structures.caveTarget(); // a cave known (seen or told of) first
+                if (cave == null) {
+                    cave = Caves.find(self, random); // ores show in the walls of caves: have a look in one
+                    if (cave != null && structures.noteCave(BlockPos.containing(cave))) {
+                        Chat.say(self, Component.translatable("rlclones.chat.cave", Mth.floor(cave.x), Mth.floor(cave.z)),
+                                "CAVE " + Mth.floor(cave.x) + " " + Mth.floor(cave.y) + " " + Mth.floor(cave.z));
+                    }
+                }
+                if (cave != null) {
+                    caveVisits++;
+                    return cave;
+                }
             }
         }
         Vec3 best = null;

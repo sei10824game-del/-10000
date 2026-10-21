@@ -52,6 +52,8 @@
   "rlclones.chat.rally": "[Rally] Meet at X:%s Y:%s Z:%s! Heading to unexplored land (X:%s Z:%s). %s more needed.",
   "rlclones.chat.depart": "Leaving with %s companion(s) - follow me! (to X:%s Z:%s)",
   "rlclones.chat.join": "I'll join %s's trip! On my way to X:%s Y:%s Z:%s",
+  "rlclones.chat.ore": "Iron/diamond ore at X:%s Y:%s Z:%s - come and dig!",
+  "rlclones.chat.cave": "Cave at X:%s Z:%s - ores in the walls!",
   "rlclones.chat.village": "Village found at X:%s Z:%s - come and see!",
   "rlclones.chat.expedition_end": "Expedition over at X:%s Z:%s - thanks, everyone is free again!",
   "rlclones.cmd.limit": "Clone limit: %s",
