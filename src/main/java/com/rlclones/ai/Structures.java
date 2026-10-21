@@ -42,6 +42,8 @@ public final class Structures {
     private long lastOreSaid;
     /** Caves seen or told of (max 16). */
     private final List<BlockPos> caves = new ArrayList<>();
+    /** The height a diamond ore was last seen or told of at (the dig for diamonds goes down to it): MIN_VALUE while none was. */
+    private int diamondY = Integer.MIN_VALUE;
     public int oreTipsGiven;
     public int oreTipsGot;
 
@@ -105,7 +107,7 @@ public final class Structures {
                     lastOreSaid = now;
                     oreTipsGiven++;
                     if (diamond) {
-                        Progression.noteDiamondY(p.getY());
+                        noteDiamondY(p.getY());
                     }
                     Chat.say(self, Component.translatable("rlclones.chat.ore", p.getX(), p.getY(), p.getZ()), "ORE " + p.getX() + " " + p.getY() + " " + p.getZ() + (diamond ? " d" : " i"));
                     break;
@@ -122,6 +124,16 @@ public final class Structures {
     }
 
     /** "STRUCT x y z" from a friend. */
+    private void noteDiamondY(int y) {
+        if (y >= -64 && y <= 16) {
+            diamondY = y;
+        }
+    }
+
+    public int diamondY() {
+        return diamondY;
+    }
+
     private boolean tipNear(BlockPos p) {
         for (BlockPos t : oreTips) {
             if (t.distManhattan(p) <= 12) {
@@ -186,7 +198,7 @@ public final class Structures {
                     oreTips.add(at);
                     oreTipsGot++;
                     if (p.length > 4 && p[4].equals("d")) {
-                        Progression.noteDiamondY(at.getY());
+                        noteDiamondY(at.getY());
                     }
                 }
             } catch (RuntimeException ignored) {

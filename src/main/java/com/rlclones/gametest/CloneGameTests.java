@@ -2658,8 +2658,7 @@ public final class CloneGameTests {
         c.controller().structures().onChat("ORE " + tip.getX() + " -50 " + tip.getZ() + " d");
         h.runAfterDelay(5, () -> {
             boolean known = c.controller().structures().oreTip() != null;
-            int y = com.rlclones.ai.Progression.digTargetY(com.rlclones.ai.Progression.Need.DIAMOND);
-            com.rlclones.ai.Progression.noteDiamondY(com.rlclones.ai.Progression.DIAMOND_Y); // (back to the usual for the other tests, whatever comes)
+            int y = c.controller().structures().diamondY();
             h.assertTrue(known, "an ore tip is known");
             h.assertTrue(y == -50, "the diamond height was learnt (" + y + ")");
             finish(h, c);

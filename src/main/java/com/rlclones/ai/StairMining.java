@@ -131,7 +131,14 @@ public final class StairMining {
 
     /** How deep to dig now. */
     public int target() {
-        return targetY != Integer.MIN_VALUE ? targetY : Progression.digTargetY(Progression.need(self));
+        if (targetY != Integer.MIN_VALUE) {
+            return targetY;
+        }
+        Progression.Need need = Progression.need(self);
+        if (need == Progression.Need.DIAMOND && self.controller() != null && self.controller().structures().diamondY() != Integer.MIN_VALUE) {
+            return self.controller().structures().diamondY(); // where a diamond ore was seen (by us or a friend)
+        }
+        return Progression.digTargetY(need);
     }
 
     /** On the surface (sky overhead), carrying a pickaxe, still missing iron or diamond gear, not deep enough yet. */
