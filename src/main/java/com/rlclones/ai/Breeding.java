@@ -18,6 +18,9 @@ public final class Breeding {
     /** Food items to spare (besides a full food gauge) before a clone (or player) can be a parent. */
     public static final int FOOD_NEEDED = 4;
 
+    /** Ticks a parent or newborn must wait before breeding again (a day): the soak of 200 clones starved before the crops grew. */
+    public static final int COOLDOWN = 24000;
+
     private final ClonePlayer self;
     private final Motor motor;
     @Nullable
@@ -33,7 +36,9 @@ public final class Breeding {
 
     /** Full stomach and food in the bag. */
     public static boolean eligible(Player p) {
-        return p.isAlive() && !p.isSpectator() && !(p instanceof ClonePlayer c && c.isCreative())
+        CloneManager m = CloneManager.peek();
+        return p.isAlive() && (m == null || !m.coolingDown(p))
+                && !p.isSpectator() && !(p instanceof ClonePlayer c && c.isCreative())
                 && p.getFoodData().getFoodLevel() >= 20 && FoodAid.foodItems(p) >= FOOD_NEEDED;
     }
 

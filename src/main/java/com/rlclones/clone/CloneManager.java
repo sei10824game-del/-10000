@@ -96,6 +96,13 @@ public final class CloneManager {
 
     /** Clones born so far (diagnostics, tests). */
     public int births;
+    /** Game time each parent (and newborn) last bred or was born: no breeding again before {@link com.rlclones.ai.Breeding#COOLDOWN} passes. */
+    private final java.util.Map<UUID, Long> bredAt = new java.util.HashMap<>();
+
+    public boolean coolingDown(net.minecraft.world.entity.player.Player p) {
+        Long t = bredAt.get(p.getUUID());
+        return t != null && p.level().getGameTime() - t < com.rlclones.ai.Breeding.COOLDOWN;
+    }
 
     /**
      * Two parents - clones, or a player and a clone - with full stomachs and food to spare give most of their food
@@ -124,6 +131,9 @@ public final class CloneManager {
         ClonePlayer child = summon(null, level, mid, a.getYRot(), team, inherited, looks);
         if (child == null) {
             return null;
+        }
+        for (net.minecraft.world.entity.player.Player p : List.of(a, b, child)) {
+            bredAt.put(p.getUUID(), level.getGameTime());
         }
         for (net.minecraft.world.entity.player.Player p : List.of(a, b)) {
             p.getFoodData().setFoodLevel(Math.max(0, p.getFoodData().getFoodLevel() - 14));
