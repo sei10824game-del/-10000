@@ -2251,7 +2251,7 @@ public final class CloneController {
             urgentCrafts++;
             return Option.CRAFT; // a furnace for the raw food / ore, the first bucket
         }
-        if ((mask & Option.MINE.bit()) != 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
+        if (!hungryNoFood() && (mask & Option.MINE.bit()) != 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
                 && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24, p -> harvestable(Perception.BlockKind.ORE, p)
                 && (hasPickFor(self.level().getBlockState(p)) || pickMakeableFor(self.level().getBlockState(p)))) != null) {
             orePulls++;
@@ -4073,6 +4073,16 @@ public final class CloneController {
 
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
+        if (hungryNoFood() && !self.serverLevel().canSeeSky(self.blockPosition().above()) && self.getY() < 55) {
+            Vec3 out = Caves.exitGoal(self); // starving underground: up to the open, where the food is
+            if (out == null) {
+                var st = com.rlclones.clone.Bases.get(self.getServer()).nearestStaircase(self.level().dimension(), self.position(), 200);
+                out = st == null ? null : Vec3.atBottomCenterOf(st.top);
+            }
+            if (out != null) {
+                return out;
+            }
+        }
         Vec3 home = homewardGoal();
         if (home != null && Senses.threats(perception, self, now(), 16).isEmpty()) {
             return home; // a trip just ended: the way back to the base

@@ -58,6 +58,32 @@ public final class Caves {
                 && !level.getBlockState(c.below()).getCollisionShape(level, c.below()).isEmpty();
     }
 
+    /** Underground: the nearest air cell open to the sky that the cave floor leads to (null when the cave is closed or too big to search). */
+    @Nullable
+    public static Vec3 exitGoal(Player p) {
+        ServerLevel level = (ServerLevel) p.level();
+        BlockPos start = p.blockPosition();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> seen = new HashSet<>();
+        queue.add(start);
+        seen.add(start);
+        while (!queue.isEmpty() && seen.size() < 3000) {
+            BlockPos c = queue.poll();
+            if (level.canSeeSky(c) && pocket(level, c)) {
+                return Vec3.atBottomCenterOf(c);
+            }
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    BlockPos n = c.relative(d).above(dy);
+                    if (level.getBlockState(n).isAir() && level.getBlockState(n.above()).isAir() && seen.add(n)) {
+                        queue.add(n);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     /** The deepest air cell of the cave {@code start} is in if it is joined to the open air (else null). */
     @Nullable
     private static BlockPos reachesTheSky(ServerLevel level, BlockPos start) {
