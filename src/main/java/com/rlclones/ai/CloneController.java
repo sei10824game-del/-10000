@@ -2276,6 +2276,9 @@ public final class CloneController {
                 return Option.EXPLORE;
             }
         }
+        if ((mask & Option.FARM.bit()) != 0 && FoodAid.foodItems(self) < 6) {
+            return Option.FARM; // food to be had close by (ripe crops, berries, melons, hay): take it before it is needed
+        }
         if ((mask & Option.EXPLORE.bit()) != 0 && homewardGoal() != null) {
             return Option.EXPLORE; // back to the base after a trip
         }

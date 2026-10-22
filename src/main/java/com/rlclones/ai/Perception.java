@@ -36,7 +36,7 @@ import java.util.Map;
  * Seen things are remembered for a while so the clone has object permanence.
  */
 public final class Perception {
-    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL, STONE, BREWING, UNKNOWN, WOOD}
+    public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL, STONE, BREWING, UNKNOWN, WOOD, FOOD}
 
     public static final class Seen {
         public final Entity entity;
@@ -391,7 +391,7 @@ public final class Perception {
             if (kind == BlockKind.STONE && !blocks.containsKey(pos) && !diggable.test(pos)) {
                 continue;
             }
-            if (kind != null && !blocks.containsKey(pos) && (kind == BlockKind.STONE || kind == BlockKind.UNKNOWN || kind == BlockKind.WOOD)
+            if (kind != null && !blocks.containsKey(pos) && (kind == BlockKind.STONE || kind == BlockKind.UNKNOWN || kind == BlockKind.WOOD || kind == BlockKind.FOOD)
                     && count(kind) >= (kind == BlockKind.UNKNOWN ? 12 : 8)) {
                 continue; // plenty of those remembered already
             }
@@ -447,6 +447,14 @@ public final class Perception {
         return false;
     }
 
+    /** Food growing or stored in the open: a ripe crop, a ripe sweet berry bush, a melon, a hay bale (villages, wild patches). */
+    public static boolean isWildFood(BlockState st) {
+        var b = st.getBlock();
+        return b instanceof net.minecraft.world.level.block.CropBlock c && c.isMaxAge(st)
+                || b == net.minecraft.world.level.block.Blocks.SWEET_BERRY_BUSH && st.getValue(net.minecraft.world.level.block.SweetBerryBushBlock.AGE) >= 2
+                || b == net.minecraft.world.level.block.Blocks.MELON || b == net.minecraft.world.level.block.Blocks.HAY_BLOCK;
+    }
+
     public static BlockKind classify(BlockState state) {
         if (state.is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE)) {
             return BlockKind.TABLE;
@@ -469,6 +477,9 @@ public final class Perception {
         }
         if (state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(Tags.Blocks.COBBLESTONE)) {
             return BlockKind.STONE;
+        }
+        if (isWildFood(state)) {
+            return BlockKind.FOOD;
         }
         if (state.is(BlockTags.PLANKS)) {
             return BlockKind.WOOD;

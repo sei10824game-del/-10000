@@ -262,7 +262,7 @@ public final class Farming {
 
     /** A ripe crop, or (running short of food) a hay bale: nine wheat, a village's food store. */
     private boolean harvestable(BlockState st) {
-        return ripe(st) || st.is(Blocks.HAY_BLOCK) && FoodAid.foodItems(self) < 8;
+        return ripe(st) || Perception.isWildFood(st) && FoodAid.foodItems(self) < 8;
     }
 
     private static boolean ripe(BlockState st) {
@@ -336,6 +336,23 @@ public final class Farming {
                 bestScore = score;
                 best = p.immutable();
                 out[0] = j;
+            }
+        }
+        if (best == null && breaking && FoodAid.foodItems(self) < 8 && self instanceof com.rlclones.clone.ClonePlayer cp) {
+            // wild food remembered further off (berries, melons, hay, ripe crops of a village): the nearest one
+            double d0 = 32 * 32;
+            for (var e : cp.controller().perception().blocks().entrySet()) {
+                BlockPos p = e.getKey();
+                Long f = failed.get(p);
+                double d = p.distSqr(feet);
+                if (e.getValue() == Perception.BlockKind.FOOD && d < d0 && (f == null || self.level().getGameTime() - f >= 1200) && Perception.isWildFood(level.getBlockState(p))) {
+                    d0 = d;
+                    best = p.immutable();
+                    out[0] = Job.HARVEST;
+                }
+            }
+            if (best != null) {
+                return best;
             }
         }
         if ((best == null || out[0] == Job.SEEDS) && seeds && hoe && breaking) {
