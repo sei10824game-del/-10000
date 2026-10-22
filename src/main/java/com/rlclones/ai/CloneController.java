@@ -1505,6 +1505,16 @@ public final class CloneController {
     }
 
     /** Hungry and nothing to eat: no trips, no digging, food first. */
+    private long scoutAfter = 3000;
+    private int scouts;
+
+    /** Early on, a clone with a pickaxe and some food that knows of no village goes to look for one alone (up to 3 tries, 9000 ticks apart). */
+    private boolean villageScoutWanted(long now) {
+        return scouts < 3 && now >= scoutAfter && !expedition.isLeading() && !expedition.villageKnown && !structures.villageKnown && !trading.met
+                && Progression.need(self) != Progression.Need.WOOD && !hungryNoFood() && FoodAid.foodItems(self) >= 2
+                && self.getHealth() >= self.getMaxHealth() * 0.9f && ticksLived < 60000;
+    }
+
     private boolean hungryNoFood() {
         return !self.isCreative() && self.getFoodData().getFoodLevel() < 8 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
     }
@@ -1637,7 +1647,7 @@ public final class CloneController {
         }
         // iron / diamonds to dig for, a stone pickaxe still to make, or no food for a trip: no new trips
         boolean homeBody = digPending(now) || hungryNoFood() || Progression.need(self) == Progression.Need.STONE;
-        if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline())) {
+        if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline()) || villageScoutWanted(now)) {
             mask |= Option.EXPEDITION.bit();
         }
         if (expedition.joinedOffer() != null || (!homeBody && expedition.canJoin(now))) {
@@ -2255,6 +2265,9 @@ public final class CloneController {
                 return Option.EXPLORE;
             }
         }
+        if ((mask & Option.EXPEDITION.bit()) != 0 && villageScoutWanted(now)) {
+            return Option.EXPEDITION; // R-20: find a village early (trading, a base, beds)
+        }
         Option dig = digDrive(now, mask);
         if (dig != null) {
             return dig;
@@ -2437,7 +2450,11 @@ public final class CloneController {
                         expedition.leadHunt(foe.blockPosition(), (Integer) hunt[1], net.minecraft.world.entity.EntityType.getKey(foe.getType()).toString());
                     } else {
                         BlockPos t = expedition.pickTarget(visitedChunks::contains);
-                        if (t != null && !expedition.villageKnown && !structures.villageKnown && !trading.met && random.nextFloat() < 0.5f) {
+                        if (t != null && villageScoutWanted(now)) {
+                            scouts++;
+                            scoutAfter = now + 9000;
+                            expedition.leadVillage(t, 0); // early: look for a village alone
+                        } else if (t != null && !expedition.villageKnown && !structures.villageKnown && !trading.met && random.nextFloat() < 0.5f) {
                             expedition.leadVillage(t, expedition.companionsNeeded(t, brain())); // no village known yet: look for one
                         } else if (t != null) {
                             expedition.lead(t, expedition.companionsNeeded(t, brain()));
