@@ -2439,7 +2439,7 @@ public final class CloneGameTests {
         }
         boolean[] differed = {false};
         h.onEachTick(() -> {
-            if (h.getLevel().getGameTime() % 10 == 0) {
+            if (h.getLevel().getGameTime() % 2 == 0) { // (the look picks its blocks by random rays: more looks, fewer runs where one clone saw no stone for 300 ticks)
                 a.controller().perception().update(h.getLevel().getGameTime());
                 b.controller().perception().update(h.getLevel().getGameTime());
             }
@@ -2450,7 +2450,7 @@ public final class CloneGameTests {
                 h.assertFalse(ta.equals(tb), "the same block is not both clones' target at once (" + ta.subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             }
         });
-        h.runAfterDelay(300, () -> {
+        h.runAfterDelay(350, () -> {
             h.assertTrue(differed[0], "both had a target of their own (" + a.controller().optionLog + " | " + b.controller().optionLog + " " + a.controller().harvestDebug + ")");
             finish(h, a, b);
             h.succeed();
