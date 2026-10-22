@@ -3724,7 +3724,9 @@ public final class CloneGameTests {
             h.assertTrue(pen.contains(cow1.position()) && pen.contains(cow2.position()), "both cows led in with the wheat (gate " + gateNow + " held "
                     + c.getMainHandItem() + " clone at " + c.blockPosition().subtract(pen.origin()).toShortString() + " pens " + bases.pens.size() + " log" + c.controller().animals().livestockLog + " lured "
                     + c.controller().animals().lured + " " + c.controller().animals().livestockDebug + " cows at "
-                    + cow1.blockPosition().subtract(pen.origin()).toShortString() + " / " + cow2.blockPosition().subtract(pen.origin()).toShortString() + ")");
+                    + cow1.blockPosition().subtract(pen.origin()).toShortString() + " / " + cow2.blockPosition().subtract(pen.origin()).toShortString()
+                    + " los " + cow1.getSensing().hasLineOfSight(c) + "/" + cow2.getSensing().hasLineOfSight(c)
+                    + " dist " + (int) cow1.distanceTo(c) + "/" + (int) cow2.distanceTo(c) + " nav " + cow1.getNavigation().isDone() + "/" + cow2.getNavigation().isDone() + ")");
             var gate = h.getLevel().getBlockState(pen.origin().offset(pen.size() / 2, 0, 0));
             h.assertTrue(gate.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock
                     && !gate.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN), "and the gate shut");
