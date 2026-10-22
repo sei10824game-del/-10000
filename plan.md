@@ -803,3 +803,16 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 注意: Perception.update は 4tick に1回だけ呼ばれる。以前の「全域探索を4tickに1回」はこのため効いていなかった。いまは update 2回に1回(約8tick)。
 - 牛の柵の実測(失敗時): `cows at 12,0,8 / 11,0,7` `los true/true` `dist 1/2` `nav true/true`。つまり牛は視線も距離も問題なく、クローンにぴったり付いていて止まっている(2.5ブロック以内では TemptGoal が停止する仕様)。クローンも柵の外の東側(x≈12)にいる。66cの視線仮説は外れ。本当の詰まりは「牛に囲まれたクローンが門の前(x=3,z=-2)まで進めない」。段階5の外側ブランチは `ticks>2400` まで進展判定がない。案: 門の前まで動けない(`motor.stuckCount()` または移動量が小さい)なら、小麦をしまって牛を散らし(約100tick)、牛のいない側から回り込む。
 - ソークの設定は元(12体・72000tick)に戻した。
+
+### 67. 引き継ぎ(2026-10-22、run 39724959304 時点)
+- ブランチ: `claude/s11-1-implementation-ib5d52`。次のセッションは `plan.md`(この章と 66a〜66d)と `REQUIREMENTS.md` だけ読む。ローカルは `./gradlew` が通らない。検証は CI(`gh run list --branch ...`、失敗は `gh run view <id> --log-failed | grep -aoE "LogTestReporter\]: [a-z0-9]+ failed! .{0,300}"`)。
+- この回に入れたもの: 繁殖のクールタイム(`Breeding.COOLDOWN`)、飢饉モード(`CloneManager.famine`: 繁殖停止と、飢えた個体は狩りか探索)、生肉・生魚・ジャガイモは焼くまで食べない(`Equipment.keepForFurnace`、満腹度2以下なら食べる)、野生の群れの最後の2頭は狩らない(`Senses.lastPair`)、牛の柵の修正(`Animals` 段階5)、軽量化(`Perception.canSee` の視線使い回し、周りの探索は24ブロック以内を毎回・全域は2回に1回、`AgentWatcher` は近い8人まで)、ソークの出力 `SOAK-FEATURES`・`SOAK-PROF`、`soak.flag` の `clones N` 行。
+- 測定: 1体あたり 236µs → 85〜167µs(ランナーで2倍ほど振れる)。200体・6000tick で約33ms/tick、エラー0。
+- 未解決(優先順):
+  1. `SOAK-FEATURES` が 溶岩バケツ0・ベッド0・村を知っている0体(12体・72000tick)。機能が実機で発動しない理由を調べる(`LavaScoop`・`Bedding`・`Structures.villageKnown`・`Caves`)。
+  2. 牛の柵 `penscowswhenwheatpilesup`: 約半分の run で落ちる。実測は 66d(牛はクローンにぴったり付いて止まり、クローンが柵の外の東側から門の前へ進めない)。案: 進めないなら小麦をしまって牛を散らし、牛のいない側から回り込む(`Animals` 段階5の外側ブランチ)。
+  3. run ごとに入れ替わって落ちるテスト(最近: `clonesraiseshields`、`usesexistingbrewingstand`、`setstntoffwithflintandsteel`、`huntsfishinthewater`、`buildsachickenpenandthrowseggsin`、`cullsthesurplusbutnotapet`、`cutsthefootofatreehiddenbyleaves`)。今回の変更との関係は未確認。軽量化(知覚の間引き)の副作用が疑わしければ `Perception.FAR_EVERY` を 1 にして比べる。
+  4. 軽量化の続き: 戦略(経路探索 14〜30µs)、知覚の探索と視線判定。12体で `SOAK-PROF` が出る。
+  5. 未実装: 村での拠点づくりの先。
+- 注意: ソークは `soak.flag` があると push のたびに走る(12体・72000tick、約25分)。人数や tick を変えて測るときは、測定後に必ず元(1行目の文のみ+空)へ戻す。
+- サブエージェント(Agent ツール)がこのセッションの途中から使えなくなった。使えるなら設計・難デバッグは Opus に委任(`CLAUDE.md`)。
