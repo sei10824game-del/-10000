@@ -2272,7 +2272,7 @@ public final class CloneController {
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
             }
-            if (CloneManager.peek() != null && CloneManager.peek().famine(now) && (mask & Option.EXPLORE.bit()) != 0) {
+            if ((mask & Option.EXPLORE.bit()) != 0) { // nothing to hunt in sight: out to fresh ground (spread by crowdAt)
                 return Option.EXPLORE;
             }
         }
@@ -2495,7 +2495,7 @@ public final class CloneController {
         }
         endedOption = option.name();
         endedAfter = optionTicks;
-        if ((option == Option.EXPEDITION || option == Option.JOIN) && !died && !expedition.villageKnown) {
+        if ((option == Option.EXPEDITION || option == Option.JOIN) && !died && !expedition.villageKnown && !storage.homeWanted()) { // (far from every base with the blocks for a house: build one here instead)
             homewardUntil = now() + 6000; // the trip is over: back to the base
         }
         if (option == Option.FIGHT || option == Option.HUNT) {
@@ -4046,13 +4046,13 @@ public final class CloneController {
     private final java.util.List<Vec3> caveGoals = new java.util.ArrayList<>();
     public int caveSteps;
 
-    /** 0.25 per other player within 20 blocks of (x, z), at most 1. */
+    /** 0.5 per other player within 40 blocks of (x, z), at most 3: a hungry group fans out. */
     private double crowdAt(double x, double z) {
         int n = 0;
         for (net.minecraft.server.level.ServerPlayer o : self.getServer().getPlayerList().getPlayers()) {
-            n += o != self && o.level() == self.level() && o.distanceToSqr(x, o.getY(), z) < 400 ? 1 : 0;
+            n += o != self && o.level() == self.level() && o.distanceToSqr(x, o.getY(), z) < 1600 ? 1 : 0;
         }
-        return Math.min(1.0, 0.25 * n);
+        return Math.min(3.0, 0.5 * n);
     }
 
     private long homewardUntil;
@@ -4116,12 +4116,12 @@ public final class CloneController {
                 }
             }
         }
-        boolean hungry = hungryNoFood();
+        boolean hungry = hungryNoFood() || FoodAid.foodItems(self) < 3 && self.getFoodData().getFoodLevel() < 12; // short of food: spread out over fresh ground
         Vec3 best = null;
         double bestScore = -Double.MAX_VALUE;
         for (int i = 0; i < 6; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
-            double dist = 12 + random.nextDouble() * 12;
+            double dist = hungry ? 40 + random.nextDouble() * 40 : 12 + random.nextDouble() * 12;
             double x = self.getX() + Math.cos(angle) * dist;
             double z = self.getZ() + Math.sin(angle) * dist;
             int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z));
