@@ -158,7 +158,7 @@ public final class Expedition {
     public BlockPos pickTarget(LongPredicate visited) {
         for (int i = 0; i < 12; i++) {
             double a = random.nextDouble() * Math.PI * 2;
-            double d = 120 + random.nextDouble() * 80;
+            double d = 160 + random.nextDouble() * 120;
             int x = Mth.floor(self.getX() + Math.cos(a) * d);
             int z = Mth.floor(self.getZ() + Math.sin(a) * d);
             if (visited.test(ChunkPos.asLong(x >> 4, z >> 4))) {

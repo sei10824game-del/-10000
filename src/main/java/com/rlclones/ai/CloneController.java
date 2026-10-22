@@ -2276,6 +2276,9 @@ public final class CloneController {
                 return Option.EXPLORE;
             }
         }
+        if ((mask & Option.EXPLORE.bit()) != 0 && homewardGoal() != null) {
+            return Option.EXPLORE; // back to the base after a trip
+        }
         if ((mask & Option.EXPEDITION.bit()) != 0 && villageScoutWanted(now)) {
             return Option.EXPEDITION; // R-20: find a village early (trading, a base, beds)
         }
@@ -2489,6 +2492,9 @@ public final class CloneController {
         }
         endedOption = option.name();
         endedAfter = optionTicks;
+        if ((option == Option.EXPEDITION || option == Option.JOIN) && !died && !expedition.villageKnown) {
+            homewardUntil = now() + 6000; // the trip is over: back to the base
+        }
         if (option == Option.FIGHT || option == Option.HUNT) {
             closeCombatStep(died, died);
             target = null;
@@ -4046,8 +4052,28 @@ public final class CloneController {
         return Math.min(1.0, 0.25 * n);
     }
 
+    private long homewardUntil;
+
+    /** After a trip: the centre of the nearest base if it is more than 40 blocks off, else null (and the walk home is over). */
+    @Nullable
+    private Vec3 homewardGoal() {
+        if (now() >= homewardUntil) {
+            return null;
+        }
+        var base = com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), self.position(), 100000);
+        if (base == null || Vec3.atCenterOf(base.center).distanceTo(self.position()) < 40) {
+            homewardUntil = 0;
+            return null;
+        }
+        return Vec3.atCenterOf(base.center);
+    }
+
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
+        Vec3 home = homewardGoal();
+        if (home != null && Senses.threats(perception, self, now(), 16).isEmpty()) {
+            return home; // a trip just ended: the way back to the base
+        }
         Vec3 site = structures.target();
         if (site != null && Senses.threats(perception, self, now(), 16).isEmpty()) {
             return site; // R-20: a structure seen (or told of) and not visited yet
