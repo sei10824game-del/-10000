@@ -2257,6 +2257,14 @@ public final class CloneController {
             orePulls++;
             return Option.MINE; // ore in sight: nothing else comes close (a pickaxe is made first if need be)
         }
+        if (hungryNoFood()) { // a village's food store (chests, hay bales, ripe crops) within sight comes before the hunt
+            if ((mask & Option.LOOT.bit()) != 0) {
+                return Option.LOOT;
+            }
+            if ((mask & Option.FARM.bit()) != 0) {
+                return Option.FARM;
+            }
+        }
         if (hungryNoFood()) { // starving: hunt first (any time, not only in a famine); in a famine the animals round here are gone, spread out to find some
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;

@@ -349,6 +349,9 @@ public final class Crafting {
         if (Fishing.rodSlot(p) < 0 && count(p, Items.STRING) >= 2 && sticksAndPlanks >= 3) {
             out.add(Items.FISHING_ROD);
         }
+        if (count(p, Items.WHEAT) >= 3 && FoodAid.foodItems(p) < 12) {
+            out.add(Items.BREAD); // wheat from a field or a hay bale: bread
+        }
         if (count(p, Items.GUNPOWDER) >= 5 && countTag(p, ItemTags.SAND) >= 4) {
             out.add(Items.TNT);
         }

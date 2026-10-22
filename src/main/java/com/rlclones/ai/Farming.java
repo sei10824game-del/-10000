@@ -260,6 +260,11 @@ public final class Farming {
         return false;
     }
 
+    /** A ripe crop, or (running short of food) a hay bale: nine wheat, a village's food store. */
+    private boolean harvestable(BlockState st) {
+        return ripe(st) || st.is(Blocks.HAY_BLOCK) && FoodAid.foodItems(self) < 8;
+    }
+
     private static boolean ripe(BlockState st) {
         return st.getBlock() instanceof CropBlock crop && crop.isMaxAge(st);
     }
@@ -309,7 +314,7 @@ public final class Farming {
         for (BlockPos p : BlockPos.betweenClosed(feet.offset(-RADIUS, -2, -RADIUS), feet.offset(RADIUS, 1, RADIUS))) {
             BlockState st = level.getBlockState(p);
             Job j = null;
-            if (breaking && ripe(st)) {
+            if (breaking && harvestable(st)) {
                 j = Job.HARVEST;
             } else if (seeds && st.getBlock() instanceof FarmBlock && level.getBlockState(p.above()).isAir() && bright(level, p.above())) {
                 j = Job.PLANT;
@@ -437,7 +442,7 @@ public final class Farming {
         }
         BlockState st = level.getBlockState(target);
         boolean stillValid = switch (job) {
-            case HARVEST -> ripe(st);
+            case HARVEST -> harvestable(st);
             case PLANT -> st.getBlock() instanceof FarmBlock && level.getBlockState(target.above()).isAir() && seedSlot(self) >= 0;
             case TILL -> tillable(level, target) && hoeSlot(self) >= 0 && seedSlot(self) >= 0;
             case SEEDS -> isGrass(st);
