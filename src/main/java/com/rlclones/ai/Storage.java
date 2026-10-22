@@ -306,6 +306,15 @@ public final class Storage {
     }
 
     /** A stray chest: generated loot (loot table still attached) or inside a structure, and not one of our bases. */
+    private static boolean spawnerNear(ServerLevel level, BlockPos p) {
+        for (BlockPos q : BlockPos.betweenClosed(p.offset(-10, -4, -10), p.offset(10, 4, 10))) {
+            if (level.getBlockState(q).is(net.minecraft.world.level.block.Blocks.SPAWNER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isStray(BlockPos pos) {
         ServerLevel level = self.serverLevel();
         if (Bases.get(self.getServer()).isBaseChest(level.dimension(), pos)) {
@@ -320,7 +329,8 @@ public final class Storage {
             if (tag.contains("LootTable")) {
                 return true;
             }
-            return !level.structureManager().getAllStructuresAt(p).isEmpty();
+            // (a chest opened once has lost its loot table: one in a dungeon, by a spawner, is still nobody's)
+            return !level.structureManager().getAllStructuresAt(p).isEmpty() || spawnerNear(level, p);
         });
     }
 
