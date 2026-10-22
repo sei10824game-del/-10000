@@ -1,5 +1,6 @@
 package com.rlclones.ai;
 
+import com.rlclones.Config;
 import com.rlclones.entity.PathProxyEntity;
 import com.rlclones.registry.ModEntities;
 import net.minecraft.core.BlockPos;
@@ -390,6 +391,9 @@ public final class Motor {
             clearPath();
             return true;
         }
+        if ((stepFixCell != null || stuckCount >= 3) && mendHighStep(goal)) {
+            return false; // a wall two blocks high in the way: a block is laid to make it two steps of one
+        }
         if (repathTimer > 0) {
             repathTimer--;
         }
@@ -443,6 +447,64 @@ public final class Motor {
         path = null;
         pathGoal = null;
     }
+
+    private BlockPos stepFixCell;
+    private int stepFixTicks;
+    /** Two-high walls made climbable by a block laid at the foot (tests, soak). */
+    public int stepsFixed;
+
+    private boolean solidAt(BlockPos p) {
+        ServerLevel level = self.serverLevel();
+        return level.getFluidState(p).isEmpty() && !level.getBlockState(p).getCollisionShape(level, p).isEmpty();
+    }
+
+    /**
+     * Stuck on the way to a goal that is not below us, with a wall two blocks high straight ahead (and air above it): nobody can jump that. We step back
+     * one block and lay a block in the cell we stood in; the wall is then a step of one and a jump of one. True while at it.
+     */
+    private boolean mendHighStep(Vec3 goal) {
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || !self.onGround() || self.isInWater() || self.isPassenger()) {
+            stepFixCell = null;
+            return false;
+        }
+        Vec3 pos = self.position();
+        if (stepFixCell == null) {
+            if (goal.y < pos.y - 0.5) {
+                return false;
+            }
+            Direction toGoal = Direction.getNearest(goal.x - pos.x, 0, goal.z - pos.z);
+            BlockPos feet = self.blockPosition();
+            BlockPos ahead = feet.relative(toGoal);
+            if (!solidAt(ahead) || !solidAt(ahead.above()) || solidAt(ahead.above(2)) || solidAt(feet.above(2)) || Equipment.pillarBlockSlot(self) < 0) {
+                return false; // not a two-high wall (or nothing to build with)
+            }
+            stepFixCell = feet.immutable();
+            stepFixDir = toGoal;
+            stepFixTicks = 0;
+        }
+        if (++stepFixTicks > 120) {
+            stepFixCell = null;
+            return false;
+        }
+        BlockPos back = stepFixCell.relative(stepFixDir.getOpposite());
+        if (horizontalDistance(pos, Vec3.atBottomCenterOf(stepFixCell)) < 0.9) {
+            if (solidAt(back) || !solidAt(back.below())) {
+                stepFixCell = null;
+                return false; // nowhere to step back to
+            }
+            moveToward(Vec3.atBottomCenterOf(back));
+            return true;
+        }
+        Equipment.select(self, Equipment.pillarBlockSlot(self));
+        if (placeBlockAt(stepFixCell)) {
+            stepsFixed++;
+            stepFixCell = null;
+            resetStuck();
+        }
+        return true;
+    }
+
+    private Direction stepFixDir = Direction.NORTH;
 
     public void resetStuck() {
         stuckCount = 0;
