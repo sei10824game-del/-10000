@@ -202,7 +202,7 @@ public final class Animals {
         List<Animal> ready = new ArrayList<>();
         for (Perception.Seen s : perception.remembered()) {
             if (s.entity instanceof Animal a && a.isAlive() && a.distanceTo(self) < 16 && a.getAge() == 0 && a.canFallInLove()
-                    && !a.isInLove() && ours(a)) {
+                    && !a.isInLove() && (ours(a) || wildBreedOk(a))) {
                 ready.add(a);
             }
         }
@@ -210,12 +210,24 @@ public final class Animals {
             for (int j = i + 1; j < ready.size(); j++) {
                 Animal a = ready.get(i);
                 Animal b = ready.get(j);
-                if (a.getType() == b.getType() && count(a::isFood) >= 2 && tally(a.getType()) < targetFor(a.getType())) {
+                if (a.getType() == b.getType() && count(a::isFood) >= 2 && (ours(a) ? tally(a.getType()) < targetFor(a.getType()) : wildBreedOk(a))) {
                     return new Animal[]{a, b};
                 }
             }
         }
         return null;
+    }
+
+    /** Short of food: two wild animals of a kind are bred (no pen) while fewer than 8 of the kind are about - meat that grows back. */
+    private boolean wildBreedOk(Animal a) {
+        if (a instanceof TamableAnimal || a instanceof net.minecraft.world.entity.animal.horse.AbstractHorse || FoodAid.foodItems(self) >= 8) {
+            return false;
+        }
+        int n = 0;
+        for (Perception.Seen s : perception.remembered()) {
+            n += s.entity instanceof Animal o && o.isAlive() && o.getType() == a.getType() && o.distanceTo(self) < 16 ? 1 : 0;
+        }
+        return n < 8;
     }
 
     private int woodPlanks() {
