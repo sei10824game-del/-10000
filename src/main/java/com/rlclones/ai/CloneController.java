@@ -2247,11 +2247,11 @@ public final class CloneController {
             orePulls++;
             return Option.MINE; // ore in sight: nothing else comes close (a pickaxe is made first if need be)
         }
-        if (hungryNoFood() && CloneManager.peek() != null && CloneManager.peek().famine(now)) { // famine: the animals round here are gone, spread out to find some
+        if (hungryNoFood()) { // starving: hunt first (any time, not only in a famine); in a famine the animals round here are gone, spread out to find some
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
             }
-            if ((mask & Option.EXPLORE.bit()) != 0) {
+            if (CloneManager.peek() != null && CloneManager.peek().famine(now) && (mask & Option.EXPLORE.bit()) != 0) {
                 return Option.EXPLORE;
             }
         }

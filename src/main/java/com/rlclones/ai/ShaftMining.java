@@ -378,6 +378,25 @@ public final class ShaftMining {
         return -1;
     }
 
+    /** A ladder missing in the cell above (broken, or never put): one is put there from the ladder below, if we carry any. */
+    private boolean mendGap(BlockPos feet, Bases.Shaft s) {
+        BlockPos gap = feet.above();
+        if (gap.getY() >= s.top.getY() || ladderAt(gap) || !ladderAt(feet) || !self.level().getBlockState(gap).isAir()) {
+            return false;
+        }
+        int slot = self.getInventory().findSlotMatchingItem(new ItemStack(Items.LADDER));
+        BlockPos wall = gap.relative(s.wall);
+        if (slot < 0 || !solid(wall)) {
+            return false; // none to spare / no wall: the climb goes on as before (stuck -> the escape reflex)
+        }
+        Equipment.select(self, slot);
+        motor.stop();
+        if (motor.useOnFace(wall, s.wall.getOpposite()) && ladderAt(gap)) {
+            laddersPlaced++;
+        }
+        return true;
+    }
+
     /** Back up the ladders and out onto the rim. */
     private Status climbTick(BlockPos feet) {
         Bases.Shaft s = shaft;
@@ -392,6 +411,9 @@ public final class ShaftMining {
         if (stuck > 160) {
             debug += " | stuck climbing at " + feet.toShortString();
             return Status.DONE; // the escape reflex takes it from here
+        }
+        if (inColumn(feet) && mendGap(feet, s)) {
+            return Status.WORKING;
         }
         Direction out = s.wall;
         if (solid(s.top.relative(s.wall)) || !solid(s.top.relative(s.wall).below())) {
