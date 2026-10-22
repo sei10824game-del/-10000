@@ -5765,6 +5765,25 @@ public final class CloneGameTests {
         return java.nio.file.Files.exists(game.resolve("soak.flag")) || game.getParent() != null && java.nio.file.Files.exists(game.getParent().resolve("soak.flag"));
     }
 
+    /** A line "clones N" in soak.flag sets how many clones the soak starts (default SOAK_CLONES, at most 400). */
+    private static int soakClones() {
+        java.nio.file.Path game = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
+        for (java.nio.file.Path dir : new java.nio.file.Path[]{game, game.getParent()}) {
+            if (dir == null || !java.nio.file.Files.exists(dir.resolve("soak.flag"))) {
+                continue;
+            }
+            try {
+                for (String line : java.nio.file.Files.readAllLines(dir.resolve("soak.flag"))) {
+                    if (line.trim().matches("clones \\d{1,3}")) {
+                        return Math.max(1, Math.min(400, Integer.parseInt(line.trim().substring(7))));
+                    }
+                }
+            } catch (java.io.IOException | RuntimeException ignored) {
+            }
+        }
+        return SOAK_CLONES;
+    }
+
     private static int soakTicks() {
         java.nio.file.Path game = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
         for (java.nio.file.Path dir : new java.nio.file.Path[]{game, game.getParent()}) {
@@ -6796,7 +6815,8 @@ public final class CloneGameTests {
         com.rlclones.ai.Prof.on = true; // (SOAK-PROF: where a clone's time goes over the whole soak)
         BlockPos site = soakSite(h);
         List<String> names = new ArrayList<>();
-        for (int i = 0; i < SOAK_CLONES; i++) {
+        final int soakClones = soakClones();
+        for (int i = 0; i < soakClones; i++) {
             int x = site.getX() + (i % 4) * 3;
             int z = site.getZ() + (i / 4) * 3;
             level.getChunk(x >> 4, z >> 4); // (the soak area spans chunks: one not generated yet has no ground - the clone there fell out of the world, run after run)
