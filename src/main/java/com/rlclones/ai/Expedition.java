@@ -76,6 +76,7 @@ public final class Expedition {
     private int waitTicks;
     private Vec3 wander;
     private long lastLed;
+    private int wetTicks;
 
     // member
     @Nullable
@@ -166,6 +167,9 @@ public final class Expedition {
             }
             int y = self.level().hasChunk(x >> 4, z >> 4)
                     ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) : self.getBlockY();
+            if (self.level().hasChunk(x >> 4, z >> 4) && !self.level().getFluidState(new BlockPos(x, y - 1, z)).isEmpty()) {
+                continue; // open water at the goal (a lake, the sea): nobody walks there
+            }
             return new BlockPos(x, y, z);
         }
         return null;
@@ -292,6 +296,11 @@ public final class Expedition {
         }
         totalTicks++;
         phaseTicks++;
+        wetTicks = self.isInWater() ? wetTicks + 1 : 0;
+        if (phase >= 2 && wetTicks > 300) { // swimming for 15 seconds on a trip: the trip is over (the swimming / breath reflexes get the clone out)
+            end();
+            return Status.DONE;
+        }
         if (totalTicks > (villageSearch ? 30000 : 12000)) {
             end();
             return Status.DONE;
