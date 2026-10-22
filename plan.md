@@ -792,3 +792,8 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - `penscowswhenwheatpilesup` は 66a の修正で通った。不安定な3件は同 run で通過(失敗ログなし、再発したらその都度読む)。
 - 追加機能の確認: GameTest `scoopsLavaIntoAnEmptyBucket`・`setsItsRespawnPointAtABed`・`findsACaveMouthToLookIn`・`picksAPlaceDeeperInACave`・`reportsAVillageItSees`・`expeditionRalliesAndFollows` が CI で通過。実機(長時間ソーク)での確認は未。
 - 残り: 村での拠点づくりの先、200体の負荷測定。
+
+#### 66c. 軽量化の結果と、牛の柵の未解決(2026-10-22)
+- 軽量化(ソーク `SOAK-PROF`、12体、1体あたり): 合計236µs → 85µs。知覚87 → 25µs。①視線判定を「目もモブも動いていない間」4tick 使い回す(`Perception.canSee`)、②周りのモブの探索は24ブロック以内を毎tick、全域(96)は4tickに1回(`Perception.update`)。区画ごとの共有は逆効果(34 → 52µs)で取り消した。ランナーの速さで数字が2倍ほど振れるので、同じ run の PERF(アイドル12体: 150 → 63µs)も見ること。残り: 戦略42µs(経路探索16µs)、知覚の全域探索12µs。
+- 牛の柵 `penscowswhenwheatpilesup`: 66a の修正だけでは直らない(通る run と落ちる run がある)。ログは「4@3,0,5 ↔ 5@3,0,0」の往復のまま。仮説: 牛の TemptGoal は**視線(柵の当たり判定を通せない)と10ブロック以内**が必要で、門の列からずれた牛は、クローンが柵の内側に入ると視線が切れて止まる(牛は怖がらない: canScare=false)。クローンが一人で中に入る → 牛が付いてこない → 段階4で迎えに戻る、の繰り返し。直す案: 段階5の前で、牛がすべて門の列(|x-門x|≤1)の内側・3ブロック以内に並ぶまで待ってから、ゆっくり中へ入る。または門の前の開口を一時的に広げる。実測が要る(牛とクローンの位置・視線を記録するテスト用ログ)。
+- 他の落ちるテスト: `buildsachickenpenandthrowseggsin`、`cullsthesurplusbutnotapet`、`cutsthefootofatreehiddenbyleaves`、`twoclonestakedifferentblocks`、`makessoilbesidebarewaterandlightstheplot` は run ごとに入れ替わる(不安定の疑い)。
