@@ -478,7 +478,7 @@ public final class Perception {
         if (state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(Tags.Blocks.COBBLESTONE)) {
             return BlockKind.STONE;
         }
-        if (isWildFood(state)) {
+        if (isWildFood(state) && !state.is(net.minecraft.world.level.block.Blocks.HAY_BLOCK)) { // (a hay bale stays an unknown block: Discovery mines and learns it)
             return BlockKind.FOOD;
         }
         if (state.is(BlockTags.PLANKS)) {

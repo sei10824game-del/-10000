@@ -220,7 +220,7 @@ public final class Animals {
 
     /** Short of food: two wild animals of a kind are bred (no pen) while fewer than 8 of the kind are about - meat that grows back. */
     private boolean wildBreedOk(Animal a) {
-        if (a instanceof TamableAnimal || a instanceof net.minecraft.world.entity.animal.horse.AbstractHorse || FoodAid.foodItems(self) >= 8) {
+        if (a instanceof TamableAnimal || a instanceof net.minecraft.world.entity.animal.horse.AbstractHorse || FoodAid.foodItems(self) >= 8 || self.getFoodData().getFoodLevel() >= 14) {
             return false;
         }
         int n = 0;
