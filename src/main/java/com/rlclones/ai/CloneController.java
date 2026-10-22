@@ -2265,6 +2265,9 @@ public final class CloneController {
                 return Option.FARM;
             }
         }
+        if (hungryNoFood() && (mask & Option.FISH.bit()) != 0) {
+            return Option.FISH; // fish do not run out
+        }
         if (hungryNoFood()) { // starving: hunt first (any time, not only in a famine); in a famine the animals round here are gone, spread out to find some
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
@@ -4034,6 +4037,15 @@ public final class CloneController {
     private final java.util.List<Vec3> caveGoals = new java.util.ArrayList<>();
     public int caveSteps;
 
+    /** 0.25 per other player within 20 blocks of (x, z), at most 1. */
+    private double crowdAt(double x, double z) {
+        int n = 0;
+        for (net.minecraft.server.level.ServerPlayer o : self.getServer().getPlayerList().getPlayers()) {
+            n += o != self && o.level() == self.level() && o.distanceToSqr(x, o.getY(), z) < 400 ? 1 : 0;
+        }
+        return Math.min(1.0, 0.25 * n);
+    }
+
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
         Vec3 site = structures.target();
@@ -4075,6 +4087,7 @@ public final class CloneController {
                 }
             }
         }
+        boolean hungry = hungryNoFood();
         Vec3 best = null;
         double bestScore = -Double.MAX_VALUE;
         for (int i = 0; i < 6; i++) {
@@ -4086,6 +4099,9 @@ public final class CloneController {
             double y = Math.abs(surface - self.getY()) > 12 ? self.getY() : surface;
             long chunk = ChunkPos.asLong(Mth.floor(x) >> 4, Mth.floor(z) >> 4);
             double score = (visitedChunks.contains(chunk) ? 0 : 1) + random.nextDouble() * 0.5 - (persona.avoids(new Vec3(x, y, z)) ? 2 : 0);
+            if (hungry) {
+                score -= crowdAt(x, z); // hungry: the hunting ground others are already on is picked less often (a nudge, not a rule: the group stays within reach)
+            }
             if (score > bestScore) {
                 bestScore = score;
                 best = new Vec3(x, y, z);
