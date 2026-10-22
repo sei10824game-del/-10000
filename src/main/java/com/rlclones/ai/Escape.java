@@ -356,7 +356,10 @@ public final class Escape {
             Equipment.select(self, Equipment.bestToolSlot(self, st));
         }
         motor.stop();
-        if (motor.mine(p)) {
+        motor.handDigOk = true; // breaking out: by hand if need be
+        boolean mined = motor.mine(p);
+        motor.handDigOk = false;
+        if (mined) {
             blocksMined++;
             mining = null;
         } else if (++miningTicks > 400) {
