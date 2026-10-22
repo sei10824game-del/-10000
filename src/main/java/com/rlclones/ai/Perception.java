@@ -130,9 +130,9 @@ public final class Perception {
         double range2 = range * range;
         // (nothing further than the view range can pass canSee: those are left out before sorting)
         long pe = Prof.t();
-        // within NEAR blocks every tick; the whole view range only every FAR_EVERY ticks (staggered by id): the big box is what costs
+        // within NEAR blocks every tick; the whole view range only every FAR_EVERY looks (a look is every 4 ticks): the big box is what costs
         // (what lies further out is a few ticks late in turning up; the entities themselves are read live)
-        boolean full = range <= NEAR || (now + self.getId()) % FAR_EVERY == 0;
+        boolean full = range <= NEAR || updates++ % FAR_EVERY == 0;
         double reach = full ? range : NEAR;
         java.util.function.Predicate<Entity> wanted = e -> e.isAlive() && !e.isSpectator()
                 && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
@@ -219,7 +219,8 @@ public final class Perception {
     }
 
     private static final double NEAR = 24.0;
-    private static final int FAR_EVERY = 4;
+    private static final int FAR_EVERY = 2;
+    private int updates;
     /** What the last full-range look found beyond NEAR blocks. */
     private final List<Entity> farSeen = new java.util.ArrayList<>();
 

@@ -58,12 +58,19 @@ public final class AgentWatcher {
         return traces.size();
     }
 
+    /** Most other players watched at once (imitation); a crowd of 200 clones would otherwise have each one tracing 60. */
+    private static final int MAX_WATCHED = 8;
+
     public void update(long now) {
+        int watched = 0;
         Set<UUID> seen = new HashSet<>();
         float weight = (float) Config.get(Config.IMITATION_WEIGHT, 0.8);
         for (Perception.Seen s : perception.visible()) {
             if (!(s.entity instanceof ServerPlayer agent) || agent == self || agent.isSpectator()) {
                 continue;
+            }
+            if (++watched > MAX_WATCHED) {
+                break; // (visible is nearest first: in a crowd of hundreds the nearest few are the ones worth learning from)
             }
             seen.add(agent.getUUID());
             Trace t = traces.get(agent.getUUID());
