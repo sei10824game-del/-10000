@@ -784,6 +784,8 @@ public final class Animals {
     @Nullable
     private Livestock livestock;
     private int frontWait;
+    private int frontStall;
+    private double bestFront = Double.MAX_VALUE;
     private long hideUntil;
     private int loggedStage = -1;
     /** Stage changes of the livestock job, with where the clone stood relative to the pen (diagnostics). */
@@ -925,6 +927,8 @@ public final class Animals {
                     return Status.WORKING;
                 }
                 stage = 5;
+                bestFront = Double.MAX_VALUE;
+                frontStall = 0;
             }
             case 5 -> {
                 // lead them into the pen (walk in slowly, crop held high)
@@ -948,6 +952,15 @@ public final class Animals {
                         }
                         if (blocked && level.getGameTime() >= hideUntil + 160) {
                             hideUntil = level.getGameTime() + 40; // at most 40 of every 200 ticks: hidden for good, they stand in the way
+                        }
+                        double toFront = Motor.horizontalDistance(self.position(), front);
+                        if (toFront < bestFront - 1.0) {
+                            bestFront = toFront;
+                            frontStall = 0;
+                        } else if (++frontStall > 120) { // hemmed in by cows that hang on the crop: put it away for good 5 s so they wander off, then on
+                            hideUntil = level.getGameTime() + 100;
+                            frontStall = 0;
+                            bestFront = toFront;
                         }
                         if (level.getGameTime() < hideUntil) {
                             emptyHand(); // one stands in the way: crop away so it stops crowding us, and past it
