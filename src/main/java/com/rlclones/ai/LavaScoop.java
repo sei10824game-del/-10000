@@ -29,6 +29,9 @@ public final class LavaScoop {
     private long cooldownUntil;
     /** Buckets of lava taken (tests, soak). */
     public int scooped;
+    /** Ticks it was wanted (bucket, no lava bucket, healthy) / pools found (soak diagnosis). */
+    public int wantedTicks;
+    public int poolsFound;
     public String debug = "";
 
     public LavaScoop(ClonePlayer self, Motor motor) {
@@ -66,7 +69,11 @@ public final class LavaScoop {
             if (now < cooldownUntil || threatened || (now + self.getId()) % 100 != 0 || !wanted()) {
                 return false;
             }
+            wantedTicks++;
             spot = find();
+            if (spot != null) {
+                poolsFound++;
+            }
             if (spot == null) {
                 cooldownUntil = now + 1200;
                 return false;
