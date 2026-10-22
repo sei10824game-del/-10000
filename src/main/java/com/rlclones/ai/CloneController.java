@@ -2272,7 +2272,7 @@ public final class CloneController {
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
             }
-            if ((mask & Option.EXPLORE.bit()) != 0) { // nothing to hunt in sight: out to fresh ground (spread by crowdAt)
+            if ((mask & Option.EXPLORE.bit()) != 0 && foodAid.favourite(64) == null) { // nothing to hunt in sight (a helper who fed us is followed instead, below): out to fresh ground (spread by crowdAt)
                 return Option.EXPLORE;
             }
         }
