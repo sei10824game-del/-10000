@@ -624,9 +624,6 @@ public final class Motor {
         return hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(pos) ? hit.getBlockPos().immutable() : null;
     }
 
-    /** Set by the break-out reflexes (a pit, a wall): rock may be dug by hand then, slowly, as a last resort. */
-    public boolean handDigOk;
-
     public boolean mine(BlockPos pos) {
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);
@@ -635,15 +632,9 @@ public final class Motor {
             return true;
         }
         if (state.requiresCorrectToolForDrops() && !self.getMainHandItem().isCorrectToolForDrops(state) && !self.isCreative()) {
-            // no pickaxe that does it in the hand: take one that does, else (not buried, not breaking out) do not swing a sword at the rock
+            // no pickaxe that does it in the hand: take one that does, else dig by hand (a sword is not worn down on rock)
             int tool = Equipment.bestToolSlot(self, state);
-            if (tool >= 0) {
-                Equipment.select(self, tool);
-            } else if (!handDigOk && !self.isInWall()) {
-                mineDebug = "no tool for " + state.getBlock().getName().getString();
-                resetMining();
-                return false;
-            }
+            Equipment.select(self, tool >= 0 ? tool : Equipment.bareSlot(self));
         }
         if (!pos.equals(breakingPos)) {
             resetMining();

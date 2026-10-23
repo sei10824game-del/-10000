@@ -535,7 +535,7 @@ public final class Equipment {
     }
 
     /** A slot whose item takes no wear from digging: the held one if it is such, else an empty slot, else a block / food. */
-    private static int bareSlot(Player p) {
+    public static int bareSlot(Player p) {
         Inventory inv = p.getInventory();
         int found = -1;
         for (int i = 0; i < inv.items.size(); i++) {
