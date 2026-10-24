@@ -760,6 +760,38 @@ public final class CloneManager {
      * eight clones with fewer than 8 animals about get one more, grazing 24-48 blocks off on grass. ponytail: no biome check beyond "grass"; a ceiling of
      * 8 within 64 blocks, so hunting still thins them and never floods.
      */
+    private java.lang.reflect.Field creatureCapField;
+    private boolean creatureCapSearched;
+
+    /**
+     * The animal cap is MobCategory.CREATURE's max (10) times the loaded chunks / 289: with two hundred players in one place the chunks are few and
+     * the animals stay few. Raised by animalCapPerClone for every clone (the field is found by its value, mapping independent). ponytail: the vanilla
+     * cap of 10 is put back by setting the option to 0; a clone count that changes shifts the cap every 400 ticks only.
+     */
+    private void raiseAnimalCap() {
+        if (!creatureCapSearched) {
+            creatureCapSearched = true;
+            for (java.lang.reflect.Field f : net.minecraft.world.entity.MobCategory.class.getDeclaredFields()) {
+                try {
+                    if (f.getType() == int.class && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                        f.setAccessible(true);
+                        if (f.getInt(net.minecraft.world.entity.MobCategory.CREATURE) == 10) {
+                            creatureCapField = f;
+                            break;
+                        }
+                    }
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                }
+            }
+        }
+        if (creatureCapField != null && ticks % 400 == 0) {
+            try {
+                creatureCapField.setInt(net.minecraft.world.entity.MobCategory.CREATURE, (int) Math.round(10 + Config.get(Config.ANIMAL_CAP_PER_CLONE, 1.0) * clones.size()));
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+        }
+    }
+
     private void topUpWildlife() {
         if (!Config.get(Config.WILDLIFE_TOPUP, true) || ticks % 400 != 0 || clones.isEmpty()) {
             return;
@@ -797,6 +829,7 @@ public final class CloneManager {
     public void tick() {
         ticks++;
         topUpWildlife();
+        raiseAnimalCap();
         // the chunks around a human follow its movement packets; a clone has none, so its chunk tickets are moved here
         // (if they only moved when the clone itself is ticked, walking into a chunk that is not loaded yet would stop it for good)
         for (ClonePlayer c : clones.values()) {
