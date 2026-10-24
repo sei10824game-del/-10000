@@ -313,6 +313,21 @@ public final class Senses {
         return n <= keep;
     }
 
+    /** A herd is worth sparing only when we could breed it: chickens (seeds are everywhere), else two of what the kind eats are in the bag. */
+    private static boolean canBreed(Player agent, Entity prey) {
+        if (!(prey instanceof net.minecraft.world.entity.animal.Animal a)) {
+            return true;
+        }
+        if (a instanceof net.minecraft.world.entity.animal.Chicken) {
+            return true;
+        }
+        int n = 0;
+        for (net.minecraft.world.item.ItemStack st : agent.getInventory().items) {
+            n += a.isFood(st) ? st.getCount() : 0;
+        }
+        return n >= 2;
+    }
+
     public static Perception.Seen nearestAnimal(Perception observer, Player agent, long now, double radius) {
         Perception.Seen best = null;
         double bestD = radius;
@@ -323,7 +338,7 @@ public final class Senses {
             if (agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().animals().keepAlive(s.entity)) {
                 continue; // future livestock: we have their food in plenty and mean to pen them
             }
-            if (lastPair(observer, s, now, agent.getFoodData().getFoodLevel() > 10 ? 4 : 2) && agent.getFoodData().getFoodLevel() > 4) {
+            if (canBreed(agent, s.entity) && lastPair(observer, s, now, agent.getFoodData().getFoodLevel() > 10 ? 4 : 2) && agent.getFoodData().getFoodLevel() > 4) {
                 continue; // the last two (four, when not hungry) of a wild herd stay to breed (unless we are starving)
             }
             double d = s.pos.distanceTo(agent.position());

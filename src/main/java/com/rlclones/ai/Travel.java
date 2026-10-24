@@ -76,22 +76,30 @@ public final class Travel {
     /** A block worth less than the trip: unneeded ones first, then ordinary building blocks (not wood). */
     private int bridgeBlockSlot() {
         Inventory inv = self.getInventory();
+        int log = -1;
         for (int i : Storage.unneededSlots(self)) {
-            if (Equipment.isBuildingBlock(self, inv.items.get(i))) {
-                return i;
+            ItemStack s = inv.items.get(i);
+            if (Equipment.isBuildingBlock(self, s)) {
+                if (!s.is(ItemTags.LOGS)) {
+                    return i;
+                }
+                log = i; // (a log is a bridge of four planks: last of all)
             }
         }
-        int fallback = -1;
+        int planks = -1;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
             if (Equipment.isBuildingBlock(self, s)) {
-                if (!s.is(ItemTags.LOGS) && !s.is(ItemTags.PLANKS)) {
+                if (s.is(ItemTags.LOGS)) {
+                    log = log < 0 ? i : log;
+                } else if (s.is(ItemTags.PLANKS)) {
+                    planks = i;
+                } else {
                     return i;
                 }
-                fallback = i;
             }
         }
-        return fallback;
+        return planks >= 0 ? planks : log;
     }
 
     private int bridgeBlocks() {
