@@ -22,6 +22,7 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue REPLAY_UPDATES;
 
     public static final ForgeConfigSpec.BooleanValue ALLOW_BLOCK_BREAKING;
+    public static final ForgeConfigSpec.BooleanValue WILDLIFE_TOPUP;
     public static final ForgeConfigSpec.BooleanValue ALLOW_BLOCK_PLACING;
     public static final ForgeConfigSpec.BooleanValue CLONES_BLOCK_NIGHT_SKIP;
 
@@ -53,6 +54,7 @@ public final class Config {
 
         b.push("actions");
         ALLOW_BLOCK_BREAKING = b.comment("Clones may break blocks (chop trees, mine ores).").define("allowBlockBreaking", true);
+        WILDLIFE_TOPUP = b.comment("Where clones go hungry: now and then a cow / pig / sheep / chicken grazes in near a clone that has fewer than 8 animals about (only while mob spawning is on).").define("wildlifeTopUp", true);
         ALLOW_BLOCK_PLACING = b.comment("Clones may place blocks (pillar up to escape).").define("allowBlockPlacing", true);
         b.pop();
 

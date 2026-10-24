@@ -752,8 +752,51 @@ public final class CloneManager {
 
     // ------------------------------------------------------------------ ticking
 
+    private static final net.minecraft.world.entity.EntityType<?>[] WILDLIFE = {net.minecraft.world.entity.EntityType.COW, net.minecraft.world.entity.EntityType.PIG,
+            net.minecraft.world.entity.EntityType.SHEEP, net.minecraft.world.entity.EntityType.CHICKEN, net.minecraft.world.entity.EntityType.SHEEP};
+
+    /**
+     * Two hundred players keep the wild herds from being made good (animals are laid down with the land and come back slowly): every 400 ticks up to
+     * eight clones with fewer than 8 animals about get one more, grazing 24-48 blocks off on grass. ponytail: no biome check beyond "grass"; a ceiling of
+     * 8 within 64 blocks, so hunting still thins them and never floods.
+     */
+    private void topUpWildlife() {
+        if (!Config.get(Config.WILDLIFE_TOPUP, true) || ticks % 400 != 0 || clones.isEmpty()) {
+            return;
+        }
+        java.util.List<ClonePlayer> live = new ArrayList<>();
+        for (ClonePlayer c : clones.values()) {
+            if (c.isAlive() && !c.isRemoved() && !c.isCreative() && c.serverLevel().getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING)) {
+                live.add(c);
+            }
+        }
+        java.util.Collections.shuffle(live);
+        for (ClonePlayer c : live.subList(0, Math.min(8, live.size()))) {
+            net.minecraft.server.level.ServerLevel level = c.serverLevel();
+            if (level.getEntitiesOfClass(net.minecraft.world.entity.animal.Animal.class, c.getBoundingBox().inflate(64, 32, 64)).size() >= 8) {
+                continue;
+            }
+            var rnd = level.getRandom();
+            for (int tries = 0; tries < 12; tries++) {
+                double a = rnd.nextDouble() * Math.PI * 2;
+                double d = 24 + rnd.nextDouble() * 24;
+                int x = c.getBlockX() + (int) (Math.cos(a) * d);
+                int z = c.getBlockZ() + (int) (Math.sin(a) * d);
+                if (!level.hasChunk(x >> 4, z >> 4)) {
+                    continue;
+                }
+                var pos = new net.minecraft.core.BlockPos(x, level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+                if (level.getBlockState(pos.below()).is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) && level.getBlockState(pos).isAir()) {
+                    WILDLIFE[rnd.nextInt(WILDLIFE.length)].spawn(level, pos, net.minecraft.world.entity.MobSpawnType.NATURAL);
+                    break;
+                }
+            }
+        }
+    }
+
     public void tick() {
         ticks++;
+        topUpWildlife();
         // the chunks around a human follow its movement packets; a clone has none, so its chunk tickets are moved here
         // (if they only moved when the clone itself is ticked, walking into a chunk that is not loaded yet would stop it for good)
         for (ClonePlayer c : clones.values()) {
