@@ -634,6 +634,11 @@ public final class Motor {
         if (state.requiresCorrectToolForDrops() && !self.getMainHandItem().isCorrectToolForDrops(state) && !self.isCreative()) {
             // no pickaxe that does it in the hand: take one that does, else dig by hand (a sword is not worn down on rock)
             int tool = Equipment.bestToolSlot(self, state);
+            if (tool < 0 && state.is(net.minecraftforge.common.Tags.Blocks.ORES) && !self.isInWall()) {
+                mineDebug = "no pickaxe for " + state.getBlock().getName().getString(); // an ore broken without the tool drops nothing: left alone
+                resetMining();
+                return false;
+            }
             Equipment.select(self, tool >= 0 ? tool : Equipment.bareSlot(self));
         }
         if (!pos.equals(breakingPos)) {
