@@ -1,1 +1,3 @@
 soak enabled: gametest soakHowFarCloneGetsOnItsOwn runs (delete this file to switch it off)
+6000
+clones 200
