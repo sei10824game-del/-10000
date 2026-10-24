@@ -6932,6 +6932,14 @@ public final class CloneGameTests {
                             feat[5] += ctl.structures().villageKnown ? 1 : 0;
                         }
                     }
+                    int[] animals = {0, 0};
+                    h.getLevel().getEntities().getAll().forEach(e -> {
+                        if (e instanceof net.minecraft.world.entity.animal.Animal a && a.isAlive() && !a.hasCustomName()) {
+                            animals[0]++;
+                            animals[1] += a instanceof net.minecraft.world.entity.animal.Sheep ? 1 : 0;
+                        }
+                    });
+                    RLClones.LOGGER.info("SOAK-ANIMALS alive={} sheep={}", animals[0], animals[1]);
                     RLClones.LOGGER.info("SOAK-FEATURES lavaBuckets={} bedsSet={} sitesFound={} oreTipsGiven={} oreTipsGot={} villageKnown={} lavaChecks={} lavaPools={} withBucket={}", feat[0], feat[1], feat[2], feat[3], feat[4], feat[5], feat[6], feat[7], feat[8]);
                     RLClones.LOGGER.info("SOAK-DIGGATE (why the dig drive did or did not send a clone digging) {}", gate);
                     RLClones.LOGGER.info("SOAK-ESCAPES (why escapes started: block under the feet, height band, option) {}", escapes);
