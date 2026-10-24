@@ -138,6 +138,8 @@ public final class CloneController {
     private final Int2LongOpenHashMap enemyLastAttack = new Int2LongOpenHashMap();
     private final Int2LongOpenHashMap enemyLastShot = new Int2LongOpenHashMap();
     private final LongOpenHashSet visitedChunks = new LongOpenHashSet();
+    /** Chunks any clone has stood in (overworld): fresh ground for the animals (they are placed when a chunk is made) and for finds. */
+    private static final LongOpenHashSet WORLD_VISITED = new LongOpenHashSet();
     private final Random random = new Random();
 
     // strategy
@@ -1775,6 +1777,9 @@ public final class CloneController {
         }
         lastFood = food;
         long chunk = ChunkPos.asLong(self.getBlockX() >> 4, self.getBlockZ() >> 4);
+        if (self.level().dimension() == net.minecraft.world.level.Level.OVERWORLD && WORLD_VISITED.size() < 200000) {
+            WORLD_VISITED.add(chunk);
+        }
         if (visitedChunks.size() < 4096 && visitedChunks.add(chunk)) {
             optionReward += 0.3f;
         }
@@ -2466,7 +2471,7 @@ public final class CloneController {
                         Entity foe = (Entity) hunt[0];
                         expedition.leadHunt(foe.blockPosition(), (Integer) hunt[1], net.minecraft.world.entity.EntityType.getKey(foe.getType()).toString());
                     } else {
-                        BlockPos t = expedition.pickTarget(visitedChunks::contains);
+                        BlockPos t = expedition.pickTarget(c -> visitedChunks.contains(c) || WORLD_VISITED.contains(c));
                         if (t != null && villageScoutWanted(now)) {
                             scouts++;
                             scoutAfter = now + 9000;
@@ -4129,15 +4134,15 @@ public final class CloneController {
         boolean hungry = hungryNoFood() || FoodAid.foodItems(self) < 3 && self.getFoodData().getFoodLevel() < 12; // short of food: spread out over fresh ground
         Vec3 best = null;
         double bestScore = -Double.MAX_VALUE;
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 8; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
-            double dist = hungry ? 40 + random.nextDouble() * 40 : 12 + random.nextDouble() * 12;
+            double dist = hungry ? 40 + random.nextDouble() * 40 : 16 + random.nextDouble() * 24;
             double x = self.getX() + Math.cos(angle) * dist;
             double z = self.getZ() + Math.sin(angle) * dist;
             int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z));
             double y = Math.abs(surface - self.getY()) > 12 ? self.getY() : surface;
             long chunk = ChunkPos.asLong(Mth.floor(x) >> 4, Mth.floor(z) >> 4);
-            double score = (visitedChunks.contains(chunk) ? 0 : 1) + random.nextDouble() * 0.5 - (persona.avoids(new Vec3(x, y, z)) ? 2 : 0);
+            double score = (visitedChunks.contains(chunk) ? 0 : 1) + (WORLD_VISITED.contains(chunk) ? 0 : 1.5) + random.nextDouble() * 0.5 - (persona.avoids(new Vec3(x, y, z)) ? 2 : 0);
             if (hungry) {
                 score -= crowdAt(x, z); // hungry: the hunting ground others are already on is picked less often (a nudge, not a rule: the group stays within reach)
             }
