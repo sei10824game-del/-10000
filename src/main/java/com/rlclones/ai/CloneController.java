@@ -88,6 +88,7 @@ public final class CloneController {
     private final Spawners spawners;
     private final Bedding bedding;
     private final LavaScoop lavaScoop;
+    private final Campfire campfire;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -205,6 +206,7 @@ public final class CloneController {
         this.spawners = new Spawners(self, motor);
         this.bedding = new Bedding(self, motor);
         this.lavaScoop = new LavaScoop(self, motor);
+        this.campfire = new Campfire(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -351,6 +353,10 @@ public final class CloneController {
 
     public Spawners spawners() {
         return spawners;
+    }
+
+    public Campfire campfire() {
+        return campfire;
     }
 
     public LavaScoop lavaScoop() {
@@ -641,6 +647,9 @@ public final class CloneController {
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
+        }
+        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
+            itemBusy = campfire.tick(now, threatened); // raw food in the bag: laid on a campfire (one is put down if it is in the bag)
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = lavaScoop.tick(now, threatened); // an empty bucket and a lava pool near: a bucket of lava (fuel, weapon)

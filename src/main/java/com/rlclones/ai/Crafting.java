@@ -352,6 +352,10 @@ public final class Crafting {
         if (count(p, Items.WHEAT) >= 3 && FoodAid.foodItems(p) < 12) {
             out.add(Items.BREAD); // wheat from a field or a hay bale: bread
         }
+        if (count(p, Items.CAMPFIRE) == 0 && Campfire.hasRaw(p) && count(p, Items.COAL) + count(p, Items.CHARCOAL) >= 1 && countTag(p, ItemTags.LOGS) >= 3
+                && sticksAndPlanks >= 3 && !(p instanceof com.rlclones.clone.ClonePlayer cc && cc.controller() != null && cc.controller().campfire().existing() != null)) {
+            out.add(Items.CAMPFIRE); // raw food and nothing to cook it on: a campfire burns no fuel
+        }
         if (count(p, Items.GUNPOWDER) >= 5 && countTag(p, ItemTags.SAND) >= 4) {
             out.add(Items.TNT);
         }
