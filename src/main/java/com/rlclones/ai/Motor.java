@@ -682,6 +682,9 @@ public final class Motor {
             level.destroyBlockProgress(self.getId(), pos, -1);
             self.gameMode.destroyBlock(pos);
             resetMining();
+            if (state.is(net.minecraftforge.common.Tags.Blocks.ORES) && self instanceof com.rlclones.clone.ClonePlayer cp && cp.controller() != null) {
+                cp.controller().perception().noteVein(pos); // the rest of the vein is looked for at once, whoever broke the first
+            }
             return level.getBlockState(pos).isAir() || !level.getBlockState(pos).is(state.getBlock());
         }
         return false;

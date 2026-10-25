@@ -579,6 +579,29 @@ public final class Perception {
         threatCache.put(radius, list);
     }
 
+    /** Ores joined to {@code from} (corners count), within 5 blocks of it, at most 16: remembered whether they were seen or not. */
+    public void noteVein(BlockPos from) {
+        java.util.ArrayDeque<BlockPos> todo = new java.util.ArrayDeque<>();
+        java.util.Set<BlockPos> seen = new java.util.HashSet<>();
+        todo.add(from.immutable());
+        seen.add(from.immutable());
+        int found = 0;
+        while (!todo.isEmpty() && found < 16) {
+            BlockPos c = todo.poll();
+            for (BlockPos n : BlockPos.betweenClosed(c.offset(-1, -1, -1), c.offset(1, 1, 1))) {
+                if (Math.abs(n.getX() - from.getX()) > 5 || Math.abs(n.getY() - from.getY()) > 5 || Math.abs(n.getZ() - from.getZ()) > 5) {
+                    continue;
+                }
+                BlockPos k = n.immutable();
+                if (seen.add(k) && classify(self.level().getBlockState(k)) == BlockKind.ORE) {
+                    blocks.put(k, BlockKind.ORE);
+                    todo.add(k);
+                    found++;
+                }
+            }
+        }
+    }
+
     public void noteBlock(BlockPos pos) {
         BlockKind kind = kindOf(pos);
         if (kind != null) {
