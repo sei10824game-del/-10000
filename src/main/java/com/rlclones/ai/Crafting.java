@@ -92,6 +92,7 @@ public final class Crafting {
     public BlockPos lastTable;
     /** When a better pickaxe last made crafting urgent (once in 400 ticks: no loop if it cannot be made after all). */
     private long upgradeAt = Long.MIN_VALUE / 2;
+    private long toolUpgradeAt = Long.MIN_VALUE / 2;
     /** When smelting (or taking out what was smelted) last made crafting urgent. */
     private long smeltUrgentAt = Long.MIN_VALUE / 2;
     /** What a recipe makes -> game time until which it is left alone (it could not be carried out here: no room for a table...). */
@@ -745,6 +746,31 @@ public final class Crafting {
         return countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4;
     }
 
+    /** A stone sword / axe / shovel / hoe the clone does not have a stone (or better) one of, with the cobblestone and wood for it in the bag (null = none). */
+    @Nullable
+    private static Item stoneToolUpgrade(Player p) {
+        if (cobble(p) < 1 || woodUnits(p) + count(p, Items.STICK) < 2) {
+            return null;
+        }
+        boolean table = count(p, Items.CRAFTING_TABLE) > 0 || tableNearby(p) || woodUnits(p) >= 4;
+        if (!table) {
+            return null;
+        }
+        if (bestWeapon(p) < Equipment.attackDamage(new ItemStack(Items.STONE_SWORD)) - 0.01 && cobble(p) >= 2) {
+            return Items.STONE_SWORD;
+        }
+        if (tierOf(p, AxeItem.class) < 1 && cobble(p) >= 3) {
+            return Items.STONE_AXE;
+        }
+        if (tierOf(p, net.minecraft.world.item.ShovelItem.class) == 0 && cobble(p) >= 1) {
+            return Items.STONE_SHOVEL;
+        }
+        if (tierOf(p, HoeItem.class) == 0 && cobble(p) >= 2) {
+            return Items.STONE_HOE;
+        }
+        return null;
+    }
+
     /** The best pickaxe better than the one in the bag that can be made right now (null = none). */
     @Nullable
     public static Item pickaxeUpgrade(Player p) {
@@ -802,6 +828,14 @@ public final class Crafting {
             upgradeAt = now;
             if (forcedTarget == null) {
                 forcedTarget = up;
+            }
+            return true;
+        }
+        Item tool = stoneToolUpgrade(self);
+        if (tool != null && now - toolUpgradeAt >= 400) {
+            toolUpgradeAt = now; // wooden sword / axe / shovel / hoe and the cobblestone for the stone one: not left to chance
+            if (forcedTarget == null) {
+                forcedTarget = tool;
             }
             return true;
         }
