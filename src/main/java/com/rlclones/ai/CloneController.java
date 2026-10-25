@@ -2122,6 +2122,8 @@ public final class CloneController {
 
     /** How the clone last died (for diagnostics). */
     public String lastDeath = "";
+    /** Deaths of every clone since the server started, by cause ("/rlclone deaths"). */
+    public static final java.util.Map<String, Integer> DEATHS = new java.util.concurrent.ConcurrentHashMap<>();
 
     private String lastOptionsShort() {
         String log = String.valueOf(optionLog);
@@ -2135,6 +2137,7 @@ public final class CloneController {
                 + " feet=" + self.level().getBlockState(self.blockPosition()).getBlock().getDescriptionId().replace("block.minecraft.", "")
                 + " head=" + self.level().getBlockState(BlockPos.containing(self.getEyePosition())).getBlock().getDescriptionId().replace("block.minecraft.", "")
                 + " scaf=" + scaffold.size();
+        DEATHS.merge(source.getMsgId() + (source.getEntity() == null ? "" : " by " + Perception.typeId(source.getEntity())) + " during " + option, 1, Integer::sum);
         com.rlclones.RLClones.LOGGER.info("CLONE-DEATH {} {} t={}", self.getGameProfile().getName(), lastDeath, self.level().getGameTime());
         if (option != null) {
             finishOption(true);
@@ -2255,6 +2258,10 @@ public final class CloneController {
         if ((mask & Option.CRAFT.bit()) != 0 && crafting.urgent()) {
             urgentCrafts++;
             return Option.CRAFT; // a furnace for the raw food / ore, the first bucket
+        }
+        if ((mask & Option.QUARRY.bit()) != 0 && !hungryNoFood() && Progression.need(self) == Progression.Need.STONE
+                && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24) != null) {
+            return Option.QUARRY; // ore in sight but only a wooden pickaxe: cobblestone first (a stone pickaxe is two sticks and three of it), then the ore
         }
         if (!hungryNoFood() && (mask & Option.MINE.bit()) != 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
                 && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24, p -> harvestable(Perception.BlockKind.ORE, p)

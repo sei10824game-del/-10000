@@ -82,6 +82,7 @@ public final class CloneCommand {
                         .then(Commands.literal("off").executes(ctx -> setCoward(ctx, false))))
                 .then(Commands.literal("giveitems").requires(CloneCommand::mayControl).executes(CloneCommand::giveItems))
                 .then(Commands.literal("list").executes(CloneCommand::list))
+                .then(Commands.literal("deaths").executes(CloneCommand::deaths))
                 .then(Commands.literal("remove").requires(CloneCommand::mayControl)
                         .then(Commands.literal("all").executes(ctx -> {
                             int n = manager(ctx).removeAll();
@@ -199,6 +200,18 @@ public final class CloneCommand {
                     : Component.translatable("rlclones.cmd.summoned_team", total, team), true);
         }
         return total;
+    }
+
+    private static int deaths(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        java.util.List<java.util.Map.Entry<String, Integer>> rows = new java.util.ArrayList<>(com.rlclones.ai.CloneController.DEATHS.entrySet());
+        rows.sort((a, b) -> b.getValue() - a.getValue());
+        int total = rows.stream().mapToInt(java.util.Map.Entry::getValue).sum();
+        src.sendSuccess(() -> Component.literal("Deaths: " + total + " (cause, by whom, during which action)").withStyle(ChatFormatting.AQUA), false);
+        for (var e : rows) {
+            src.sendSuccess(() -> Component.literal(" " + e.getValue() + " x " + e.getKey()), false);
+        }
+        return rows.size();
     }
 
     private static int list(CommandContext<CommandSourceStack> ctx) {
