@@ -756,16 +756,17 @@ public final class Crafting {
         if (!table) {
             return null;
         }
-        if (bestWeapon(p) < Equipment.attackDamage(new ItemStack(Items.STONE_SWORD)) - 0.01 && cobble(p) >= 2) {
+        int spare = cobble(p) - (count(p, Items.FURNACE) > 0 || furnaceNearby(p) ? 0 : 8); // (the furnace's eight come first)
+        if (bestWeapon(p) < Equipment.attackDamage(new ItemStack(Items.STONE_SWORD)) - 0.01 && spare >= 2) {
             return Items.STONE_SWORD;
         }
-        if (tierOf(p, AxeItem.class) < 1 && cobble(p) >= 3) {
+        if (tierOf(p, AxeItem.class) < 1 && spare >= 3) {
             return Items.STONE_AXE;
         }
-        if (tierOf(p, net.minecraft.world.item.ShovelItem.class) == 0 && cobble(p) >= 1) {
+        if (tierOf(p, net.minecraft.world.item.ShovelItem.class) == 0 && spare >= 1) {
             return Items.STONE_SHOVEL;
         }
-        if (tierOf(p, HoeItem.class) == 0 && cobble(p) >= 2) {
+        if (tierOf(p, HoeItem.class) == 0 && spare >= 2) {
             return Items.STONE_HOE;
         }
         return null;
