@@ -89,6 +89,7 @@ public final class CloneController {
     private final Bedding bedding;
     private final LavaScoop lavaScoop;
     private final Campfire campfire;
+    private final StairGuard stairGuard;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -207,6 +208,7 @@ public final class CloneController {
         this.bedding = new Bedding(self, motor);
         this.lavaScoop = new LavaScoop(self, motor);
         this.campfire = new Campfire(self, motor);
+        this.stairGuard = new StairGuard(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -353,6 +355,10 @@ public final class CloneController {
 
     public Spawners spawners() {
         return spawners;
+    }
+
+    public StairGuard stairGuard() {
+        return stairGuard;
     }
 
     public Campfire campfire() {
@@ -647,6 +653,9 @@ public final class CloneController {
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
+        }
+        if (!itemBusy && !escaping) {
+            itemBusy = stairGuard.tick(now); // monsters coming down the staircase: a block makes the step one high, the fight hits their feet; taken out when it is quiet
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = campfire.tick(now, threatened); // raw food in the bag: laid on a campfire (one is put down if it is in the bag)
