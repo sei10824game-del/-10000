@@ -870,20 +870,23 @@ public final class Motor {
     }
 
     private void openDoorAhead() {
-        if (!self.horizontalCollision) {
-            return;
+        if (!self.horizontalCollision && stuckCount < 2) {
+            return; // (a pressure plate that did not fire leaves the door shut and the clone standing before it: stuck counts as well as bumping)
         }
         Direction facing = Direction.fromYRot(self.getYRot());
-        for (int dy = 0; dy <= 1; dy++) {
-            BlockPos p = self.blockPosition().relative(facing).above(dy);
-            BlockState st = self.level().getBlockState(p);
-            boolean door = st.getBlock() instanceof DoorBlock && st.is(BlockTags.WOODEN_DOORS);
-            boolean gate = st.getBlock() instanceof FenceGateBlock;
-            if ((door || gate) && st.hasProperty(BlockStateProperties.OPEN) && !st.getValue(BlockStateProperties.OPEN)) {
-                BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(p), facing.getOpposite(), p, false);
-                self.gameMode.useItemOn(self, self.level(), self.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
-                self.swing(InteractionHand.MAIN_HAND);
-                return;
+        Direction toGoal = lastGoal == null ? facing : Direction.getNearest(lastGoal.x - self.getX(), 0, lastGoal.z - self.getZ());
+        for (Direction d : new Direction[]{facing, toGoal, toGoal.getClockWise(), toGoal.getCounterClockWise(), toGoal.getOpposite()}) {
+            for (int dy = 0; dy <= 1; dy++) {
+                BlockPos p = self.blockPosition().relative(d).above(dy);
+                BlockState st = self.level().getBlockState(p);
+                boolean door = st.getBlock() instanceof DoorBlock && st.is(BlockTags.WOODEN_DOORS);
+                boolean gate = st.getBlock() instanceof FenceGateBlock;
+                if ((door || gate) && st.hasProperty(BlockStateProperties.OPEN) && !st.getValue(BlockStateProperties.OPEN)) {
+                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(p), d.getOpposite(), p, false);
+                    self.gameMode.useItemOn(self, self.level(), self.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
+                    self.swing(InteractionHand.MAIN_HAND);
+                    return;
+                }
             }
         }
     }
