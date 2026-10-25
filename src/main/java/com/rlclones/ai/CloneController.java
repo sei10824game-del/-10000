@@ -1769,6 +1769,9 @@ public final class CloneController {
             if (dh < 0) {
                 stepReward += dh * 1.5f;
                 optionReward += dh;
+                if (action == CombatAction.PILLAR && self.getLastDamageSource() != null && self.getLastDamageSource().is(net.minecraft.tags.DamageTypeTags.IS_PROJECTILE)) {
+                    stepReward += dh * 3f; // building up in a shooter's line of sight: each arrow taken there teaches that it is a poor answer
+                }
                 LivingEntity attacker = self.getLastHurtByMob();
                 if (attacker != null && !perception.isVisible(attacker) && attacker.distanceTo(self) < 32) {
                     // feel where the hit came from and turn around, like a player reacting to the damage tilt

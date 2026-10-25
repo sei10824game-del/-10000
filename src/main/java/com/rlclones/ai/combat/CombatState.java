@@ -97,7 +97,7 @@ public final class CombatState {
         q[CombatAction.HOLD.ordinal()] = dist == 2 && own < 2 ? 0.3f : -0.05f;
         q[CombatAction.SHOOT.ordinal()] = far ? (explosive ? 0.8f : 0.4f) : -0.3f;
         q[CombatAction.USE_ITEM.ordinal()] = own < 2 ? 0.25f : 0.1f;
-        q[CombatAction.PILLAR.ordinal()] = crowd >= 1 && hp == 0 ? 0.3f : -0.1f;
+        q[CombatAction.PILLAR.ordinal()] = ranged ? -0.8f : (crowd >= 1 && hp == 0 ? 0.3f : -0.1f); // (a stack of blocks is a target for a shooter)
 
         // a better spot is worth a few steps when exposed to a crowd or beside a hazard; the table learns the rest
         q[CombatAction.POSITION.ordinal()] = terrain == Terrain.HAZARD ? 0.5f : terrain == Terrain.OPEN && crowd >= 1 ? 0.35f : -0.1f;
