@@ -3,6 +3,7 @@ package com.rlclones.ai;
 import com.rlclones.Config;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
@@ -398,6 +399,32 @@ public final class Perception {
             if (kind != null) {
                 if (blocks.put(pos, kind) == null) {
                     discoveries++;
+                }
+            }
+        }
+        peripheralOres(level);
+    }
+
+    /**
+     * What is beside us is seen too, not only what is in front: every few ticks the ores within three blocks that show a face to the air are noted, whatever
+     * way the clone looks (down a tunnel the walls beside it are out of the frame of the random looks). ponytail: 7x7x4 blocks every 8 ticks.
+     */
+    private void peripheralOres(Level level) {
+        if (((level.getGameTime() + self.getId()) & 7) != 0 || !self.onGround()) {
+            return;
+        }
+        BlockPos c = self.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-3, -1, -3), c.offset(3, 2, 3))) {
+            BlockState st = level.getBlockState(p);
+            if (!st.is(Tags.Blocks.ORES) || blocks.containsKey(p)) {
+                continue;
+            }
+            for (Direction d : Direction.values()) {
+                if (level.getBlockState(p.relative(d)).isAir()) {
+                    if (blocks.put(p.immutable(), BlockKind.ORE) == null) {
+                        discoveries++;
+                    }
+                    break;
                 }
             }
         }
