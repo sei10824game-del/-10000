@@ -63,7 +63,7 @@ public final class Progression {
     private static final int SWORD_COST = 2;
     /** Where the iron is thickest (1.18+), and where the diamonds are (just above the bedrock). */
     public static final int IRON_Y = 16;
-    public static final int DIAMOND_Y = -58;
+    public static final int DIAMOND_Y = -62; // (down to the bedrock: the stairs end where it stops them; was -58)
 
     private Progression() {
     }
