@@ -4296,7 +4296,7 @@ public final class CloneController {
         double bestScore = -Double.MAX_VALUE;
         for (int i = 0; i < 8; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
-            double dist = hungry ? 40 + random.nextDouble() * 40 : 16 + random.nextDouble() * 24;
+            double dist = hungry ? 60 + random.nextDouble() * 70 : 24 + random.nextDouble() * 40;
             double x = self.getX() + Math.cos(angle) * dist;
             double z = self.getZ() + Math.sin(angle) * dist;
             int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z));

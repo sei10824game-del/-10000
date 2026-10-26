@@ -39,7 +39,7 @@ public final class Expedition {
 
     private static final Pattern RALLY = Pattern.compile("^RALLY (-?\\d+) (-?\\d+) (-?\\d+) TO (-?\\d+) (-?\\d+) (-?\\d+) need=(\\d+)");
     private static final int GATHER_TICKS = 600;
-    private static final int COOLDOWN = 12000;
+    private static final int COOLDOWN = 8000;
     /** A clone first gets to know its surroundings (5 minutes) before it leads anyone into the unknown. */
     private static final int FIRST_DELAY = 6000;
     private static final double JOIN_RADIUS = 96;
@@ -159,7 +159,7 @@ public final class Expedition {
     public BlockPos pickTarget(LongPredicate visited) {
         for (int i = 0; i < 12; i++) {
             double a = random.nextDouble() * Math.PI * 2;
-            double d = 160 + random.nextDouble() * 120;
+            double d = 240 + random.nextDouble() * 200; // (animals and villages turn up a few chunks on: the land round the base is picked over)
             int x = Mth.floor(self.getX() + Math.cos(a) * d);
             int z = Mth.floor(self.getZ() + Math.sin(a) * d);
             if (visited.test(ChunkPos.asLong(x >> 4, z >> 4))) {
@@ -256,7 +256,7 @@ public final class Expedition {
     public void leadVillage(BlockPos target, int need) {
         lead(target, need);
         villageSearch = true;
-        legsLeft = 6;
+        legsLeft = 8;
     }
 
     private boolean villageNear() {
@@ -393,8 +393,8 @@ public final class Expedition {
                     double dx = target.getX() - rally.getX();
                     double dz = target.getZ() - rally.getZ();
                     double len = Math.max(1, Math.sqrt(dx * dx + dz * dz));
-                    int nx = Mth.floor(target.getX() + dx / len * 150);
-                    int nz = Mth.floor(target.getZ() + dz / len * 150);
+                    int nx = Mth.floor(target.getX() + dx / len * 220);
+                    int nz = Mth.floor(target.getZ() + dz / len * 220);
                     int ny = self.level().hasChunk(nx >> 4, nz >> 4) ? self.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, nx, nz) : self.getBlockY();
                     target = new BlockPos(nx, ny, nz);
                     phase = 2;
