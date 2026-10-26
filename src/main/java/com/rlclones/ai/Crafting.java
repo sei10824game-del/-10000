@@ -756,7 +756,10 @@ public final class Crafting {
         if (!table) {
             return null;
         }
-        int spare = cobble(p) - (count(p, Items.FURNACE) > 0 || furnaceNearby(p) ? 0 : 8); // (the furnace's eight come first)
+        if (tierOf(p, PickaxeItem.class) < 1 || count(p, Items.FURNACE) == 0 && !furnaceNearby(p)) {
+            return null; // the stone pickaxe and the furnace come first (their cobblestone is not spent on the lesser tools)
+        }
+        int spare = cobble(p);
         if (bestWeapon(p) < Equipment.attackDamage(new ItemStack(Items.STONE_SWORD)) - 0.01 && spare >= 2) {
             return Items.STONE_SWORD;
         }
