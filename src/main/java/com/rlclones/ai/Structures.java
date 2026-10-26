@@ -39,6 +39,22 @@ public final class Structures {
     private boolean villageSaid;
     /** Ores (iron, diamond) a friend or this clone saw and has not got: where to go digging (max 24). */
     private final List<BlockPos> oreTips = new ArrayList<>();
+    /** What any clone has found (overworld): iron / diamond ore tips, caves, villages - for those born or reborn later, and for friends out of earshot. Memory only. */
+    private static final List<BlockPos> WORLD_ORES = new ArrayList<>();
+    private static final List<BlockPos> WORLD_CAVES = new ArrayList<>();
+    private static final List<BlockPos> WORLD_VILLAGES = new ArrayList<>();
+
+    private static void remember(List<BlockPos> list, BlockPos p, int near, int cap) {
+        for (BlockPos q : list) {
+            if (q.distManhattan(p) <= near) {
+                return;
+            }
+        }
+        if (list.size() >= cap) {
+            list.remove(0);
+        }
+        list.add(p.immutable());
+    }
     private long lastOreSaid;
     private BlockPos villagePos;
     /** Caves seen or told of (max 16). */
@@ -90,6 +106,9 @@ public final class Structures {
                     villageSaid = true;
                     villageKnown = true;
                     villagePos = p.immutable();
+                    if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+                        remember(WORLD_VILLAGES, p, 64, 8);
+                    }
                     add(p);
                     Chat.say(self, Component.translatable("rlclones.chat.village", p.getX(), p.getZ()), "VILLAGE " + p.getX() + " " + p.getY() + " " + p.getZ());
                     break;
@@ -106,6 +125,9 @@ public final class Structures {
                 if ((diamond || st.is(net.minecraft.tags.BlockTags.IRON_ORES)) && !tipNear(e.getKey())) {
                     BlockPos p = e.getKey();
                     oreTips.add(p.immutable());
+                    if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+                        remember(WORLD_ORES, p, 12, 64);
+                    }
                     lastOreSaid = now;
                     oreTipsGiven++;
                     if (diamond) {
@@ -117,6 +139,7 @@ public final class Structures {
             }
         }
         oreTips.removeIf(t -> Motor.horizontalDistance(self.position(), Vec3.atCenterOf(t)) < 6 && Math.abs(self.getY() - t.getY()) < 8);
+        WORLD_ORES.removeIf(t -> Motor.horizontalDistance(self.position(), Vec3.atCenterOf(t)) < 6 && Math.abs(self.getY() - t.getY()) < 8);
         for (Site s : sites) {
             if (!s.visited && Motor.horizontalDistance(self.position(), Vec3.atCenterOf(s.pos)) < VISIT && Math.abs(self.getY() - s.pos.getY()) < 12) {
                 s.visited = true;
@@ -157,6 +180,15 @@ public final class Structures {
                 best = t;
             }
         }
+        if (best == null && self.level().dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            for (BlockPos t : WORLD_ORES) { // nobody told this one: the world's map
+                double d = t.distSqr(self.blockPosition());
+                if (d < bestD) {
+                    bestD = d;
+                    best = t;
+                }
+            }
+        }
         return best == null ? null : Vec3.atBottomCenterOf(best);
     }
 
@@ -171,12 +203,19 @@ public final class Structures {
             caves.remove(0);
         }
         caves.add(p.immutable());
+        if (self.level().dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            remember(WORLD_CAVES, p, 24, 32);
+        }
         return true;
     }
 
     /** A known village 40-160 blocks away that the clone has not been near yet (the place to put a home), or null. */
     @Nullable
     public Vec3 villageToVisit() {
+        if (villagePos == null && !WORLD_VILLAGES.isEmpty() && self.level().dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            villagePos = WORLD_VILLAGES.get(WORLD_VILLAGES.size() - 1); // one a friend found: this one knows of it too
+            villageKnown = true;
+        }
         if (villagePos == null) {
             return null;
         }
@@ -194,6 +233,15 @@ public final class Structures {
             if (d > 10 * 10 && d < bestD) {
                 bestD = d;
                 best = c;
+            }
+        }
+        if (best == null && self.level().dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            for (BlockPos c : WORLD_CAVES) {
+                double d = c.distSqr(self.blockPosition());
+                if (d > 10 * 10 && d < bestD) {
+                    bestD = d;
+                    best = c;
+                }
             }
         }
         return best == null ? null : Vec3.atBottomCenterOf(best);
