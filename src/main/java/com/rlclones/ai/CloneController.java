@@ -1796,6 +1796,9 @@ public final class CloneController {
                     stepReward += dh * 3f; // building up in a shooter's line of sight: each arrow taken there teaches that it is a poor answer
                 }
                 LivingEntity attacker = self.getLastHurtByMob();
+                if (attacker instanceof net.minecraft.world.entity.animal.Animal) {
+                    hurtByAnimal.add(Perception.typeId(attacker)); // (a pig that bit: the full fighting from then on)
+                }
                 if (attacker != null && !perception.isVisible(attacker) && attacker.distanceTo(self) < 32) {
                     // feel where the hit came from and turn around, like a player reacting to the damage tilt
                     lookBack = attacker.getEyePosition();
@@ -2754,7 +2757,38 @@ public final class CloneController {
         return true;
     }
 
+    /** Kinds of animal that hurt us once (never walked up to with nothing but the weapon again): by type id. */
+    private final java.util.Set<String> hurtByAnimal = new java.util.HashSet<>();
+
+    /** A farm animal that cannot hurt a player (and has not): hunted by walking up and hitting it, none of the fighting tactics (blocks, backing off, strafing). */
+    private boolean simplePrey(Entity e) {
+        return e instanceof net.minecraft.world.entity.animal.Cow || e instanceof net.minecraft.world.entity.animal.Pig
+                || e instanceof net.minecraft.world.entity.animal.Sheep || e instanceof net.minecraft.world.entity.animal.Chicken
+                ? !hurtByAnimal.contains(Perception.typeId(e)) : false;
+    }
+
+    public int simpleHunts;
+
     private boolean runFight(long now, boolean hunt) {
+        if (hunt && target instanceof net.minecraft.world.entity.animal.Animal prey && prey.isAlive() && simplePrey(prey)) {
+            lastFightId = prey.getId();
+            lastFightAt = now;
+            motor.lookAt(prey);
+            if (!motor.withinReach(prey)) {
+                motor.navigate(prey.position(), 0.8, true);
+            } else {
+                motor.stop();
+                int w = Equipment.bestWeaponSlot(self);
+                if (w >= 0) {
+                    Equipment.select(self, w);
+                }
+                if (motor.canHit(prey) && self.getAttackStrengthScale(0.5f) >= 0.9f) {
+                    motor.attack(prey);
+                    simpleHunts++;
+                }
+            }
+            return false; // (a dead one ends the fight on the next look; the drops are picked up as usual)
+        }
         if (target != null) {
             lastFightId = target.getId();
             lastFightAt = now;
