@@ -201,6 +201,8 @@ public final class Storage {
                 if (!launcher) {
                     out.add(i);
                 }
+            } else if ((s.is(Items.IRON_INGOT) || s.is(Items.DIAMOND)) && Progression.need(p) == Progression.Need.NONE) {
+                out.add(i); // nothing left to make from it: into the base chest, for a friend who is short
             } else if (!KEEP.contains(it)) {
                 out.add(i);
             }
@@ -244,6 +246,7 @@ public final class Storage {
         boolean needPick = !hasPick;
         boolean needFood = !hasFood && p.getFoodData().getFoodLevel() <= 16;
         boolean needBlocks = blocks < 8;
+        Progression.Need need = Progression.need(p);
         boolean hasShield = p.getOffhandItem().getItem() instanceof ShieldItem;
         return s -> {
             if (s.isEmpty()) {
@@ -266,6 +269,9 @@ public final class Storage {
             }
             if (needFood && Equipment.foodScore(p, s) > 0) {
                 return true;
+            }
+            if (s.is(Items.IRON_INGOT) && need == Progression.Need.IRON || s.is(Items.DIAMOND) && need == Progression.Need.DIAMOND) {
+                return true; // what the base chest holds of the gear's material
             }
             return needBlocks && Equipment.isPillarBlock(s);
         };
