@@ -534,10 +534,71 @@ public final class Motor {
                 return null;
             }
         }
+        BlockPos goalPos = BlockPos.containing(goal);
+        Path shared = reuse(level, goalPos);
+        if (shared != null) {
+            pathsReused++;
+            return shared;
+        }
         proxy.moveTo(self.getX(), self.getY(), self.getZ(), self.getYRot(), 0f);
         proxy.setOnGround(true);
         int accuracy = Math.max(0, (int) Math.floor(arrive));
-        return proxy.getNavigation().createPath(BlockPos.containing(goal), accuracy);
+        Path made = proxy.getNavigation().createPath(goalPos, accuracy);
+        pathsComputed++;
+        if (made != null && made.canReach() && made.getNodeCount() > 1) {
+            java.util.List<Node> nodes = new java.util.ArrayList<>(made.getNodeCount());
+            for (int i = 0; i < made.getNodeCount(); i++) {
+                nodes.add(made.getNode(i));
+            }
+            RECENT.addFirst(new SharedPath(level.dimension(), goalPos, nodes, level.getGameTime()));
+            while (RECENT.size() > 48) {
+                RECENT.removeLast();
+            }
+        }
+        return made;
+    }
+
+    /** A path some clone made lately to (nearly) the same goal that passes where we stand: the rest of it, instead of a search of our own. */
+    private static final class SharedPath {
+        final net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim;
+        final BlockPos goal;
+        final java.util.List<Node> nodes;
+        final long tick;
+
+        SharedPath(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, BlockPos goal, java.util.List<Node> nodes, long tick) {
+            this.dim = dim;
+            this.goal = goal;
+            this.nodes = nodes;
+            this.tick = tick;
+        }
+    }
+
+    private static final java.util.ArrayDeque<SharedPath> RECENT = new java.util.ArrayDeque<>();
+    /** Searches done / searches saved by a path already made (tests, soak). */
+    public static int pathsComputed;
+    public static int pathsReused;
+
+    @javax.annotation.Nullable
+    private Path reuse(ServerLevel level, BlockPos goal) {
+        long gt = level.getGameTime();
+        Vec3 pos = self.position();
+        for (java.util.Iterator<SharedPath> it = RECENT.iterator(); it.hasNext();) {
+            SharedPath sp = it.next();
+            if (gt - sp.tick > 80 || gt < sp.tick) {
+                it.remove();
+                continue;
+            }
+            if (sp.dim != level.dimension() || sp.goal.distManhattan(goal) > 3) {
+                continue;
+            }
+            for (int i = 0; i < sp.nodes.size() - 1; i++) {
+                Node n = sp.nodes.get(i);
+                if (Math.abs(n.x + 0.5 - pos.x) < 1.0 && Math.abs(n.z + 0.5 - pos.z) < 1.0 && Math.abs(n.y - pos.y) <= 1.0) {
+                    return new Path(new java.util.ArrayList<>(sp.nodes.subList(i, sp.nodes.size())), sp.goal, true);
+                }
+            }
+        }
+        return null;
     }
 
     private void trackProgress(boolean moving) {

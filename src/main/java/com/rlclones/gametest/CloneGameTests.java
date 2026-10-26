@@ -6940,6 +6940,7 @@ public final class CloneGameTests {
                         }
                     });
                     RLClones.LOGGER.info("SOAK-ANIMALS alive={} sheep={}", animals[0], animals[1]);
+                    RLClones.LOGGER.info("SOAK-PATHS computed={} reused={}", com.rlclones.ai.Motor.pathsComputed, com.rlclones.ai.Motor.pathsReused);
                     RLClones.LOGGER.info("SOAK-FEATURES lavaBuckets={} bedsSet={} sitesFound={} oreTipsGiven={} oreTipsGot={} villageKnown={} lavaChecks={} lavaPools={} withBucket={}", feat[0], feat[1], feat[2], feat[3], feat[4], feat[5], feat[6], feat[7], feat[8]);
                     RLClones.LOGGER.info("SOAK-DIGGATE (why the dig drive did or did not send a clone digging) {}", gate);
                     RLClones.LOGGER.info("SOAK-ESCAPES (why escapes started: block under the feet, height band, option) {}", escapes);
