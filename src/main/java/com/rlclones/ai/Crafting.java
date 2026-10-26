@@ -924,7 +924,7 @@ public final class Crafting {
         if (count(p, Items.COAL) + count(p, Items.CHARCOAL) > 0) {
             return 0;
         }
-        return Math.min(12, countTag(p, ItemTags.LOGS) - 8);
+        return Math.min(32, countTag(p, ItemTags.LOGS) - 8);
     }
 
     private static int fuelSlot(Player p) {
@@ -1359,6 +1359,9 @@ public final class Crafting {
         if (!menu.getSlot(2).getItem().isEmpty()) {
             menu.clicked(2, 0, ClickType.QUICK_MOVE, self);
             smelted++;
+        }
+        if (menu.getSlot(1).getItem().isEmpty() && !menu.getSlot(0).getItem().isEmpty() && fuelSlot(self) >= 0) {
+            shiftClickInventorySlot(menu, fuelSlot(self)); // a batch cooking with nothing to burn (the fuel ran out): fuel first, whatever else is done
         }
         boolean inputEmpty = menu.getSlot(0).getItem().isEmpty();
         int cooking = menu.getSlot(0).getItem().getCount();
