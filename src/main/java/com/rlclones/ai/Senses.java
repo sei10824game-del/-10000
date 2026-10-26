@@ -172,6 +172,11 @@ public final class Senses {
         if (Equipment.usableSlot(agent, x -> true) < 0) {
             mask &= ~CombatAction.USE_ITEM.bit();
         }
+        int launcher = Equipment.rangedSlot(agent);
+        if (launcher >= 0 && Equipment.isLauncher(agent.getInventory().getItem(launcher)) && Equipment.canFire(agent, agent.getInventory().getItem(launcher))
+                && Equipment.bestWeaponSlot(agent) < 0) {
+            mask &= ~(CombatAction.ATTACK.bit() | CombatAction.CRIT_ATTACK.bit() | CombatAction.SPRINT_ATTACK.bit()); // a bow and nothing else: no beating with it - shoot, or step back
+        }
         boolean headroom = agent.level().getBlockState(agent.blockPosition().above(2)).getCollisionShape(agent.level(), agent.blockPosition().above(2)).isEmpty();
         if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(agent) < 0 || !agent.onGround() || !headroom) {
             mask &= ~CombatAction.PILLAR.bit();
