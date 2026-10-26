@@ -1128,6 +1128,9 @@ public final class Crafting {
         Equipment.select(self, slot);
         ServerLevel level = self.serverLevel();
         BlockPos feet = self.blockPosition();
+        if (nicheStation(level, feet, slot)) {
+            return; // in a tunnel: into the wall, not into the way
+        }
         for (Direction d : Direction.Plane.HORIZONTAL) {
             BlockPos spot = feet.relative(d);
             if (level.getBlockState(spot).canBeReplaced() && level.getBlockState(spot.above()).canBeReplaced()
@@ -1156,6 +1159,74 @@ public final class Crafting {
         }
         placeDebug = sb.toString().replace("Block{minecraft:", "").replace("}", "");
         stage = -1;
+    }
+
+    @Nullable
+    private BlockPos niche;
+
+    /**
+     * Underground between walls (a tunnel, a staircase): the station is not put down in the passage - a block of the wall is dug out beside us and the
+     * station set in the hole, so nobody has to climb over it. True while at it (the dig and the placing take a few ticks). ponytail: the first wall
+     * block that is solid, breakable, holds no water or lava behind it; with no tool for it the old way (on the ground) is used.
+     */
+    private boolean nicheStation(ServerLevel level, BlockPos feet, int slot) {
+        if (level.canSeeSky(feet.above()) || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            niche = null;
+            return false;
+        }
+        if (niche != null && !niche.closerThan(feet, 3.0)) {
+            niche = null;
+        }
+        if (niche == null) {
+            int walls = 0;
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                walls += solidFull(level, feet.relative(d)) ? 1 : 0;
+            }
+            if (walls < 2) {
+                return false; // open ground: the ordinary way
+            }
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                BlockPos wall = feet.relative(d);
+                BlockState st = level.getBlockState(wall);
+                if (solidFull(level, wall) && st.getDestroySpeed(level, wall) >= 0 && !st.hasBlockEntity() && quietBehind(level, wall)
+                        && (!st.requiresCorrectToolForDrops() || Equipment.bestToolSlot(self, st) >= 0)) {
+                    niche = wall.immutable();
+                    break;
+                }
+            }
+            if (niche == null) {
+                return false;
+            }
+        }
+        BlockState st = level.getBlockState(niche);
+        if (!st.isAir() && !st.canBeReplaced()) {
+            Equipment.select(self, Equipment.bestToolSlot(self, st));
+            motor.stop();
+            motor.mine(niche);
+            return true;
+        }
+        Equipment.select(self, slot);
+        motor.lookAt(Vec3.atCenterOf(niche));
+        if (motor.placeBlockAt(niche)) {
+            placed(niche);
+            niche = null;
+        }
+        return true;
+    }
+
+    private static boolean solidFull(ServerLevel level, BlockPos p) {
+        BlockState st = level.getBlockState(p);
+        return st.isSolidRender(level, p) && level.getFluidState(p).isEmpty();
+    }
+
+    /** No water or lava touching the block (taking it out would let it run). */
+    private static boolean quietBehind(ServerLevel level, BlockPos p) {
+        for (Direction d : Direction.values()) {
+            if (!level.getFluidState(p.relative(d)).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** A crafting table (or furnace) of the same kind already standing within 12 blocks, the nearest, looked for in the world itself, not only in what the clone has seen. */
