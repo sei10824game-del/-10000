@@ -64,6 +64,9 @@ public final class Travel {
         for (int i = start; i <= 16; i++) {
             BlockPos c = feet.relative(d, i);
             if (i > 0 && (!passable(c) || !passable(c.above()))) {
+                if (i - start >= 1 && i >= 2 && solid(c) && passable(c.above()) && passable(c.above(2))) {
+                    return i - start; // the far side is one block higher: a jump up onto it (the sprint jump covers it)
+                }
                 return i == 1 ? 0 : -1; // a wall: not a gap problem
             }
             if (solid(c.below())) {
@@ -547,7 +550,7 @@ public final class Travel {
         switch (stage) {
             case 0 -> {
                 // back off for a run-up
-                Vec3 runStart = edgeCenter.subtract(fwd.scale(3));
+                Vec3 runStart = edgeCenter.subtract(fwd.scale(how == 1 ? 5 : 3)); // (a sprint needs a few blocks to get up to speed)
                 motor.lookAngles(dir.toYRot(), 0f);
                 if (Motor.horizontalDistance(self.position(), runStart) < 0.4 || ticks > 60) {
                     stage = 1;
