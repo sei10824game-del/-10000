@@ -705,6 +705,12 @@ public final class Crafting {
                 }
             }
         }
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && tableAccess && c.controller().bedding().bedWanted()) {
+            CraftingRecipe r = craftable(p, s -> s.is(ItemTags.BEDS));
+            if (r != null) {
+                return r; // wool from the sheep: a bed for the base (the respawn point)
+            }
+        }
         // curiosity: make something never made before (cheap materials only)
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null) {
             return c.controller().crafting().curiosity(tableAccess);

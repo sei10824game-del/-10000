@@ -56,8 +56,83 @@ public final class Bedding {
         return null;
     }
 
+    private boolean bedItemInBag() {
+        for (var st : self.getInventory().items) {
+            if (st.is(net.minecraft.tags.ItemTags.BEDS)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean woolInBag() {
+        int n = 0;
+        for (var st : self.getInventory().items) {
+            if (st.is(net.minecraft.tags.ItemTags.WOOL)) {
+                n += st.getCount();
+            }
+        }
+        return n >= 3;
+    }
+
+    private boolean bedAround() {
+        BlockPos c = self.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-16, -3, -16), c.offset(16, 3, 16))) {
+            if (self.serverLevel().getBlockState(p).is(BlockTags.BEDS)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Respawn on, a base close by with no bed about, three wool in the bag and no bed yet: the crafting makes one. */
+    public boolean bedWanted() {
+        return respawnOn() && !bedItemInBag() && woolInBag() && nearBase() && !bedAround();
+    }
+
+    private boolean nearBase() {
+        return com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), self.position(), 24) != null;
+    }
+
+    private long placeCooldown;
+
+    /** A bed from the bag put down on the ground two blocks ahead (the respawn point is set at it by the usual walk). */
+    private boolean placeBed(long now) {
+        if (now < placeCooldown || !bedItemInBag() || !respawnOn() || !nearBase() || bedAround() || !self.onGround()
+                || !com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_PLACING, true)) {
+            return false;
+        }
+        placeCooldown = now + 600;
+        int slot = -1;
+        for (int i = 0; i < self.getInventory().items.size(); i++) {
+            if (self.getInventory().items.get(i).is(net.minecraft.tags.ItemTags.BEDS)) {
+                slot = i;
+                break;
+            }
+        }
+        Direction face = self.getDirection();
+        for (Direction d : new Direction[]{face, face.getClockWise(), face.getCounterClockWise(), face.getOpposite()}) {
+            BlockPos floor = self.blockPosition().relative(d, 2).below();
+            BlockPos cell = floor.above();
+            if (self.serverLevel().getBlockState(floor).isFaceSturdy(self.serverLevel(), floor, Direction.UP) && self.serverLevel().getBlockState(cell).isAir()
+                    && self.serverLevel().getBlockState(cell.relative(d)).isAir()) {
+                Equipment.select(self, slot);
+                motor.lookAt(Vec3.atCenterOf(floor).add(0, 0.5, 0));
+                self.setYRot(d.toYRot()); // (a bed lies the way the placer faces)
+                self.gameMode.useItemOn(self, self.serverLevel(), self.getMainHandItem(), InteractionHand.MAIN_HAND,
+                        new BlockHitResult(Vec3.atCenterOf(floor).add(0, 0.5, 0), Direction.UP, floor, false));
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** True while busy with a bed. */
     public boolean tick(long now, boolean threatened) {
+        if (bed == null && !threatened && placeBed(now)) {
+            cooldownUntil = 0; // (the walk to the new bed follows)
+            return true;
+        }
         if (bed == null) {
             if (now < cooldownUntil || threatened || (now + self.getId()) % 200 != 0 || !respawnOn()) {
                 return false;
