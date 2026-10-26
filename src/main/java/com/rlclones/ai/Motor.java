@@ -880,7 +880,13 @@ public final class Motor {
      */
     public boolean placeBlockAt(BlockPos target) {
         ServerLevel level = self.serverLevel();
-        if (!level.getBlockState(target).canBeReplaced()) {
+        BlockState cur = level.getBlockState(target);
+        if (!cur.canBeReplaced() && !cur.isAir() && cur.getDestroySpeed(level, target) == 0f && cur.getCollisionShape(level, target).isEmpty() && !cur.hasBlockEntity()
+                && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && self.getEyePosition().distanceTo(Vec3.atCenterOf(target)) <= BLOCK_REACH) {
+            self.gameMode.destroyBlock(target); // a torch (a flower, a lever...) where the block should go: taken out by hand first, the block comes next time
+            return false;
+        }
+        if (!cur.canBeReplaced()) {
             return false;
         }
         if (self.getBoundingBox().intersects(new AABB(target))) {
