@@ -531,6 +531,9 @@ public final class StairMining {
     private Status digTick(BlockPos feet) {
         if (stairs == null) {
             Direction d = pickDirection(feet);
+            if (d != null && bases().shaftNear(self.level().dimension(), feet, 4)) {
+                d = null; // a shaft goes down right here: a staircase beside it would cut into it
+            }
             if (d == null) {
                 noWayAt = feet;
                 noWayUntil = self.level().getGameTime() + 6000;

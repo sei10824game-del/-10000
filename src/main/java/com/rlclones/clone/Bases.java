@@ -285,6 +285,32 @@ public class Bases extends SavedData {
 
     public final List<Shaft> shafts = new ArrayList<>();
 
+    /** A staircase of ours passes within two blocks (sideways) of a shaft that would be dug down from {@code top}? (they must not cut into each other) */
+    public boolean stairsNear(ResourceKey<Level> dim, BlockPos top) {
+        for (Staircase s : staircases) {
+            if (s.dimension != dim) {
+                continue;
+            }
+            for (int i = 0; i <= s.steps() + 1; i++) {
+                BlockPos c = s.top.relative(s.dir, i).below(i);
+                if (c.getY() <= top.getY() && Math.abs(c.getX() - top.getX()) <= 2 && Math.abs(c.getZ() - top.getZ()) <= 2) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** A shaft's column within {@code r} blocks (sideways) of {@code pos}, going below it? */
+    public boolean shaftNear(ResourceKey<Level> dim, BlockPos pos, int r) {
+        for (Shaft s : shafts) {
+            if (s.dimension == dim && Math.abs(s.top.getX() - pos.getX()) <= r && Math.abs(s.top.getZ() - pos.getZ()) <= r && s.end.getY() <= pos.getY()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Shaft addShaft(ResourceKey<Level> dim, BlockPos top, net.minecraft.core.Direction wall) {
         Shaft s = new Shaft(dim, top, wall, top, false);
         shafts.add(s);

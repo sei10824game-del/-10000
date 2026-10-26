@@ -285,6 +285,10 @@ public final class ShaftMining {
                 debug = "no place for a shaft at " + feet.toShortString();
                 return Status.FAILED;
             }
+            if (bases().stairsNear(self.level().dimension(), feet)) {
+                debug = "a staircase runs by " + feet.toShortString() + ": no shaft here";
+                return Status.FAILED;
+            }
             shaft = bases().addShaft(self.level().dimension(), feet, wall);
             debug = "new shaft " + feet.toShortString() + " ladders on " + wall;
             trace("new@" + feet.toShortString() + wall);
