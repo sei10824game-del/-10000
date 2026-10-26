@@ -956,6 +956,7 @@ public final class Crafting {
     private static int fuelSlot(Player p) {
         Inventory inv = p.getInventory();
         int best = -1;
+        int saplings = -1;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
             if (s.isEmpty() || s.is(ItemTags.LOGS) || !AbstractFurnaceBlockEntity.isFuel(s)) {
@@ -964,9 +965,14 @@ public final class Crafting {
             if (s.is(Items.COAL) || s.is(Items.CHARCOAL)) {
                 return i;
             }
-            if (best < 0 && !s.is(Items.LAVA_BUCKET)) {
+            if (s.is(ItemTags.SAPLINGS) && s.getCount() >= 5) {
+                saplings = i; // a heap of saplings (more than the few kept for planting): fuel, before the planks / sticks / tools that also burn
+            } else if (best < 0 && !s.is(Items.LAVA_BUCKET) && !s.is(ItemTags.SAPLINGS)) {
                 best = i;
             }
+        }
+        if (saplings >= 0) {
+            return saplings;
         }
         if (best < 0 && spareLogs(p) > 0) {
             for (int i = 0; i < inv.items.size(); i++) {
