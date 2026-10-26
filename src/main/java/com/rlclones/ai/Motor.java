@@ -1259,6 +1259,8 @@ public final class Motor {
 
     /** Ticks spent climbing a ladder with the assist (tests). */
     public int ladderClimbs;
+    /** Ticks a ridden horse was driven by hand (tests, soak). */
+    public int ridden;
 
     public void tick() {
         ladderAssist();
@@ -1398,6 +1400,13 @@ public final class Motor {
         self.zza = zza;
         self.xxa = xxa;
         self.setJumping(jump);
+        if (self.isPassenger() && self.getVehicle() instanceof net.minecraft.world.entity.animal.horse.AbstractHorse steed && steed.isAlive() && steed.isSaddled()
+                && steed.getControllingPassenger() == self && !self.level().isClientSide) {
+            // a rider on a saddled horse is steered by the client that rides it (it sends the horse's moves); a clone has no client, so the horse is told here to take
+            // a step the way its rider's inputs say (the horse reads zza / xxa and the yaw off its rider)
+            steed.travel(Vec3.ZERO);
+            ridden++;
+        }
 
         // reset one-tick intentions
         lookTarget = null;
