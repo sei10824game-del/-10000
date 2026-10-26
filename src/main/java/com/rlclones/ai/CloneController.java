@@ -1537,7 +1537,7 @@ public final class CloneController {
 
     /** Under three food items and not full: the next dig or trip would start hungry. */
     private boolean leanOnFood() {
-        return !self.isCreative() && FoodAid.foodItems(self) < 3 && self.getFoodData().getFoodLevel() < 14;
+        return !self.isCreative() && FoodAid.foodItems(self) < 2 && self.getFoodData().getFoodLevel() < 10;
     }
 
     private boolean hungryNoFood() {
@@ -2303,7 +2303,7 @@ public final class CloneController {
                 return Option.FARM;
             }
         }
-        if (persona.isProvider() && FoodAid.foodItems(self) < 12 && !hungryNoFood()) { // the crowd's provider: fields, animals and the hunt fill the larder
+        if (persona.isProvider() && FoodAid.foodItems(self) < 6 && !hungryNoFood()) { // the crowd's provider: fields, animals and the hunt fill the larder
             if ((mask & Option.FARM.bit()) != 0) {
                 return Option.FARM;
             }
