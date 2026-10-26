@@ -144,6 +144,9 @@ public final class Travel {
             return false;
         }
         Vec3 goal = motor.recentGoal();
+        if (goal != null && ((self.tickCount + self.getId()) & 15) == 0 && startWaterBridge(goal)) {
+            return true; // water ahead on the way to a far goal: a bridge rather than a swim (drownings), left standing for the next to use
+        }
         if (goal != null && motor.stuckCount() >= 2 && !self.isPassenger() && Motor.horizontalDistance(self.position(), goal) > 1.5) {
             double up = goal.y - self.getY();
             if (up >= 3 && startWaterClimb(goal)) {
@@ -222,6 +225,55 @@ public final class Travel {
         }
         cooldown = 40;
         return consumables.pearlToward(goal);
+    }
+
+    /** Bridges laid over open water before the swim (tests, soak). */
+    public int waterBridges;
+
+    /**
+     * Standing on the shore and the goal lies across water (3 to 24 blocks of it, land on the far side): the bridge is built now, with what the
+     * clone does not need, instead of waiting to be stuck - the path finder would send it swimming. ponytail: straight toward the goal's main axis;
+     * no check for a way round (the path finder prefers land when there is one, and a pond costs a few blocks).
+     */
+    private boolean startWaterBridge(Vec3 goal) {
+        if (threatened || !self.onGround() || self.isInWater() || self.isPassenger() || !Config.get(Config.ALLOW_BLOCK_PLACING, true)
+                || Motor.horizontalDistance(self.position(), goal) < 10) {
+            return false;
+        }
+        Direction d = Direction.getNearest(goal.x - self.getX(), 0, goal.z - self.getZ());
+        BlockPos feet = self.blockPosition();
+        int run = 0;
+        boolean landAfter = false;
+        for (int i = 1; i <= 26; i++) {
+            BlockPos c = feet.relative(d, i);
+            if (!passable(c) || !passable(c.above())) {
+                if (run == 0 || i == 1 && !water(c.below())) {
+                    return false;
+                }
+                break;
+            }
+            if (water(c.below())) {
+                run++;
+            } else if (solid(c.below())) {
+                landAfter = run > 0;
+                break;
+            } else {
+                return false; // a drop, lava...: the gap logic's business
+            }
+        }
+        if (run < 3 || run > 24 || !landAfter || !water(feet.relative(d).below()) || bridgeBlocks() < run) {
+            return false;
+        }
+        bridging = true;
+        dir = d;
+        gap = run;
+        placed = 0;
+        ticks = 0;
+        steps = 0;
+        lastFeet = feet;
+        bridges++;
+        waterBridges++;
+        return bridgeTick();
     }
 
     // ------------------------------------------------------------------ water: swimming up falls, diving off cliffs
