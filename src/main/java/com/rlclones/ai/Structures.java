@@ -44,6 +44,66 @@ public final class Structures {
     private static final List<BlockPos> WORLD_CAVES = new ArrayList<>();
     private static final List<BlockPos> WORLD_VILLAGES = new ArrayList<>();
 
+    private static net.minecraft.server.MinecraftServer loadedFor;
+    private static int savedHash;
+
+    private static java.nio.file.Path mapFile(net.minecraft.server.MinecraftServer server) {
+        return server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("rlclones_map.txt");
+    }
+
+    /** The shared map from the world folder (once per run of the server). */
+    private static void loadWorld(net.minecraft.server.MinecraftServer server) {
+        if (loadedFor == server) {
+            return;
+        }
+        loadedFor = server; // (another world in the same run: its own map)
+        WORLD_ORES.clear();
+        WORLD_CAVES.clear();
+        WORLD_VILLAGES.clear();
+        try {
+            for (String line : java.nio.file.Files.readAllLines(mapFile(server))) {
+                String[] w = line.trim().split(" ");
+                if (w.length == 4) {
+                    BlockPos p = new BlockPos(Integer.parseInt(w[1]), Integer.parseInt(w[2]), Integer.parseInt(w[3]));
+                    switch (w[0]) {
+                        case "ore" -> remember(WORLD_ORES, p, 12, 64);
+                        case "cave" -> remember(WORLD_CAVES, p, 24, 32);
+                        case "village" -> remember(WORLD_VILLAGES, p, 64, 8);
+                        default -> {
+                        }
+                    }
+                }
+            }
+        } catch (java.io.IOException | RuntimeException ignored) {
+            // no map yet, or a line that is not one: start from what is found now
+        }
+        savedHash = WORLD_ORES.hashCode() * 31 + WORLD_CAVES.hashCode() * 17 + WORLD_VILLAGES.hashCode();
+    }
+
+    /** Writes the shared map when it has changed (the manager calls this now and then). */
+    public static void saveWorld(net.minecraft.server.MinecraftServer server) {
+        int h = WORLD_ORES.hashCode() * 31 + WORLD_CAVES.hashCode() * 17 + WORLD_VILLAGES.hashCode();
+        if (loadedFor != server || h == savedHash) {
+            return;
+        }
+        savedHash = h;
+        List<String> lines = new ArrayList<>();
+        for (BlockPos p : WORLD_ORES) {
+            lines.add("ore " + p.getX() + " " + p.getY() + " " + p.getZ());
+        }
+        for (BlockPos p : WORLD_CAVES) {
+            lines.add("cave " + p.getX() + " " + p.getY() + " " + p.getZ());
+        }
+        for (BlockPos p : WORLD_VILLAGES) {
+            lines.add("village " + p.getX() + " " + p.getY() + " " + p.getZ());
+        }
+        try {
+            java.nio.file.Files.write(mapFile(server), lines);
+        } catch (java.io.IOException ignored) {
+            // a read-only world folder: the map stays in memory
+        }
+    }
+
     private static void remember(List<BlockPos> list, BlockPos p, int near, int cap) {
         for (BlockPos q : list) {
             if (q.distManhattan(p) <= near) {
@@ -65,6 +125,9 @@ public final class Structures {
     public int oreTipsGot;
 
     public Structures(ClonePlayer self) {
+        if (self.getServer() != null) {
+            loadWorld(self.getServer());
+        }
         this.self = self;
     }
 

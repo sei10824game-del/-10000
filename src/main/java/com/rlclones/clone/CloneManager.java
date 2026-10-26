@@ -830,6 +830,9 @@ public final class CloneManager {
         ticks++;
         topUpWildlife();
         raiseAnimalCap();
+        if (ticks % 2400 == 0) {
+            com.rlclones.ai.Structures.saveWorld(server);
+        }
         // the chunks around a human follow its movement packets; a clone has none, so its chunk tickets are moved here
         // (if they only moved when the clone itself is ticked, walking into a chunk that is not loaded yet would stop it for good)
         for (ClonePlayer c : clones.values()) {
