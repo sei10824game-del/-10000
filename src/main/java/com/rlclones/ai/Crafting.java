@@ -129,7 +129,7 @@ public final class Crafting {
         if (now == workTick && inv == workInv && seen == workSeen && forcedTarget == workForced) {
             return workCached;
         }
-        workCached = plan(self) != null || smeltWork() || furnaceReady() || stationToPlace() != null;
+        workCached = plan(self) != null || smeltWork() || furnaceReady() || stationToPlace() != null || doneFurnace() != null;
         workForced = forcedTarget;
         workTick = now;
         workInv = inv;
@@ -208,6 +208,24 @@ public final class Crafting {
         if (furnace != null && self.level().isLoaded(furnace) && !(self.level().getBlockState(furnace).getBlock() instanceof net.minecraft.world.level.block.AbstractFurnaceBlock)) {
             furnace = null;
         }
+    }
+
+    /** A furnace within reach of what we have seen with finished goods in its output (ours or anybody's, whatever we remember of it): the nearest, or null. */
+    @Nullable
+    public BlockPos doneFurnace() {
+        BlockPos best = null;
+        double bestD = 30 * 30;
+        for (var e : perception.blocks().entrySet()) {
+            if (e.getValue() != Perception.BlockKind.FURNACE) {
+                continue;
+            }
+            double d = e.getKey().distSqr(self.blockPosition());
+            if (d < bestD && self.level().getBlockEntity(e.getKey()) instanceof AbstractFurnaceBlockEntity f && !f.getItem(2).isEmpty()) {
+                bestD = d;
+                best = e.getKey().immutable();
+            }
+        }
+        return best;
     }
 
     /** The furnace we know of is cooking a batch of something (a bag of other raw food / ore waits behind it). */
@@ -887,7 +905,7 @@ public final class Crafting {
             }
             return true;
         }
-        if ((smeltWork() || furnaceReady()) && now - smeltUrgentAt >= 400) {
+        if ((smeltWork() || furnaceReady() || doneFurnace() != null) && now - smeltUrgentAt >= 400) {
             smeltUrgentAt = now; // raw iron / raw meat in the bag and a furnace to use (or a batch waiting in it): not left to chance
             return true;
         }
@@ -1068,6 +1086,13 @@ public final class Crafting {
         if (furnaceReady()) {
             smelting = true;
             station = furnace;
+            stage = 2;
+            return Status.WORKING;
+        }
+        BlockPos done = doneFurnace();
+        if (done != null) {
+            smelting = true;
+            station = done; // what is cooked and left in a furnace is taken out
             stage = 2;
             return Status.WORKING;
         }
