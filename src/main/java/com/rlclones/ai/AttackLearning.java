@@ -31,7 +31,7 @@ public final class AttackLearning {
     public static final int HOLD_SHORT = 2;
     public static final int HOLD_LONG = 3;
     public static final String[] MODE_NAMES = {"swing", "tap", "hold_short", "hold_long"};
-    public static final int[] HOLD_TICKS = {0, 1, 12, 60}; // (the long hold: a grab that lasts, the left button pressed during it)
+    public static final int[] HOLD_TICKS = {0, 1, 12, 25};
 
     private final Supplier<Brain> brain;
     /** Damage this clone dealt to each entity (by id), all causes together. */
