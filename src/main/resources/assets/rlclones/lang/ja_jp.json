@@ -101,6 +101,8 @@
   "rlclones.msg.breeding_off": "交配オフ",
   "rlclones.msg.chat_on": "クローンのチャットを表示",
   "rlclones.msg.chat_off": "クローンのチャットを非表示（クローン同士の会話は続きます）",
+  "rlclones.msg.flee_on": "逃走 ON：クローンは敵から逃げることがあります",
+  "rlclones.msg.flee_off": "逃走 OFF：クローンは敵から逃げません",
   "rlclones.msg.coward_on": "臆病モード ON：クローンは敵から逃げる・隠れることしかしません",
   "rlclones.msg.coward_off": "臆病モード OFF：クローンは再び戦います",
   "rlclones.msg.born": "%2$s と %3$s の間に %1$s が生まれました",

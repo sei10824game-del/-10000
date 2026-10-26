@@ -80,6 +80,10 @@ public final class CloneCommand {
                         .executes(ctx -> setCoward(ctx, !CloneManager.coward()))
                         .then(Commands.literal("on").executes(ctx -> setCoward(ctx, true)))
                         .then(Commands.literal("off").executes(ctx -> setCoward(ctx, false))))
+                .then(Commands.literal("flee").requires(CloneCommand::mayControl)
+                        .executes(ctx -> setFlee(ctx, !CloneManager.fleeAllowed()))
+                        .then(Commands.literal("on").executes(ctx -> setFlee(ctx, true)))
+                        .then(Commands.literal("off").executes(ctx -> setFlee(ctx, false))))
                 .then(Commands.literal("giveitems").requires(CloneCommand::mayControl).executes(CloneCommand::giveItems))
                 .then(Commands.literal("list").executes(CloneCommand::list))
                 .then(Commands.literal("deaths").executes(CloneCommand::deaths))
@@ -153,6 +157,12 @@ public final class CloneCommand {
     private static int setChat(CommandContext<CommandSourceStack> ctx, boolean on) {
         manager(ctx).setChatShown(on);
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.chat_on" : "rlclones.msg.chat_off"), true);
+        return 1;
+    }
+
+    private static int setFlee(CommandContext<CommandSourceStack> ctx, boolean on) {
+        manager(ctx).setFleeAllowed(on);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.flee_on" : "rlclones.msg.flee_off"), true);
         return 1;
     }
 

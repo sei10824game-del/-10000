@@ -451,6 +451,9 @@ public final class Senses {
                 }
             }
         }
+        if (!com.rlclones.clone.CloneManager.fleeAllowed()) {
+            mask &= ~Option.FLEE.bit(); // /rlclone flee off: no running away
+        }
         if ((mask & Option.FLEE.bit()) != 0) {
             // enemies about: fight, flee or get on with work - never stand around resting or trail after a friend
             mask &= ~(Option.REST.bit() | Option.FOLLOW.bit());

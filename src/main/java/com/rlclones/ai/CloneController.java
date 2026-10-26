@@ -3501,6 +3501,10 @@ public final class CloneController {
             finishUse(lt, 40);
             return;
         }
+        if (useMode >= AttackLearning.HOLD_SHORT && actionTicks % 5 == 0 && Senses.gap(self, t) <= 6.5) {
+            motor.lookAt(t);
+            motor.attack(t); // the left button while the right one is held (a grab and then the strangle, a charged strike): what such an item asks for
+        }
         if (self.getTicksUsingItem() >= AttackLearning.HOLD_TICKS[useMode]) {
             self.releaseUsingItem();
             finishUse(lt, 40);

@@ -23,6 +23,8 @@ public class CloneRoster extends SavedData {
     public boolean chatHidden;
     /** /rlclone coward: clones never fight, they only run and hide. */
     public boolean coward;
+    /** /rlclone flee off: clones never run away (they fight, or carry on). */
+    public boolean noFlee;
     public boolean linked;
     public boolean respawn;
     public int nextIndex = 1;
@@ -34,6 +36,7 @@ public class CloneRoster extends SavedData {
         r.breeding = tag.getBoolean("breeding");
         r.chatHidden = tag.getBoolean("chatHidden");
         r.coward = tag.getBoolean("coward");
+        r.noFlee = tag.getBoolean("noFlee");
         r.nextIndex = Math.max(1, tag.getInt("nextIndex"));
         ListTag list = tag.getList("clones", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -68,6 +71,7 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("breeding", breeding);
         tag.putBoolean("chatHidden", chatHidden);
         tag.putBoolean("coward", coward);
+        tag.putBoolean("noFlee", noFlee);
         tag.putInt("nextIndex", nextIndex);
         ListTag list = new ListTag();
         profiles.forEach((id, profile) -> {

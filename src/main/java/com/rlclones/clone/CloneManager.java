@@ -227,6 +227,16 @@ public final class CloneManager {
         roster().setDirty();
     }
 
+    /** /rlclone flee: whether clones may run away from enemies (on by default). */
+    public static boolean fleeAllowed() {
+        return instance == null || !instance.roster().noFlee;
+    }
+
+    public void setFleeAllowed(boolean on) {
+        roster().noFlee = !on;
+        roster().setDirty();
+    }
+
     public static void shutdown() {
         instance = null;
         AgentEvents.clear();
