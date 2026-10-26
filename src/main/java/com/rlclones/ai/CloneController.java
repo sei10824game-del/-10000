@@ -2320,6 +2320,9 @@ public final class CloneController {
                 return Option.ANIMALS;
             }
         }
+        if ((mask & Option.QUARRY.bit()) != 0 && !hungryNoFood() && Crafting.furnaceShort(self) && Crafting.stoneNeeded(self) > 0) {
+            return Option.QUARRY; // a bag of raw food / ore, the furnace taken up, the cobblestone for another not there yet: to the stone
+        }
         if (leanOnFood() && !hungryNoFood()) { // low on food but not starving: topped up now, before a dig or a trip makes it a problem
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;

@@ -184,7 +184,7 @@ public final class Crafting {
         if (tierOf(p, AxeItem.class) < 1) {
             need += 3;
         }
-        if (count(p, Items.FURNACE) == 0 && !furnaceNearby(p)) {
+        if (count(p, Items.FURNACE) == 0 && (!furnaceNearby(p) || furnaceShort(p))) {
             need += 8;
         }
         if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BREWING_STAND) && !brewingStandNearby(p)) {
@@ -209,6 +209,32 @@ public final class Crafting {
             furnace = null;
         }
     }
+
+    /** The furnace we know of is cooking a batch of something (a bag of other raw food / ore waits behind it). */
+    public boolean furnaceBusy() {
+        validateFurnace();
+        return furnace != null && !furnaceFar() && self.level().getGameTime() < furnaceReadyAt;
+    }
+
+    private static boolean busyNear(Player p) {
+        return p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().furnaceBusy();
+    }
+
+    /** Four or more raw things to cook, the furnace round here taken up and none to put down: a second one is wanted (the cobblestone for it first). */
+    public static boolean furnaceShort(Player p) {
+        return count(p, Items.FURNACE) == 0 && busyNear(p) && smeltables(p).size() >= 1 && rawCount(p) >= 4;
+    }
+
+    private static int rawCount(Player p) {
+        int n = 0;
+        for (int i : smeltables(p)) {
+            n += p.getInventory().items.get(i).getCount();
+        }
+        return n;
+    }
+
+    @Nullable
+    private BlockPos ownFurnace;
 
     private boolean furnaceReady() {
         validateFurnace();
@@ -732,7 +758,7 @@ public final class Crafting {
 
     /** No furnace anywhere near, the cobblestone for one (8) and something worth smelting in the bag. */
     public static boolean furnaceWanted(Player p) {
-        return count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && !furnaceNearby(p) && !smeltables(p).isEmpty();
+        return count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && (!furnaceNearby(p) || furnaceShort(p)) && !smeltables(p).isEmpty();
     }
 
     /** Can this pickaxe be made right now from what is in the bag (sticks, the head material, a table here or in the bag)? */
@@ -1059,7 +1085,7 @@ public final class Crafting {
         }
         if (smeltWork()) {
             smelting = true;
-            station = nearest(Perception.BlockKind.FURNACE, 24);
+            station = ownFurnace != null && self.level().getBlockState(ownFurnace).getBlock() instanceof net.minecraft.world.level.block.AbstractFurnaceBlock ? ownFurnace : nearest(Perception.BlockKind.FURNACE, 24);
             stage = station == null ? 1 : 2;
             return Status.WORKING;
         }
@@ -1114,7 +1140,7 @@ public final class Crafting {
             stage = -1;
             return;
         }
-        BlockPos existing = existingStation(item);
+        BlockPos existing = item == Items.FURNACE && placeOnly && furnaceBusy() ? null : existingStation(item); // (a busy furnace is no reason not to put down another)
         if (existing != null) {
             // one stands within a dozen blocks (not necessarily in view): use it, do not put down another beside it
             perception.noteBlock(existing);
@@ -1258,6 +1284,10 @@ public final class Crafting {
 
     private void placed(BlockPos spot) {
         perception.noteBlock(spot);
+        if (self.level().getBlockState(spot).getBlock() instanceof net.minecraft.world.level.block.AbstractFurnaceBlock && furnaceBusy()) {
+            ownFurnace = spot.immutable(); // the second furnace: the next smelt goes there
+            furnace = null;
+        }
         station = spot;
         stage = 2;
         if (placeOnly) {
