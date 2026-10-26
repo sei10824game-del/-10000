@@ -373,6 +373,43 @@ public final class StairMining {
         return true;
     }
 
+    /** Steps mended: blocks that fell / were put into the way of a staircase and were dug out again (tests, soak). */
+    public int stepsMended;
+    private BlockPos mending;
+
+    /**
+     * Gravel / dirt / a placed block sits in the way of the stairs (the roof came down, somebody built there): the first solid one of the cells the next
+     * step needs is dug out. {@code down}: the step below; else the one above (the way up to the top). True while at it.
+     */
+    private boolean mendWay(BlockPos feet, Bases.Staircase s, boolean down) {
+        Direction fwd = down ? s.dir : s.dir.getOpposite();
+        BlockPos next = feet.relative(fwd);
+        BlockPos[] cells = down
+                ? new BlockPos[]{next, next.above(), next.below(), next.below().above()}
+                : new BlockPos[]{feet.above(2), next.above(), next.above(2)};
+        if (mending == null || !solid(mending)) {
+            mending = null;
+            for (BlockPos c : cells) {
+                if (solid(c) && diggable(c) && (!self.serverLevel().getBlockState(c).requiresCorrectToolForDrops() || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(c)) >= 0)) {
+                    mending = c.immutable();
+                    break;
+                }
+            }
+            if (mending == null) {
+                return false;
+            }
+        }
+        Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(mending)));
+        motor.stop();
+        if (motor.mine(mending)) {
+            stepsMended++;
+            mending = null;
+            motor.resetStuck();
+            stuck = 0;
+        }
+        return true;
+    }
+
     private boolean solid(BlockPos p) {
         ServerLevel level = self.serverLevel();
         return level.getFluidState(p).isEmpty() && !level.getBlockState(p).getCollisionShape(level, p).isEmpty();
@@ -474,6 +511,8 @@ public final class StairMining {
                     }
                     toStage(1);
                     motor.resetStuck();
+                } else if (motor.stuckCount() > 2 && mendWay(feet, s, false)) {
+                    return Status.WORKING; // fallen gravel / a block in the way up: dug out
                 } else if (motor.stuckCount() > 3 && fixHighStep(feet, s)) {
                     return Status.WORKING; // a step two high on the way up: a block is put down to make it two steps of one
                 } else if (motor.stuckCount() > 8) {
@@ -513,6 +552,9 @@ public final class StairMining {
                 }
                 if (self.onGround()) {
                     motor.moveToward(Vec3.atBottomCenterOf(s.top.relative(s.dir, i + 1).below(i + 1)));
+                }
+                if (stuck > 8 && mendWay(feet, s, true)) {
+                    return Status.WORKING; // something in the way of the next step: dug out
                 }
                 if (stuck > 80) {
                     return failStairs("stuck on step " + i + " of " + s.steps() + " at " + feet.toShortString());
