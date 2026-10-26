@@ -2,6 +2,7 @@ package com.rlclones.ai;
 
 import com.rlclones.Config;
 import com.rlclones.clone.Bases;
+import com.rlclones.clone.CloneManager;
 import com.rlclones.clone.ClonePlayer;
 import com.rlclones.ai.strategy.Option;
 import net.minecraft.core.BlockPos;
@@ -42,6 +43,8 @@ public final class Persona {
     private final Motor motor;
     public int goal;
     public int favourite;
+    /** With a crowd about (12+ clones) every clone has a job by its UUID: 0 miner, 1 provider (food), 2 scout (trips, villages), 3 generalist. */
+    public final int role;
 
     // decor
     private final Map<BlockPos, Integer> decor = new HashMap<>();
@@ -98,6 +101,23 @@ public final class Persona {
         int h = self.getUUID().hashCode() * 0x9E3779B1;
         goal = Math.floorMod(h >>> 8, GOALS.length);
         favourite = Math.floorMod(h >>> 16, FAVOURITES.length);
+        int r = Math.floorMod(h >>> 24, 20);
+        role = r < 8 ? 0 : r < 14 ? 1 : r < 17 ? 2 : 3;
+    }
+
+    /** Jobs are given out only in a crowd; alone or in a small group everybody does everything. */
+    private boolean rolesActive() {
+        CloneManager m = CloneManager.peek();
+        return m != null && m.clones().size() >= 12;
+    }
+
+    public boolean isProvider() {
+        return rolesActive() && role == 1;
+    }
+
+    /** Trips and village hunts: scouts and generalists (miners and providers stay at their work, and join). */
+    public boolean mayScout() {
+        return !rolesActive() || role >= 2;
     }
 
     public String goalName() {

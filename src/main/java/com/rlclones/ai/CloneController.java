@@ -1530,7 +1530,7 @@ public final class CloneController {
 
     /** Early on, a clone with a pickaxe and some food that knows of no village goes to look for one alone (up to 3 tries, 9000 ticks apart). */
     private boolean villageScoutWanted(long now) {
-        return scouts < 3 && now >= scoutAfter && !expedition.isLeading() && !expedition.villageKnown && !structures.villageKnown && !trading.met
+        return scouts < 3 && persona.mayScout() && now >= scoutAfter && !expedition.isLeading() && !expedition.villageKnown && !structures.villageKnown && !trading.met
                 && Progression.need(self) != Progression.Need.WOOD && !hungryNoFood() && FoodAid.foodItems(self) >= 2
                 && self.getHealth() >= self.getMaxHealth() * 0.9f && ticksLived < 60000;
     }
@@ -1672,7 +1672,7 @@ public final class CloneController {
         }
         // iron / diamonds to dig for, a stone pickaxe still to make, or no food for a trip: no new trips
         boolean homeBody = digPending(now) || hungryNoFood() || leanOnFood() || Progression.need(self) == Progression.Need.STONE;
-        if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline()) || villageScoutWanted(now)) {
+        if (expedition.isLeading() || (!homeBody && persona.mayScout() && expedition.canLead(now) && othersOnline()) || villageScoutWanted(now)) {
             mask |= Option.EXPEDITION.bit();
         }
         if (expedition.joinedOffer() != null || (!homeBody && expedition.canJoin(now))) {
@@ -2301,6 +2301,14 @@ public final class CloneController {
             }
             if ((mask & Option.FARM.bit()) != 0) {
                 return Option.FARM;
+            }
+        }
+        if (persona.isProvider() && FoodAid.foodItems(self) < 12 && !hungryNoFood()) { // the crowd's provider: fields, animals and the hunt fill the larder
+            if ((mask & Option.FARM.bit()) != 0) {
+                return Option.FARM;
+            }
+            if ((mask & Option.ANIMALS.bit()) != 0) {
+                return Option.ANIMALS;
             }
         }
         if (leanOnFood() && !hungryNoFood()) { // low on food but not starving: topped up now, before a dig or a trip makes it a problem
