@@ -393,7 +393,7 @@ public final class Motor {
             flightGoal = goal;
             return false;
         }
-        if (horizontalDistance(pos, goal) > 40 && self.onGround() && Equipment.hasElytra(self) && Equipment.rocketSlot(self) >= 0
+        if (horizontalDistance(pos, goal) > 28 && self.onGround() && Equipment.hasElytra(self) && Equipment.rocketSlot(self) >= 0
                 && self.level().canSeeSky(self.blockPosition().above(2))) {
             flightGoal = goal;
             takeoffTicks = 1;
@@ -999,7 +999,9 @@ public final class Motor {
             if (self.onGround() && takeoffTicks < 5) {
                 jump = true;
             } else if (!self.onGround() && !self.isFallFlying() && self.tryToStartFallFlying()) {
-                fireRocket();
+                if (freeAhead(yaw, -35f, 30.0) >= 30.0) {
+                    fireRocket(); // (not at a wall: the boost would only put us into it)
+                }
                 takeoffTicks = 0;
             }
             if (takeoffTicks > 25) {
@@ -1020,7 +1022,17 @@ public final class Motor {
         Vec3 pos = self.position();
         double h = horizontalDistance(pos, flightGoal);
         float pitch;
-        if (h < 14) {
+        float yaw = yawTo(flightGoal);
+        double clear = freeAhead(yaw, 0f, 28.0);
+        if (clear < 28.0 && h >= 14) {
+            // a hill / wall / tree line ahead: no more rockets, climb over it, or turn to the side that is open (a rocket at a wall is a wall)
+            double left = freeAhead(yaw - 55f, 0f, 28.0);
+            double right = freeAhead(yaw + 55f, 0f, 28.0);
+            if (clear < 12.0 && Math.max(left, right) > clear + 6.0) {
+                yaw += left > right ? -55f : 55f;
+            }
+            pitch = clear < 12.0 ? -40f : -20f;
+        } else if (h < 14) {
             pitch = 40f; // come down to land
         } else {
             double wantAlt = flightGoal.y + Math.min(30.0, h * 0.25);
@@ -1029,7 +1041,15 @@ public final class Motor {
                 fireRocket();
             }
         }
-        lookAngles(yawTo(flightGoal), pitch);
+        lookAngles(yaw, pitch);
+    }
+
+    /** How far (up to {@code max}) the way is clear for the eyes along this yaw / pitch: the first solid block ends it. */
+    private double freeAhead(float yaw, float pitch, double max) {
+        Vec3 eye = self.getEyePosition();
+        Vec3 dir = Vec3.directionFromRotation(pitch, yaw);
+        BlockHitResult hit = self.serverLevel().clip(new ClipContext(eye, eye.add(dir.scale(max)), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
+        return hit.getType() == HitResult.Type.BLOCK ? hit.getLocation().distanceTo(eye) : max;
     }
 
     private void fireRocket() {
