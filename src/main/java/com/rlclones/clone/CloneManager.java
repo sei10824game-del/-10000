@@ -786,7 +786,7 @@ public final class CloneManager {
         }
         if (creatureCapField != null && ticks % 400 == 0) {
             try {
-                creatureCapField.setInt(net.minecraft.world.entity.MobCategory.CREATURE, (int) Math.round(10 + Config.get(Config.ANIMAL_CAP_PER_CLONE, 1.0) * clones.size()));
+                creatureCapField.setInt(net.minecraft.world.entity.MobCategory.CREATURE, (int) Math.round(10 + Config.get(Config.ANIMAL_CAP_PER_CLONE, 2.0) * clones.size()));
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
         }
