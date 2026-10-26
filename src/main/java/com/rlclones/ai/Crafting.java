@@ -200,7 +200,15 @@ public final class Crafting {
         return (smeltWork() || furnaceReady()) && self.level().getGameTime() - smeltUrgentAt >= 400;
     }
 
+    /** The furnace a batch was left in is gone (broken, burnt away): forgotten, or it would stop every later smelting and the one in the bag from being put down. */
+    private void validateFurnace() {
+        if (furnace != null && self.level().isLoaded(furnace) && !(self.level().getBlockState(furnace).getBlock() instanceof net.minecraft.world.level.block.AbstractFurnaceBlock)) {
+            furnace = null;
+        }
+    }
+
     private boolean furnaceReady() {
+        validateFurnace();
         return furnace != null && !furnaceFar() && self.level().getGameTime() >= furnaceReadyAt;
     }
 
@@ -379,6 +387,7 @@ public final class Crafting {
                 out.add(Items.BUCKET);
             }
         }
+        out.removeIf(it -> it instanceof TieredItem && !(it instanceof PickaxeItem) && count(p, it) >= 1 || it instanceof PickaxeItem && count(p, it) >= 2); // (one of a tool is enough: a bag full of wooden hoes is no help)
         return out;
     }
 
@@ -956,6 +965,7 @@ public final class Crafting {
     }
 
     private boolean smeltWork() {
+        validateFurnace();
         if (topUp()) {
             return true;
         }
