@@ -57,6 +57,9 @@ public final class Lighting {
         }
         ServerLevel level = self.serverLevel();
         BlockPos feet = self.blockPosition();
+        if (!level.canSeeSky(feet.above()) && wallTorch(level, feet, slot)) {
+            return true; // underground: on the wall, out of the way of the feet (and of the next block that goes down there)
+        }
         BlockPos below = feet.below();
         if (!level.getBlockState(feet).canBeReplaced() || !level.getFluidState(feet).isEmpty()
                 || !level.getBlockState(below).isFaceSturdy(level, below, Direction.UP)) {
@@ -72,6 +75,34 @@ public final class Lighting {
         }
         return true;
     }
+
+    /** A torch on a side wall at head height (a tunnel, a staircase): the first wall with a face to put it on. True when one went up. */
+    private boolean wallTorch(ServerLevel level, BlockPos feet, int slot) {
+        BlockPos at = feet.above();
+        if (!level.getBlockState(at).canBeReplaced() || !level.getFluidState(at).isEmpty()) {
+            return false;
+        }
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            BlockPos wall = at.relative(d);
+            if (level.getBlockState(wall).isFaceSturdy(level, wall, d.getOpposite())) {
+                int before = self.getInventory().selected;
+                Equipment.select(self, slot);
+                boolean ok = motor.useOnFace(wall, d.getOpposite()) && level.getBlockState(at).is(net.minecraft.world.level.block.Blocks.WALL_TORCH);
+                if (before < Inventory.getSelectionSize()) {
+                    self.getInventory().selected = before;
+                }
+                if (ok) {
+                    torchesPlaced++;
+                    wallTorches++;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Torches put on a wall (tests, soak). */
+    public int wallTorches;
 
     private BlockPos proofSpot;
 
