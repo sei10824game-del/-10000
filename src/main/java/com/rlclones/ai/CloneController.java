@@ -2728,6 +2728,9 @@ public final class CloneController {
     private long fightBestAt;
     private int fightDigs;
     private int fightWalk;
+    private int fightBlocked;
+    @Nullable
+    private BlockPos fightSecond;
     public String fightDebug = "";
     private int lastFightId = -1;
     private long lastFightAt;
@@ -2758,7 +2761,25 @@ public final class CloneController {
                 fightBestAt = now;
             }
             fightDebug = String.format("d=%.1f best=%.1f since=%d vis=%s digs=%d", d, fightBest, now - fightBestAt, perception.isVisible(target), fightDigs);
-            if (now - fightBestAt > 100 && d > 2.5 && d <= 24 && fightDigs < 60) {
+            if (d > 2.5 && d <= 24 && now % 10 == 0) {
+                // seen, but no way to it on foot (behind a wall, through a window): after 2 seconds of that the wall is dug, instead of building towers to look over it
+                fightBlocked = motor.obstruction(target.blockPosition().above()) != null && motor.pathTo(target.position()) == null ? fightBlocked + 10 : 0;
+            }
+            if (fightSecond != null) {
+                BlockState below = self.serverLevel().getBlockState(fightSecond);
+                if (below.isAir() || !below.getFluidState().isEmpty() || below.getDestroySpeed(self.serverLevel(), fightSecond) < 0
+                        || below.requiresCorrectToolForDrops() && Equipment.bestToolSlot(self, below) < 0 || self.getEyePosition().distanceTo(Vec3.atCenterOf(fightSecond)) > Motor.BLOCK_REACH - 0.3) {
+                    fightSecond = null;
+                } else {
+                    Equipment.select(self, Equipment.bestToolSlot(self, below));
+                    if (motor.mine(fightSecond)) {
+                        fightSecond = null; // (the opening is two high now: a clone fits through)
+                        fightBestAt = now;
+                    }
+                    return true;
+                }
+            }
+            if ((now - fightBestAt > 100 || fightBlocked >= 40) && d > 2.5 && d <= 24 && fightDigs < 60) {
                 // no headway (behind a wall, a window, a ceiling - seen or not): dig through what is between us, block after block (never the walls of a base) before giving up
                 BlockPos wall = motor.obstruction(target.blockPosition().above());
                 if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && (!self.serverLevel().getBlockState(wall).requiresCorrectToolForDrops()
@@ -2776,6 +2797,7 @@ public final class CloneController {
                             fightDigs++;
                             fightWalk = 0;
                             fightBestAt = now;
+                            fightSecond = wall.below(); // and the block under it: an opening two high to charge through
                         }
                         return true;
                     }
