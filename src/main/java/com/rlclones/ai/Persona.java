@@ -838,7 +838,7 @@ public final class Persona {
                     }
                 }
                 c.setChanged();
-            } else if (have == 0 && self.getFoodData().getFoodLevel() < 14) {
+            } else if (have < 3 && self.getFoodData().getFoodLevel() < 16) {
                 for (int i = 0; i < c.getContainerSize(); i++) {
                     ItemStack s = c.getItem(i);
                     if (isFood(s)) {

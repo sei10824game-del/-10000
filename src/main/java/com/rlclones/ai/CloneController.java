@@ -1535,6 +1535,11 @@ public final class CloneController {
                 && self.getHealth() >= self.getMaxHealth() * 0.9f && ticksLived < 60000;
     }
 
+    /** Under three food items and not full: the next dig or trip would start hungry. */
+    private boolean leanOnFood() {
+        return !self.isCreative() && FoodAid.foodItems(self) < 3 && self.getFoodData().getFoodLevel() < 14;
+    }
+
     private boolean hungryNoFood() {
         return !self.isCreative() && self.getFoodData().getFoodLevel() < (Caution.level(Caution.HUNGER, now()) >= 1 ? 11 : 8) && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
     }
@@ -1666,7 +1671,7 @@ public final class CloneController {
             mask |= Option.FARM.bit(); // a field to work, or water to bring home for one
         }
         // iron / diamonds to dig for, a stone pickaxe still to make, or no food for a trip: no new trips
-        boolean homeBody = digPending(now) || hungryNoFood() || Progression.need(self) == Progression.Need.STONE;
+        boolean homeBody = digPending(now) || hungryNoFood() || leanOnFood() || Progression.need(self) == Progression.Need.STONE;
         if (expedition.isLeading() || (!homeBody && expedition.canLead(now) && othersOnline()) || villageScoutWanted(now)) {
             mask |= Option.EXPEDITION.bit();
         }
@@ -2293,6 +2298,14 @@ public final class CloneController {
         if (hungryNoFood()) { // a village's food store (chests, hay bales, ripe crops) within sight comes before the hunt
             if ((mask & Option.LOOT.bit()) != 0) {
                 return Option.LOOT;
+            }
+            if ((mask & Option.FARM.bit()) != 0) {
+                return Option.FARM;
+            }
+        }
+        if (leanOnFood() && !hungryNoFood()) { // low on food but not starving: topped up now, before a dig or a trip makes it a problem
+            if ((mask & Option.HUNT.bit()) != 0) {
+                return Option.HUNT;
             }
             if ((mask & Option.FARM.bit()) != 0) {
                 return Option.FARM;
