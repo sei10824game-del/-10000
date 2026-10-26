@@ -50,7 +50,36 @@ public final class Caves {
                 }
             }
         }
-        return null;
+        return crater(p, random);
+    }
+
+    /**
+     * A huge cave open to the sky (a crater, a giant ravine, a collapsed cavern) has no ceiling to find a pocket under: the ground simply falls away.
+     * A column whose surface lies eight or more blocks below where the clone stands is the way in; the lowest of the samples is the goal.
+     * ponytail: 16 samples 14-60 blocks out; the walk down is the ordinary navigation (slopes) - steep walls are left to the stairs / pit logic.
+     */
+    @Nullable
+    private static Vec3 crater(Player p, Random random) {
+        ServerLevel level = (ServerLevel) p.level();
+        if (!level.canSeeSky(p.blockPosition().above())) {
+            return null;
+        }
+        int myTop = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, p.getBlockX(), p.getBlockZ());
+        BlockPos best = null;
+        for (int i = 0; i < 16; i++) {
+            double a = random.nextDouble() * Math.PI * 2;
+            double d = 14 + random.nextDouble() * 46;
+            int x = Mth.floor(p.getX() + Math.cos(a) * d);
+            int z = Mth.floor(p.getZ() + Math.sin(a) * d);
+            if (!level.hasChunk(x >> 4, z >> 4)) {
+                continue;
+            }
+            int h = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            if (h <= myTop - 8 && level.getFluidState(new BlockPos(x, h - 1, z)).isEmpty() && (best == null || h < best.getY())) {
+                best = new BlockPos(x, h, z);
+            }
+        }
+        return best == null ? null : Vec3.atBottomCenterOf(best);
     }
 
     private static boolean pocket(ServerLevel level, BlockPos c) {
