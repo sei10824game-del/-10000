@@ -461,6 +461,11 @@ public final class Brain {
         }
         replay.add(tableName, s, a, r, s2, terminal, gamma, nextMask, weight);
         int n = Config.get(Config.REPLAY_UPDATES, 4);
+        com.rlclones.clone.CloneManager cm = com.rlclones.clone.CloneManager.peek();
+        if (cm != null && cm.isLinked()) { // one brain for all: when the server is slow the repeats are cut (not for own-brain clones: their learning is all they have)
+            float ms = cm.tickMillis();
+            n = ms > 48f ? Math.min(n, 1) : ms > 40f ? Math.min(n, 2) : n;
+        }
         for (int i = 0; i < n; i++) {
             ReplayBuffer.Transition t = replay.sample(random);
             if (t == null) {

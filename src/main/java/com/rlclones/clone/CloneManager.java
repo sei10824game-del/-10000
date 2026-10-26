@@ -280,6 +280,11 @@ public final class CloneManager {
         return e instanceof ClonePlayer c && clones.get(c.getUUID()) == c;
     }
 
+    /** The server's recent average tick time in milliseconds (50 = at the limit). */
+    public float tickMillis() {
+        return server.getAverageTickTime();
+    }
+
     public boolean isLinked() {
         return roster().linked;
     }
