@@ -2761,7 +2761,8 @@ public final class CloneController {
             if (now - fightBestAt > 100 && d > 2.5 && d <= 24 && fightDigs < 60) {
                 // no headway (behind a wall, a window, a ceiling - seen or not): dig through what is between us, block after block (never the walls of a base) before giving up
                 BlockPos wall = motor.obstruction(target.blockPosition().above());
-                if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && !BlockClaims.takenByOther(wall, self.getUUID(), now)
+                if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && (!self.serverLevel().getBlockState(wall).requiresCorrectToolForDrops()
+                        || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)) >= 0) && !BlockClaims.takenByOther(wall, self.getUUID(), now)
                         && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(wall), 12) == null) {
                     BlockClaims.claim(wall, self.getUUID(), now);
                     if (self.getEyePosition().distanceTo(Vec3.atCenterOf(wall)) > Motor.BLOCK_REACH - 0.6) {
