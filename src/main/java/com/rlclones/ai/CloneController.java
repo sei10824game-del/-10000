@@ -90,6 +90,7 @@ public final class CloneController {
     private final LavaScoop lavaScoop;
     private final Campfire campfire;
     private final StairGuard stairGuard;
+    private final WaterPlug waterPlug;
     private final Persona persona;
     private final Portals portals;
     private final AttackLearning attacks = new AttackLearning(this::brain);
@@ -209,6 +210,7 @@ public final class CloneController {
         this.lavaScoop = new LavaScoop(self, motor);
         this.campfire = new Campfire(self, motor);
         this.stairGuard = new StairGuard(self, motor);
+        this.waterPlug = new WaterPlug(self, motor);
         this.persona = new Persona(self, motor);
         this.portals = new Portals(self, motor);
         this.explosives.setBrain(this::brain);
@@ -355,6 +357,10 @@ public final class CloneController {
 
     public Spawners spawners() {
         return spawners;
+    }
+
+    public WaterPlug waterPlug() {
+        return waterPlug;
     }
 
     public StairGuard stairGuard() {
@@ -653,6 +659,9 @@ public final class CloneController {
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
+        }
+        if (!itemBusy && !escaping) {
+            itemBusy = waterPlug.tick(now, threatened); // water running down a staircase / tunnel: blocks into it where it comes from
         }
         if (!itemBusy && !escaping) {
             itemBusy = stairGuard.tick(now); // monsters coming down the staircase: a block makes the step one high, the fight hits their feet; taken out when it is quiet
