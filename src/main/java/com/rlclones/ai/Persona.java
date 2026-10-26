@@ -43,7 +43,7 @@ public final class Persona {
     private final Motor motor;
     public int goal;
     public int favourite;
-    /** With a crowd about (12+ clones) every clone has a job by its UUID: 0 miner, 1 provider (food), 2 scout (trips, villages), 3 generalist. */
+    /** With a crowd about (20+ clones) every clone has a job by its UUID: 0 miner, 1 provider (food), 2 scout (trips, villages), 3 generalist. */
     public final int role;
 
     // decor
@@ -108,7 +108,7 @@ public final class Persona {
     /** Jobs are given out only in a crowd; alone or in a small group everybody does everything. */
     private boolean rolesActive() {
         CloneManager m = CloneManager.peek();
-        return m != null && m.clones().size() >= 12;
+        return m != null && m.clones().size() >= 20;
     }
 
     public boolean isProvider() {
