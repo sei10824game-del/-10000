@@ -40,7 +40,7 @@ public final class LavaScoop {
     }
 
     private boolean wanted() {
-        return self.getInventory().countItem(Items.BUCKET) > 0 && self.getInventory().countItem(Items.LAVA_BUCKET) == 0
+        return Caution.level(Caution.LAVA, self.level().getGameTime()) == 0 && self.getInventory().countItem(Items.BUCKET) > 0 && self.getInventory().countItem(Items.LAVA_BUCKET) == 0
                 && self.getHealth() >= 16 && !self.isOnFire() && !self.isInWater() && self.onGround();
     }
 

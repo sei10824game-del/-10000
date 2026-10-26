@@ -938,7 +938,7 @@ public final class CloneController {
             alarm = Alarm.LAVA;
         } else if (self.isOnFire() && hp < 0.6f) {
             alarm = Alarm.FIRE;
-        } else if (self.isInWater() && self.getAirSupply() < self.getMaxAirSupply() * 0.3) {
+        } else if (self.isInWater() && self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(now)) {
             alarm = Alarm.DROWNING;
         } else if (threats.stream().anyMatch(s -> s.entity instanceof Creeper c && c.getSwellDir() > 0 && s.entity.distanceTo(self) < 5)) {
             alarm = Alarm.EXPLOSION;
@@ -1536,7 +1536,7 @@ public final class CloneController {
     }
 
     private boolean hungryNoFood() {
-        return !self.isCreative() && self.getFoodData().getFoodLevel() < 8 && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
+        return !self.isCreative() && self.getFoodData().getFoodLevel() < (Caution.level(Caution.HUNGER, now()) >= 1 ? 11 : 8) && FoodAid.foodItems(self) == 0 && !Senses.hasFood(self);
     }
 
     /** Iron / diamonds are still to be found, there is depth left to dig for them, and the last digs did not all get nowhere. */

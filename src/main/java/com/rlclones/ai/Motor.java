@@ -982,7 +982,7 @@ public final class Motor {
         if (self.getFoodData().getFoodLevel() <= 6 && !self.getAbilities().mayfly) {
             return false; // too hungry to sprint
         }
-        if (self.getAirSupply() < self.getMaxAirSupply() * 0.3 && !self.hasEffect(MobEffects.WATER_BREATHING) && !self.canBreatheUnderwater()) {
+        if (self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(self.level().getGameTime()) && !self.hasEffect(MobEffects.WATER_BREATHING) && !self.canBreatheUnderwater()) {
             return false; // up for air
         }
         if (horizontalDistance(self.position(), swimGoal) < 3.0 && swimGoal.y > self.getY() - 0.5) {
@@ -1051,7 +1051,7 @@ public final class Motor {
         if (stuck) {
             Vec3 h = new Vec3(moveDir.x, 0, moveDir.z);
             escapeBase = h.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : h.normalize();
-            escapeStage = self.getAirSupply() < self.getMaxAirSupply() * 0.3 ? 2 : 0;
+            escapeStage = self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(self.level().getGameTime()) ? 2 : 0;
             escapeTicks = 30;
             waterEscapes++;
         }
@@ -1273,7 +1273,7 @@ public final class Motor {
                     strokeFrom = self.position();
                     strokeTicks = 0;
                 }
-            } else if (dive && (diveHard || self.getAirSupply() > self.getMaxAirSupply() * 0.3)) {
+            } else if (dive && (diveHard || self.getAirSupply() > self.getMaxAirSupply() * Caution.airUp(self.level().getGameTime()))) {
                 // sink on purpose (what holding the sneak key does for a player in water)
                 jump = false;
                 self.setDeltaMovement(self.getDeltaMovement().add(0, -0.04, 0));
