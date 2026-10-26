@@ -648,7 +648,7 @@ public final class CloneController {
         if (!itemBusy && !scaffold.isEmpty() && option != Option.GATHER_WOOD && option != Option.FIGHT && option != Option.FLEE && !escaping && !threatened) {
             itemBusy = scaffoldCleanup(); // a pillar of dirt left beside a tree: taken down, as a tidy player does
         }
-        if (!itemBusy && option == Option.REST && !escaping) {
+        if (!itemBusy && (option == Option.REST || tradeTrip) && !escaping) {
             itemBusy = trading.tick(now); // R-50: a villager near: sell the surplus, buy food / gear
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
@@ -2332,6 +2332,21 @@ public final class CloneController {
         }
         if ((mask & Option.FARM.bit()) != 0 && FoodAid.foodItems(self) < 6) {
             return Option.FARM; // food to be had close by (ripe crops, berries, melons, hay): take it before it is needed
+        }
+        if ((mask & Option.PORTAL.bit()) != 0 && Progression.tier(self) >= 3 && !hungryNoFood() && !leanOnFood() && random.nextFloat() < 0.4f) {
+            return Option.PORTAL; // an iron pickaxe or better and the makings of a portal (or one known): on to the Nether
+        }
+        if (!tradeTrip && (mask & Option.EXPLORE.bit()) != 0 && now >= tradeTripAfter && trading.tripWanted() && !hungryNoFood() && !leanOnFood()) {
+            Vec3 v = structures.villageSpot();
+            if (v != null && Motor.horizontalDistance(self.position(), v) > 24 && Motor.horizontalDistance(self.position(), v) < 300) {
+                tradeTrip = true;
+                tradeTripUntil = now + 4000;
+                tradeTripAfter = now + 9000;
+                return Option.EXPLORE; // a village to sell the surplus in / spend the emeralds in
+            }
+        }
+        if (tradeTrip && (mask & Option.EXPLORE.bit()) != 0) {
+            return Option.EXPLORE;
         }
         if ((mask & Option.EXPLORE.bit()) != 0 && homewardGoal() != null) {
             return Option.EXPLORE; // back to the base after a trip
@@ -4110,6 +4125,9 @@ public final class CloneController {
     }
 
     private long homewardUntil;
+    private boolean tradeTrip;
+    private long tradeTripUntil;
+    private long tradeTripAfter;
 
     /** After a trip: the centre of the nearest base if it is more than 40 blocks off, else null (and the walk home is over). */
     @Nullable
@@ -4135,6 +4153,16 @@ public final class CloneController {
             }
             if (out != null) {
                 return out;
+            }
+        }
+        if (tradeTrip) {
+            Vec3 v = structures.villageSpot();
+            if (v == null || now() > tradeTripUntil || Motor.horizontalDistance(self.position(), v) < 20 && !trading.met) {
+                tradeTrip = false;
+            } else if (Motor.horizontalDistance(self.position(), v) < 12 && trading.deals > 0) {
+                tradeTrip = false; // done: trading went on
+            } else if (Senses.threats(perception, self, now(), 16).isEmpty()) {
+                return v;
             }
         }
         Vec3 home = homewardGoal();

@@ -32,7 +32,22 @@ public final class Trading {
         this.motor = motor;
     }
 
-    /** Called while resting and idle. True while walking to the villager. */
+    private static final net.minecraft.world.item.Item[] SELLABLE = {Items.WHEAT, Items.CARROT, Items.POTATO, Items.COAL, Items.PAPER, Items.ROTTEN_FLESH, Items.STRING};
+
+    /** A lot of something a villager buys (20 or more), or eight emeralds to spend: worth a walk to a village. */
+    public boolean tripWanted() {
+        if (self.getInventory().countItem(Items.EMERALD) >= 8) {
+            return true;
+        }
+        for (net.minecraft.world.item.Item it : SELLABLE) {
+            if (self.getInventory().countItem(it) >= 20) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Called while resting and idle (or on a trading trip). True while walking to the villager. */
     public boolean tick(long now) {
         if (now < cooldownUntil) {
             return false;

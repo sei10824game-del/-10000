@@ -272,6 +272,13 @@ public final class Structures {
         return true;
     }
 
+    /** The nearest village this clone knows of (its own or the world's), or null. */
+    @Nullable
+    public Vec3 villageSpot() {
+        villageToVisit(); // (takes over what a friend found)
+        return villagePos == null ? null : Vec3.atBottomCenterOf(villagePos);
+    }
+
     /** A known village 40-160 blocks away that the clone has not been near yet (the place to put a home), or null. */
     @Nullable
     public Vec3 villageToVisit() {
