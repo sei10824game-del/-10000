@@ -660,6 +660,10 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
         }
+        if (!itemBusy && !escaping && !threatened && option != Option.FIGHT && option != Option.FLEE && option != Option.COLLECT && option != Option.CRAFT
+                && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.EAT) {
+            itemBusy = dropReflex(now); // something lying close by (a kill's drops, a broken ore): picked up before the next thing, as a player would
+        }
         if (!itemBusy && !escaping) {
             itemBusy = waterPlug.tick(now, threatened); // water running down a staircase / tunnel: blocks into it where it comes from
         }
@@ -2130,6 +2134,45 @@ public final class CloneController {
         }
         motor.stop();
         motor.mine(dig);
+        return true;
+    }
+
+    private final it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap dropIgnored = new it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap();
+    private int dropWalkTicks;
+    private int dropTarget = -1;
+    /** Pickups done by walking up to a lying item (tests, soak). */
+    public int dropPickups;
+
+    /** True while walking to an item within six blocks (up to three seconds each; one that cannot be reached is left for ten seconds). */
+    private boolean dropReflex(long now) {
+        if (((now + self.getId()) & 3) != 0 && dropTarget < 0) {
+            return false;
+        }
+        if (self.getInventory().getFreeSlot() < 0 || self.isUsingItem() || !self.onGround()) {
+            dropTarget = -1;
+            return false;
+        }
+        Entity item = Senses.nearestItem(perception, self, now, 6);
+        if (item == null || dropIgnored.get(item.getId()) > now) {
+            dropTarget = -1;
+            dropWalkTicks = 0;
+            return false;
+        }
+        if (item.getId() != dropTarget) {
+            dropTarget = item.getId();
+            dropWalkTicks = 0;
+        }
+        if (++dropWalkTicks > 60 || motor.stuckCount() > 4) {
+            dropIgnored.put(item.getId(), now + 200);
+            dropTarget = -1;
+            return false;
+        }
+        if (self.distanceTo(item) < 1.2) {
+            motor.moveToward(item.position());
+        } else {
+            motor.navigate(item.position(), 0.5, false);
+        }
+        dropPickups++;
         return true;
     }
 
