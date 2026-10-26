@@ -2727,6 +2727,7 @@ public final class CloneController {
     private double fightBest = Double.MAX_VALUE;
     private long fightBestAt;
     private int fightDigs;
+    private int fightWalk;
     public String fightDebug = "";
     private int lastFightId = -1;
     private long lastFightAt;
@@ -2764,15 +2765,19 @@ public final class CloneController {
                         && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(wall), 12) == null) {
                     BlockClaims.claim(wall, self.getUUID(), now);
                     if (self.getEyePosition().distanceTo(Vec3.atCenterOf(wall)) > Motor.BLOCK_REACH - 0.6) {
-                        motor.navigate(motor.approachPoint(wall), 1.0, false); // the wall is further than an arm: up to it first
+                        if (motor.stuckCount() <= 3 && ++fightWalk < 200) {
+                            motor.navigate(motor.approachPoint(wall), 1.0, false); // the wall is further than an arm: up to it first
+                            return true;
+                        }
+                    } else {
+                        Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)));
+                        if (motor.mine(wall)) {
+                            fightDigs++;
+                            fightWalk = 0;
+                            fightBestAt = now;
+                        }
                         return true;
                     }
-                    Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)));
-                    if (motor.mine(wall)) {
-                        fightDigs++;
-                        fightBestAt = now;
-                    }
-                    return true;
                 }
             }
             if (now - fightBestAt > (perception.isVisible(target) ? 900 : 120) && d > 2.5) {
@@ -2784,6 +2789,7 @@ public final class CloneController {
                 dropVantage();
                 fightBest = Double.MAX_VALUE;
                 fightDigs = 0;
+                fightWalk = 0;
                 return true;
             }
         }
