@@ -217,6 +217,10 @@ public final class Brain {
                 return a;
             }
         }
+        float best = Math.max(parkQ[g][0], parkQ[g][1]);
+        if (best > 0.2f && parkQ[g][1] != parkQ[g][0]) {
+            return rnd.nextInt(20) == 0 ? rnd.nextInt(2) : (parkQ[g][1] > parkQ[g][0] ? 1 : 0); // it worked: it is used (the other way is tried one time in twenty)
+        }
         if (rnd.nextInt(5) == 0 || parkQ[g][1] == parkQ[g][0]) {
             return rnd.nextInt(2); // keep trying both now and then
         }
@@ -227,6 +231,9 @@ public final class Brain {
         int g = Math.min(gap, PARKOUR_GAPS - 1);
         parkN[g][how]++;
         parkQ[g][how] += (reward - parkQ[g][how]) / Math.min(parkN[g][how], 10);
+        if (reward > 0f) {
+            parkQ[g][how] = Math.max(parkQ[g][how], 0.3f); // one jump that worked is enough to trust: earlier misses do not outweigh it
+        }
     }
 
     public boolean knowsItem(String key) {

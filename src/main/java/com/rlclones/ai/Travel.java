@@ -162,13 +162,16 @@ public final class Travel {
         if (goal != null && motor.stuckCount() >= 1) {
             guardDebug = "goal " + BlockPos.containing(goal).toShortString() + " stuck=" + motor.stuckCount() + " ground=" + self.onGround();
         }
-        if (goal == null || Motor.horizontalDistance(self.position(), goal) < 6 && Math.abs(goal.y - self.getY()) < 3 || motor.stuckCount() < 2
+        if (goal == null || Motor.horizontalDistance(self.position(), goal) < 6 && Math.abs(goal.y - self.getY()) < 3 || motor.stuckCount() < 2 && !motor.noPath()
                 || !self.onGround() || self.isInWater() || self.isPassenger()) {
             return false;
         }
         Direction d = Direction.getNearest(goal.x - self.getX(), 0, goal.z - self.getZ());
         int g = gapAhead(d);
         debug = "gap=" + g + " dir=" + d;
+        if (motor.stuckCount() < 2 && (g <= 0 || brain() == null || Math.max(brain().parkourValue(g, 0), brain().parkourValue(g, 1)) <= 0.2f)) {
+            return false; // no way found, but nothing known to work over this gap: stuck first, as before
+        }
         if (gapTrace.length() < 300) {
             BlockPos ahead = self.blockPosition().relative(d);
             gapTrace.append(String.format(java.util.Locale.ROOT, "[%s g%d %s %s/%s/%s]", self.blockPosition().toShortString(), g, d,

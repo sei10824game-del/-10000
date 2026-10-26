@@ -512,6 +512,11 @@ public final class Motor {
         progressTimer = 0;
     }
 
+    /** The path finder found no way to the goal just now (a gap, a wall): a known jump may be taken without waiting to get stuck. */
+    public boolean noPath() {
+        return failedPaths > 0;
+    }
+
     /** Number of consecutive "no progress" periods while trying to move; options use this to give up. */
     public int stuckCount() {
         return stuckCount;
