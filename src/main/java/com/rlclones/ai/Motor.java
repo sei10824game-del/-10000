@@ -231,10 +231,10 @@ public final class Motor {
     }
 
     /** Lava (flowing over the floor too) or fire in the cell we are about to walk into, or the one above it. */
-    /** Lava or fire in the cells round {@code p} (one block each way, a block down and up). */
+    /** Lava or fire in the cells at the feet / head round {@code p} (one block each way): where a corner of the body can touch it. */
     private boolean lavaNear(BlockPos p) {
         ServerLevel level = self.serverLevel();
-        for (BlockPos q : BlockPos.betweenClosed(p.offset(-1, -1, -1), p.offset(1, 1, 1))) {
+        for (BlockPos q : BlockPos.betweenClosed(p.offset(-1, 0, -1), p.offset(1, 1, 1))) {
             if (level.getFluidState(q).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(q).is(BlockTags.FIRE)) {
                 return true;
             }
@@ -254,13 +254,11 @@ public final class Motor {
         mz /= len;
         ServerLevel level = self.serverLevel();
         for (double ahead : new double[]{0.6, 1.1}) {
-            for (double side : new double[]{0.0, -0.35, 0.35}) { // (the body is 0.6 wide: a corner of it touches what the middle clears)
-                BlockPos feet = BlockPos.containing(self.getX() + mx * ahead - mz * side, self.getY() + 0.01, self.getZ() + mz * ahead + mx * side);
-                for (int dy = 0; dy <= 1; dy++) {
-                    BlockPos p = feet.above(dy);
-                    if (level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(p).is(BlockTags.FIRE)) {
-                        return true;
-                    }
+            BlockPos feet = BlockPos.containing(self.getX() + mx * ahead, self.getY() + 0.01, self.getZ() + mz * ahead);
+            for (int dy = 0; dy <= 1; dy++) {
+                BlockPos p = feet.above(dy);
+                if (level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(p).is(BlockTags.FIRE)) {
+                    return true;
                 }
             }
         }
@@ -429,7 +427,7 @@ public final class Motor {
                 Node n = path.getNextNode();
                 Vec3 c = new Vec3(n.x + 0.5, n.y, n.z + 0.5);
                 // swimming: path nodes may lie on the bottom while we float at the surface -> judge horizontally
-                if (horizontalDistance(pos, c) < (lavaNear(new BlockPos(n.x, n.y, n.z)) ? 0.2 : 0.45) && (Math.abs(pos.y - n.y) < 1.2 || self.isInWater())) {
+                if (horizontalDistance(pos, c) < (lavaNear(new BlockPos(n.x, n.y, n.z)) ? 0.32 : 0.45) && (Math.abs(pos.y - n.y) < 1.2 || self.isInWater())) {
                     path.advance();
                 } else {
                     break;
