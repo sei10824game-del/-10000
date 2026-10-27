@@ -105,6 +105,7 @@ public final class DoorBreath {
                 }
             }
             case INSIDE -> {
+                openDoor(level);
                 motor.diveHard();
                 motor.moveToward(Vec3.atBottomCenterOf(door));
                 if (self.getAirSupply() >= self.getMaxAirSupply() * 0.9) {
@@ -132,6 +133,16 @@ public final class DoorBreath {
             }
         }
         return true;
+    }
+
+    /** A door put down faces the one who placed it and its panel stands on that side, shut: the way in from where we stand is the panel. Opened, the way is free. */
+    private void openDoor(ServerLevel level) {
+        var st = level.getBlockState(door);
+        if (st.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && st.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN)
+                && !st.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN) && self.distanceToSqr(Vec3.atCenterOf(door)) < 9) {
+            net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(door), Direction.UP, door, false);
+            self.gameMode.useItemOn(self, level, self.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+        }
     }
 
     private void reset(long now) {
