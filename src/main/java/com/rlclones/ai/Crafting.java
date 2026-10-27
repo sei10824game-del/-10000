@@ -851,7 +851,7 @@ public final class Crafting {
         if (!table) {
             return null;
         }
-        if (tierOf(p, PickaxeItem.class) < 1 || count(p, Items.FURNACE) == 0 && !furnaceNearby(p)) {
+        if (tierOf(p, PickaxeItem.class) < 1 || count(p, Items.FURNACE) == 0 && !furnaceNearby(p) && cobble(p) < 12) {
             return null; // the stone pickaxe and the furnace come first (their cobblestone is not spent on the lesser tools)
         }
         int spare = cobble(p);

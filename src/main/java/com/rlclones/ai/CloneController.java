@@ -2413,6 +2413,9 @@ public final class CloneController {
         if ((mask & Option.STORE.bit()) != 0 && storage.homeWanted() && random.nextFloat() < 0.5f) {
             return Option.STORE; // no base and the wood to build one: a house with a chest, as a player makes his first one
         }
+        if ((mask & Option.STORE.bit()) != 0 && Storage.bagFull(self) && random.nextFloat() < 0.8f) {
+            return Option.STORE; // no free slot: a made pickaxe / mined ore has nowhere to go, the surplus (wooden tools...) goes into a chest
+        }
         wantWater = false;
         if ((mask & Option.FARM.bit()) != 0 && water.hasWork() && random.nextFloat() < 0.8f) {
             wantWater = true;

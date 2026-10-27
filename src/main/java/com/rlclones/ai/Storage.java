@@ -220,6 +220,11 @@ public final class Storage {
         return n;
     }
 
+    /** At most one free slot and three or more slots of things not needed. */
+    public static boolean bagFull(Player p) {
+        return freeSlots(p) <= 1 && unneededSlots(p).size() >= 3;
+    }
+
     public static boolean needsStore(Player p) {
         int unneeded = unneededSlots(p).size();
         return unneeded >= 5 || (unneeded >= 1 && freeSlots(p) <= 3);
