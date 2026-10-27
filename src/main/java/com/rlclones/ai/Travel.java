@@ -105,6 +105,27 @@ public final class Travel {
         return planks >= 0 ? planks : log;
     }
 
+    /** One log of the stack in {@code slot} made into four planks of the same wood (what the inventory's own crafting grid does); false when there is no such planks item or no room. */
+    private boolean logToPlanks(int slot) {
+        ItemStack logs = self.getInventory().items.get(slot);
+        net.minecraft.resources.ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(logs.getItem());
+        if (id == null) {
+            return false;
+        }
+        String path = id.getPath().replace("stripped_", "").replace("_log", "_planks").replace("_wood", "_planks").replace("_stem", "_planks").replace("_hyphae", "_planks")
+                .replace("bamboo_block", "bamboo_planks");
+        var planks = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(new net.minecraft.resources.ResourceLocation(id.getNamespace(), path));
+        if (planks == null || planks == net.minecraft.world.item.Items.AIR || planks == logs.getItem()) {
+            return false;
+        }
+        ItemStack out = new ItemStack(planks, 4);
+        if (!self.getInventory().add(out)) {
+            return false;
+        }
+        logs.shrink(1);
+        return true;
+    }
+
     private int bridgeBlocks() {
         int n = 0;
         for (ItemStack s : self.getInventory().items) {
@@ -471,6 +492,9 @@ public final class Travel {
             return true;
         }
         int slot = bridgeBlockSlot();
+        if (slot >= 0 && self.getInventory().items.get(slot).is(ItemTags.LOGS) && logToPlanks(slot)) {
+            slot = bridgeBlockSlot(); // the planks ran out half way: a log is sawn into four (the 2x2 grid of the inventory, anywhere) - not laid as it is
+        }
         if (slot < 0) {
             return finish();
         }
