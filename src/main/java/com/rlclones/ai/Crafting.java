@@ -956,7 +956,7 @@ public final class Crafting {
             }
             return true;
         }
-        if ((smeltWork() || furnaceReady() || doneFurnace() != null) && now - smeltUrgentAt >= 400) {
+        if ((smeltWork() || furnaceReady() || doneFurnace() != null) && now - smeltUrgentAt >= 100) {
             smeltUrgentAt = now; // raw iron / raw meat in the bag and a furnace to use (or a batch waiting in it): not left to chance
             return true;
         }

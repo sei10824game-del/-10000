@@ -111,7 +111,7 @@ public final class Campfire {
     /** True while busy with a fire. */
     public boolean tick(long now, boolean threatened) {
         if (stage == Stage.IDLE) {
-            if (now < cooldownUntil || threatened || (!hurry && (now + self.getId()) % 40 != 0) || !self.onGround() || self.isInWater() || rawSlot() < 0) {
+            if (now < cooldownUntil || threatened || (!hurry && (now + self.getId()) % 10 != 0) || !self.onGround() || self.isInWater() || rawSlot() < 0) {
                 return false;
             }
             fire = existing();
@@ -130,7 +130,7 @@ public final class Campfire {
         }
         if (threatened || ++ticks > 900 || !(level().getBlockState(fire).getBlock() instanceof CampfireBlock)) {
             stage = Stage.IDLE;
-            cooldownUntil = now + 600;
+            cooldownUntil = now + 100; // (a threat passes: the fire is gone back to soon)
             return false;
         }
         Vec3 c = Vec3.atCenterOf(fire);
@@ -194,7 +194,7 @@ public final class Campfire {
                 }
                 if (now >= waitUntil) {
                     stage = Stage.IDLE;
-                    cooldownUntil = now + 200;
+                    cooldownUntil = now + 40;
                     return false;
                 }
             }
