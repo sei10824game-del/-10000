@@ -915,6 +915,19 @@ public final class Crafting {
                 && !c.getCloneBrain().hasFlag("had_bucket");
     }
 
+    /** A better pickaxe, or a stone sword / axe / shovel / hoe, can be made right now: asked for first thing (the forced target is set to it). */
+    public boolean toolsPending() {
+        Item up = pickaxeUpgrade(self);
+        Item tool = up == null ? stoneToolUpgrade(self) : null;
+        if (up == null && tool == null) {
+            return false;
+        }
+        if (forcedTarget == null) {
+            forcedTarget = up != null ? up : tool;
+        }
+        return true;
+    }
+
     /** Crafting that should not wait for the policy to get round to it (a furnace for the raw food/ore, the first bucket, a pickaxe for mining). */
     public boolean urgent() {
         if (forcedTarget instanceof PickaxeItem) {
@@ -922,7 +935,7 @@ public final class Crafting {
         }
         Item up = pickaxeUpgrade(self);
         long now = self.level().getGameTime();
-        if (up != null && now - upgradeAt >= 400) {
+        if (up != null && now - upgradeAt >= 100) {
             // a better pickaxe can be made right now: nothing else may eat its wood / stone first
             upgradeAt = now;
             if (forcedTarget == null) {
@@ -931,7 +944,7 @@ public final class Crafting {
             return true;
         }
         Item tool = stoneToolUpgrade(self);
-        if (tool != null && now - toolUpgradeAt >= 400) {
+        if (tool != null && now - toolUpgradeAt >= 100) {
             toolUpgradeAt = now; // wooden sword / axe / shovel / hoe and the cobblestone for the stone one: not left to chance
             if (forcedTarget == null) {
                 forcedTarget = tool;

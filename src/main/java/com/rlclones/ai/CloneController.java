@@ -2415,6 +2415,10 @@ public final class CloneController {
         if (!Senses.threats(perception, self, now, 16).isEmpty()) {
             return null;
         }
+        if ((mask & Option.CRAFT.bit()) != 0 && !hungryNoFood() && crafting.toolsPending() && random.nextFloat() < 0.9f) {
+            urgentCrafts++;
+            return Option.CRAFT; // the stone pickaxe / tools can be made now: before the animals, the farm and the rest (the wooden ones are slower at everything)
+        }
         if ((mask & Option.FEED.bit()) != 0 && random.nextFloat() < 0.85f) {
             return Option.FEED;
         }
