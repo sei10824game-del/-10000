@@ -21,6 +21,7 @@ public final class DoorBreath {
     private final Motor motor;
     private int stage;
     private BlockPos door;
+    private BlockPos lastDoor;
     private int ticks;
     private long cooldownUntil;
     /** Doors put down for a breath (tests). */
@@ -60,13 +61,21 @@ public final class DoorBreath {
     public boolean tick(long now) {
         ServerLevel level = self.serverLevel();
         if (stage == 0) {
-            if (now < cooldownUntil || !self.isInWater() || self.isPassenger() || self.isCreative() || doorSlot() < 0
+            // a door of ours still standing in the water (put down earlier, never taken back: it is not in the bag any more) is gone to again
+            boolean standing = lastDoor != null && level.getBlockState(lastDoor).is(net.minecraft.tags.BlockTags.DOORS)
+                    && self.position().distanceToSqr(Vec3.atCenterOf(lastDoor)) < 14 * 14;
+            if (now < cooldownUntil || !self.isInWater() || self.isPassenger() || self.isCreative() || doorSlot() < 0 && !standing
                     || self.getAirSupply() >= self.getMaxAirSupply() * 0.4 || self.hasEffect(MobEffects.WATER_BREATHING)
-                    || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || depth() <= self.getAirSupply() / 8) {
+                    || !Config.get(Config.ALLOW_BLOCK_PLACING, true) && !standing || depth() <= self.getAirSupply() / 8) {
                 return false;
             }
-            stage = PLACE;
             ticks = 0;
+            if (standing) {
+                door = lastDoor;
+                stage = INSIDE;
+            } else {
+                stage = PLACE;
+            }
         }
         if (++ticks > 400) {
             reset(now);
@@ -94,6 +103,7 @@ public final class DoorBreath {
                             }
                             if (level.getBlockState(c).is(net.minecraft.tags.BlockTags.DOORS)) {
                                 door = c;
+                                lastDoor = c;
                                 doorsPlaced++;
                                 stage = INSIDE;
                             }
