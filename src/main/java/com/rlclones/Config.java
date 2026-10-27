@@ -55,7 +55,7 @@ public final class Config {
 
         b.push("actions");
         ALLOW_BLOCK_BREAKING = b.comment("Clones may break blocks (chop trees, mine ores).").define("allowBlockBreaking", true);
-        ANIMAL_CAP_PER_CLONE = b.comment("The world-wide animal cap (vanilla 10, times the loaded chunks / 289) is raised by this much for every clone: cap = 10 + this x clones (0 = leave it alone).").defineInRange("animalCapPerClone", 2.0, 0.0, 20.0);
+        ANIMAL_CAP_PER_CLONE = b.comment("The world-wide animal cap (vanilla 10, times the loaded chunks / 289) is raised by this much for every clone: cap = 10 + 4 x clones x this (0 = leave it alone).").defineInRange("animalCapPerClone", 1.0, 0.0, 10.0);
         WILDLIFE_TOPUP = b.comment("Where clones go hungry: now and then a cow / pig / sheep / chicken grazes in near a clone that has fewer than 8 animals about (only while mob spawning is on).").define("wildlifeTopUp", true);
         ALLOW_BLOCK_PLACING = b.comment("Clones may place blocks (pillar up to escape).").define("allowBlockPlacing", true);
         b.pop();
