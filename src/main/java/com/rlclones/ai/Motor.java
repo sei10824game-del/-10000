@@ -963,14 +963,15 @@ public final class Motor {
         }
         Direction facing = Direction.fromYRot(self.getYRot());
         Direction toGoal = lastGoal == null ? facing : Direction.getNearest(lastGoal.x - self.getX(), 0, lastGoal.z - self.getZ());
-        for (Direction d : new Direction[]{facing, toGoal, toGoal.getClockWise(), toGoal.getCounterClockWise(), toGoal.getOpposite()}) {
+        for (Direction d : new Direction[]{null, facing, toGoal, toGoal.getClockWise(), toGoal.getCounterClockWise(), toGoal.getOpposite()}) {
             for (int dy = 0; dy <= 1; dy++) {
-                BlockPos p = self.blockPosition().relative(d).above(dy);
+                // (d == null: the door fell shut round us in the doorway, the automatic door's plate is out of reach)
+                BlockPos p = d == null ? self.blockPosition().above(dy) : self.blockPosition().relative(d).above(dy);
                 BlockState st = self.level().getBlockState(p);
                 boolean door = st.getBlock() instanceof DoorBlock && st.is(BlockTags.WOODEN_DOORS);
                 boolean gate = st.getBlock() instanceof FenceGateBlock;
                 if ((door || gate) && st.hasProperty(BlockStateProperties.OPEN) && !st.getValue(BlockStateProperties.OPEN)) {
-                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(p), d.getOpposite(), p, false);
+                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(p), d == null ? facing.getOpposite() : d.getOpposite(), p, false);
                     self.gameMode.useItemOn(self, self.level(), self.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
                     self.swing(InteractionHand.MAIN_HAND);
                     return;
