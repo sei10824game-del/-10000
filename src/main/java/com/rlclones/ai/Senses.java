@@ -340,6 +340,9 @@ public final class Senses {
             if (!isFoodAnimal(s.entity) || now - s.lastSeen > 60) {
                 continue;
             }
+            if (s.entity.getType() == EntityType.CHICKEN && agent.getFoodData().getFoodLevel() > 10) {
+                continue; // (a chicken is worth little meat and lays eggs: not hunted unless hungry)
+            }
             if (agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().animals().keepAlive(s.entity)) {
                 continue; // future livestock: we have their food in plenty and mean to pen them
             }

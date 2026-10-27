@@ -2428,6 +2428,9 @@ public final class CloneController {
             urgentCrafts++;
             return Option.CRAFT; // the stone pickaxe / tools can be made now: before the animals, the farm and the rest (the wooden ones are slower at everything)
         }
+        if ((mask & Option.HUNT.bit()) != 0 && FoodAid.foodItems(self) < 12 && !hungryNoFood() && random.nextFloat() < 0.6f) {
+            return Option.HUNT; // game in sight (not chickens) and the bag short of food: hunted without waiting to be hungry
+        }
         if ((mask & Option.FEED.bit()) != 0 && random.nextFloat() < 0.85f) {
             return Option.FEED;
         }
