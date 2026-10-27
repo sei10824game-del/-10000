@@ -1387,7 +1387,8 @@ public final class CloneController {
                 continue;
             }
             double d = e.getKey().distToCenterSqr(self.position());
-            if (d < bestD && brain().isHarmful(Perception.blockId(self.level().getBlockState(e.getKey()))) && safeToRemove(e.getKey())) {
+            if (d < bestD && !self.level().getBlockState(e.getKey()).is(net.minecraft.tags.BlockTags.CAMPFIRES) // (a campfire is a tool: left standing, like a furnace)
+                    && brain().isHarmful(Perception.blockId(self.level().getBlockState(e.getKey()))) && safeToRemove(e.getKey())) {
                 bestD = d;
                 best = e.getKey();
             }
