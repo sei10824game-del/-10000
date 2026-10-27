@@ -4253,6 +4253,10 @@ public final class CloneController {
         }
         if (!eatStarted) {
             int slot = Equipment.bestFoodSlot(self);
+            if (slot < 0 && self.getFoodData().getFoodLevel() > 2 && Campfire.hasRaw(self) && campfire.available()) {
+                campfire.hurry(); // only raw food in the bag and a fire to cook it on: cooked first (the fire work starts at once)
+                return true;
+            }
             if (slot < 0) {
                 return eatCake();
             }

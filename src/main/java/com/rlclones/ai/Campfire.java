@@ -89,10 +89,28 @@ public final class Campfire {
         return best;
     }
 
+    private boolean hurry;
+
+    /** Hungry with nothing but raw food in the bag: no waiting for the next look - the fire (put down from the bag, or the one near) is used now. */
+    public void hurry() {
+        hurry = true;
+        cooldownUntil = 0;
+    }
+
+    /** A campfire in the bag, or a lit one within 16 blocks. */
+    public boolean available() {
+        for (ItemStack st : self.getInventory().items) {
+            if (st.is(Items.CAMPFIRE)) {
+                return true;
+            }
+        }
+        return existing() != null;
+    }
+
     /** True while busy with a fire. */
     public boolean tick(long now, boolean threatened) {
         if (stage == Stage.IDLE) {
-            if (now < cooldownUntil || threatened || (now + self.getId()) % 40 != 0 || !self.onGround() || self.isInWater() || rawSlot() < 0) {
+            if (now < cooldownUntil || threatened || (!hurry && (now + self.getId()) % 40 != 0) || !self.onGround() || self.isInWater() || rawSlot() < 0) {
                 return false;
             }
             fire = existing();
@@ -104,6 +122,7 @@ public final class Campfire {
                 }
             }
             stage = Stage.GO;
+            hurry = false;
             ticks = 0;
             loaded = 0;
         }
