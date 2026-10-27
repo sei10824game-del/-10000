@@ -4354,8 +4354,48 @@ public final class CloneController {
         return Vec3.atCenterOf(base.center);
     }
 
+    /** Where clones are gathering before a big cave (overworld, x y z) and until when. */
+    private static Vec3 caveRally;
+    private static long caveRallyUntil;
+    private long caveWaitSince = -1;
+
+    /**
+     * A big cave (a crater, a drop of ten blocks or more, a ravine) is not gone into alone: the clone stays where it is, others are called by the rally
+     * (they come when they are digging for ore), and it goes in when two others are within 24 blocks - or after 1500 ticks anyway (alone is allowed,
+     * only not at once). True while it waits.
+     */
+    private boolean caveParty(Vec3 cave) {
+        long now = now();
+        boolean big = cave.y < self.getY() - 10 || self.serverLevel().canSeeSky(BlockPos.containing(cave).above()) && cave.y < self.getY() - 6;
+        if (!big) {
+            return false;
+        }
+        int company = 0;
+        for (ClonePlayer c : com.rlclones.clone.CloneManager.peek().clones()) {
+            company += c != self && c.isAlive() && c.level() == self.level() && c.distanceTo(self) < 24 ? 1 : 0;
+        }
+        if (company >= 2) {
+            caveWaitSince = -1;
+            return false;
+        }
+        if (caveWaitSince < 0) {
+            caveWaitSince = now;
+        }
+        if (now - caveWaitSince > 1500) {
+            caveWaitSince = -1; // long enough: on our own
+            return false;
+        }
+        caveRally = self.position();
+        caveRallyUntil = now + 2400;
+        return true;
+    }
+
     private Vec3 pickExploreGoal() {
         ServerLevel level = self.serverLevel();
+        if (caveRally != null && now() < caveRallyUntil && Progression.digWanted(self) && caveWaitSince < 0 && random.nextFloat() < 0.5f
+                && Motor.horizontalDistance(self.position(), caveRally) > 20 && Motor.horizontalDistance(self.position(), caveRally) < 120) {
+            return caveRally; // somebody waits for company by a big cave: off to join
+        }
         if (hungryNoFood() && !self.serverLevel().canSeeSky(self.blockPosition().above()) && self.getY() < 55) {
             Vec3 out = Caves.exitGoal(self); // starving underground: up to the open, where the food is
             if (out == null) {
@@ -4412,6 +4452,9 @@ public final class CloneController {
                         Chat.say(self, Component.translatable("rlclones.chat.cave", Mth.floor(cave.x), Mth.floor(cave.z)),
                                 "CAVE " + Mth.floor(cave.x) + " " + Mth.floor(cave.y) + " " + Mth.floor(cave.z));
                     }
+                }
+                if (cave != null && caveParty(cave)) {
+                    return self.position(); // the cave is big and we are few: wait here for company (the rally), then go in together
                 }
                 if (cave != null) {
                     caveVisits++;
