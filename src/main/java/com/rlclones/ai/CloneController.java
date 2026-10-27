@@ -1817,6 +1817,11 @@ public final class CloneController {
             }
         }
         lastHealth = hp;
+        LivingEntity unseen = self.getLastHurtByMob();
+        if (unseen != null && unseen.isAlive() && self.tickCount - self.getLastHurtByMobTimestamp() < 100 && unseen.distanceTo(self) < 12
+                && !perception.isVisible(unseen) && Senses.isHostileTo(unseen, self)) {
+            perception.hear(unseen, unseen.position(), now()); // hit by something it cannot see (an invisible one): it is where the blow came from, and fought
+        }
         int food = self.getFoodData().getFoodLevel();
         if (lastFood >= 0 && food > lastFood) {
             optionReward += (food - lastFood) * (lastFood <= 14 ? 1.0f : 0.2f);
