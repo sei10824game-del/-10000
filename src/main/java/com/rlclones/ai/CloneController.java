@@ -663,8 +663,8 @@ public final class CloneController {
         if (!itemBusy && !escaping && !threatened && (option == Option.REST || option == Option.EXPLORE || option == Option.GATHER_WOOD || option == Option.FOLLOW)) {
             itemBusy = strayBlockReflex(now); // a lone plank left standing on the ground (scaffold, a tower that was never used): taken up again
         }
-        if (!itemBusy && !escaping && !threatened && option != Option.FIGHT && option != Option.FLEE && option != Option.COLLECT && option != Option.CRAFT
-                && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.EAT) {
+        if (!itemBusy && !escaping && !threatened && (option == Option.REST || option == Option.EXPLORE || option == Option.HUNT || option == Option.MINE
+                || option == Option.QUARRY || option == Option.STAIRS || option == Option.SHAFT || option == Option.GATHER_WOOD || option == Option.FOLLOW)) {
             itemBusy = dropReflex(now); // something lying close by (a kill's drops, a broken ore): picked up before the next thing, as a player would
         }
         if (!itemBusy && !escaping) {

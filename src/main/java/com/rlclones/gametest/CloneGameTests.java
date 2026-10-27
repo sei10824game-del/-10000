@@ -5321,7 +5321,7 @@ public final class CloneGameTests {
         inv.add(new ItemStack(Items.IRON_BOOTS)); // in the bag counts too (it will be put on)
         h.assertTrue(Progression.tier(c) == 4 && Progression.ironShort(c) == 0
                 && Progression.need(c) == Progression.Need.DIAMOND && Progression.diamondNeed(c) == 29
-                && Progression.digWanted(c) && Progression.digTargetY(Progression.need(c)) == -58,
+                && Progression.digWanted(c) && Progression.digTargetY(Progression.need(c)) == Progression.DIAMOND_Y,
                 "iron gear: diamonds next, dig down to -58 (" + Progression.describe(c) + ")");
         inv.add(new ItemStack(Items.DIAMOND, 10));
         h.assertTrue(Progression.diamondShort(c) == 19, "diamonds in the bag count off (" + Progression.describe(c) + ")");
@@ -5441,7 +5441,7 @@ public final class CloneGameTests {
         inv.add(new ItemStack(Items.IRON_LEGGINGS));
         inv.add(new ItemStack(Items.IRON_BOOTS));
         st.assumeSurface = true;
-        h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) && st.target() == -58 && sh.target() == -58, "iron gear: diamonds are the aim, dig to -58 ("
+        h.assertTrue(com.rlclones.ai.StairMining.ironGeared(c) && st.target() == Progression.DIAMOND_Y && sh.target() == Progression.DIAMOND_Y, "iron gear: diamonds are the aim, dig to -58 ("
                 + st.target() + " " + sh.target() + ")");
         st.targetY = c.getBlockY() - 5; // (the arena lies below the real depth)
         h.assertTrue(st.wanted(), "iron gear and no diamonds: still digging down");
