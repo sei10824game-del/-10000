@@ -3079,7 +3079,9 @@ public final class CloneController {
                         (float) Config.get(Config.DISCOUNT, 0.9), mask, 1f, false);
             }
             CombatAction prev = action;
-            int a = forcedAction != null && (mask & forcedAction.bit()) != 0 ? forcedAction.ordinal() : brain().chooseCombat(targetType, s, mask);
+            CombatAction free = freeHit();
+            CombatAction pick = free != null && (mask & free.bit()) != 0 ? free : forcedAction;
+            int a = pick != null && (mask & pick.bit()) != 0 ? pick.ordinal() : brain().chooseCombat(targetType, s, mask);
             if (a < 0) {
                 return;
             }
@@ -3181,6 +3183,34 @@ public final class CloneController {
             default -> {
             }
         }
+    }
+
+    private int ignoreTarget = -1;
+    private long ignoreSince;
+    /** The kind that went on with another's target after our hit is not drawn off it: learned once (and shared by the brain); then, while it is not after us, the plain efficient hit. */
+    @Nullable
+    private CombatAction freeHit() {
+        Entity t = target;
+        if (!(t instanceof net.minecraft.world.entity.Mob m) || !m.isAlive()) {
+            return null;
+        }
+        var k = brain().knowledge(targetType);
+        boolean onUs = m.getTarget() == self;
+        if (k.has(EnemyKnowledge.IGNORES_US) && !onUs && !k.isRanged() && !k.has(EnemyKnowledge.EXPLOSIVE) && self.getHealth() >= 8) {
+            return Senses.gap(self, t) > 2.5 ? CombatAction.APPROACH : CombatAction.ATTACK;
+        }
+        if (m.getLastHurtByMob() == self && !onUs && m.getTarget() instanceof Player) {
+            if (ignoreTarget != m.getId()) {
+                ignoreTarget = m.getId();
+                ignoreSince = now();
+            } else if (now() - ignoreSince > 40) {
+                k.trait(EnemyKnowledge.IGNORES_US);
+                ignoreSince = Long.MAX_VALUE / 2;
+            }
+        } else if (onUs) {
+            ignoreTarget = -1;
+        }
+        return null;
     }
 
     private void executeAction() {

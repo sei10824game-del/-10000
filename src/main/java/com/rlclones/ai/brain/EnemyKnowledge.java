@@ -24,6 +24,8 @@ public final class EnemyKnowledge {
     public static final String EXPLOSIVE = "explosive";
     public static final String MELEE = "melee";
     public static final String AGGRESSIVE = "attacks_unprovoked";
+    /** Hit by us but it kept to its own target (another clone's): a kind that cannot be drawn off its target. */
+    public static final String IGNORES_US = "ignores_us";
 
     public final String typeId;
 
