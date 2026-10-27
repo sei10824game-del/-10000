@@ -915,6 +915,11 @@ public final class Crafting {
                 && !c.getCloneBrain().hasFlag("had_bucket");
     }
 
+    /** Raw meat / ore in the bag and no furnace in it or near: one is wanted before the catch is eaten raw. */
+    public boolean furnaceFirst() {
+        return count(self, Items.FURNACE) == 0 && !furnaceNearby(self) && !smeltables(self).isEmpty();
+    }
+
     /** A better pickaxe, or a stone sword / axe / shovel / hoe, can be made right now: asked for first thing (the forced target is set to it). */
     public boolean toolsPending() {
         Item up = pickaxeUpgrade(self);

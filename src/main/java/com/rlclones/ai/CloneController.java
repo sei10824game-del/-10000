@@ -2415,6 +2415,15 @@ public final class CloneController {
         if (!Senses.threats(perception, self, now, 16).isEmpty()) {
             return null;
         }
+        if (!hungryNoFood() && crafting.furnaceFirst() && random.nextFloat() < 0.85f) {
+            if ((mask & Option.CRAFT.bit()) != 0 && Crafting.furnaceWanted(self)) {
+                urgentCrafts++;
+                return Option.CRAFT; // eight cobblestone and raw meat: the furnace now, the catch is not to be eaten raw
+            }
+            if ((mask & Option.QUARRY.bit()) != 0) {
+                return Option.QUARRY; // raw meat / ore and no furnace: the cobblestone for one
+            }
+        }
         if ((mask & Option.CRAFT.bit()) != 0 && !hungryNoFood() && crafting.toolsPending() && random.nextFloat() < 0.9f) {
             urgentCrafts++;
             return Option.CRAFT; // the stone pickaxe / tools can be made now: before the animals, the farm and the rest (the wooden ones are slower at everything)
