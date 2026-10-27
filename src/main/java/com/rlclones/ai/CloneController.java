@@ -660,6 +660,9 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
         }
+        if (!itemBusy && !escaping && !threatened && (option == Option.REST || option == Option.EXPLORE || option == Option.GATHER_WOOD || option == Option.FOLLOW)) {
+            itemBusy = strayBlockReflex(now); // a lone plank left standing on the ground (scaffold, a tower that was never used): taken up again
+        }
         if (!itemBusy && !escaping && !threatened && option != Option.FIGHT && option != Option.FLEE && option != Option.COLLECT && option != Option.CRAFT
                 && option != Option.STORE && option != Option.FETCH && option != Option.LOOT && option != Option.EAT) {
             itemBusy = dropReflex(now); // something lying close by (a kill's drops, a broken ore): picked up before the next thing, as a player would
@@ -2134,6 +2137,84 @@ public final class CloneController {
         }
         motor.stop();
         motor.mine(dig);
+        return true;
+    }
+
+    private BlockPos strayBlock;
+    private int strayTicks;
+    private final java.util.Set<BlockPos> strayIgnored = new java.util.HashSet<>();
+    /** Lone planks taken up again (tests, soak). */
+    public int strayRemoved;
+
+    /**
+     * A single plank block standing on the ground with no other plank / fence / door / base near it is nobody's wall: scaffold left from cutting a tree,
+     * a pillar from a fight. It is broken and picked up (the drop reflex does that). ponytail: planks only (a dirt or cobble block cannot be told from
+     * the land), 5 blocks round, looked at every 40 ticks; bridges (air or water under them) and anything near a base, pen or other planks stay.
+     */
+    private boolean strayBlockReflex(long now) {
+        ServerLevel level = self.serverLevel();
+        if (strayBlock == null) {
+            if (((now + self.getId()) % 40) != 0 || !Config.get(Config.ALLOW_BLOCK_BREAKING, true) || !self.onGround()) {
+                return false;
+            }
+            BlockPos c = self.blockPosition();
+            for (BlockPos p : BlockPos.betweenClosed(c.offset(-5, -1, -5), c.offset(5, 3, 5))) {
+                if (!level.getBlockState(p).is(net.minecraft.tags.BlockTags.PLANKS) || strayIgnored.contains(p)) {
+                    continue;
+                }
+                if (isStray(level, p)) {
+                    strayBlock = p.immutable();
+                    strayTicks = 0;
+                    break;
+                }
+            }
+            if (strayBlock == null) {
+                return false;
+            }
+        }
+        if (++strayTicks > 300 || !level.getBlockState(strayBlock).is(net.minecraft.tags.BlockTags.PLANKS)) {
+            if (strayTicks > 300) {
+                strayIgnored.add(strayBlock);
+            }
+            strayBlock = null;
+            return false;
+        }
+        if (self.getEyePosition().distanceTo(Vec3.atCenterOf(strayBlock)) > Motor.BLOCK_REACH - 0.7) {
+            motor.navigate(motor.approachPoint(strayBlock), 1.0, false);
+            if (motor.stuckCount() > 5) {
+                strayIgnored.add(strayBlock);
+                strayBlock = null;
+                return false;
+            }
+            return true;
+        }
+        Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(strayBlock)));
+        motor.stop();
+        if (motor.mine(strayBlock)) {
+            strayRemoved++;
+            strayBlock = null;
+        }
+        return true;
+    }
+
+    private boolean isStray(ServerLevel level, BlockPos p) {
+        if (!level.getBlockState(p.below()).isFaceSturdy(level, p.below(), net.minecraft.core.Direction.UP) || level.getBlockState(p.below()).is(net.minecraft.tags.BlockTags.PLANKS)) {
+            return false; // over a gap (a bridge), or stacked on planks
+        }
+        if (com.rlclones.clone.Bases.get(self.getServer()).nearest(level.dimension(), Vec3.atCenterOf(p), 24) != null) {
+            return false;
+        }
+        for (BlockPos q : BlockPos.betweenClosed(p.offset(-2, -1, -2), p.offset(2, 2, 2))) {
+            if (q.equals(p)) {
+                continue;
+            }
+            var st = level.getBlockState(q);
+            if (st.is(net.minecraft.tags.BlockTags.PLANKS) || st.is(net.minecraft.tags.BlockTags.FENCES) || st.is(net.minecraft.tags.BlockTags.DOORS)
+                    || st.is(net.minecraft.tags.BlockTags.FENCE_GATES) || st.is(net.minecraft.tags.BlockTags.BEDS) || st.hasBlockEntity()
+                    || st.is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE) || st.is(net.minecraft.tags.BlockTags.STAIRS) || st.is(net.minecraft.tags.BlockTags.SLABS)) {
+                return false; // part of something built
+            }
+        }
         return true;
     }
 
