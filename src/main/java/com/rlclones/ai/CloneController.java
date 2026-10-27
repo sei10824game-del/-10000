@@ -1696,7 +1696,7 @@ public final class CloneController {
             mask |= Option.JOIN.bit();
         }
         if (Config.get(Config.ALLOW_BLOCK_BREAKING, true) && Crafting.stoneNeeded(self) > 0
-                && Senses.nearestBlock(perception, self, Perception.BlockKind.STONE, 16) != null) {
+                && Senses.nearestBlock(perception, self, Perception.BlockKind.STONE, Progression.need(self) == Progression.Need.STONE ? 40 : 16) != null) {
             mask |= Option.QUARRY.bit();
         }
         if (discovery.canDiscover()) {
@@ -2513,6 +2513,9 @@ public final class CloneController {
         }
         if ((mask & Option.EXPEDITION.bit()) != 0 && villageScoutWanted(now)) {
             return Option.EXPEDITION; // R-20: find a village early (trading, a base, beds)
+        }
+        if ((mask & Option.QUARRY.bit()) != 0 && !hungryNoFood() && Progression.need(self) == Progression.Need.STONE && random.nextFloat() < 0.9f) {
+            return Option.QUARRY; // the wooden pickaxe is in hand: stone first and the stone tools with it (they are quicker at everything than the wooden ones), then the rest
         }
         Option dig = digDrive(now, mask);
         if (dig != null) {
