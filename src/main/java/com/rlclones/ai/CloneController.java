@@ -2244,7 +2244,19 @@ public final class CloneController {
             dropTarget = item.getId();
             dropWalkTicks = 0;
         }
-        if (++dropWalkTicks > 60 || motor.stuckCount() > 4) {
+        if (dropWalkTicks > 20 && motor.stuckCount() > 1 && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && dropWalkTicks <= 160) {
+            // the item lies behind a block (one put in front by a clone's own stairs / bridge...): dig the block in the way, as a player would
+            net.minecraft.world.phys.Vec3 eye = self.getEyePosition();
+            net.minecraft.world.phys.BlockHitResult hit = self.serverLevel().clip(new net.minecraft.world.level.ClipContext(eye, item.position().add(0, 0.2, 0),
+                    net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, self));
+            if (hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK && !self.level().getBlockState(hit.getBlockPos()).is(net.minecraft.world.level.block.Blocks.BEDROCK)) {
+                dropWalkTicks++;
+                motor.mine(hit.getBlockPos());
+                dropPickups++;
+                return true;
+            }
+        }
+        if (++dropWalkTicks > 160 || motor.stuckCount() > 4) {
             dropIgnored.put(item.getId(), now + 200);
             dropTarget = -1;
             return false;
