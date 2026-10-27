@@ -29,6 +29,7 @@ public final class Campfire {
     private BlockPos fire;
     private int ticks;
     private int loaded;
+    private int fails;
     private long waitUntil;
     private long cooldownUntil;
     /** Items laid on a fire (tests, soak). */
@@ -125,6 +126,7 @@ public final class Campfire {
             hurry = false;
             ticks = 0;
             loaded = 0;
+            fails = 0;
         }
         if (threatened || ++ticks > 900 || !(level().getBlockState(fire).getBlock() instanceof CampfireBlock)) {
             stage = Stage.IDLE;
@@ -148,7 +150,16 @@ public final class Campfire {
             case LOAD -> {
                 motor.stop();
                 int slot = rawSlot();
-                if (slot < 0 || loaded >= 4) {
+                int onFire = 0;
+                if (level().getBlockEntity(fire) instanceof net.minecraft.world.level.block.entity.CampfireBlockEntity be) {
+                    for (ItemStack st : be.getItems()) {
+                        if (!st.isEmpty()) {
+                            onFire++;
+                        }
+                    }
+                }
+                if (slot < 0 || loaded >= 4 || onFire >= 4) {
+                    debug = "load done slot=" + slot + " loaded=" + loaded + " onFire=" + onFire;
                     waitUntil = now + 700;
                     stage = Stage.WAIT;
                     return true;
@@ -158,6 +169,10 @@ public final class Campfire {
                 }
                 Equipment.select(self, slot);
                 motor.lookAt(c.add(0, 0.3, 0));
+                if (self.getEyePosition().distanceTo(c) > 3.2) {
+                    motor.navigate(Vec3.atBottomCenterOf(fire), 1.5, false); // (pushed off the fire's side while loading: back to it)
+                    return true;
+                }
                 var hand = self.getMainHandItem();
                 int before = hand.getCount();
                 self.gameMode.useItemOn(self, level(), hand, InteractionHand.MAIN_HAND, new BlockHitResult(c.add(0, 0.4, 0), Direction.UP, fire, false));
@@ -165,7 +180,9 @@ public final class Campfire {
                 if (self.getInventory().getItem(self.getInventory().selected).getCount() < before || self.getInventory().getItem(self.getInventory().selected).isEmpty()) {
                     loaded++;
                     cooked++;
-                } else {
+                    fails = 0;
+                } else if (++fails >= 4) {
+                    debug = "refused " + hand.getItem() + " onFire=" + onFire;
                     loaded = 4; // would not take it (full)
                 }
             }
