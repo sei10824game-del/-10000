@@ -1612,14 +1612,14 @@ public final class CloneController {
             digGate.merge("health", 1, Integer::sum);
             return null;
         }
-        if (self.getFoodData().getFoodLevel() < 14 && FoodAid.foodItems(self) < 4) { // enough for a long way down: food first (the clone eats on its own when hungry)
+        if (self.getFoodData().getFoodLevel() < 10 && FoodAid.foodItems(self) < 2) { // enough for a long way down: food first (the clone eats on its own when hungry)
             digGate.merge("food", 1, Integer::sum);
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
             }
             return (mask & Option.FARM.bit()) != 0 ? Option.FARM : null;
         }
-        if (Crafting.woodUnits(self) < 12 && (mask & Option.GATHER_WOOD.bit()) != 0) { // a spare pickaxe's worth and a table
+        if (Crafting.woodUnits(self) < 8 && (mask & Option.GATHER_WOOD.bit()) != 0) { // a spare pickaxe's worth and a table
             digGate.merge("wood", 1, Integer::sum);
             return Option.GATHER_WOOD; // a table, sticks, ladders: from wood
         }
