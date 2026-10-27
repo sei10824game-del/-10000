@@ -65,6 +65,11 @@ public final class Equipment {
         return c.getCloneBrain().itemUseValue(id, AttackLearning.SWING) * Math.sqrt(Math.max(0.25, speed) / 4.0);
     }
 
+    /** Less than a sixth of the durability left: still works, but is put behind a sound one and is made again. */
+    public static boolean worn(ItemStack s) {
+        return s.isDamageableItem() && s.getMaxDamage() - s.getDamageValue() < s.getMaxDamage() / 6;
+    }
+
     public static int bestWeaponSlot(Player p) {
         Inventory inv = p.getInventory();
         int best = -1;
@@ -74,7 +79,7 @@ public final class Equipment {
             if (s.isEmpty() || isLauncher(s) || s.isEdible()) {
                 continue;
             }
-            double score = Math.max(attackDamage(s), learnedSwing(p, s));
+            double score = Math.max(attackDamage(s), learnedSwing(p, s)) * (worn(s) ? 0.6 : 1.0); // (a worn one after a sound one)
             if (score > bestScore + 0.01) {
                 bestScore = score;
                 best = i;
@@ -522,7 +527,7 @@ public final class Equipment {
             if (needsTool && !s.isCorrectToolForDrops(state)) {
                 continue;
             }
-            float speed = s.getDestroySpeed(state);
+            float speed = s.getDestroySpeed(state) * (worn(s) ? 0.6f : 1.0f);
             if (speed > bestSpeed || (needsTool && best < 0)) {
                 bestSpeed = speed;
                 best = i;

@@ -330,6 +330,38 @@ public final class Crafting {
         return forced instanceof PickaxeItem fp && tierOf(p, PickaxeItem.class) >= ((TieredItem) fp).getTier().getLevel();
     }
 
+    private static int countFresh(Player p, Item item) {
+        int n = 0;
+        for (ItemStack st : p.getInventory().items) {
+            if (st.is(item) && !Equipment.worn(st)) {
+                n += st.getCount();
+            }
+        }
+        return n;
+    }
+
+    /** The best pickaxe / axe / sword in the bag is worn out (a sixth left): one of the same material is wanted again (the worn one stays as the spare). */
+    private static void addWornReplacements(Player p, List<Item> out) {
+        for (Item[] kind : new Item[][]{PICKAXES, AXES, SWORDS}) {
+            for (Item it : kind) {
+                boolean has = false;
+                boolean sound = false;
+                for (ItemStack st : p.getInventory().items) {
+                    if (st.is(it)) {
+                        has = true;
+                        sound |= !Equipment.worn(st);
+                    }
+                }
+                if (has) {
+                    if (!sound) {
+                        out.add(0, it); // the best one we have is worn out
+                    }
+                    break; // (kinds are listed best first: only the best one we hold counts)
+                }
+            }
+        }
+    }
+
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null
@@ -434,7 +466,8 @@ public final class Crafting {
                 out.add(Items.BUCKET);
             }
         }
-        out.removeIf(it -> it instanceof TieredItem && !(it instanceof PickaxeItem) && count(p, it) >= 1 || it instanceof PickaxeItem && count(p, it) >= 2); // (one of a tool is enough: a bag full of wooden hoes is no help)
+        addWornReplacements(p, out);
+        out.removeIf(it -> it instanceof TieredItem && !(it instanceof PickaxeItem) && countFresh(p, it) >= 1 || it instanceof PickaxeItem && countFresh(p, it) >= 2); // (one of a tool is enough: a bag full of wooden hoes is no help)
         return out;
     }
 

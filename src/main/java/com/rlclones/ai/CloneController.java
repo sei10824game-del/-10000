@@ -2698,12 +2698,22 @@ public final class CloneController {
         }
     }
 
+    private Option lastWork;
+    private long lastWorkAt;
+
     private void finishOption(boolean died) {
         if (option == null) {
             return;
         }
         endedOption = option.name();
         endedAfter = optionTicks;
+        if (option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY || option == Option.GATHER_WOOD || option == Option.FARM) {
+            lastWork = option;
+            lastWorkAt = now();
+        } else if ((option == Option.FIGHT || option == Option.FLEE || option == Option.EAT || option == Option.HUNT) && lastWork != null && now() - lastWorkAt < 900 && !died) {
+            nextOption = lastWork; // the interruption is over: the work that was broken off is gone back to (the planner takes it only if it is still possible and nothing threatens)
+            lastWork = null;
+        }
         if ((option == Option.EXPEDITION || option == Option.JOIN) && !died && !expedition.villageKnown && !storage.homeWanted()) { // (far from every base with the blocks for a house: build one here instead)
             homewardUntil = now() + 6000; // the trip is over: back to the base
         }
