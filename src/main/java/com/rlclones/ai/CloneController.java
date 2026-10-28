@@ -1562,6 +1562,11 @@ public final class CloneController {
     }
 
     /** Iron / diamonds are still to be found, there is depth left to dig for them, and the last digs did not all get nowhere. */
+    /** Only a wooden pickaxe and no stone in sight: a staircase down through the dirt gets to it (and the cobblestone comes of the digging). */
+    private boolean stoneDig(int mask) {
+        return Progression.need(self) == Progression.Need.STONE && (mask & Option.QUARRY.bit()) == 0 && Config.get(Config.ALLOW_BLOCK_BREAKING, true);
+    }
+
     private boolean digPending(long now) {
         return now >= digBackoffUntil && Progression.digWanted(self) && stairs.pending();
     }
@@ -2424,6 +2429,9 @@ public final class CloneController {
                 return Option.QUARRY; // raw meat / ore and no furnace: the cobblestone for one
             }
         }
+        if (!hungryNoFood() && stoneDig(mask) && (mask & Option.STAIRS.bit()) != 0 && now - lastDigEnd >= 300 && random.nextFloat() < 0.8f) {
+            return Option.STAIRS; // the wooden pickaxe and no rock in sight: down to the stone, not wandering about above it
+        }
         if ((mask & Option.CRAFT.bit()) != 0 && !hungryNoFood() && crafting.toolsPending() && random.nextFloat() < 0.9f) {
             urgentCrafts++;
             return Option.CRAFT; // the stone pickaxe / tools can be made now: before the animals, the farm and the rest (the wooden ones are slower at everything)
@@ -2609,7 +2617,7 @@ public final class CloneController {
         }
         if ((mask & BUSY_OPTIONS) != 0) {
             int idle = Option.STAIRS.bit() | Option.ACHIEVE.bit() | Option.SHAFT.bit();
-            if (digPending(now)) {
+            if (digPending(now) || stoneDig(mask)) {
                 idle &= ~(Option.STAIRS.bit() | Option.SHAFT.bit()); // iron / diamonds are still to be had: digging is real work
             }
             if (forcedOption != null) {
