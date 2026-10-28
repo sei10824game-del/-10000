@@ -970,6 +970,26 @@ public final class Crafting {
         return count(self, Items.FURNACE) == 0 && !furnaceNearby(self) && !smeltables(self).isEmpty();
     }
 
+    /** The materials for a better pickaxe (stone / iron / diamond, three of them) are in the bag and only the wood (sticks, a table) is lacking. */
+    public static boolean pickaxeWoodShort(Player p) {
+        int have = tierOf(p, PickaxeItem.class);
+        if (have < 0) {
+            return false;
+        }
+        for (Item it : PICKAXES) {
+            int tier = ((TieredItem) it).getTier().getLevel();
+            if (tier <= have) {
+                continue;
+            }
+            boolean mats = it == Items.STONE_PICKAXE ? cobble(p) >= 3 : it == Items.IRON_PICKAXE ? count(p, Items.IRON_INGOT) >= 3
+                    : it == Items.DIAMOND_PICKAXE && count(p, Items.DIAMOND) >= 3;
+            if (mats && !makeable(p, it)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** A better pickaxe, or a stone sword / axe / shovel / hoe, can be made right now: asked for first thing (the forced target is set to it). */
     public boolean toolsPending() {
         Item up = pickaxeUpgrade(self);
