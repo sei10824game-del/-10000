@@ -362,6 +362,55 @@ public final class Crafting {
         }
     }
 
+    private static Object modOwner;
+    private static List<Entry> modGear = List.of();
+
+    /** Armour / weapons / tools of other mods that the bag holds the materials for and that beat what we wear / hold: made as well (their recipes are read, not named here). */
+    private static void addModGear(Player p, List<Item> out) {
+        if (!(p instanceof ServerPlayer sp)) {
+            return;
+        }
+        var manager = sp.serverLevel().getRecipeManager();
+        if (modOwner != manager) {
+            List<Entry> list = new ArrayList<>();
+            for (Entry e : index(sp)) {
+                Item it = e.result().getItem();
+                var key = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(it);
+                if (key != null && !key.getNamespace().equals("minecraft") && (it instanceof net.minecraft.world.item.ArmorItem || it instanceof SwordItem || it instanceof TieredItem)) {
+                    list.add(e);
+                }
+            }
+            modGear = list;
+            modOwner = manager;
+        }
+        for (Entry e : modGear) {
+            Item it = e.result().getItem();
+            if (out.contains(it) || !canCraft(p, e.recipe())) {
+                continue;
+            }
+            boolean better;
+            if (it instanceof net.minecraft.world.item.ArmorItem a) {
+                ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
+                better = !(worn.getItem() instanceof net.minecraft.world.item.ArmorItem w) || a.getDefense() + a.getToughness() > w.getDefense() + w.getToughness() + 0.01;
+                for (ItemStack st : p.getInventory().items) {
+                    better &= !(st.getItem() instanceof net.minecraft.world.item.ArmorItem b) || b.getEquipmentSlot() != a.getEquipmentSlot()
+                            || a.getDefense() + a.getToughness() > b.getDefense() + b.getToughness() + 0.01;
+                }
+            } else if (it instanceof SwordItem) {
+                better = Equipment.attackDamage(e.result()) > bestWeapon(p) + 0.01;
+            } else if (it instanceof PickaxeItem || it instanceof AxeItem || it instanceof net.minecraft.world.item.ShovelItem || it instanceof HoeItem) {
+                int have = it instanceof PickaxeItem ? tierOf(p, PickaxeItem.class) : it instanceof AxeItem ? tierOf(p, AxeItem.class)
+                        : it instanceof HoeItem ? tierOf(p, HoeItem.class) : tierOf(p, net.minecraft.world.item.ShovelItem.class);
+                better = ((TieredItem) it).getTier().getLevel() > have;
+            } else {
+                better = false;
+            }
+            if (better) {
+                out.add(it);
+            }
+        }
+    }
+
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null
@@ -467,6 +516,7 @@ public final class Crafting {
             }
         }
         addWornReplacements(p, out);
+        addModGear(p, out);
         out.removeIf(it -> it instanceof TieredItem && !(it instanceof PickaxeItem) && countFresh(p, it) >= 1 || it instanceof PickaxeItem && countFresh(p, it) >= 2); // (one of a tool is enough: a bag full of wooden hoes is no help)
         return out;
     }
