@@ -187,6 +187,16 @@ public final class StairMining {
         }
     }
 
+    /** Other clones about (a lone clone has no one to pass): the staircase is dug two wide. */
+    private boolean wide() {
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Another clone right beside us (we share a 1-wide hole and have not moved for a while): neither can pass the other. */
     private boolean crowdedHere() {
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
@@ -649,6 +659,18 @@ public final class StairMining {
             Equipment.select(self, slot);
             motor.placeBlockAt(floor);
             return Status.WORKING;
+        }
+        // a second lane beside the step (feet, head, and the head room of the step down): the clones go up and down past one another instead of jamming in a one-wide hole
+        if (wide()) {
+            BlockPos side = next.relative(s.dir.getClockWise());
+            for (BlockPos p : new BlockPos[]{side.above(2), side.above(), side}) {
+                if (solid(p) && diggable(p)) {
+                    motor.stop();
+                    Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
+                    mineClaimed(p);
+                    return Status.WORKING;
+                }
+            }
         }
         // step down
         motor.moveToward(Vec3.atBottomCenterOf(next));
