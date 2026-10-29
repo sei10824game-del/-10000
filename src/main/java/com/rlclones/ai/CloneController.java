@@ -995,6 +995,9 @@ public final class CloneController {
         } else if (self.getFoodData().getFoodLevel() == 0 && Equipment.bestFoodSlot(self) < 0) {
             alarm = Alarm.STARVING;
         }
+        if (alarm == Alarm.OUTNUMBERED || alarm == Alarm.OUTMATCHED || alarm == Alarm.LOW_HEALTH) {
+            need = Math.min(10, need + HELP_BONUS); // what the deaths of callers / helpers have taught: ask for more
+        }
         if (alarm != null && need > 1) {
             // friends already standing next to us count
             int allies = 0;
@@ -1044,6 +1047,10 @@ public final class CloneController {
     private void resolve(boolean died) {
         if (openAlarm == null) {
             return;
+        }
+        if (!died && ++helpWon >= 3) {
+            helpWon = 0;
+            helpBonus(-1); // calls that ended well three times over: perhaps fewer would do again
         }
         BlockPos p = openAlarmPos;
         Chat.say(self, Component.translatable(died ? "rlclones.chat.cancel" : "rlclones.chat.resolved", p.getX(), p.getY(), p.getZ()),
@@ -1120,6 +1127,18 @@ public final class CloneController {
     }
 
     public int cancelledHelp;
+
+    /** Helpers asked for on top of the estimate: up by one when a caller / a helper dies in the fight, down by one after three calls that ended well (all clones share it). */
+    private static volatile int HELP_BONUS;
+    private int helpWon;
+
+    private static synchronized void helpBonus(int d) {
+        HELP_BONUS = Mth.clamp(HELP_BONUS + d, 0, 6);
+    }
+
+    public static int helpBonus() {
+        return HELP_BONUS;
+    }
 
     public List<Chat.Request> requests() {
         return requests;
@@ -2316,6 +2335,9 @@ public final class CloneController {
     }
 
     public void onDeath(DamageSource source) {
+        if (source.getEntity() != null && (openAlarm != null || answering != null || now() - lastAlarm < 1200)) {
+            helpBonus(+1); // died in a fight it had called for help in (or came to help in): the call asked for too few
+        }
         lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel()
                 + " fall=" + (int) self.fallDistance + " pits=" + pits.busy() + " doorBreath=" + doorBreath.busy() + " lastOpts=" + lastOptionsShort()
                 + " attacker=" + (source.getEntity() == null ? "-" : Perception.typeId(source.getEntity()))
