@@ -68,6 +68,7 @@ public final class CloneMobs {
             return null;
         }
         body.getPersistentData().putUUID(SOUL, soul.getUUID());
+        body.getPersistentData().putBoolean(SIDE, true);
         level.addFreshEntity(body);
         return body;
     }
@@ -85,6 +86,56 @@ public final class CloneMobs {
         Mob body = summon(player, level, egg.getType(event.getItemStack().getTag()), Vec3.atBottomCenterOf(at));
         if (body != null && !player.getAbilities().instabuild) {
             event.getItemStack().shrink(1);
+        }
+    }
+
+    /** Persistent-data key: this mob is on the players' side (clone mobs and what they summon). */
+    public static final String SIDE = "rlclones_players_side";
+    /** The clone-mob zombie whose call for help is being answered right now (same tick as the reinforcement joins the world). */
+    private static Entity aidFrom;
+    private static long aidTick = -1;
+
+    public static boolean playerSide(Entity e) {
+        return e != null && e.getPersistentData().getBoolean(SIDE);
+    }
+
+    /** A zombie that is a clone mob calls for help: the reinforcement that joins in this tick is on the players' side. */
+    @SubscribeEvent
+    public static void onZombieAid(net.minecraftforge.event.entity.living.ZombieEvent.SummonAidEvent event) {
+        if (soulOf(event.getSummoner()) != null) {
+            aidFrom = event.getSummoner();
+            aidTick = event.getLevel().getGameTime();
+        }
+    }
+
+    /** What a clone mob summons (a vex of its owner, zombie reinforcements) is on the players' side - and, if set, a clone mob too. */
+    @SubscribeEvent
+    public static void onSummonedJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (!(event.getEntity() instanceof Mob mob) || event.loadedFromDisk() || event.getLevel().isClientSide || mob.getServer() == null || playerSide(mob)) {
+            return;
+        }
+        boolean summoned = mob instanceof net.minecraft.world.entity.monster.Vex v && soulOf(v.getOwner()) != null
+                || aidFrom != null && aidTick == event.getLevel().getGameTime() && mob instanceof net.minecraft.world.entity.monster.Zombie;
+        if (!summoned) {
+            return;
+        }
+        mob.getPersistentData().putBoolean(SIDE, true);
+        CloneManager m = CloneManager.get(mob.getServer());
+        if (SYNC_READY && m.summonedAsClone()) {
+            ClonePlayer soul = m.summon(null, (ServerLevel) event.getLevel(), mob.position(), mob.getYRot());
+            if (soul != null) {
+                mob.getPersistentData().putUUID(SOUL, soul.getUUID());
+                mob.setPersistenceRequired();
+            }
+        }
+    }
+
+    /** Players' side never turns on the players or on each other (a vex does not go rogue); the hostile mobs' side of it is stage 4. */
+    @SubscribeEvent
+    public static void onTarget(net.minecraftforge.event.entity.living.LivingChangeTargetEvent event) {
+        if (playerSide(event.getEntity()) && event.getNewTarget() != null
+                && (event.getNewTarget() instanceof net.minecraft.world.entity.player.Player || playerSide(event.getNewTarget()))) {
+            event.setCanceled(true);
         }
     }
 

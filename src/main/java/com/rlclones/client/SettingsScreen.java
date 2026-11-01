@@ -14,7 +14,7 @@ import java.util.List;
 /** K key: the clone switches (same as the /rlclone commands) and the clone-mob list. Every button runs the command, then asks the server for the new state. */
 public class SettingsScreen extends Screen {
     /** Order of the packet's switches; the command word for each. */
-    static final String[] COMMANDS = {"battleroyale", "breeding", "chat", "coward", "flee", "link", "respawn"};
+    static final String[] COMMANDS = {"battleroyale", "breeding", "chat", "coward", "flee", "link", "respawn", "summonedmobs"};
     static boolean[] switches = new boolean[COMMANDS.length];
     static java.util.Set<String> mobTypes = new java.util.TreeSet<>();
 

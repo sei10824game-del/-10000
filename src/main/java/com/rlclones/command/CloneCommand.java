@@ -70,6 +70,10 @@ public final class CloneCommand {
                                 .executes(ctx -> summonMobs(ctx, 1))
                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                         .executes(ctx -> summonMobs(ctx, IntegerArgumentType.getInteger(ctx, "count"))))))
+                .then(Commands.literal("summonedmobs").requires(CloneCommand::mayControl)
+                        .executes(ctx -> setSummonedMobs(ctx, !manager(ctx).summonedAsClone()))
+                        .then(Commands.literal("on").executes(ctx -> setSummonedMobs(ctx, true)))
+                        .then(Commands.literal("off").executes(ctx -> setSummonedMobs(ctx, false))))
                 .then(Commands.literal("battleroyale").requires(CloneCommand::mayControl)
                         .executes(ctx -> setBattleRoyale(ctx, !manager(ctx).isBattleRoyale()))
                         .then(Commands.literal("on").executes(ctx -> setBattleRoyale(ctx, true)))
@@ -192,6 +196,12 @@ public final class CloneCommand {
     private static int setFlee(CommandContext<CommandSourceStack> ctx, boolean on) {
         manager(ctx).setFleeAllowed(on);
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.flee_on" : "rlclones.msg.flee_off"), true);
+        return 1;
+    }
+
+    private static int setSummonedMobs(CommandContext<CommandSourceStack> ctx, boolean on) {
+        manager(ctx).setSummonedAsClone(on);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.summoned_on" : "rlclones.msg.summoned_off"), true);
         return 1;
     }
 
