@@ -833,3 +833,26 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 2 食料の予測と備蓄: `leanOnFood`(食料3個未満かつ満腹度14未満)で HUNT/FARM を先に、遠征しない。備蓄(R-41 `Persona.pantryTick`)は既存。取り出しは 3個未満で。
 - 3 役割: `Persona.role`(UUID から: 掘り40%・食料30%・偵察15%・万能15%)。12体以上のときだけ有効(`rolesActive`)。偵察/万能だけが遠征を先導・単独の村探しをする。食料役は食料12個未満で FARM/ANIMALS を引く。掘り役の専用の優先はまだ(掘りは全員の既存の挙動)。
 - 4 共有の地図: `Structures.WORLD_ORES/CAVES/VILLAGES`(オーバーワールドのみ・メモリのみ・再起動で消える)。友達に聞こえなくても、新しい個体・復活した個体が使う。永続化は未実装。
+
+## 71. クローンモブ(設計のみ、未実装。2026-11-01)
+要望: スポーンエッグを持って特定キー → 召喚すると、元のモブの体にクローンを入れたような「クローンモブ」になる。空腹値とインベントリはクローンと同じ。陣営はプレイヤー側(ゾンビでも他のゾンビに敵対される)。コマンドで、元の陣営から敵対されるか否かを切り替える。
+
+### 核心の判断: 体(Mob)と魂(ClonePlayer)を分ける(案b)
+- 案a(Mob に脳を移植)は不可: CloneController / Motor / Perception / Equipment / Storage は ServerPlayer 前提(FoodData、Inventory、gameMode.useItemOn、入力 zza/xxa)。Mob 用に全部抽象化すると規模が10倍。
+- 案b(採用): 見えない ClonePlayer(「魂」。spectator 風に当たり判定・描画なし、プレイヤー一覧に出さない)を作り、可視の Mob(「体」)を、魂の位置・向きに毎tick合わせる。逆に、体が受けたダメージ・死は魂へ転送する。脳・空腹・持ち物・Brain(Q表)は既存のまま使える。
+- 体の移動: 魂の Motor が出す移動を、体へ反映する(魂を体の位置へ pull し、体の `getNavigation().moveTo` / `setDeltaMovement` で動かし、魂は体の位置にテレポート)。体が動けない地形は、魂も同じ位置に留まる。
+
+### 実装の段階(各段階にゲームテスト)
+1. **データ**: `CloneMobData`(体の UUID ↔ 魂の UUID、元の種類、元の陣営の敵対フラグ)。体の NBT に魂の UUID を保存。体が消えたら魂も消す(CloneManager.remove)。テスト: 体を kill すると魂の死亡処理(CLONE-DEATH)が走る。
+2. **召喚**: キー(ClientKeys に追加、例: V)→ パケット(network に `CloneMobKeyPacket`)で、サーバー側のフラグ `armedPlayers` を立てる。スポーンエッグの使用(`SpawnEggItem` のイベント `PlayerInteractEvent.RightClickBlock` / `EntityJoinLevelEvent`)で、フラグが立っていれば、通常のスポーンの代わりに、体を生成して魂を作る(CloneManager.summon の経路を再利用)。テスト: フラグ付きで体が生成され、魂が1つ対応する。
+3. **体と魂の同期**: `CloneMobBody` のティック処理(体の位置→魂、魂の入力→体の移動)。体は `Mob#setNoAi(true)` にして、バニラ AI を止める(魂が動かす)。テスト: 魂の目標へ体が歩く。
+4. **陣営**: 他の敵対モブが、体を、プレイヤーと同様に狙う(`NearestAttackableTargetGoal<Player>` は Player 限定なので、`EntityJoinLevelEvent` で、全 Mob に、体を狙う追加ゴールを、プレイヤー陣営なら付与)。元の陣営への敵対切り替えは、`/rlclone mobfaction <hostile|peace>`(体ごと、またはすべて)。`peace` なら、元の種類のモブの狙いから体を外す(`LivingChangeTargetEvent` で取り消す)。`Senses.isHostileTo/isAllyOf` は、体を味方として扱うよう、魂経由で既存の判定を使う。テスト: ゾンビの体を、別のゾンビが狙う、peace で狙わない。
+5. **能力の制限(v1)**: 手のないモブ(腕なし)は、採掘・クラフト・ドアは、なしにする(魂の Motor に `canUseHands` フラグを足し、`mine` / `placeBlockAt` / クラフトを無効化)。飛行・水棲は対象外(スポーンしても、地上移動のみ)。移動と戦闘(体の攻撃力で)・食事・狩りだけを v1 とする。
+6. **体の戦闘**: 魂の攻撃は、体の `doHurtTarget` を呼ぶ(体のダメージ・特殊効果をそのまま使う)。
+7. **保存**: 体と魂の対応を、世界の保存データに入れる(Bases と同じ SavedData)。
+
+### リスクと削るもの
+- 魂が ServerPlayer なので、プレイヤー数・Tab リスト・マルチプレイの通信に影響する(クローン200体の経験があるので、同じ扱いで)。
+- 体の物理(ジャンプ・落下・水)と魂の Motor の食い違い: v1 は「体の位置が真実、魂は追従」で、魂側の落下ダメージは無効にする。
+- 削る: 空を飛ぶ・泳ぐ・テレポートするモブ、複数体の乗り物、モブ固有の特殊攻撃(クリーパーの爆発の制御)。
+- 工数の目安: 段階1〜4で最小の動くもの。5〜7は、そのあと。
