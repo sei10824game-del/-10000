@@ -91,9 +91,6 @@ public final class CloneMobs {
 
     /** Persistent-data key: this mob is on the players' side (clone mobs and what they summon). */
     public static final String SIDE = "rlclones_players_side";
-    /** The clone-mob zombie whose call for help is being answered right now (same tick as the reinforcement joins the world). */
-    private static Entity aidFrom;
-    private static long aidTick = -1;
 
     /** Side hooks on (they were off once to bisect learnsEnemyRange...; passes with them off, 2 fails with them on: watch it). */
     private static final boolean SIDE_HOOKS = true;
@@ -102,27 +99,29 @@ public final class CloneMobs {
         return e != null && e.getPersistentData().getBoolean(SIDE);
     }
 
-    /** A zombie that is a clone mob calls for help: the reinforcement that joins in this tick is on the players' side. */
+    /** A zombie that is a clone mob calls for help: the reinforcement it gets (made here, so no other mob can be mistaken for it) is on the players' side. */
     @SubscribeEvent
     public static void onZombieAid(net.minecraftforge.event.entity.living.ZombieEvent.SummonAidEvent event) {
-        if (SIDE_HOOKS && soulOf(event.getEntity()) != null) {
-            aidFrom = event.getEntity();
-            aidTick = event.getEntity().level().getGameTime();
+        if (SIDE_HOOKS && soulOf(event.getEntity()) != null && event.getCustomSummonedAid() == null) {
+            var z = new net.minecraft.world.entity.monster.Zombie(event.getLevel());
+            z.getPersistentData().putBoolean(SIDE, true);
+            event.setCustomSummonedAid(z);
         }
     }
 
     /** What a clone mob summons (a vex of its owner, zombie reinforcements) is on the players' side - and, if set, a clone mob too. */
     @SubscribeEvent
     public static void onSummonedJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
-        if (!SIDE_HOOKS || !(event.getEntity() instanceof Mob mob) || event.loadedFromDisk() || event.getLevel().isClientSide || mob.getServer() == null || playerSide(mob)) {
+        if (!SIDE_HOOKS || !(event.getEntity() instanceof Mob mob) || event.loadedFromDisk() || event.getLevel().isClientSide || mob.getServer() == null || mob.getPersistentData().hasUUID(SOUL)) {
             return;
         }
-        boolean summoned = mob instanceof net.minecraft.world.entity.monster.Vex v && soulOf(v.getOwner()) != null
-                || aidFrom != null && aidTick == event.getLevel().getGameTime() && mob instanceof net.minecraft.world.entity.monster.Zombie;
-        if (!summoned) {
+        boolean vex = mob instanceof net.minecraft.world.entity.monster.Vex v && soulOf(v.getOwner()) != null;
+        if (vex) {
+            mob.getPersistentData().putBoolean(SIDE, true);
+        }
+        if (!playerSide(mob)) {
             return;
         }
-        mob.getPersistentData().putBoolean(SIDE, true);
         CloneManager m = CloneManager.get(mob.getServer());
         if (SYNC_READY && m.summonedAsClone()) {
             ClonePlayer soul = m.summon(null, (ServerLevel) event.getLevel(), mob.position(), mob.getYRot());
