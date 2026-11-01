@@ -241,9 +241,30 @@ public final class CloneMobs {
         }
     }
 
+    /** Hostile mobs go for clone mobs too, as they do for players (the body is a Mob, which their player-only goal skips). */
+    @SubscribeEvent
+    public static void onHostileJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof Mob mob && mob instanceof net.minecraft.world.entity.monster.Enemy && !event.getLevel().isClientSide
+                && !playerSide(mob)) {
+            mob.targetSelector.addGoal(3, new net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal<>(mob, Mob.class, 10, true, false,
+                    e -> playerSide(e) && soulOf(e) != null));
+        }
+    }
+
+    /** Peace with the kind: a clone mob (its body or its soul) is not a target for mobs of its own type. */
+    private static boolean peaceWith(Mob attacker, Entity target) {
+        Mob body = target instanceof Mob m ? m : target instanceof net.minecraft.world.entity.player.Player p ? bodyOf(p) : null;
+        return body != null && body.getType() == attacker.getType();
+    }
+
     /** Players' side never turns on the players or on each other (a vex does not go rogue); the hostile mobs' side of it is stage 4. */
     @SubscribeEvent
     public static void onTarget(net.minecraftforge.event.entity.living.LivingChangeTargetEvent event) {
+        if (CloneManager.mobPeace() && event.getEntity() instanceof Mob attacker && !playerSide(attacker) && event.getNewTarget() != null
+                && peaceWith(attacker, event.getNewTarget())) {
+            event.setCanceled(true);
+            return;
+        }
         if (SIDE_HOOKS && playerSide(event.getEntity()) && event.getNewTarget() != null
                 && (event.getNewTarget() instanceof net.minecraft.world.entity.player.Player || playerSide(event.getNewTarget()))) {
             event.setCanceled(true);

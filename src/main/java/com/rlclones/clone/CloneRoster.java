@@ -22,6 +22,8 @@ public class CloneRoster extends SavedData {
     public final java.util.Set<String> mobTypes = new java.util.TreeSet<>();
     /** Mobs a clone mob summons (vex, zombie reinforcements...) are clone mobs too. */
     public boolean summonedAsClone;
+    /** /rlclone mobfaction peace: mobs of a clone mob's own kind leave it alone (hostile = they still attack it, the default). */
+    public boolean mobPeace;
     public boolean breeding;
     /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
     public boolean chatHidden;
@@ -38,6 +40,7 @@ public class CloneRoster extends SavedData {
         r.linked = tag.getBoolean("linked");
         r.respawn = tag.getBoolean("respawn");
         r.breeding = tag.getBoolean("breeding");
+        r.mobPeace = tag.getBoolean("mobPeace");
         r.summonedAsClone = tag.getBoolean("summonedAsClone");
         r.chatHidden = tag.getBoolean("chatHidden");
         r.coward = tag.getBoolean("coward");
@@ -77,6 +80,7 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("linked", linked);
         tag.putBoolean("respawn", respawn);
         tag.putBoolean("breeding", breeding);
+        tag.putBoolean("mobPeace", mobPeace);
         tag.putBoolean("summonedAsClone", summonedAsClone);
         tag.putBoolean("chatHidden", chatHidden);
         tag.putBoolean("coward", coward);

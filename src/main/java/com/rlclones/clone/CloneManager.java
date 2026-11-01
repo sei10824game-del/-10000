@@ -262,6 +262,15 @@ public final class CloneManager {
         }
     }
 
+    public static boolean mobPeace() {
+        return instance != null && instance.roster().mobPeace;
+    }
+
+    public void setMobPeace(boolean on) {
+        roster().mobPeace = on;
+        roster().setDirty();
+    }
+
     /** Whether mobs summoned by a clone mob are clone mobs too (they are on the players' side either way). */
     public boolean summonedAsClone() {
         return roster().summonedAsClone;
@@ -274,7 +283,7 @@ public final class CloneManager {
 
     /** The settings the screen shows: battle royale, breeding, chat, coward, flee, link, respawn, summoned mobs as clones. */
     public boolean[] switches() {
-        return new boolean[]{isBattleRoyale(), isBreeding(), chatShown(), coward(), fleeAllowed(), isLinked(), isRespawnEnabled(), summonedAsClone()};
+        return new boolean[]{isBattleRoyale(), isBreeding(), chatShown(), coward(), fleeAllowed(), isLinked(), isRespawnEnabled(), summonedAsClone(), mobPeace()};
     }
 
     public void sendSettings(ServerPlayer to) {

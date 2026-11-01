@@ -70,6 +70,9 @@ public final class CloneCommand {
                                 .executes(ctx -> summonMobs(ctx, 1))
                                 .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                         .executes(ctx -> summonMobs(ctx, IntegerArgumentType.getInteger(ctx, "count"))))))
+                .then(Commands.literal("mobfaction").requires(CloneCommand::mayControl)
+                        .then(Commands.literal("hostile").executes(ctx -> setMobFaction(ctx, false)))
+                        .then(Commands.literal("peace").executes(ctx -> setMobFaction(ctx, true))))
                 .then(Commands.literal("summonedmobs").requires(CloneCommand::mayControl)
                         .executes(ctx -> setSummonedMobs(ctx, !manager(ctx).summonedAsClone()))
                         .then(Commands.literal("on").executes(ctx -> setSummonedMobs(ctx, true)))
@@ -196,6 +199,12 @@ public final class CloneCommand {
     private static int setFlee(CommandContext<CommandSourceStack> ctx, boolean on) {
         manager(ctx).setFleeAllowed(on);
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.flee_on" : "rlclones.msg.flee_off"), true);
+        return 1;
+    }
+
+    private static int setMobFaction(CommandContext<CommandSourceStack> ctx, boolean peace) {
+        manager(ctx).setMobPeace(peace);
+        ctx.getSource().sendSuccess(() -> Component.translatable(peace ? "rlclones.msg.mobpeace_on" : "rlclones.msg.mobpeace_off"), true);
         return 1;
     }
 

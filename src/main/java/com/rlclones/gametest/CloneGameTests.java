@@ -254,6 +254,24 @@ public final class CloneGameTests {
         h.succeedWhen(() -> h.assertTrue(body.position().distanceTo(soul.position()) < 1.0, "the body is where the soul is"));
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 400)
+    public static void plainMobsAttackCloneMobsUnlessAtPeace(GameTestHelper h) {
+        var server = h.getLevel().getServer();
+        CloneManager m = CloneManager.get(server);
+        m.setMobPeace(true);
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        var plain = h.spawn(net.minecraft.world.entity.EntityType.ZOMBIE, new net.minecraft.world.phys.Vec3(8.5, 2, 3.5));
+        h.runAfterDelay(120, () -> {
+            boolean left = plain.getTarget() != body && plain.getTarget() != soul;
+            m.setMobPeace(false);
+            h.assertTrue(left, "at peace: a zombie leaves the clone zombie alone");
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(plain.getTarget() == body || plain.getTarget() == soul, "hostile again: it goes for the clone zombie");
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
