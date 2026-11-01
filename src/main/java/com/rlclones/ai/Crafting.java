@@ -996,6 +996,11 @@ public final class Crafting {
         return false;
     }
 
+    /** About to dig for iron / diamonds with a pickaxe and under six planks' worth of wood (sticks 2 + a table 4) to make a new one when it wears out deep down (soak: tier 0, no wood, stuck at y 16-38). */
+    public static boolean spareWoodShort(Player p) {
+        return tierOf(p, PickaxeItem.class) >= 0 && Progression.digWanted(p) && woodUnits(p) + count(p, Items.STICK) / 2 < 6;
+    }
+
     /** A better pickaxe, or a stone sword / axe / shovel / hoe, can be made right now: asked for first thing (the forced target is set to it). */
     public boolean toolsPending() {
         Item up = pickaxeUpgrade(self);
