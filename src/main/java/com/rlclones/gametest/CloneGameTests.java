@@ -284,6 +284,20 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void handlessCloneMobsCannotMineOrBuild(GameTestHelper h) {
+        var cow = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.COW, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var zombie = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
+        h.assertTrue(!com.rlclones.clone.CloneMobs.canUseHands(com.rlclones.clone.CloneMobs.soulOf(cow)), "a cow has no hands");
+        h.assertTrue(com.rlclones.clone.CloneMobs.canUseHands(com.rlclones.clone.CloneMobs.soulOf(zombie)), "a zombie has");
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(cow);
+        soul.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
+        soul.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.COBBLESTONE, 4));
+        var at = h.absolutePos(new net.minecraft.core.BlockPos(3, 2, 5));
+        h.assertTrue(!soul.controller().motor().placeBlockAt(at) && !soul.controller().motor().mine(at.below()), "it neither builds nor mines");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

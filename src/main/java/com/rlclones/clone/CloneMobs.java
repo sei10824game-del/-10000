@@ -178,6 +178,24 @@ public final class CloneMobs {
         return id != null && p.level() instanceof ServerLevel l && l.getEntity(id) instanceof Mob m && m.isAlive() ? m : null;
     }
 
+    /** Hands to mine, build, open doors and craft: a plain clone, or a clone mob whose body is man-shaped (zombie, skeleton, illager, villager, piglin, witch). */
+    public static boolean canUseHands(net.minecraft.world.entity.player.Player p) {
+        Mob b = bodyOf(p);
+        return b == null || b instanceof net.minecraft.world.entity.monster.Zombie || b instanceof net.minecraft.world.entity.monster.AbstractSkeleton
+                || b instanceof net.minecraft.world.entity.monster.AbstractIllager || b instanceof net.minecraft.world.entity.npc.AbstractVillager
+                || b instanceof net.minecraft.world.entity.monster.piglin.AbstractPiglin || b instanceof net.minecraft.world.entity.monster.Witch;
+    }
+
+    /** A blow of the soul is a blow of the body (its own damage and effects: a husk's hunger, a spider's poison...); a body with no attack of its own leaves it to the soul's fist. */
+    public static boolean bodyStrike(net.minecraft.world.entity.player.Player p, Entity target) {
+        Mob b = bodyOf(p);
+        if (b == null || b.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) == null) {
+            return false;
+        }
+        b.doHurtTarget(target);
+        return true;
+    }
+
     /** Clone mobs breed with their own kind only (a plain clone with a plain clone). */
     public static boolean sameKind(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
         Mob x = bodyOf(a);

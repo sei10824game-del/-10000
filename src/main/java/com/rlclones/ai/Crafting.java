@@ -414,6 +414,9 @@ public final class Crafting {
 
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
+        if (!com.rlclones.clone.CloneMobs.canUseHands(p)) {
+            return out; // a clone mob with no hands crafts nothing
+        }
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().crafting().forcedTarget != null
                 && !satisfied(p, c.controller().crafting().forcedTarget)) {
             out.add(c.controller().crafting().forcedTarget);

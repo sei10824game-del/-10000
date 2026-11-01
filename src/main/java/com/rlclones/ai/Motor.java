@@ -685,7 +685,11 @@ public final class Motor {
 
     public void attack(Entity target) {
         self.resetLastActionTime();
-        self.attack(target);
+        if (com.rlclones.clone.CloneMobs.bodyStrike(self, target)) {
+            self.resetAttackStrengthTicker();
+        } else {
+            self.attack(target);
+        }
         self.swing(InteractionHand.MAIN_HAND);
     }
 
@@ -707,6 +711,10 @@ public final class Motor {
     }
 
     public boolean mine(BlockPos pos) {
+        if (!com.rlclones.clone.CloneMobs.canUseHands(self)) {
+            mineDebug = "no hands";
+            return false;
+        }
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);
         if (state.isAir()) {
@@ -879,6 +887,9 @@ public final class Motor {
      * player builds (supports walls and roofs). Returns true if the block is there afterwards.
      */
     public boolean placeBlockAt(BlockPos target) {
+        if (!com.rlclones.clone.CloneMobs.canUseHands(self)) {
+            return false;
+        }
         ServerLevel level = self.serverLevel();
         BlockState cur = level.getBlockState(target);
         if (!cur.canBeReplaced() && !cur.isAir() && cur.getDestroySpeed(level, target) == 0f && cur.getCollisionShape(level, target).isEmpty() && !cur.hasBlockEntity()
@@ -958,6 +969,9 @@ public final class Motor {
     }
 
     private void openDoorAhead() {
+        if (!com.rlclones.clone.CloneMobs.canUseHands(self)) {
+            return;
+        }
         if (!self.horizontalCollision && stuckCount < 2) {
             return; // (a pressure plate that did not fire leaves the door shut and the clone standing before it: stuck counts as well as bumping)
         }
