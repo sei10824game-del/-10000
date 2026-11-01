@@ -95,6 +95,9 @@ public final class CloneMobs {
     private static Entity aidFrom;
     private static long aidTick = -1;
 
+    /** Off while run 41260156217 / 8d54536 (learnsEnemyRange... failing twice) is bisected: the side hooks below are suspected. */
+    private static final boolean SIDE_HOOKS = false;
+
     public static boolean playerSide(Entity e) {
         return e != null && e.getPersistentData().getBoolean(SIDE);
     }
@@ -102,7 +105,7 @@ public final class CloneMobs {
     /** A zombie that is a clone mob calls for help: the reinforcement that joins in this tick is on the players' side. */
     @SubscribeEvent
     public static void onZombieAid(net.minecraftforge.event.entity.living.ZombieEvent.SummonAidEvent event) {
-        if (soulOf(event.getEntity()) != null) {
+        if (SIDE_HOOKS && soulOf(event.getEntity()) != null) {
             aidFrom = event.getEntity();
             aidTick = event.getEntity().level().getGameTime();
         }
@@ -111,7 +114,7 @@ public final class CloneMobs {
     /** What a clone mob summons (a vex of its owner, zombie reinforcements) is on the players' side - and, if set, a clone mob too. */
     @SubscribeEvent
     public static void onSummonedJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
-        if (!(event.getEntity() instanceof Mob mob) || event.loadedFromDisk() || event.getLevel().isClientSide || mob.getServer() == null || playerSide(mob)) {
+        if (!SIDE_HOOKS || !(event.getEntity() instanceof Mob mob) || event.loadedFromDisk() || event.getLevel().isClientSide || mob.getServer() == null || playerSide(mob)) {
             return;
         }
         boolean summoned = mob instanceof net.minecraft.world.entity.monster.Vex v && soulOf(v.getOwner()) != null
@@ -133,7 +136,7 @@ public final class CloneMobs {
     /** Players' side never turns on the players or on each other (a vex does not go rogue); the hostile mobs' side of it is stage 4. */
     @SubscribeEvent
     public static void onTarget(net.minecraftforge.event.entity.living.LivingChangeTargetEvent event) {
-        if (playerSide(event.getEntity()) && event.getNewTarget() != null
+        if (SIDE_HOOKS && playerSide(event.getEntity()) && event.getNewTarget() != null
                 && (event.getNewTarget() instanceof net.minecraft.world.entity.player.Player || playerSide(event.getNewTarget()))) {
             event.setCanceled(true);
         }
