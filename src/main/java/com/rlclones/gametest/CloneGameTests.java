@@ -272,6 +272,18 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void cloneMobBodyIsTiedToItsSoulAgainAfterLoading(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        com.rlclones.clone.CloneMobs.forgetLinks(); // (what a restart does to the map)
+        h.assertTrue(com.rlclones.clone.CloneMobs.bodyOf(soul) == null, "the link is gone");
+        com.rlclones.clone.CloneMobs.registerLoaded(body, h.getLevel().getGameTime());
+        com.rlclones.clone.CloneMobs.relinkLoaded(h.getLevel().getServer(), h.getLevel().getGameTime());
+        h.assertTrue(com.rlclones.clone.CloneMobs.bodyOf(soul) == body, "tied again from the soul's UUID in the body's data");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

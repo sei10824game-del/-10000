@@ -31,7 +31,7 @@ public final class CloneMobs {
     /** Players whose next spawn egg makes a clone mob. */
     private static final Set<UUID> ARMED = new HashSet<>();
 
-    /** Soul -> body (not saved yet: stage 7 puts it in the world data). */
+    /** Soul -> body (rebuilt after a restart from the soul UUID kept in each body's own saved data). */
     private static final java.util.Map<UUID, UUID> BODY = new java.util.HashMap<>();
     /** Persistent-data key on a baby body: the game time it grows up at (types with no baby form of their own, like the zombie, grow by this). */
     public static final String GROW_AT = "rlclones_grow_at";
@@ -72,10 +72,60 @@ public final class CloneMobs {
         BODY.put(soul.getUUID(), body.getUUID());
     }
 
+    /** Bodies loaded from disk whose soul is not found yet (clones log back in after the world loads): soul -> (body, give-up time). */
+    private static final java.util.Map<UUID, Mob> LOADED = new java.util.HashMap<>();
+    private static final java.util.Map<UUID, Long> LOADED_UNTIL = new java.util.HashMap<>();
+
+    /** A body comes back from the world data: it is tied to its soul again as soon as that clone is logged in (the link is the soul's UUID in the body's own data). */
+    @SubscribeEvent
+    public static void onBodyLoaded(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.loadedFromDisk() && !event.getLevel().isClientSide && event.getEntity() instanceof Mob mob && mob.getPersistentData().hasUUID(SOUL)) {
+            registerLoaded(mob, event.getLevel().getGameTime());
+        }
+    }
+
+    public static void registerLoaded(Mob mob, long now) {
+        UUID soul = mob.getPersistentData().getUUID(SOUL);
+        LOADED.put(soul, mob);
+        LOADED_UNTIL.put(soul, now + 2400); // (two minutes for the clones to log in; then the body is an orphan)
+    }
+
+    /** Tests: what a restart does. */
+    public static void forgetLinks() {
+        BODY.clear();
+    }
+
+    /** Tie the loaded bodies to their souls; an orphan (no such clone any more) is removed. */
+    public static void relinkLoaded(net.minecraft.server.MinecraftServer server, long now) {
+        var it = LOADED.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            ClonePlayer soul = CloneManager.get(server).byId(e.getKey());
+            Mob body = e.getValue();
+            if (soul != null && body.isAlive()) {
+                link(body, soul);
+                it.remove();
+                LOADED_UNTIL.remove(e.getKey());
+            } else if (!body.isAlive() || now > LOADED_UNTIL.getOrDefault(e.getKey(), 0L)) {
+                if (body.isAlive()) {
+                    body.discard();
+                }
+                it.remove();
+                LOADED_UNTIL.remove(e.getKey());
+            }
+        }
+    }
+
     /** Every tick: each body goes to its soul's place and facing; a body or soul that is gone takes the other with it. */
     @SubscribeEvent
     public static void onServerTick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
-        if (event.phase != net.minecraftforge.event.TickEvent.Phase.END || BODY.isEmpty()) {
+        if (event.phase != net.minecraftforge.event.TickEvent.Phase.END) {
+            return;
+        }
+        if (!LOADED.isEmpty() && event.getServer().getTickCount() % 20 == 0) {
+            relinkLoaded(event.getServer(), event.getServer().overworld().getGameTime());
+        }
+        if (BODY.isEmpty()) {
             return;
         }
         var it = BODY.entrySet().iterator();
