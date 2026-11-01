@@ -102,9 +102,9 @@ public final class CloneMobs {
     /** A zombie that is a clone mob calls for help: the reinforcement that joins in this tick is on the players' side. */
     @SubscribeEvent
     public static void onZombieAid(net.minecraftforge.event.entity.living.ZombieEvent.SummonAidEvent event) {
-        if (soulOf(event.getSummoner()) != null) {
-            aidFrom = event.getSummoner();
-            aidTick = event.getLevel().getGameTime();
+        if (soulOf(event.getEntity()) != null) {
+            aidFrom = event.getEntity();
+            aidTick = event.getEntity().level().getGameTime();
         }
     }
 
