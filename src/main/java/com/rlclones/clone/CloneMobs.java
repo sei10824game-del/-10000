@@ -95,8 +95,8 @@ public final class CloneMobs {
     private static Entity aidFrom;
     private static long aidTick = -1;
 
-    /** Off while run 41260156217 / 8d54536 (learnsEnemyRange... failing twice) is bisected: the side hooks below are suspected. */
-    private static final boolean SIDE_HOOKS = false;
+    /** Side hooks on (they were off once to bisect learnsEnemyRange...; passes with them off, 2 fails with them on: watch it). */
+    private static final boolean SIDE_HOOKS = true;
 
     public static boolean playerSide(Entity e) {
         return e != null && e.getPersistentData().getBoolean(SIDE);
