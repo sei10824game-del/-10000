@@ -856,3 +856,10 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 体の物理(ジャンプ・落下・水)と魂の Motor の食い違い: v1 は「体の位置が真実、魂は追従」で、魂側の落下ダメージは無効にする。
 - 削る: 空を飛ぶ・泳ぐ・テレポートするモブ、複数体の乗り物、モブ固有の特殊攻撃(クリーパーの爆発の制御)。
 - 工数の目安: 段階1〜4で最小の動くもの。5〜7は、そのあと。
+
+## 72. 引き継ぎ(2026-11-01 時点、ブランチ claude/s11-1-implementation-ib5d52)
+- 状況: 直近のCIはビルド通過。ゲームテストで落ちるのは既知の不安定なもののみ(penscowswhenwheatpilesup, asksforfoodandafriendbringssome, cutsthefootofatreehiddenbyleaves, huntsfishinthewater, leavesnoscaffoldbehindatalltree, pearlsoveralavamoat…)。
+- 直近の実装(すべてpush済み、実機未確認): 石ツール最優先(木のツルハシ後、石が見えなければ階段掘りで降りる)、かまど優先(生肉・鉱石)、焚き火の積み込み強化、MOD装備のクラフト、木材不足なら木こり先行(pickaxeWoodShort)、階段の2車線化(StairMining.wide)、助けを呼ぶ人数の学習(helpBonus)、満杯時の保管(Storage.bagFull)、透明な敵への反応、ドア関連(Motor.openDoorAhead、DoorBreath)、animalCap = 10 + 4 x クローン数 x 係数。
+- 長時間試験(12体・72000tick): 石のツルハシ12/12、かまど12/12、鉄インゴット9/12、鉄のツルハシ0/12(木材不足が原因と判断し修正済み、再測定が必要)。丸石を、スラブ・壁などに変える無駄なクラフトが残る(curiosity クラフト)。
+- 次にやること: (1) 最新の長時間試験で鉄のツルハシの到達数を確認、(2) クローンモブ(71)の段階1〜4、(3) 未実装の案: 死因の罰、遠征価値の学習、隊列戦闘、防具の耐久管理、睡眠。
+- 注意: 前のセッションでは Agent ツールが使えず、Opusへの設計委任ができなかった(71は Sonnet が書いた)。使えるかは、セッションの設定(ツール許可)による。使えない場合も、設計は plan.md に残して実装へ進んでよい。
