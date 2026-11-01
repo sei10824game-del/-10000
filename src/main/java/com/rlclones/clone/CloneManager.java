@@ -178,6 +178,12 @@ public final class CloneManager {
     }
 
     /** Note who a clone was born of (breeding; tests). */
+    /** The clone with this UUID (null = none logged in). */
+    @Nullable
+    public ClonePlayer byId(UUID id) {
+        return clones.get(id);
+    }
+
     public void recordParents(UUID child, UUID a, UUID b) {
         roster().parents.put(child, List.of(a, b));
         roster().setDirty();
@@ -605,6 +611,7 @@ public final class CloneManager {
                         : Component.translatable("rlclones.msg.respawn_off").withStyle(ChatFormatting.GRAY));
             }
             case TEACH_HARMFUL -> teachHarmful(sender);
+            case CLONE_MOB -> CloneMobs.toggleArmed(sender);
             case TOGGLE_BREEDING -> {
                 setBreeding(!isBreeding());
                 broadcast(isBreeding()

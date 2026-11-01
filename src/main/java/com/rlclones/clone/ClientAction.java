@@ -7,5 +7,6 @@ public enum ClientAction {
     TOGGLE_RESPAWN,
     TEACH_HARMFUL,
     BATTLE_ROYALE,
-    TOGGLE_BREEDING
+    TOGGLE_BREEDING,
+    CLONE_MOB
 }

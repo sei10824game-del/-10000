@@ -208,6 +208,16 @@ public final class CloneGameTests {
 
     // ------------------------------------------------------------------ AC: clones are real players
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void cloneMobKeepsItsSoulAndDiesWithIt(GameTestHelper h) {
+        net.minecraft.world.entity.Mob body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        h.assertTrue(body != null, "a body is made");
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        h.assertTrue(soul != null && soul.isAlive(), "one soul answers to the body");
+        body.kill();
+        h.succeedWhen(() -> h.assertTrue(soul.isDeadOrDying() || !soul.isAlive(), "the soul dies with the body"));
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
