@@ -978,17 +978,14 @@ public final class Crafting {
 
     /** The materials for a better pickaxe (stone / iron / diamond, three of them) are in the bag and only the wood (sticks, a table) is lacking. */
     public static boolean pickaxeWoodShort(Player p) {
-        int have = tierOf(p, PickaxeItem.class);
-        if (have < 0) {
-            return false;
-        }
+        int have = tierOf(p, PickaxeItem.class); // (-1 = none: a pickaxe worn out deep down is wood-short too; soak: tier 0, no wood, stuck at y 16-38)
         for (Item it : PICKAXES) {
             int tier = ((TieredItem) it).getTier().getLevel();
             if (tier <= have) {
                 continue;
             }
-            boolean mats = it == Items.STONE_PICKAXE ? cobble(p) >= 3 : it == Items.IRON_PICKAXE ? count(p, Items.IRON_INGOT) >= 3
-                    : it == Items.DIAMOND_PICKAXE && count(p, Items.DIAMOND) >= 3;
+            boolean mats = it == Items.WOODEN_PICKAXE || (it == Items.STONE_PICKAXE ? cobble(p) >= 3 : it == Items.IRON_PICKAXE ? count(p, Items.IRON_INGOT) >= 3
+                    : it == Items.DIAMOND_PICKAXE && count(p, Items.DIAMOND) >= 3);
             if (mats && !makeable(p, it)) {
                 return true;
             }
