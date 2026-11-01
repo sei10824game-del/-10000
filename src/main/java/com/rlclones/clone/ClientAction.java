@@ -8,5 +8,6 @@ public enum ClientAction {
     TEACH_HARMFUL,
     BATTLE_ROYALE,
     TOGGLE_BREEDING,
-    CLONE_MOB
+    CLONE_MOB,
+    OPEN_SETTINGS
 }

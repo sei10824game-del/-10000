@@ -123,11 +123,34 @@ public final class CloneCommand {
                         .then(Commands.literal("unlimited").requires(s -> s.hasPermission(2)).executes(ctx -> setLimit(ctx, 0)))
                         .then(Commands.argument("max", IntegerArgumentType.integer(0, 1_000_000)).requires(s -> s.hasPermission(2))
                                 .executes(ctx -> setLimit(ctx, IntegerArgumentType.getInteger(ctx, "max")))))
+                .then(Commands.literal("mobtype").requires(CloneCommand::mayControl)
+                        .then(Commands.literal("list").executes(ctx -> {
+                            ctx.getSource().sendSuccess(() -> Component.literal("Clone mob types: " + manager(ctx).cloneMobTypes()), false);
+                            return 1;
+                        }))
+                        .then(Commands.literal("add").then(Commands.argument("id", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                .suggests(net.minecraft.commands.synchronization.SuggestionProviders.SUMMONABLE_ENTITIES)
+                                .executes(ctx -> setMobType(ctx, true))))
+                        .then(Commands.literal("remove").then(Commands.argument("id", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                .suggests(net.minecraft.commands.synchronization.SuggestionProviders.SUMMONABLE_ENTITIES)
+                                .executes(ctx -> setMobType(ctx, false)))))
                 .then(Commands.literal("save").requires(CloneCommand::mayControl).executes(ctx -> {
                     manager(ctx).saveAll();
                     ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.cmd.saved"), false);
                     return 1;
                 })));
+    }
+
+    /** /rlclone mobtype add|remove: natural spawns of this entity type become (or stop being) clone mobs. */
+    private static int setMobType(CommandContext<CommandSourceStack> ctx, boolean on) {
+        var id = net.minecraft.commands.arguments.ResourceLocationArgument.getId(ctx, "id");
+        if (!net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.containsKey(id)) {
+            ctx.getSource().sendFailure(Component.literal("Unknown entity type " + id));
+            return 0;
+        }
+        manager(ctx).setCloneMobType(id.toString(), on);
+        ctx.getSource().sendSuccess(() -> Component.literal((on ? "Natural " : "No longer natural ") + id + (on ? " spawns become clone mobs" : " spawns as clone mobs")), true);
+        return 1;
     }
 
     private static int setLimit(CommandContext<CommandSourceStack> ctx, int max) {

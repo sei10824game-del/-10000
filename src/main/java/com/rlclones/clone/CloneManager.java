@@ -243,6 +243,27 @@ public final class CloneManager {
         roster().setDirty();
     }
 
+    /** Entity-type ids whose natural spawns become clone mobs. */
+    public java.util.Set<String> cloneMobTypes() {
+        return java.util.Collections.unmodifiableSet(roster().mobTypes);
+    }
+
+    public void setCloneMobType(String id, boolean on) {
+        if (on ? roster().mobTypes.add(id) : roster().mobTypes.remove(id)) {
+            roster().setDirty();
+        }
+    }
+
+    /** The settings the screen shows: battle royale, breeding, chat, coward, flee, link, respawn. */
+    public boolean[] switches() {
+        return new boolean[]{isBattleRoyale(), isBreeding(), chatShown(), coward(), fleeAllowed(), isLinked(), isRespawnEnabled()};
+    }
+
+    public void sendSettings(ServerPlayer to) {
+        com.rlclones.network.ModNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.PLAYER.with(() -> to),
+                new com.rlclones.network.ModNetwork.SettingsPacket(switches(), new java.util.ArrayList<>(roster().mobTypes)));
+    }
+
     public static void shutdown() {
         instance = null;
         AgentEvents.clear();
@@ -612,6 +633,7 @@ public final class CloneManager {
             }
             case TEACH_HARMFUL -> teachHarmful(sender);
             case CLONE_MOB -> CloneMobs.toggleArmed(sender);
+            case OPEN_SETTINGS -> sendSettings(sender);
             case TOGGLE_BREEDING -> {
                 setBreeding(!isBreeding());
                 broadcast(isBreeding()

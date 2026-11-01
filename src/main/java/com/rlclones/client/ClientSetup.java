@@ -25,6 +25,7 @@ public final class ClientSetup {
     public static final KeyMapping TEACH = new KeyMapping("key.rlclones.teach_harmful", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_L, CATEGORY);
     public static final KeyMapping BATTLE_ROYALE = new KeyMapping("key.rlclones.battle_royale", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G, CATEGORY);
     public static final KeyMapping CLONE_MOB = new KeyMapping("key.rlclones.clone_mob", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V, CATEGORY);
+    public static final KeyMapping SETTINGS = new KeyMapping("key.rlclones.settings", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K, CATEGORY);
     public static final KeyMapping BREEDING = new KeyMapping("key.rlclones.breeding", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, CATEGORY);
 
     private ClientSetup() {
@@ -39,6 +40,7 @@ public final class ClientSetup {
         event.register(BATTLE_ROYALE);
         event.register(BREEDING);
         event.register(CLONE_MOB);
+        event.register(SETTINGS);
     }
 
     @SubscribeEvent

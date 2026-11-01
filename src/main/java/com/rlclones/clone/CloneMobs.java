@@ -88,6 +88,44 @@ public final class CloneMobs {
         }
     }
 
+    /** Off until stage 3 (body <-> soul sync) exists: without it a natural clone mob would be a plain mob plus a visible clone. */
+    private static final boolean SYNC_READY = false;
+
+    /** A mob of a listed type spawns by itself (world, chunk generation, structures...): it becomes a clone mob. */
+    @SubscribeEvent
+    public static void onNaturalSpawn(net.minecraftforge.event.entity.living.MobSpawnEvent.FinalizeSpawn event) {
+        MobSpawnType t = event.getSpawnType();
+        Mob mob = event.getEntity();
+        if (!SYNC_READY || mob.level().isClientSide || mob.getServer() == null || mob.getPersistentData().hasUUID(SOUL)
+                || t == MobSpawnType.SPAWN_EGG || t == MobSpawnType.COMMAND || t == MobSpawnType.DISPENSER || t == MobSpawnType.MOB_SUMMONED) {
+            return;
+        }
+        var key = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
+        CloneManager m = CloneManager.get(mob.getServer());
+        if (key == null || !m.cloneMobTypes().contains(key.toString())) {
+            return;
+        }
+        ClonePlayer soul = m.summon(null, event.getLevel().getLevel(), mob.position(), mob.getYRot());
+        if (soul != null) {
+            mob.getPersistentData().putUUID(SOUL, soul.getUUID());
+            mob.setPersistenceRequired(); // (a clone mob never despawns: its soul would be left behind)
+        }
+    }
+
+    /** The body is gone for good (discarded, e.g. despawned): its soul is forgotten with it. */
+    @SubscribeEvent
+    public static void onBodyGone(net.minecraftforge.event.entity.EntityLeaveLevelEvent event) {
+        Entity e = event.getEntity();
+        var why = e.getRemovalReason();
+        if (why != Entity.RemovalReason.DISCARDED) { // (killed: the death handler above deals with the soul)
+            return;
+        }
+        ClonePlayer soul = soulOf(e);
+        if (soul != null) {
+            CloneManager.get(e.getServer()).remove(soul, true, Component.literal("its body is gone"));
+        }
+    }
+
     /** The body dies: so does its soul (the usual clone death follows). */
     @SubscribeEvent
     public static void onBodyDeath(LivingDeathEvent event) {

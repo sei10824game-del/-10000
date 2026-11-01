@@ -18,6 +18,8 @@ public class CloneRoster extends SavedData {
     public final Map<UUID, String> teams = new LinkedHashMap<>();
     /** Clones born of two parents (N key breeding): child -> its parents. */
     public final Map<UUID, java.util.List<UUID>> parents = new LinkedHashMap<>();
+    /** Entity types (ids) whose natural spawns become clone mobs (plan.md 71 / settings screen). */
+    public final java.util.Set<String> mobTypes = new java.util.TreeSet<>();
     public boolean breeding;
     /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
     public boolean chatHidden;
@@ -38,6 +40,9 @@ public class CloneRoster extends SavedData {
         r.coward = tag.getBoolean("coward");
         r.noFlee = tag.getBoolean("noFlee");
         r.nextIndex = Math.max(1, tag.getInt("nextIndex"));
+        for (Tag t : tag.getList("mobTypes", Tag.TAG_STRING)) {
+            r.mobTypes.add(t.getAsString());
+        }
         ListTag list = tag.getList("clones", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             CompoundTag c = list.getCompound(i);
@@ -73,6 +78,9 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("coward", coward);
         tag.putBoolean("noFlee", noFlee);
         tag.putInt("nextIndex", nextIndex);
+        ListTag mt = new ListTag();
+        mobTypes.forEach(m -> mt.add(net.minecraft.nbt.StringTag.valueOf(m)));
+        tag.put("mobTypes", mt);
         ListTag list = new ListTag();
         profiles.forEach((id, profile) -> {
             CompoundTag c = new CompoundTag();

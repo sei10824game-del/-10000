@@ -53,6 +53,8 @@ public final class ClientKeys {
             ModNetwork.sendToServer(ClientAction.BATTLE_ROYALE);
         } else if (matches(ClientSetup.BREEDING, key)) {
             ModNetwork.sendToServer(ClientAction.TOGGLE_BREEDING);
+        } else if (matches(ClientSetup.SETTINGS, key)) {
+            ModNetwork.sendToServer(ClientAction.OPEN_SETTINGS);
         } else if (matches(ClientSetup.CLONE_MOB, key)) {
             ModNetwork.sendToServer(ClientAction.CLONE_MOB);
         }

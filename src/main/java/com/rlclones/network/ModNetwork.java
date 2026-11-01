@@ -28,6 +28,36 @@ public final class ModNetwork {
                 .decoder(ActionPacket::decode)
                 .consumerMainThread(ActionPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(SettingsPacket.class, 1, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(SettingsPacket::encode)
+                .decoder(SettingsPacket::decode)
+                .consumerMainThread(SettingsPacket::handle)
+                .add();
+    }
+
+    /** Server -> client: the switches and the clone-mob entity ids the settings screen shows. */
+    public record SettingsPacket(boolean[] switches, java.util.List<String> mobTypes) {
+        public void encode(FriendlyByteBuf buf) {
+            buf.writeVarInt(switches.length);
+            for (boolean b : switches) {
+                buf.writeBoolean(b);
+            }
+            buf.writeCollection(mobTypes, FriendlyByteBuf::writeUtf);
+        }
+
+        public static SettingsPacket decode(FriendlyByteBuf buf) {
+            boolean[] s = new boolean[buf.readVarInt()];
+            for (int i = 0; i < s.length; i++) {
+                s[i] = buf.readBoolean();
+            }
+            return new SettingsPacket(s, buf.readList(FriendlyByteBuf::readUtf));
+        }
+
+        public void handle(Supplier<NetworkEvent.Context> ctx) {
+            net.minecraftforge.fml.DistExecutor.unsafeRunWhenOn(net.minecraftforge.api.distmarker.Dist.CLIENT,
+                    () -> () -> com.rlclones.client.SettingsScreen.receive(this));
+            ctx.get().setPacketHandled(true);
+        }
     }
 
     public static void sendToServer(ClientAction action) {
