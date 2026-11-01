@@ -863,3 +863,96 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 - 長時間試験(12体・72000tick): 石のツルハシ12/12、かまど12/12、鉄インゴット9/12、鉄のツルハシ0/12(木材不足が原因と判断し修正済み、再測定が必要)。丸石を、スラブ・壁などに変える無駄なクラフトが残る(curiosity クラフト)。
 - 次にやること: (1) 最新の長時間試験で鉄のツルハシの到達数を確認、(2) クローンモブ(71)の段階1〜4、(3) 未実装の案: 死因の罰、遠征価値の学習、隊列戦闘、防具の耐久管理、睡眠。
 - 注意: 前のセッションでは Agent ツールが使えず、Opusへの設計委任ができなかった(71は Sonnet が書いた)。使えるかは、セッションの設定(ツール許可)による。使えない場合も、設計は plan.md に残して実装へ進んでよい。
+
+## 73. クローンモブの特性と特殊攻撃の学習(設計のみ、未実装。2026-11-01)
+要望: (1) 元のモブの耐性・弱点を生まれつき知っている(学習で死なない)。(2) 固有の特殊攻撃を Brain(Q表)で学ぶ。(3) 体の大きさを知り、通れない所は体の大きさ分を掘って通る。
+**前提: 71 の段階3(体と魂の同期)が終わっていること。** 体の位置・接地・衝突・ダメージが真実で、魂(ClonePlayer)はそれに従う。魂は環境ダメージ(溺れ・溶岩・落下・日光)を受けない(ダメージは体から転送されるものだけ)。これが無いと、本章の判定は魂の体で行われて全部ずれる。
+
+### 73.1 特性テーブル(データ駆動)
+- `BodyTraits`(record。1か所): `sun`(日光で燃える)、`water`(水・雨で傷つく)、`fire`(火・溶岩無効)、`safeDrop`(安全に降りられる高さ。落下無効なら無限)、`breathes`(溺れない)、`undead`(回復/負傷のポーションが逆、毒・再生なし)、`width`/`height`(体の当たり判定)、`hands`(71 段階5 の `canUseHands` をここへ統合)、`specials`(特殊攻撃の一覧。73.3)。
+- 取得: `BodyTraits.of(Player)`。普通のクローン(体なし)は `PLAYER` 定数を返す → 既存の挙動は一切変わらない。体ごとに1回作ってキャッシュ(体の種類 → traits)。
+- 既定値は API から導く(mod モブにもそのまま効く):
+| 項目 | 既定 |
+|---|---|
+| fire | `EntityType.fireImmune()` |
+| water | `LivingEntity.isSensitiveToWater()` |
+| breathes | `LivingEntity.canBreatheUnderwater()` |
+| safeDrop | `EntityTypeTags.FALL_DAMAGE_IMMUNE` なら無限、それ以外は `Mob.getMaxFallDistance()`(1.20.1 にタグがあるか実装時に確認。無ければ JSON のみ) |
+| undead | `getMobType() == MobType.UNDEAD` |
+| sun | `undead && !fire`。さらに Brain の観察(`EnemyKnowledge.BURNS_IN_DAYLIGHT`、CloneController の flaggedBurn)がその種類で立っていれば true |
+| width/height | `body.getBbWidth()/getBbHeight()`(毎回体から読む。子供・スライムの大きさの変化に追従) |
+| specials | `RangedAttackMob` を実装していれば `RANGED`。それ以外は JSON |
+- 上書き: データパックの JSON `data/<ns>/rlclones_mob_traits/<entity path>.json`(例 `minecraft/husk.json` = `{"sun":false}`、`minecraft/blaze.json` = `{"specials":[{"kind":"small_fireball","cooldown":100,"range":16}]}`)。書いた項目だけ既定を上書き。読み込みはバニラの `SimpleJsonResourceReloadListener` を `AddReloadListenerEvent` で登録(新しい依存なし)。mod モブは JSON で既存の kind に割り当てる(新しい kind はコードが要る)。
+- 同梱する JSON(既定で合わないものだけ): husk(sun=false)、enderman/blaze/creeper/evoker/witch の specials、drowned(breathes は既定で true)。
+
+### 73.2 危険判定への差し込み(Brain には書かない)
+- 原則: 体の特性は**問い合わせ時の上書き**で、Brain(共有・保存される)へは書かない。ブレイズの体が「溶岩は安全」と学ぶと、仲間の人型クローンが溶岩に入るため。
+- 差し込み点(すべて `BodyTraits.of(self)` を見るだけ):
+  - `Motor.lavaNear` / `hazardAhead`: `fire` なら溶岩・火を危険にしない。`water` なら水を溶岩と同じ扱いにする。調べる範囲を体の幅に合わせる(±1 → ±ceil(width/2)+0)。
+  - `Motor.deadlyDropAhead` / `dropAt` のしきい値(今は 4〜5): `safeDrop` を使う。
+  - 息: `CloneController`(957 付近の `Caution.airUp`)・`DoorBreath`・`Consumables`(414 の水中呼吸ポーション): `breathes` なら全部飛ばす。
+  - 火: `Consumables`(279 の消火・耐火ポーション): `fire` なら飛ばす。
+  - 害のある接触の学習(`judgeHarmfulContact`/`learnHarmful`): 体の特性で説明できるダメージ(water の体が水で、sun の体が日光で)は学ばない。**これをしないと「水は有害」が Brain 経由で全クローンへ広がる。**
+  - `EffectSense`: `undead` の体は、効果の学習を `undead:` を前に付けたキーに分ける(人型の学習を汚さない)。既知の値(instant_health 悪・instant_damage 良・poison/regeneration 無)を最初から入れる。
+  - `Escape` の悪い方向(badDirs): 上と同じ判定関数を通す(水/溶岩の判定を Motor のものに寄せる)。
+- 日光・雨(新しい反射。`Escape` の隣の小さな処理): `sun` で昼・空が見える・頭に何も無い(体の頭スロット)とき、または `water` で雨に当たっているとき、16 ブロック以内の空の見えない立てる場所へ逃げる(`canSeeSky` で探す)。昼の間は `Senses.strategyMask` から EXPLORE・EXPEDITION・JOIN・GATHER_WOOD を外す(状態の桁は足さない)。
+- 変換の防止: ゾンビの体が水中で溺死体に変わる等で体が入れ替わるとリンクが切れる。`LivingConversionEvent.Pre` で、魂のある体の変換は取り消す。
+
+### 73.3 特殊攻撃の学習
+- 行動: `CombatAction` の**末尾**に `SPECIAL(30)`・`SPECIAL2(30)` を足す。`QTable.fromBytes` は行動数が増えても読める(足りない枠は 0)ので、保存済みの表はそのまま使える(P-07 の「古いキーを変えない」と同じ考え)。人型のクローンでは mask で常に外す(`Senses.combatMask`、`Brain.describePolicy` の mask、`AgentWatcher` の模倣)。
+- 何をするか(`Specials`、kind → 処理。体の API を呼ぶ):
+| kind | 体 | 処理 | 使える条件(mask) | 既定の待ち |
+|---|---|---|---|---|
+| ranged | skeleton, stray, witch, pillager, snow golem, piglin, mod の RangedAttackMob | `performRangedAttack(target, 1f)` | 視線が通る・距離 3〜16 | 40 |
+| explode | creeper | `ignite()`(導火線はバニラの tick) | 距離 3 以内。敵が離れたら `setSwellDir(-1)` で止める | 一度きり |
+| small_fireball | blaze | SmallFireball を3発(所有者=体) | 視線・距離 16 以内 | 100 |
+| teleport | enderman | `randomTeleport` で標的の背後 2 ブロックへ(立てる所のみ) | 距離 4〜24・水中でない | 60 |
+| fangs | evoker(SPECIAL) | EvokerFangs を標的へ一列 | 距離 12 以内 | 100 |
+| summon_vex | evoker(SPECIAL2) | Vex を3体(生存は合計6まで)。陣営は既存の `onSummonedJoin` で味方 | 標的がいる | 340 |
+- 観測: 状態(`CombatState`)の桁は**足さない**。使えるか(待ち・距離・視線)は mask で表す。距離は既存の `DIST`(敵の間合い基準)で足りる。代わりに戦闘の Q 表の名前を体ごとに分ける: 体ありのとき `"<体の種類>><敵の種類>"`(例 `minecraft:blaze>minecraft:zombie`)。`Brain.knowledge` / `prior` / `donorFor` は `>` の後ろ(敵の種類)で引く。初めての表は、同じ敵の人型の表から軽く写す(既存の donor と同じ n≤2。SPECIAL の枠は写さない)。こうしないと、共有の表で「ゾンビには SPECIAL」が体の違うクローンに混ざる。
+- 初期値(`CombatState.prior` に kind を渡す): ranged/small_fireball/fangs は DIST≥2 で 0.4、0〜1 で 0.05。explode は DIST=0 かつ CROWD≥1(2体以上)で 0.3、それ以外 -0.3。teleport は HP 低で 0.2(背後へ逃げる)、それ以外 0.1。summon_vex は 0.3。
+- 報酬(P-08 の「その行動の中で出す」に合わせ、戦闘の `stepReward` へ):
+  - 与ダメージ・撃破は既存の `onDealtDamage`(+量)・`onKill`(+8)をそのまま使う。**要る変更は帰属だけ**: 攻撃者が「魂のある体」「その体が所有者の飛び道具(矢・火の玉・牙)」「その体が呼んだ Vex」なら、その魂の controller に渡す(Vex の分は ×0.5)。
+  - 味方・プレイヤーを巻き込んだ: -1×ダメージ(爆発・火の玉)。新規。
+  - 待ちの無駄(SPECIAL を出して 0 ダメージ): 既存の -0.01/tick だけ。追加しない。
+  - クリーパーの爆発で体が死ぬのは既存の死亡 -25。2体以上を倒せば +16 以上+与ダメージで黒字になり、1体相手では赤字 → 「囲まれた時だけ爆発」が学べる見込み。黒字にならなければソークで撃破の値だけ調整する(自爆の罰は下げない)。
+- 戦略層(P-07): 桁は足さない。teleport は戦闘の外でも `Escape` の最後の手(溶岩・水・HP 低で逃げ場なし)として反射で使う(学習しない)。
+
+### 73.4 体の大きさの理解(当たり判定)
+- 食い違い: 魂は見えない ClonePlayer(衝突なし)で、`self.horizontalCollision`・`onGround`・`getBbWidth` は魂のもの。経路の代理(`PathProxyEntity`)は**プレイヤーの大きさ**。エンダーマン(高さ2.9)・クモ(幅1.4)・アイアンゴーレムは、経路は「通れる」のに体が詰まる。
+- 方針:
+  1. `Motor.body()`(体があれば体、無ければ self)を作り、衝突・接地・進み具合の判定(`stuckCount` の計算、`openDoorAhead`、`mendHighStep`、`StairMining.stuck`、`Escape` の「囲まれた」判定)を全部 body() で読む。
+  2. 経路の代理を体の大きさにする: `PathProxyEntity` に幅・高さを持たせ `refreshDimensions()`(代理は大きさごとに1つ)。共有の経路キャッシュ `RECENT` のキーに大きさ(ceil(w), ceil(h))を足す。体より小さい(ニワトリ等)場合も体の大きさで探す(通れる道が増える)。
+  3. 体の大きさで道が無い・詰まった(`stuckCount>=3`)とき: プレイヤーの大きさの代理で経路を作り、それを骨組みに**体の分だけ広げて掘る**。
+- 掘る範囲: 次の経路ノードへ向けて体の AABB を1ブロック進めた箱 `body.getBoundingBox().move(dir).deflate(0.01)` と交わる、衝突のあるブロック(足元の床は除く)。高さは足元から ceil(height) 段、横は ceil(width) 列。
+  - 除外: 拠点・ドア・ベッド・チェスト(`Bases`/`BlockClaims` の保護)、壊せない物、その向こうに水・溶岩がある物(既存の `safeToDig` を使う)。除外に当たったら掘らずに別の道を探し、だめなら目標を諦める(既存の backoff)。ドアは壊さない: 幅の広い体は小屋に入らない。
+  - 上限: 1回の詰まりで 6 ブロック、1つの目標で 24 ブロック(地形を壊しすぎない)。
+  - 掘り方: `hands` の体は魂の道具で `mine`(既存)。手の無い体は素手で壊せる物(土・葉・木・砂利など、道具不要のもの)だけ、素手の速さで。
+- 階段・縦坑: `StairMining` の天井の高さを ceil(height)+1、幅が 1 を超えれば既存の `wide`(2車線)を使う。`ShaftMining` の断面を ceil(width)×ceil(width)。
+- 溶岩の近さ・崖の判定(73.2)も体の幅で行う(幅の広い体は角が先に触れる)。
+
+### 実装の段階(1段階 = 1コミット、各段階にゲームテスト1本以上。CI で確かめてから次へ)
+| 段階 | 内容 | ゲームテスト案 |
+|---|---|---|
+| T0 | 71 段階3(同期)+ 魂の環境ダメージ無効 | 71 の `bodyWalksToSoulGoal`(仮) |
+| T1 | `BodyTraits` + 既定値 + JSON 読み込み | `traitsComeFromTheBody`(blaze=fire、enderman=water、husk=sun false、人型=PLAYER)。ゲームを動かさない単体のチェックで足りる |
+| T2 | 危険判定の差し込み・害の学習の除外・変換の取り消し | `blazeBodyCrossesLava`(溶岩の帯の向こうの目標へ。人型クローンは回り道)、`endermanBodyAvoidsWater`、`ironGolemBodyDropsTenBlocks`、`zombieBodyStaysUnderWater`(浮上しない・溺死体にならない・Brain に水の害が入らない) |
+| T3 | 日光・雨の避難 | `zombieBodySeeksShadeAtNoon`(昼・屋外 → 400tick 以内に屋根の下) |
+| T4 | 体の大きさ(body()・代理の大きさ・広げて掘る) | `endermanBodyDigsAThreeHighWay`(高さ2の通路の先へ。天井を掘って着く)、`spiderBodyWidensAPass`、`wideBodyLeavesTheHutDoor`(ドアを壊さない) |
+| T5 | SPECIAL/SPECIAL2 の実行・mask・帰属 | `skeletonBodyShootsWithSpecial`(的に矢が当たり、魂の stepReward が増える)、`evokerVexesCountForTheSoul`、`creeperBodyFuseStopsWhenTheTargetLeaves` |
+| T6 | 表の分割・初期値・報酬(巻き込み罰) | `blazeBodyPrefersFireballAtRange`(報酬を与えて学習させ、遠い DIST で Q(SPECIAL)>Q(ATTACK))。学習結果を見るテストは揺れやすいので、行動の選び方ではなく Q 値の更新を見る |
+| T7 | ソーク(クローンモブ数体を混ぜる) | 死因(溺れ・溶岩・日光)が体の特性どおり減るか、SPECIAL の使用率 |
+
+### 削る範囲
+- 飛ぶ・泳ぐ体の特殊攻撃(ガスト・ファントム・ガーディアンのビーム)、ウォーデンの音波、シュルカーの弾、ドラゴン・ウィザー、スライムの分裂、クモの壁登り(移動は v1 の地上のみ。71 段階5 のまま)。
+- 体の頭スロットへ魂の兜を写す同期(兜で日光を防ぐ)。v1 は日陰に逃げるだけ。
+- 新しい kind を JSON だけで足すこと(処理はコード。JSON は既存 kind への割り当てのみ)。
+- 状態の桁の追加(特殊攻撃の待ち・体の種類)。mask と表の分割で足りる。足りないとソークで分かったら足す。
+
+### リスク
+- 共有の Brain の汚染(溶岩・水・効果の学習)。73.2 の「書かない」と「学ばない」が全部の入口で守られているか、T2 のテストで Brain の中身まで見る。
+- 帰属の漏れ: 飛び道具・爆発・Vex の所有者が体のため、`onDealtDamage` に届かず SPECIAL が学べない(報酬 0 で「使わない」に収束)。T5 で必ず確かめる。
+- クリーパーは学習が黒字にならず爆発しないままの可能性。撃破の値で調整する。
+- 表の数: 体の種類×敵の種類で増える。使っている体の種類だけなので上限は小さいが、`Brain.save` の大きさを T7 で見る。
+- 掘る範囲の誤り: 体の AABB の計算違いで拠点・地形を大きく壊す。保護の除外と1回 6/目標 24 の上限で抑える。
+- 日陰探しの止まり: 昼の間ずっと日陰で何もしない(食べ物が無くなる)。日陰では掘る・作る・休む系(MINE・CRAFT・STAIRS・REST)は mask に残す。
