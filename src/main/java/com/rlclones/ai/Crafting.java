@@ -22,6 +22,7 @@ import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.Tiers;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.HoeItem;
 import net.minecraft.world.item.Item;
@@ -517,6 +518,11 @@ public final class Crafting {
         }
         addWornReplacements(p, out);
         addModGear(p, out);
+        if (pick < Tiers.IRON.getLevel()) {
+            // soak: ingots arrive one by one and a shield / iron sword / iron armour took them before the third: nothing of iron but the pickaxe until it is made
+            out.removeIf(it -> it == Items.SHIELD || it instanceof TieredItem t && !(it instanceof PickaxeItem) && t.getTier() == Tiers.IRON
+                    || it instanceof ArmorItem a && a.getMaterial() == net.minecraft.world.item.ArmorMaterials.IRON);
+        }
         out.removeIf(it -> it instanceof TieredItem && !(it instanceof PickaxeItem) && countFresh(p, it) >= 1 || it instanceof PickaxeItem && countFresh(p, it) >= 2); // (one of a tool is enough: a bag full of wooden hoes is no help)
         return out;
     }
