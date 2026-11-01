@@ -218,6 +218,32 @@ public final class CloneGameTests {
         h.succeedWhen(() -> h.assertTrue(soul.isDeadOrDying() || !soul.isAlive(), "the soul dies with the body"));
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void cloneMobsBreedOwnKindAndBabiesGrowUp(GameTestHelper h) {
+        var server = h.getLevel().getServer();
+        CloneManager m = CloneManager.get(server);
+        m.setBreeding(true);
+        var z1 = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var z2 = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 3.5)));
+        var sk = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
+        ClonePlayer a = com.rlclones.clone.CloneMobs.soulOf(z1);
+        ClonePlayer b = com.rlclones.clone.CloneMobs.soulOf(z2);
+        ClonePlayer c = com.rlclones.clone.CloneMobs.soulOf(sk);
+        for (ClonePlayer p : List.of(a, b, c)) {
+            p.getInventory().add(new ItemStack(Items.BREAD, 8));
+        }
+        h.assertTrue(com.rlclones.clone.CloneMobs.sameKind(a, b) && !com.rlclones.clone.CloneMobs.sameKind(a, c), "same kind only");
+        ClonePlayer kidSoul = m.breed(a, b);
+        h.assertTrue(kidSoul != null && com.rlclones.clone.CloneMobs.bodyOf(kidSoul) != null, "a child soul with a body");
+        var kid = com.rlclones.clone.CloneMobs.bodyOf(kidSoul);
+        h.assertTrue(kid.getType() == net.minecraft.world.entity.EntityType.ZOMBIE && kid.isBaby(), "a baby zombie is born");
+        com.rlclones.clone.CloneMobs.grow(kid, h.getLevel().getGameTime() + com.rlclones.clone.CloneMobs.GROW_TICKS);
+        h.assertTrue(!kid.isBaby(), "and it grows up");
+        h.assertTrue(m.breed(c, c) == null, "no breeding with itself");
+        m.setBreeding(false);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

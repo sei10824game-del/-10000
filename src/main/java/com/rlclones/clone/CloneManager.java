@@ -148,6 +148,14 @@ public final class CloneManager {
         if (child == null) {
             return null;
         }
+        net.minecraft.world.entity.Mob parentBody = CloneMobs.bodyOf(a);
+        if (parentBody != null) {
+            if (!CloneMobs.sameKind(a, b)) { // (only its own kind: undo the soul)
+                remove(child, true, Component.literal("no such pair"));
+                return null;
+            }
+            CloneMobs.birth(parentBody, child, mid);
+        }
         for (net.minecraft.world.entity.player.Player p : List.of(a, b, child)) {
             bredAt.put(p.getUUID(), level.getGameTime());
         }

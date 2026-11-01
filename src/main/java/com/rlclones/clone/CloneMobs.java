@@ -31,6 +31,13 @@ public final class CloneMobs {
     /** Players whose next spawn egg makes a clone mob. */
     private static final Set<UUID> ARMED = new HashSet<>();
 
+    /** Soul -> body (not saved yet: stage 7 puts it in the world data). */
+    private static final java.util.Map<UUID, UUID> BODY = new java.util.HashMap<>();
+    /** Persistent-data key on a baby body: the game time it grows up at (types with no baby form of their own, like the zombie, grow by this). */
+    public static final String GROW_AT = "rlclones_grow_at";
+    /** A baby clone mob grows up after this many ticks (the animals' 20 minutes). */
+    public static final long GROW_TICKS = 24000;
+
     private CloneMobs() {
     }
 
@@ -55,6 +62,54 @@ public final class CloneMobs {
         return CloneManager.get(body.getServer()).byId(body.getPersistentData().getUUID(SOUL));
     }
 
+    /** The body of this soul (null = a plain clone, or its body is not loaded). */
+    @javax.annotation.Nullable
+    public static Mob bodyOf(net.minecraft.world.entity.player.Player p) {
+        UUID id = BODY.get(p.getUUID());
+        return id != null && p.level() instanceof ServerLevel l && l.getEntity(id) instanceof Mob m && m.isAlive() ? m : null;
+    }
+
+    /** Clone mobs breed with their own kind only (a plain clone with a plain clone). */
+    public static boolean sameKind(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
+        Mob x = bodyOf(a);
+        Mob y = bodyOf(b);
+        return x == null ? y == null : y != null && x.getType() == y.getType();
+    }
+
+    /** The child of two clone mobs: a body of the same type, a baby if the type has a baby form (it grows up with time), else a grown one. */
+    public static Mob birth(Mob parent, ClonePlayer childSoul, Vec3 pos) {
+        if (!(parent.getType().create(parent.level()) instanceof Mob kid) || !(parent.level() instanceof ServerLevel level)) {
+            return null;
+        }
+        kid.moveTo(pos.x, pos.y, pos.z, parent.getYRot(), 0f);
+        kid.finalizeSpawn(level, level.getCurrentDifficultyAt(BlockPos.containing(pos)), MobSpawnType.BREEDING, null, null);
+        kid.setBaby(true); // (no baby form: nothing changes and it is born grown)
+        if (kid.isBaby() && !(kid instanceof net.minecraft.world.entity.AgeableMob)) {
+            kid.getPersistentData().putLong(GROW_AT, level.getGameTime() + GROW_TICKS);
+        }
+        kid.getPersistentData().putUUID(SOUL, childSoul.getUUID());
+        kid.getPersistentData().putBoolean(SIDE, true);
+        kid.setPersistenceRequired();
+        level.addFreshEntity(kid);
+        BODY.put(childSoul.getUUID(), kid.getUUID());
+        return kid;
+    }
+
+    /** A baby with no growth of its own (zombie...) grows up when its time comes; animals grow by themselves. */
+    @SubscribeEvent
+    public static void onGrowTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
+        if (event.getEntity() instanceof Mob m && !m.level().isClientSide && m.tickCount % 20 == 0 && m.getPersistentData().contains(GROW_AT)) {
+            grow(m, m.level().getGameTime());
+        }
+    }
+
+    public static void grow(Mob m, long now) {
+        if (now >= m.getPersistentData().getLong(GROW_AT)) {
+            m.getPersistentData().remove(GROW_AT);
+            m.setBaby(false);
+        }
+    }
+
     /** Make the body for {@code type} at {@code pos} and a soul for it (null = could not). */
     public static Mob summon(@javax.annotation.Nullable ServerPlayer owner, ServerLevel level, EntityType<?> type, Vec3 pos) {
         if (!(type.create(level) instanceof Mob body)) {
@@ -70,6 +125,7 @@ public final class CloneMobs {
         body.getPersistentData().putUUID(SOUL, soul.getUUID());
         body.getPersistentData().putBoolean(SIDE, true);
         level.addFreshEntity(body);
+        BODY.put(soul.getUUID(), body.getUUID());
         return body;
     }
 
