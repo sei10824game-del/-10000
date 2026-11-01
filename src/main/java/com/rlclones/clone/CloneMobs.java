@@ -62,6 +62,65 @@ public final class CloneMobs {
         return CloneManager.get(body.getServer()).byId(body.getPersistentData().getUUID(SOUL));
     }
 
+    /** Tie a body to its soul: the soul does the thinking and the walking, the body (no AI of its own) is moved to wherever the soul is. */
+    public static void link(Mob body, ClonePlayer soul) {
+        body.getPersistentData().putUUID(SOUL, soul.getUUID());
+        body.getPersistentData().putBoolean(SIDE, true);
+        body.setNoAi(true);
+        body.setPersistenceRequired();
+        soul.setInvisible(true); // (armour still shows: the body wears none)
+        BODY.put(soul.getUUID(), body.getUUID());
+    }
+
+    /** Every tick: each body goes to its soul's place and facing; a body or soul that is gone takes the other with it. */
+    @SubscribeEvent
+    public static void onServerTick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
+        if (event.phase != net.minecraftforge.event.TickEvent.Phase.END || BODY.isEmpty()) {
+            return;
+        }
+        var it = BODY.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            ClonePlayer soul = CloneManager.peek() == null ? null : CloneManager.peek().byId(e.getKey());
+            if (soul == null) {
+                it.remove();
+                continue;
+            }
+            Mob body = bodyOf(soul);
+            if (body != null && !soul.isAlive()) {
+                body.kill(); // (the soul died: so does the body)
+                it.remove();
+                continue;
+            }
+            if (body == null) {
+                if (soul.level() instanceof ServerLevel l && l.getEntity(e.getValue()) == null && !l.isLoaded(soul.blockPosition())) {
+                    continue; // (the body's chunk is not loaded: wait)
+                }
+                it.remove();
+                soul.kill(); // (the body died or was removed)
+                continue;
+            }
+            body.moveTo(soul.getX(), soul.getY(), soul.getZ(), soul.getYRot(), soul.getXRot());
+            body.setYHeadRot(soul.getYHeadRot());
+            body.setYBodyRot(soul.yBodyRot);
+            body.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            body.fallDistance = 0;
+        }
+    }
+
+    /** Blows that land on the body hurt the soul (its health, hunger and armour are the real ones); the body itself takes none. */
+    @SubscribeEvent
+    public static void onBodyAttacked(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        ClonePlayer soul = soulOf(event.getEntity());
+        if (soul != null && soul.isAlive() && !event.isCanceled()) {
+            event.setCanceled(true);
+            soul.hurt(event.getSource(), event.getAmount());
+            if (!soul.isAlive()) {
+                event.getEntity().kill();
+            }
+        }
+    }
+
     /** The body of this soul (null = a plain clone, or its body is not loaded). */
     @javax.annotation.Nullable
     public static Mob bodyOf(net.minecraft.world.entity.player.Player p) {
@@ -87,11 +146,8 @@ public final class CloneMobs {
         if (kid.isBaby() && !(kid instanceof net.minecraft.world.entity.AgeableMob)) {
             kid.getPersistentData().putLong(GROW_AT, level.getGameTime() + GROW_TICKS);
         }
-        kid.getPersistentData().putUUID(SOUL, childSoul.getUUID());
-        kid.getPersistentData().putBoolean(SIDE, true);
-        kid.setPersistenceRequired();
+        link(kid, childSoul);
         level.addFreshEntity(kid);
-        BODY.put(childSoul.getUUID(), kid.getUUID());
         return kid;
     }
 
@@ -122,10 +178,8 @@ public final class CloneMobs {
         if (soul == null) {
             return null;
         }
-        body.getPersistentData().putUUID(SOUL, soul.getUUID());
-        body.getPersistentData().putBoolean(SIDE, true);
+        link(body, soul);
         level.addFreshEntity(body);
-        BODY.put(soul.getUUID(), body.getUUID());
         return body;
     }
 
@@ -182,8 +236,7 @@ public final class CloneMobs {
         if (SYNC_READY && m.summonedAsClone()) {
             ClonePlayer soul = m.summon(null, (ServerLevel) event.getLevel(), mob.position(), mob.getYRot());
             if (soul != null) {
-                mob.getPersistentData().putUUID(SOUL, soul.getUUID());
-                mob.setPersistenceRequired();
+                link(mob, soul);
             }
         }
     }
@@ -197,8 +250,8 @@ public final class CloneMobs {
         }
     }
 
-    /** Off until stage 3 (body <-> soul sync) exists: without it a natural clone mob would be a plain mob plus a visible clone. */
-    private static final boolean SYNC_READY = false;
+    /** Stage 3 (body <-> soul sync) is in: natural spawns of listed types become clone mobs. */
+    private static final boolean SYNC_READY = true;
 
     /** A mob of a listed type spawns by itself (world, chunk generation, structures...): it becomes a clone mob. */
     @SubscribeEvent
@@ -216,8 +269,7 @@ public final class CloneMobs {
         }
         ClonePlayer soul = m.summon(null, event.getLevel().getLevel(), mob.position(), mob.getYRot());
         if (soul != null) {
-            mob.getPersistentData().putUUID(SOUL, soul.getUUID());
-            mob.setPersistenceRequired(); // (a clone mob never despawns: its soul would be left behind)
+            link(mob, soul); // (a clone mob never despawns: its soul would be left behind)
         }
     }
 

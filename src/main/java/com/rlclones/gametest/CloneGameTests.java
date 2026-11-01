@@ -244,6 +244,16 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void cloneMobBodyFollowsItsSoul(GameTestHelper h) {
+        net.minecraft.world.entity.Mob body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        h.assertTrue(body.isNoAi() && soul.isInvisible(), "the body has no AI of its own and the soul is hidden");
+        var to = h.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 2, 8.5));
+        soul.teleportTo(h.getLevel(), to.x, to.y, to.z, 90f, 0f);
+        h.succeedWhen(() -> h.assertTrue(body.position().distanceTo(soul.position()) < 1.0, "the body is where the soul is"));
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
