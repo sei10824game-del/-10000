@@ -59,11 +59,17 @@ public final class CloneCommand {
                         .executes(ctx -> summon(ctx, 1, ClonePlayer.DEFAULT_TEAM))
                         .then(Commands.literal("team").then(Commands.argument("team", StringArgumentType.word())
                                 .executes(ctx -> summon(ctx, 1, StringArgumentType.getString(ctx, "team")))))
-                        .then(Commands.argument("count", IntegerArgumentType.integer(1, 64))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                 .executes(ctx -> summon(ctx, IntegerArgumentType.getInteger(ctx, "count"), ClonePlayer.DEFAULT_TEAM))
                                 .then(Commands.literal("team").then(Commands.argument("team", StringArgumentType.word())
                                         .executes(ctx -> summon(ctx, IntegerArgumentType.getInteger(ctx, "count"),
                                                 StringArgumentType.getString(ctx, "team")))))))
+                .then(Commands.literal("summonmob").requires(CloneCommand::mayControl)
+                        .then(Commands.argument("id", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                .suggests(net.minecraft.commands.synchronization.SuggestionProviders.SUMMONABLE_ENTITIES)
+                                .executes(ctx -> summonMobs(ctx, 1))
+                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> summonMobs(ctx, IntegerArgumentType.getInteger(ctx, "count"))))))
                 .then(Commands.literal("battleroyale").requires(CloneCommand::mayControl)
                         .executes(ctx -> setBattleRoyale(ctx, !manager(ctx).isBattleRoyale()))
                         .then(Commands.literal("on").executes(ctx -> setBattleRoyale(ctx, true)))
@@ -231,6 +237,35 @@ public final class CloneCommand {
         } else {
             src.sendSuccess(() -> ClonePlayer.DEFAULT_TEAM.equals(team) ? Component.translatable("rlclones.cmd.summoned", total)
                     : Component.translatable("rlclones.cmd.summoned_team", total, team), true);
+        }
+        return total;
+    }
+
+    /** /rlclone summonmob <entity> [count]: clone mobs (a body of that type with a clone soul), in a ring round the caller; no count cap. */
+    private static int summonMobs(CommandContext<CommandSourceStack> ctx, int count) {
+        CommandSourceStack src = ctx.getSource();
+        var id = net.minecraft.commands.arguments.ResourceLocationArgument.getId(ctx, "id");
+        var type = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (type == null || !net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.containsKey(id)) {
+            src.sendFailure(Component.literal("Unknown entity type " + id));
+            return 0;
+        }
+        Vec3 base = src.getPosition();
+        double radius = Math.max(2, count / (Math.PI * 2)); // (about one block of ring per mob)
+        int made = 0;
+        for (int i = 0; i < count; i++) {
+            double angle = i * (Math.PI * 2 / count);
+            Vec3 pos = count == 1 ? base : base.add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+            if (com.rlclones.clone.CloneMobs.summon(src.getPlayer(), src.getLevel(), type, pos) == null) {
+                break;
+            }
+            made++;
+        }
+        int total = made;
+        if (total == 0) {
+            src.sendFailure(Component.translatable("rlclones.msg.limit", Config.cloneLimitLabel()));
+        } else {
+            src.sendSuccess(() -> Component.literal("Summoned " + total + " clone mob(s) of " + id), true);
         }
         return total;
     }
