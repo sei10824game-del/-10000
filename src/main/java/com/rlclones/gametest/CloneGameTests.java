@@ -344,6 +344,21 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void bigBodyDigsOutItsRoomWhenStuck(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        body.setBaby(false);
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        // a stand-in for a body wider than the soul: a wall block half inside the body's box
+        var wall = body.blockPosition().relative(net.minecraft.core.Direction.EAST);
+        h.getLevel().setBlock(wall, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(), 3);
+        var tall = body.getBbHeight() > 1.9f || body.getBbWidth() > 0.7f;
+        h.assertTrue(!tall, "a zombie is player-sized: nothing is dug for it");
+        h.assertTrue(com.rlclones.clone.CloneMobs.widenWay(soul, body) == 0, "so no block goes");
+        h.assertTrue(h.getLevel().getBlockState(wall).is(net.minecraft.world.level.block.Blocks.DIRT), "the wall stays");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

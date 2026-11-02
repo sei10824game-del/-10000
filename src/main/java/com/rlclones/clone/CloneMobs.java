@@ -31,6 +31,9 @@ public final class CloneMobs {
     /** Players whose next spawn egg makes a clone mob. */
     private static final Set<UUID> ARMED = new HashSet<>();
 
+    /** Persistent-data key: how many blocks this big body has dug out for room so far. */
+    private static final String DUG = "rlclones_dug";
+
     /** Soul -> body (rebuilt after a restart from the soul UUID kept in each body's own saved data). */
     private static final java.util.Map<UUID, UUID> BODY = new java.util.HashMap<>();
     /** Persistent-data key on a baby body: the game time it grows up at (types with no baby form of their own, like the zombie, grow by this). */
@@ -155,6 +158,9 @@ public final class CloneMobs {
             body.setYBodyRot(soul.yBodyRot);
             body.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             body.fallDistance = 0;
+            if (body.tickCount % 10 == 0) {
+                widenWay(soul, body);
+            }
         }
     }
 
@@ -182,6 +188,33 @@ public final class CloneMobs {
         if (event.getEntity() instanceof ClonePlayer soul && bodyOf(soul) != null && BodyTraits.of(soul).fallImmune()) {
             event.setDamageMultiplier(0f);
         }
+    }
+
+    /** A body bigger than the soul (the soul is player-sized) that the soul cannot get on with, for want of room: the blocks its box overlaps are dug out, a few at a time. */
+    public static int widenWay(ClonePlayer soul, Mob body) {
+        if ((body.getBbWidth() <= 0.7f && body.getBbHeight() <= 1.9f) || !canUseHands(soul) || soul.controller() == null || soul.controller().motor().stuckCount() < 2) {
+            return 0;
+        }
+        int dug = body.getPersistentData().getInt(DUG);
+        if (dug >= 24 || !(soul.level() instanceof ServerLevel level)) {
+            return 0;
+        }
+        net.minecraft.world.phys.AABB box = body.getBoundingBox().deflate(0.01);
+        int made = 0;
+        for (BlockPos p : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            var st = level.getBlockState(p);
+            var shape = st.getCollisionShape(level, p);
+            if (shape.isEmpty() || !shape.bounds().move(p).intersects(box) || st.getDestroySpeed(level, p) < 0 || st.getDestroySpeed(level, p) > 25
+                    || st.hasBlockEntity() || !soul.controller().safeToDig(p) || com.rlclones.ai.BlockClaims.takenByOther(p, soul.getUUID(), level.getGameTime())) {
+                continue;
+            }
+            level.destroyBlock(p, true, soul);
+            if (++made >= 6 || dug + made >= 24) {
+                break;
+            }
+        }
+        body.getPersistentData().putInt(DUG, dug + made);
+        return made;
     }
 
     /** Blows that land on the body hurt the soul (its health, hunger and armour are the real ones); the body itself takes none. */
