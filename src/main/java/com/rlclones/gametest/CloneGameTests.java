@@ -331,6 +331,19 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void zombieBodyIsExposedToTheSunOnlyInTheOpen(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        var plain = clone(h, 2.5, 7.5, 0f, false);
+        h.assertTrue(!com.rlclones.ai.Shade.exposed(plain), "a plain clone never hides from the sky");
+        h.getLevel().setDayTime(6000);
+        boolean open = h.getLevel().canSeeSky(soul.blockPosition().above());
+        h.assertTrue(com.rlclones.ai.Shade.exposed(soul) == open, "exposed exactly when the sky is open above (open=" + open + ")");
+        finish(h, plain);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

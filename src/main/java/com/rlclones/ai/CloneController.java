@@ -102,6 +102,7 @@ public final class CloneController {
     private boolean wantWater;
     private final EffectSense effects;
     private final Breeding breeding;
+    private final Shade shade;
     private final Achievements achievements;
     private final StairMining stairs;
     private final AttackTells tells;
@@ -219,6 +220,7 @@ public final class CloneController {
         this.water = new WaterSource(self, motor);
         this.effects = new EffectSense(self, motor, perception);
         this.breeding = new Breeding(self, motor);
+        this.shade = new Shade(self, motor);
         this.achievements = new Achievements(self, motor, perception, this::brain, crafting);
         this.stairs = new StairMining(self, motor);
         this.tells = new AttackTells(self);
@@ -725,6 +727,8 @@ public final class CloneController {
                     consumables.pearlOutOfPit();
                 }
             }
+        } else if (shade.tick(now)) {
+            idleWhy = "shade";
         } else if (cleanTarget != null) {
             idleWhy = "clean";
             cleanUp();
