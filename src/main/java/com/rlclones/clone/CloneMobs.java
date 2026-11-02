@@ -65,13 +65,39 @@ public final class CloneMobs {
         return CloneManager.get(body.getServer()).byId(body.getPersistentData().getUUID(SOUL));
     }
 
+    /** Out of sight (an effect, not the flag: vanilla clears the flag every tick when no effect backs it), without particles. */
+    public static void hide(ClonePlayer soul) {
+        var fx = soul.getEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY);
+        if (fx == null || !fx.isInfiniteDuration()) {
+            soul.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY,
+                    net.minecraft.world.effect.MobEffectInstance.INFINITE_DURATION, 0, false, false, false));
+        }
+    }
+
+    private static final String NO_PUSH_TEAM = "rlclones_souls";
+
+    /** Body and soul stand in one place and must not shove each other about: one team with collisions off. */
+    private static void noPush(net.minecraft.server.MinecraftServer server, ClonePlayer soul, Mob body) {
+        var board = server.getScoreboard();
+        var team = board.getPlayerTeam(NO_PUSH_TEAM);
+        if (team == null) {
+            team = board.addPlayerTeam(NO_PUSH_TEAM);
+            team.setCollisionRule(net.minecraft.world.scores.Team.CollisionRule.NEVER);
+        }
+        board.addPlayerToTeam(soul.getScoreboardName(), team);
+        board.addPlayerToTeam(body.getStringUUID(), team);
+    }
+
     /** Tie a body to its soul: the soul does the thinking and the walking, the body (no AI of its own) is moved to wherever the soul is. */
     public static void link(Mob body, ClonePlayer soul) {
         body.getPersistentData().putUUID(SOUL, soul.getUUID());
         body.getPersistentData().putBoolean(SIDE, true);
         body.setNoAi(true);
         body.setPersistenceRequired();
-        soul.setInvisible(true); // (armour still shows: the body wears none)
+        hide(soul); // (armour still shows: the body wears none)
+        if (soul.getServer() != null) {
+            noPush(soul.getServer(), soul, body);
+        }
         BODY.put(soul.getUUID(), body.getUUID());
     }
 
@@ -158,6 +184,15 @@ public final class CloneMobs {
             body.setYBodyRot(soul.yBodyRot);
             body.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             body.fallDistance = 0;
+            if (soul.tickCount % 100 == 0) {
+                hide(soul);
+            }
+            // what the soul has lost the body shows: its health bar (and the hurt flash)
+            body.setHealth(Math.max(0.5f, Math.min(body.getMaxHealth(), soul.getHealth() / Math.max(1f, soul.getMaxHealth()) * body.getMaxHealth())));
+            if (soul.hurtTime > 0 && body.hurtTime == 0) {
+                body.hurtDuration = 10;
+                body.hurtTime = 10;
+            }
             if (body.tickCount % 10 == 0) {
                 widenWay(soul, body);
             }

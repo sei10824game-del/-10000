@@ -51,7 +51,7 @@ public final class CloneEquipment {
         soul.setItemSlot(EquipmentSlot.MAINHAND, stand.getItemBySlot(EquipmentSlot.MAINHAND).copy());
         soul.setItemSlot(EquipmentSlot.OFFHAND, stand.getItemBySlot(EquipmentSlot.OFFHAND).copy());
         m.markEquipment(soul.getUUID());
-        soul.setInvisible(true);
+        CloneMobs.hide(soul);
         mend(soul);
         stand.discard();
         return soul;
@@ -199,9 +199,7 @@ public final class CloneEquipment {
                 if (event.getServer().getTickCount() % 400 == 0) {
                     multiply(c);
                 }
-                if (!c.isInvisible()) {
-                    c.setInvisible(true);
-                }
+                CloneMobs.hide(c);
                 if (parts(c).isEmpty()) {
                     CloneManager.peek().remove(c, true, Component.literal("the equipment is used up"));
                 }
