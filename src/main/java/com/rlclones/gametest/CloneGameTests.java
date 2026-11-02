@@ -208,7 +208,7 @@ public final class CloneGameTests {
 
     // ------------------------------------------------------------------ AC: clones are real players
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void cloneMobKeepsItsSoulAndDiesWithIt(GameTestHelper h) {
         net.minecraft.world.entity.Mob body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         h.assertTrue(body != null, "a body is made");
@@ -218,7 +218,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> h.assertTrue(soul.isDeadOrDying() || !soul.isAlive(), "the soul dies with the body"));
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void cloneMobsBreedOwnKindAndBabiesGrowUp(GameTestHelper h) {
         var server = h.getLevel().getServer();
         CloneManager m = CloneManager.get(server);
@@ -244,7 +244,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void cloneMobBodyFollowsItsSoul(GameTestHelper h) {
         net.minecraft.world.entity.Mob body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
@@ -254,7 +254,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> h.assertTrue(body.position().distanceTo(soul.position()) < 1.0, "the body is where the soul is"));
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 400)
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "clonemobs")
     public static void plainMobsAttackCloneMobsUnlessAtPeace(GameTestHelper h) {
         var server = h.getLevel().getServer();
         CloneManager m = CloneManager.get(server);
@@ -272,7 +272,7 @@ public final class CloneGameTests {
         });
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void cloneMobBodyIsTiedToItsSoulAgainAfterLoading(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
@@ -284,7 +284,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void handlessCloneMobsCannotMineOrBuild(GameTestHelper h) {
         var cow = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.COW, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         var zombie = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
@@ -298,7 +298,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 60)
+    @GameTest(template = ARENA, timeoutTicks = 60, batch = "clonemobs")
     public static void traitsComeFromTheBody(GameTestHelper h) {
         var T = net.minecraft.world.entity.EntityType.class;
         var blaze = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
@@ -314,7 +314,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 300)
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "clonemobs")
     public static void soulOfACloneMobTakesNoSurroundingsDamage(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
@@ -331,7 +331,7 @@ public final class CloneGameTests {
         });
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void zombieBodyIsExposedToTheSunOnlyInTheOpen(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
@@ -344,7 +344,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void bigBodyDigsOutItsRoomWhenStuck(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         body.setBaby(false);
@@ -359,7 +359,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void specialsBelongToBodiesThatHaveThem(GameTestHelper h) {
         var skel = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         var cow = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.COW, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
@@ -379,7 +379,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void clonesMobBlowsAndShotsCountForTheSoul(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         var soul = com.rlclones.clone.CloneMobs.soulOf(body);
@@ -391,7 +391,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 900)
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "clonemobs")
     public static void skeletonBodyUsesItsArrowsAgainstAHusk(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(2.5, 2, 7.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
@@ -404,7 +404,7 @@ public final class CloneGameTests {
         });
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void whatACloneZombieInfectsJoinsThePlayersSide(GameTestHelper h) {
         var server = h.getLevel().getServer();
         var difficulty = server.getWorldData().getDifficulty();
@@ -419,7 +419,7 @@ public final class CloneGameTests {
         });
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void cloneEquipmentTakesDamageOnItsPartsAndUsesUp(GameTestHelper h) {
         var level = h.getLevel();
         var at = h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5));
@@ -443,7 +443,7 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 100)
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void cloneEquipmentMultipliesFromSpareGearWhenAllowed(GameTestHelper h) {
         var level = h.getLevel();
         var m = com.rlclones.clone.CloneManager.get(level.getServer());
