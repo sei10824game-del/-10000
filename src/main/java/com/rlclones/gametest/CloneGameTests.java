@@ -314,17 +314,21 @@ public final class CloneGameTests {
         h.succeed();
     }
 
-    @GameTest(template = ARENA, timeoutTicks = 60)
+    @GameTest(template = ARENA, timeoutTicks = 300)
     public static void soulOfACloneMobTakesNoSurroundingsDamage(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
-        float hp = soul.getHealth();
-        soul.hurt(soul.damageSources().inFire(), 4f);
-        soul.hurt(soul.damageSources().drown(), 4f);
-        h.assertTrue(soul.getHealth() == hp, "fire and drowning do nothing to the soul itself");
-        soul.hurt(soul.damageSources().magic(), 2f);
-        h.assertTrue(soul.getHealth() < hp, "other damage still does");
-        h.succeed();
+        h.runAfterDelay(100, () -> { // (a new player is shielded for a while)
+            soul.invulnerableTime = 0;
+            float hp = soul.getHealth();
+            soul.hurt(soul.damageSources().inFire(), 4f);
+            soul.hurt(soul.damageSources().drown(), 4f);
+            h.assertTrue(soul.getHealth() == hp, "fire and drowning do nothing to the soul itself (" + soul.getHealth() + ")");
+            soul.invulnerableTime = 0;
+            soul.hurt(soul.damageSources().magic(), 2f);
+            h.assertTrue(soul.getHealth() < hp, "other damage still does (" + soul.getHealth() + " of " + hp + ", invulnerable=" + soul.isInvulnerable() + ")");
+            h.succeed();
+        });
     }
 
     @GameTest(template = ARENA, timeoutTicks = 200)
