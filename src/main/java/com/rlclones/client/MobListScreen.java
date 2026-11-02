@@ -17,7 +17,7 @@ import java.util.Locale;
 
 /** The mobs (search box + scrolling list): a click marks / unmarks the type so its natural spawns become clone mobs. */
 public class MobListScreen extends Screen {
-    private static final int ROWS = 8;
+    private static final int ROWS = 6;
     private final Screen parent;
     private EditBox search;
     private int offset;
