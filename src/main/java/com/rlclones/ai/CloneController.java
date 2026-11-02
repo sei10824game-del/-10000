@@ -1594,8 +1594,8 @@ public final class CloneController {
     }
 
     private boolean digPending(long now) {
-        // (soak: nine of twelve starved deep down with food 0: no diving, and no going on, without a full stomach or food in the bag)
-        return now >= digBackoffUntil && Progression.digWanted(self) && (self.getFoodData().getFoodLevel() >= 14 || FoodAid.foodItems(self) >= 2) && stairs.pending();
+        // (soak: nine of twelve starved deep down with food 0: no diving, and no going on, on an empty stomach with no food in the bag; 14 / 2 was too strict: no iron at all)
+        return now >= digBackoffUntil && Progression.digWanted(self) && (self.getFoodData().getFoodLevel() >= 10 || FoodAid.foodItems(self) >= 1) && stairs.pending();
     }
 
     private void markDigStart() {
