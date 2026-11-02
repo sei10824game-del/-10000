@@ -28,6 +28,8 @@ public class CloneRoster extends SavedData {
     public final java.util.Set<UUID> equipment = new java.util.HashSet<>();
     /** /rlclone equipfaction peace: mobs leave clone equipment alone. */
     public boolean equipPeace;
+    /** Plain armor stands turn into clone equipment too, and clone equipment makes more of itself from its spare gear. */
+    public boolean plainStands;
     public boolean breeding;
     /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
     public boolean chatHidden;
@@ -45,6 +47,7 @@ public class CloneRoster extends SavedData {
         r.respawn = tag.getBoolean("respawn");
         r.breeding = tag.getBoolean("breeding");
         r.equipPeace = tag.getBoolean("equipPeace");
+        r.plainStands = tag.getBoolean("plainStands");
         for (Tag t : tag.getList("equipment", Tag.TAG_INT_ARRAY)) {
             r.equipment.add(net.minecraft.nbt.NbtUtils.loadUUID(t));
         }
@@ -89,6 +92,7 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("respawn", respawn);
         tag.putBoolean("breeding", breeding);
         tag.putBoolean("equipPeace", equipPeace);
+        tag.putBoolean("plainStands", plainStands);
         ListTag eq = new ListTag();
         equipment.forEach(u -> eq.add(net.minecraft.nbt.NbtUtils.createUUID(u)));
         tag.put("equipment", eq);

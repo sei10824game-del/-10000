@@ -73,6 +73,10 @@ public final class CloneCommand {
                 .then(Commands.literal("mobfaction").requires(CloneCommand::mayControl)
                         .then(Commands.literal("hostile").executes(ctx -> setMobFaction(ctx, false)))
                         .then(Commands.literal("peace").executes(ctx -> setMobFaction(ctx, true))))
+                .then(Commands.literal("plainstands").requires(CloneCommand::mayControl)
+                        .executes(ctx -> setPlainStands(ctx, !CloneManager.plainStands()))
+                        .then(Commands.literal("on").executes(ctx -> setPlainStands(ctx, true)))
+                        .then(Commands.literal("off").executes(ctx -> setPlainStands(ctx, false))))
                 .then(Commands.literal("equipfaction").requires(CloneCommand::mayControl)
                         .then(Commands.literal("hostile").executes(ctx -> setEquipFaction(ctx, false)))
                         .then(Commands.literal("peace").executes(ctx -> setEquipFaction(ctx, true))))
@@ -202,6 +206,12 @@ public final class CloneCommand {
     private static int setFlee(CommandContext<CommandSourceStack> ctx, boolean on) {
         manager(ctx).setFleeAllowed(on);
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.flee_on" : "rlclones.msg.flee_off"), true);
+        return 1;
+    }
+
+    private static int setPlainStands(CommandContext<CommandSourceStack> ctx, boolean on) {
+        manager(ctx).setPlainStands(on);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.plainstands_on" : "rlclones.msg.plainstands_off"), true);
         return 1;
     }
 

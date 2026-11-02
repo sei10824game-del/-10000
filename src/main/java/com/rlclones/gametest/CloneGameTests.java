@@ -443,6 +443,28 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void cloneEquipmentMultipliesFromSpareGearWhenAllowed(GameTestHelper h) {
+        var level = h.getLevel();
+        var m = com.rlclones.clone.CloneManager.get(level.getServer());
+        var at = h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5));
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(level, at.x, at.y, at.z);
+        stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+        level.addFreshEntity(stand);
+        ClonePlayer eq = com.rlclones.clone.CloneEquipment.convert(stand, level);
+        eq.getInventory().add(new ItemStack(Items.LEATHER_CHESTPLATE));
+        eq.getInventory().add(new ItemStack(Items.STICK, 6));
+        eq.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
+        m.setPlainStands(false);
+        h.assertTrue(com.rlclones.clone.CloneEquipment.multiply(eq) == null, "off: it does not multiply");
+        m.setPlainStands(true);
+        ClonePlayer born = com.rlclones.clone.CloneEquipment.multiply(eq);
+        m.setPlainStands(false);
+        h.assertTrue(born != null && born.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.LEATHER_CHESTPLATE) && com.rlclones.clone.CloneEquipment.is(born), "on: the spare chestplate made another equipment");
+        h.assertTrue(eq.getInventory().countItem(Items.LEATHER_CHESTPLATE) == 0 && eq.getInventory().countItem(Items.STICK) == 0, "the gear and the stand's materials are used");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

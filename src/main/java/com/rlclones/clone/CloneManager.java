@@ -280,6 +280,15 @@ public final class CloneManager {
         roster().setDirty();
     }
 
+    public static boolean plainStands() {
+        return instance != null && instance.roster().plainStands;
+    }
+
+    public void setPlainStands(boolean on) {
+        roster().plainStands = on;
+        roster().setDirty();
+    }
+
     public static boolean equipPeace() {
         return instance != null && instance.roster().equipPeace;
     }
@@ -301,7 +310,7 @@ public final class CloneManager {
 
     /** The settings the screen shows: battle royale, breeding, chat, coward, flee, link, respawn, summoned mobs as clones. */
     public boolean[] switches() {
-        return new boolean[]{isBattleRoyale(), isBreeding(), chatShown(), coward(), fleeAllowed(), isLinked(), isRespawnEnabled(), summonedAsClone(), mobPeace(), equipPeace()};
+        return new boolean[]{isBattleRoyale(), isBreeding(), chatShown(), coward(), fleeAllowed(), isLinked(), isRespawnEnabled(), summonedAsClone(), mobPeace(), equipPeace(), plainStands()};
     }
 
     public void sendSettings(ServerPlayer to) {

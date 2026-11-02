@@ -59,7 +59,7 @@ public final class CloneEquipment {
 
     @SubscribeEvent
     public static void onStandHit(AttackEntityEvent event) {
-        if (event.getTarget() instanceof ArmorStand stand && stand.getPersistentData().getBoolean(STAND) && stand.level() instanceof ServerLevel level) {
+        if (event.getTarget() instanceof ArmorStand stand && (stand.getPersistentData().getBoolean(STAND) || CloneManager.plainStands()) && stand.level() instanceof ServerLevel level) {
             event.setCanceled(true);
             convert(stand, level);
         }
@@ -112,6 +112,79 @@ public final class CloneEquipment {
         }
     }
 
+    /** Spare gear in the bag: armour no better than what is worn in its slot, and swords but the strongest. One of each kind is picked for one stand. */
+    private static List<ItemStack> spareGear(ClonePlayer p) {
+        List<ItemStack> out = new ArrayList<>();
+        java.util.Set<net.minecraft.world.entity.EquipmentSlot> taken = new java.util.HashSet<>();
+        net.minecraft.world.item.SwordItem best = null;
+        for (ItemStack s : p.getInventory().items) {
+            if (s.getItem() instanceof net.minecraft.world.item.SwordItem sw && (best == null || sw.getDamage() > best.getDamage())) {
+                best = sw;
+            }
+        }
+        boolean sword = false;
+        for (ItemStack s : p.getInventory().items) {
+            if (s.getItem() instanceof net.minecraft.world.item.ArmorItem a) {
+                ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
+                if (worn.getItem() instanceof net.minecraft.world.item.ArmorItem w && w.getDefense() >= a.getDefense() && taken.add(a.getEquipmentSlot())) {
+                    out.add(s);
+                }
+            } else if (s.getItem() instanceof net.minecraft.world.item.SwordItem sw && sw != best && !sword) {
+                out.add(s);
+                sword = true;
+            }
+        }
+        return out;
+    }
+
+    /** What an armor stand takes to make: six sticks and a stone slab (three cobblestone make the slabs). */
+    private static boolean payForStand(ClonePlayer p) {
+        int sticks = 0;
+        int cobble = 0;
+        for (ItemStack s : p.getInventory().items) {
+            sticks += s.is(net.minecraft.world.item.Items.STICK) ? s.getCount() : 0;
+            cobble += s.is(net.minecraft.world.item.Items.COBBLESTONE) ? s.getCount() : 0;
+        }
+        if (sticks < 6 || cobble < 3) {
+            return false;
+        }
+        p.getInventory().clearOrCountMatchingItems(s -> s.is(net.minecraft.world.item.Items.STICK), 6, p.inventoryMenu.getCraftSlots());
+        p.getInventory().clearOrCountMatchingItems(s -> s.is(net.minecraft.world.item.Items.COBBLESTONE), 3, p.inventoryMenu.getCraftSlots());
+        return true;
+    }
+
+    /**
+     * With the setting on: the equipment makes an armor stand (six sticks, cobblestone for the slab), puts its spare gear on it
+     * and breaks it: the stand turns into one more equipment. Returns the new one (null = nothing to do).
+     */
+    public static ClonePlayer multiply(ClonePlayer p) {
+        if (!CloneManager.plainStands() || !is(p) || !(p.level() instanceof ServerLevel level)) {
+            return null;
+        }
+        List<ItemStack> spare = spareGear(p);
+        if (spare.isEmpty() || !payForStand(p)) {
+            return null;
+        }
+        ArmorStand stand = new ArmorStand(level, p.getX() + 1.5, p.getY(), p.getZ());
+        for (ItemStack s : spare) {
+            if (s.getItem() instanceof net.minecraft.world.item.ArmorItem a) {
+                stand.setItemSlot(a.getEquipmentSlot(), s.copy());
+            } else {
+                stand.setItemSlot(EquipmentSlot.MAINHAND, s.copy());
+            }
+            s.setCount(0);
+        }
+        level.addFreshEntity(stand);
+        ClonePlayer born = convert(stand, level);
+        if (born == null) { // (the clone limit: the gear goes back on the ground)
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                p.spawnAtLocation(stand.getItemBySlot(slot).copy());
+            }
+            stand.discard();
+        }
+        return born;
+    }
+
     /** No hunger, no hurt by itself, out of sight: kept up every second. */
     @SubscribeEvent
     public static void onTick(TickEvent.ServerTickEvent event) {
@@ -123,6 +196,9 @@ public final class CloneEquipment {
                 c.getFoodData().setFoodLevel(20);
                 c.setHealth(c.getMaxHealth());
                 mend(c);
+                if (event.getServer().getTickCount() % 400 == 0) {
+                    multiply(c);
+                }
                 if (!c.isInvisible()) {
                     c.setInvisible(true);
                 }
