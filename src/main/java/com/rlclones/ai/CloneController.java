@@ -2003,6 +2003,10 @@ public final class CloneController {
 
     public void onDealtDamage(LivingEntity victim, float amount) {
         attacks.onDealt(victim, amount);
+        if (victim != self && !Senses.isHostileTo(victim, self) && !Senses.isFoodAnimal(victim) && victim instanceof Player) {
+            stepReward -= amount; // an explosion / fireball / arrow into a friend or a player
+            return;
+        }
         if (victim == target || Senses.isHostileTo(victim, self) || Senses.isFoodAnimal(victim)) {
             stepReward += amount;
             if (Senses.isHostileTo(victim, self)) {

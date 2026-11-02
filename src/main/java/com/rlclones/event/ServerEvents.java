@@ -258,7 +258,7 @@ public final class ServerEvents {
             DAMAGE_TAKEN.clear();
         }
         DAMAGE_TAKEN.addTo(victim.getId(), amount);
-        Entity attacker = event.getSource().getEntity();
+        Entity attacker = com.rlclones.clone.CloneMobs.credit(event.getSource().getEntity());
         long now = tick(victim);
         if (Senses.isAgent(victim)) {
             AgentEvents.record(victim.getUUID(), now, AgentEvents.Kind.HURT, amount, attacker == null ? -1 : attacker.getId(), 0);
@@ -282,7 +282,7 @@ public final class ServerEvents {
         if (victim.level().isClientSide || event.isCanceled()) {
             return;
         }
-        Entity killer = event.getSource().getEntity();
+        Entity killer = com.rlclones.clone.CloneMobs.credit(event.getSource().getEntity());
         long now = tick(victim);
         float taken = DAMAGE_TAKEN.remove(victim.getId());
         MinecraftServer server = victim.getServer();

@@ -242,6 +242,20 @@ public final class CloneMobs {
         return id != null && p.level() instanceof ServerLevel l && l.getEntity(id) instanceof Mob m && m.isAlive() ? m : null;
     }
 
+    /** Who gets the credit for a blow: the soul of a clone mob whose body struck it, or whose arrow / fireball / fangs / vex did (anything else: the attacker itself). */
+    public static Entity credit(Entity attacker) {
+        Entity src = attacker;
+        if (src instanceof net.minecraft.world.entity.projectile.Projectile p && p.getOwner() != null) {
+            src = p.getOwner();
+        } else if (src instanceof net.minecraft.world.entity.projectile.EvokerFangs f && f.getOwner() != null) {
+            src = f.getOwner();
+        } else if (src instanceof net.minecraft.world.entity.monster.Vex v && v.getOwner() != null) {
+            src = v.getOwner();
+        }
+        ClonePlayer soul = soulOf(src);
+        return soul != null ? soul : attacker;
+    }
+
     /** Hands to mine, build, open doors and craft: a plain clone, or a clone mob whose body is man-shaped (zombie, skeleton, illager, villager, piglin, witch). */
     public static boolean canUseHands(net.minecraft.world.entity.player.Player p) {
         Mob b = bodyOf(p);

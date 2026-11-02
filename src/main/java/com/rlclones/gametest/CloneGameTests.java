@@ -379,6 +379,18 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void clonesMobBlowsAndShotsCountForTheSoul(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        var arrow = new net.minecraft.world.entity.projectile.Arrow(h.getLevel(), body);
+        var plain = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(9.5, 2, 6.5));
+        h.assertTrue(com.rlclones.clone.CloneMobs.credit(body) == soul, "the body's blow is the soul's");
+        h.assertTrue(com.rlclones.clone.CloneMobs.credit(arrow) == soul, "its arrow too");
+        h.assertTrue(com.rlclones.clone.CloneMobs.credit(plain) == plain, "anyone else keeps their own");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
