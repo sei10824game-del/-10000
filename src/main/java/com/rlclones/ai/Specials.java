@@ -7,7 +7,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.RangedAttackMob;
+import net.minecraft.world.entity.monster.RangedAttackMob;
 import net.minecraft.world.entity.monster.Blaze;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;
@@ -46,7 +46,7 @@ public final class Specials {
     }
 
     /** Use it on {@code target}; false = not possible from here (too far, no line of sight...). */
-    public static boolean use(Player soul, Entity target, int slot) {
+    public static boolean use(com.rlclones.clone.ClonePlayer soul, Entity target, int slot) {
         Mob b = CloneMobs.bodyOf(soul);
         if (b == null || !(target instanceof LivingEntity t) || !available(soul, slot) || !(b.level() instanceof ServerLevel level)) {
             return false;
@@ -92,7 +92,7 @@ public final class Specials {
                         || level.getBlockState(p.below()).getCollisionShape(level, p.below()).isEmpty()) {
                     return false;
                 }
-                soul.teleportTo(level, behind.x, p.getY(), behind.z, soul.getYRot(), 0f);
+                soul.teleportTo(level, behind.x, (double) p.getY(), behind.z, soul.getYRot(), 0f);
                 cooldown = 60;
             }
             case "fangs" -> {
