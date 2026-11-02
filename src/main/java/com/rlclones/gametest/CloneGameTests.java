@@ -248,7 +248,7 @@ public final class CloneGameTests {
     public static void cloneMobBodyFollowsItsSoul(GameTestHelper h) {
         net.minecraft.world.entity.Mob body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
-        h.assertTrue(body.isNoAi() && soul.isInvisible(), "the body has no AI of its own and the soul is hidden");
+        h.assertTrue(body.isNoAi() && soul.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY), "the body has no AI of its own and the soul is hidden");
         var to = h.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 2, 8.5));
         soul.teleportTo(h.getLevel(), to.x, to.y, to.z, 90f, 0f);
         h.succeedWhen(() -> h.assertTrue(body.position().distanceTo(soul.position()) < 1.0, "the body is where the soul is"));
@@ -429,7 +429,7 @@ public final class CloneGameTests {
         level.addFreshEntity(stand);
         ClonePlayer eq = com.rlclones.clone.CloneEquipment.convert(stand, level);
         h.assertTrue(eq != null && stand.isRemoved(), "the stand is gone and the equipment stands in its place");
-        h.assertTrue(eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE) && com.rlclones.clone.CloneEquipment.is(eq) && eq.isInvisible(), "it wears and holds what the stand had");
+        h.assertTrue(eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE) && com.rlclones.clone.CloneEquipment.is(eq) && eq.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY), "it wears and holds what the stand had");
         h.assertTrue(net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.MENDING, eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST)) == 1
                 && net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.MENDING, eq.getMainHandItem()) == 1, "every part has Mending");
         com.rlclones.clone.CloneEquipment.wear(eq, 10f);
