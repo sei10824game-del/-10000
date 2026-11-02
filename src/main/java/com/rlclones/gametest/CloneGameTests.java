@@ -315,19 +315,22 @@ public final class CloneGameTests {
     }
 
     @GameTest(template = ARENA, timeoutTicks = 300, batch = "clonemobs")
-    public static void soulOfACloneMobTakesNoSurroundingsDamage(GameTestHelper h) {
+    public static void theBodyHoldsTheHealthOfACloneMob(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
-        h.runAfterDelay(100, () -> { // (a new player is shielded for a while)
-            soul.invulnerableTime = 0;
-            float hp = soul.getHealth();
+        h.runAfterDelay(20, () -> {
+            float max = body.getMaxHealth();
             soul.hurt(soul.damageSources().inFire(), 4f);
             soul.hurt(soul.damageSources().drown(), 4f);
-            h.assertTrue(soul.getHealth() == hp, "fire and drowning do nothing to the soul itself (" + soul.getHealth() + ")");
-            soul.invulnerableTime = 0;
-            soul.hurt(soul.damageSources().magic(), 2f);
-            h.assertTrue(soul.getHealth() < hp, "other damage still does (" + soul.getHealth() + " of " + hp + ", invulnerable=" + soul.isInvulnerable() + ")");
-            h.succeed();
+            h.assertTrue(body.getHealth() == max && soul.getHealth() == soul.getMaxHealth(), "the surroundings' fire and drowning do nothing to the soul (a blaze's body minds neither)");
+            soul.hurt(soul.damageSources().magic(), 5f);
+            h.assertTrue(body.getHealth() < max, "damage that lands on the soul goes to the body (" + body.getHealth() + " of " + max + ")");
+            body.hurt(body.damageSources().generic(), 4f);
+            float share = body.getHealth() / max;
+            h.runAfterDelay(5, () -> {
+                h.assertTrue(Math.abs(soul.getHealth() / soul.getMaxHealth() - share) < 0.06f, "the soul shows the body's share of health (" + soul.getHealth() + " vs " + share + ")");
+                h.succeed();
+            });
         });
     }
 

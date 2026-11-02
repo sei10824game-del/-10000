@@ -187,11 +187,11 @@ public final class CloneMobs {
             if (soul.tickCount % 100 == 0) {
                 hide(soul);
             }
-            // what the soul has lost the body shows: its health bar (and the hurt flash)
-            body.setHealth(Math.max(0.5f, Math.min(body.getMaxHealth(), soul.getHealth() / Math.max(1f, soul.getMaxHealth()) * body.getMaxHealth())));
-            if (soul.hurtTime > 0 && body.hurtTime == 0) {
-                body.hurtDuration = 10;
-                body.hurtTime = 10;
+            // the body holds the health: the soul (whose health the clone's own sense of danger reads) shows the same share of it
+            float share = Math.max(0.02f, body.getHealth() / Math.max(1f, body.getMaxHealth()));
+            soul.setHealth(Math.max(0.5f, Math.min(soul.getMaxHealth(), share * soul.getMaxHealth())));
+            if (body.getHealth() < body.getMaxHealth() && soul.getFoodData().getFoodLevel() >= 18 && body.tickCount % 80 == 0) {
+                body.heal(1f); // natural healing of a well-fed clone, on the body
             }
             if (body.tickCount % 10 == 0) {
                 widenWay(soul, body);
@@ -199,21 +199,28 @@ public final class CloneMobs {
         }
     }
 
-    /** True while a blow taken by the body is being handed on to the soul (so the soul's own filter lets it through). */
-    private static boolean handingOn;
-
-    /** The soul takes no damage from its own surroundings (fire, lava, drowning, walls...): the body feels them (or not: a blaze) and hands the real damage on. Falls follow the body's traits. */
+    /**
+     * The body holds the health (plan: 71 follow-up). Damage that lands on the soul goes to the body instead (blows, a fall, magic, hunger);
+     * what the surroundings do (fire, drowning, walls...) the body feels itself, so the soul takes none of it. An explosion hits both
+     * of them where they stand: the body's own share is enough.
+     */
     @SubscribeEvent
-    public static void onSoulEnvironment(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
-        if (handingOn || !(event.getEntity() instanceof ClonePlayer soul) || event.getSource().getEntity() != null || event.getSource().getDirectEntity() != null
-                || bodyOf(soul) == null) {
+    public static void onSoulHurt(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        if (!(event.getEntity() instanceof ClonePlayer soul) || event.isCanceled()) {
             return;
         }
+        Mob body = bodyOf(soul);
         var src = event.getSource();
-        if (src.is(net.minecraft.tags.DamageTypeTags.IS_FIRE) || src.is(net.minecraft.world.damagesource.DamageTypes.DROWN) || src.is(net.minecraft.world.damagesource.DamageTypes.IN_WALL)
-                || src.is(net.minecraft.world.damagesource.DamageTypes.CRAMMING) || src.is(net.minecraft.world.damagesource.DamageTypes.CACTUS)
-                || src.is(net.minecraft.world.damagesource.DamageTypes.SWEET_BERRY_BUSH) || src.is(net.minecraft.world.damagesource.DamageTypes.FREEZE)) {
-            event.setCanceled(true);
+        if (body == null || src.is(net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL) || src.is(net.minecraft.world.damagesource.DamageTypes.FELL_OUT_OF_WORLD)) {
+            return;
+        }
+        event.setCanceled(true);
+        boolean surroundings = src.is(net.minecraft.tags.DamageTypeTags.IS_FIRE) || src.is(net.minecraft.world.damagesource.DamageTypes.DROWN)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.IN_WALL) || src.is(net.minecraft.world.damagesource.DamageTypes.CRAMMING)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.CACTUS) || src.is(net.minecraft.world.damagesource.DamageTypes.SWEET_BERRY_BUSH)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.FREEZE) || src.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION);
+        if (!surroundings || src.getEntity() != null && src.is(net.minecraft.tags.DamageTypeTags.IS_FIRE)) {
+            body.hurt(src, event.getAmount());
         }
     }
 
@@ -250,24 +257,6 @@ public final class CloneMobs {
         }
         body.getPersistentData().putInt(DUG, dug + made);
         return made;
-    }
-
-    /** Blows that land on the body hurt the soul (its health, hunger and armour are the real ones); the body itself takes none. */
-    @SubscribeEvent
-    public static void onBodyAttacked(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
-        ClonePlayer soul = soulOf(event.getEntity());
-        if (soul != null && soul.isAlive() && !event.isCanceled()) {
-            event.setCanceled(true);
-            handingOn = true;
-            try {
-                soul.hurt(event.getSource(), event.getAmount());
-            } finally {
-                handingOn = false;
-            }
-            if (!soul.isAlive()) {
-                event.getEntity().kill();
-            }
-        }
     }
 
     /** The body of this soul (null = a plain clone, or its body is not loaded). */
