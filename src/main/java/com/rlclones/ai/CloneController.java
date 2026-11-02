@@ -1721,10 +1721,10 @@ public final class CloneController {
         }
         // iron / diamonds to dig for, a stone pickaxe still to make, or no food for a trip: no new trips
         boolean homeBody = digPending(now) || hungryNoFood() || leanOnFood() || Progression.need(self) == Progression.Need.STONE;
-        if (expedition.isLeading() || (!homeBody && persona.mayScout() && expedition.canLead(now) && othersOnline()) || villageScoutWanted(now)) {
+        if ((expedition.isLeading() && !hungryNoFood()) || (!homeBody && persona.mayScout() && expedition.canLead(now) && othersOnline()) || villageScoutWanted(now)) {
             mask |= Option.EXPEDITION.bit();
         }
-        if (expedition.joinedOffer() != null || (!homeBody && expedition.canJoin(now))) {
+        if ((expedition.joinedOffer() != null && !hungryNoFood()) || (!homeBody && expedition.canJoin(now))) { // (soak: trips went on with food 0 and the party starved)
             mask |= Option.JOIN.bit();
         }
         if (Config.get(Config.ALLOW_BLOCK_BREAKING, true) && Crafting.stoneNeeded(self) > 0
