@@ -103,6 +103,8 @@ public final class CloneController {
     private final EffectSense effects;
     private final Breeding breeding;
     private final Shade shade;
+    /** How many times a clone mob's own attack was used (diagnostics, tests). */
+    public int specialUses;
     private final Achievements achievements;
     private final StairMining stairs;
     private final AttackTells tells;
@@ -3365,6 +3367,7 @@ public final class CloneController {
             case SPECIAL, SPECIAL2 -> {
                 motor.lookAt(t);
                 if (Specials.use(self, t, action == CombatAction.SPECIAL ? 0 : 1)) {
+                    specialUses++;
                     actionDone = true;
                 } else if (gap > 3) {
                     motor.navigate(t.position(), 1.0, gap > 6);

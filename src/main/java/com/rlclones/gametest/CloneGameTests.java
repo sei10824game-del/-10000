@@ -391,6 +391,18 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 900)
+    public static void skeletonBodyUsesItsArrowsAgainstAHusk(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(2.5, 2, 7.5)));
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        soul.setAiEnabled(true);
+        var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(11.5, 2, 7.5));
+        h.succeedWhen(() -> {
+            h.assertTrue(soul.controller().specialUses > 0, "the skeleton's own attack was used (uses " + soul.controller().specialUses + ", husk hp " + husk.getHealth() + ", options " + soul.controller().optionLog + ")");
+            h.assertTrue(com.rlclones.clone.CloneManager.errors() == 0, "no controller errors: " + com.rlclones.clone.CloneManager.firstError);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
