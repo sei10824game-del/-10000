@@ -172,6 +172,12 @@ public final class Senses {
         if (Equipment.usableSlot(agent, x -> true) < 0) {
             mask &= ~CombatAction.USE_ITEM.bit();
         }
+        if (!Specials.available(agent, 0)) {
+            mask &= ~CombatAction.SPECIAL.bit();
+        }
+        if (!Specials.available(agent, 1)) {
+            mask &= ~CombatAction.SPECIAL2.bit();
+        }
         int launcher = Equipment.rangedSlot(agent);
         if (launcher >= 0 && Equipment.isLauncher(agent.getInventory().getItem(launcher)) && Equipment.canFire(agent, agent.getInventory().getItem(launcher))
                 && Equipment.bestWeaponSlot(agent) < 0) {

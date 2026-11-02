@@ -3358,6 +3358,14 @@ public final class CloneController {
                 }
             }
             case USE_ITEM -> useLearned(t);
+            case SPECIAL, SPECIAL2 -> {
+                motor.lookAt(t);
+                if (Specials.use(self, t, action == CombatAction.SPECIAL ? 0 : 1)) {
+                    actionDone = true;
+                } else if (gap > 3) {
+                    motor.navigate(t.position(), 1.0, gap > 6);
+                }
+            }
             case PILLAR -> pillar();
             case POSITION -> {
                 motor.lookAt(t);

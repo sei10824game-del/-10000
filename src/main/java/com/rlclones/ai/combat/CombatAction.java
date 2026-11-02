@@ -16,7 +16,11 @@ public enum CombatAction {
     /** Right-click the held special weapon (modded ability, gun, staff...); the effect is learned per enemy. */
     USE_ITEM(45),
     /** Walk to a better spot nearby (walls at the sides, height over the enemy, away from hazards); see {@link Terrain}. */
-    POSITION(40);
+    POSITION(40),
+    /** A clone mob's own attack (arrow, fireball, explosion, teleport, fangs): only for bodies that have one, see {@link com.rlclones.ai.Specials}. */
+    SPECIAL(30),
+    /** The evoker's vexes. */
+    SPECIAL2(30);
 
     public static final CombatAction[] VALUES = values();
     public static final int COUNT = VALUES.length;

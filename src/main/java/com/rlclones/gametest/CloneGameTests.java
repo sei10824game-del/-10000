@@ -359,6 +359,26 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void specialsBelongToBodiesThatHaveThem(GameTestHelper h) {
+        var skel = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.SKELETON, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var cow = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.COW, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
+        var evoker = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.EVOKER, h.absoluteVec(new net.minecraft.world.phys.Vec3(7.5, 2, 3.5)));
+        var plain = clone(h, 2.5, 7.5, 0f, false);
+        int skelMask = com.rlclones.ai.Senses.combatMask(com.rlclones.clone.CloneMobs.soulOf(skel));
+        h.assertTrue((skelMask & com.rlclones.ai.combat.CombatAction.SPECIAL.bit()) != 0 && (skelMask & com.rlclones.ai.combat.CombatAction.SPECIAL2.bit()) == 0, "a skeleton shoots (SPECIAL), no vexes");
+        h.assertTrue((com.rlclones.ai.Senses.combatMask(com.rlclones.clone.CloneMobs.soulOf(evoker)) & com.rlclones.ai.combat.CombatAction.SPECIAL2.bit()) != 0, "an evoker calls vexes");
+        h.assertTrue((com.rlclones.ai.Senses.combatMask(com.rlclones.clone.CloneMobs.soulOf(cow)) & com.rlclones.ai.combat.CombatAction.SPECIAL.bit()) == 0, "a cow has none");
+        h.assertTrue((com.rlclones.ai.Senses.combatMask(plain) & (com.rlclones.ai.combat.CombatAction.SPECIAL.bit() | com.rlclones.ai.combat.CombatAction.SPECIAL2.bit())) == 0, "a plain clone has none");
+        // the evoker's vexes: three come, on the players' side, and the call then has to cool down
+        var soul = com.rlclones.clone.CloneMobs.soulOf(evoker);
+        var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(9.5, 2, 6.5));
+        h.assertTrue(com.rlclones.ai.Specials.use(soul, husk, 1), "the vexes are called");
+        h.assertTrue(!com.rlclones.ai.Specials.available(soul, 1), "and the call cools down");
+        finish(h, plain);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
