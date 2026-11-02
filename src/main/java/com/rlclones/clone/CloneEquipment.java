@@ -57,6 +57,14 @@ public final class CloneEquipment {
         return soul;
     }
 
+    /** A clone armor stand always has arms (the ones placed before that was so get them when they load). */
+    @SubscribeEvent
+    public static void onStandJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof ArmorStand stand && !event.getLevel().isClientSide && stand.getPersistentData().getBoolean(STAND) && !stand.isShowArms()) {
+            stand.setShowArms(true);
+        }
+    }
+
     @SubscribeEvent
     public static void onStandHit(AttackEntityEvent event) {
         if (event.getTarget() instanceof ArmorStand stand && (stand.getPersistentData().getBoolean(STAND) || CloneManager.plainStands()) && stand.level() instanceof ServerLevel level) {
