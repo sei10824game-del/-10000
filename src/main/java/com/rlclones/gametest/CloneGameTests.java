@@ -352,7 +352,7 @@ public final class CloneGameTests {
         // a stand-in for a body wider than the soul: a wall block half inside the body's box
         var wall = body.blockPosition().relative(net.minecraft.core.Direction.EAST);
         h.getLevel().setBlock(wall, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(), 3);
-        var tall = body.getBbHeight() > 1.9f || body.getBbWidth() > 0.7f;
+        var tall = body.getBbHeight() > 2.1f || body.getBbWidth() > 0.8f;
         h.assertTrue(!tall, "a zombie is player-sized: nothing is dug for it");
         h.assertTrue(com.rlclones.clone.CloneMobs.widenWay(soul, body) == 0, "so no block goes");
         h.assertTrue(h.getLevel().getBlockState(wall).is(net.minecraft.world.level.block.Blocks.DIRT), "the wall stays");

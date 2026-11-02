@@ -190,9 +190,9 @@ public final class CloneMobs {
         }
     }
 
-    /** A body bigger than the soul (the soul is player-sized) that the soul cannot get on with, for want of room: the blocks its box overlaps are dug out, a few at a time. */
+    /** A body clearly bigger than the soul (the soul is player-sized: 0.6 x 1.8; zombies, skeletons and villagers, 2.0 tall, count as that size) that the soul cannot get on with, for want of room: the blocks its box overlaps are dug out, a few at a time. */
     public static int widenWay(ClonePlayer soul, Mob body) {
-        if ((body.getBbWidth() <= 0.7f && body.getBbHeight() <= 1.9f) || !canUseHands(soul) || soul.controller() == null || soul.controller().motor().stuckCount() < 2) {
+        if ((body.getBbWidth() <= 0.8f && body.getBbHeight() <= 2.1f) || !canUseHands(soul) || soul.controller() == null || soul.controller().motor().stuckCount() < 2) {
             return 0;
         }
         int dug = body.getPersistentData().getInt(DUG);
