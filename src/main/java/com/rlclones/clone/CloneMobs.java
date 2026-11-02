@@ -145,6 +145,33 @@ public final class CloneMobs {
         }
     }
 
+    /** Bodies whose own AI is lent for an attack: body -> game time the loan ends. */
+    private static final java.util.Map<UUID, Long> BORROWED = new java.util.HashMap<>();
+    private static final java.util.Map<UUID, UUID> BORROWED_TARGET = new java.util.HashMap<>();
+
+    public static boolean isBorrowed(Mob body) {
+        return BORROWED.containsKey(body.getUUID());
+    }
+
+    /**
+     * Lend the body its own AI against {@code target} for {@code ticks}: whatever its goals do (a mod's wind-up area attack, a leap, a
+     * summoning...) happens as it would for the mob itself. The soul follows the body meanwhile (see the tick).
+     */
+    public static void borrow(Mob body, net.minecraft.world.entity.LivingEntity target, long now, int ticks) {
+        BORROWED.put(body.getUUID(), now + ticks);
+        BORROWED_TARGET.put(body.getUUID(), target.getUUID());
+        body.setNoAi(false);
+        body.setTarget(target);
+    }
+
+    private static void release(Mob body) {
+        BORROWED.remove(body.getUUID());
+        BORROWED_TARGET.remove(body.getUUID());
+        body.setTarget(null);
+        body.getNavigation().stop();
+        body.setNoAi(true);
+    }
+
     /** Every tick: each body goes to its soul's place and facing; a body or soul that is gone takes the other with it. */
     @SubscribeEvent
     public static void onServerTick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
@@ -178,6 +205,18 @@ public final class CloneMobs {
                 it.remove();
                 soul.kill(); // (the body died or was removed)
                 continue;
+            }
+            if (isBorrowed(body)) {
+                var level = soul.serverLevel();
+                var target = level.getEntity(BORROWED_TARGET.get(body.getUUID()));
+                if (level.getGameTime() >= BORROWED.get(body.getUUID()) || !(target instanceof net.minecraft.world.entity.LivingEntity le) || !le.isAlive()) {
+                    release(body); // (the loan is over: the body is where the soul will be put now)
+                } else {
+                    body.setTarget(le);
+                    soul.teleportTo(level, body.getX(), body.getY(), body.getZ(), body.getYRot(), body.getXRot()); // the soul follows
+                    soul.setHealth(Math.max(0.5f, Math.min(soul.getMaxHealth(), body.getHealth() / Math.max(1f, body.getMaxHealth()) * soul.getMaxHealth())));
+                    continue;
+                }
             }
             body.moveTo(soul.getX(), soul.getY(), soul.getZ(), soul.getYRot(), soul.getXRot());
             body.setYHeadRot(soul.getYHeadRot());

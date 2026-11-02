@@ -31,6 +31,12 @@ public final class Specials {
         if (slot == 1) {
             return b instanceof Evoker ? "vex" : null;
         }
+        if (!(b instanceof net.minecraft.world.entity.monster.Guardian || b instanceof net.minecraft.world.entity.monster.Ghast || b instanceof net.minecraft.world.entity.monster.warden.Warden
+                || b instanceof Creeper || b instanceof Blaze || b instanceof EnderMan || b instanceof Evoker || b instanceof RangedAttackMob)
+                && !"minecraft".equals(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(b.getType()).getNamespace())
+                && b.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) != null) {
+            return "borrow"; // a mob of another mod: its own AI does the attacking
+        }
         return b instanceof net.minecraft.world.entity.monster.Guardian ? "beam" : b instanceof net.minecraft.world.entity.monster.Ghast ? "ghast"
                 : b instanceof net.minecraft.world.entity.monster.warden.Warden ? "sonic" : b instanceof Creeper ? "explode" : b instanceof Blaze ? "fireball" : b instanceof EnderMan ? "teleport" : b instanceof Evoker ? "fangs"
                 : b instanceof RangedAttackMob ? "ranged" : null;
@@ -48,18 +54,19 @@ public final class Specials {
         Mob b = CloneMobs.bodyOf(soul);
         String kind = b == null ? null : kind(b, slot);
         if (kind == null || kind.equals("explode") || kind.equals("teleport") || !(target instanceof LivingEntity t)
-                || !(CHARGES.containsKey(b.getUUID()) || available(soul, slot))) {
+                || !(CHARGES.containsKey(b.getUUID()) || CloneMobs.isBorrowed(b) || available(soul, slot))) {
             return false;
         }
         double d = b.distanceTo(t);
         double max = switch (kind) {
             case "beam", "sonic" -> 15;
+            case "borrow" -> 24;
             case "ghast" -> 30;
             case "fireball", "ranged" -> 16;
             case "fangs" -> 12;
             default -> 24;
         };
-        return d <= max && d >= (kind.equals("ranged") ? 3 : 0) && (kind.equals("vex") || b.hasLineOfSight(t));
+        return d <= max && d >= (kind.equals("ranged") ? 3 : 0) && (kind.equals("vex") || kind.equals("borrow") || b.hasLineOfSight(t));
     }
 
     /** This body has the attack and it is not cooling down. */
@@ -72,6 +79,9 @@ public final class Specials {
     public static final int DONE = 1;
     /** A charging attack (guardian beam, ghast fireball, warden sonic boom) is under way: stand and keep facing the target. */
     public static final int BUSY = 2;
+
+    /** Bodies whose AI is on loan for an attack (to answer DONE when it ends). */
+    private static final java.util.Map<java.util.UUID, Long> BORROWING = new java.util.HashMap<>();
 
     /** Charging attacks in progress: body -> (target, start tick). */
     private static final java.util.Map<java.util.UUID, long[]> CHARGES = new java.util.HashMap<>();
@@ -96,6 +106,22 @@ public final class Specials {
             return NO;
         }
         String kind = kind(b, slot);
+        if (kind.equals("borrow")) {
+            long now = level.getGameTime();
+            if (CloneMobs.isBorrowed(b)) {
+                return BUSY;
+            }
+            if (BORROWING.remove(b.getUUID()) != null) { // the loan ran out: done, and a pause before the next
+                b.getPersistentData().putLong(key(slot), now + 100);
+                return DONE;
+            }
+            if (!available(soul, slot) || b.distanceTo(t) > 24) {
+                return NO;
+            }
+            CloneMobs.borrow(b, t, now, 80);
+            BORROWING.put(b.getUUID(), now);
+            return BUSY;
+        }
         if (!kind.equals("beam") && !kind.equals("ghast") && !kind.equals("sonic")) {
             return use(soul, target, slot) ? DONE : NO;
         }

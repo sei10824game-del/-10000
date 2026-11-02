@@ -484,6 +484,21 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "clonemobs")
+    public static void aBodyIsLentItsOwnAiForAnAttackThenTakenBack(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(2.5, 2, 7.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(11.5, 2, 7.5));
+        husk.setNoAi(true);
+        double x0 = body.getX();
+        com.rlclones.clone.CloneMobs.borrow(body, husk, h.getLevel().getGameTime(), 40);
+        h.assertTrue(!body.isNoAi() && com.rlclones.clone.CloneMobs.isBorrowed(body), "on loan: its own AI runs");
+        h.runAfterDelay(30, () -> h.assertTrue(body.getX() > x0 + 0.8 && soul.position().distanceTo(body.position()) < 2.5, "it went for the target by itself, the soul with it (" + (body.getX() - x0) + ")"));
+        h.succeedWhen(() -> {
+            h.assertTrue(body.isNoAi() && !com.rlclones.clone.CloneMobs.isBorrowed(body), "the loan ends and the AI is taken back");
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
