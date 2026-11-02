@@ -318,7 +318,7 @@ public final class CloneGameTests {
     public static void theBodyHoldsTheHealthOfACloneMob(GameTestHelper h) {
         var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
-        h.runAfterDelay(20, () -> {
+        h.runAfterDelay(100, () -> { // (a new player is shielded for 60 ticks)
             float max = body.getMaxHealth();
             soul.hurt(soul.damageSources().inFire(), 4f);
             soul.hurt(soul.damageSources().drown(), 4f);
@@ -401,6 +401,7 @@ public final class CloneGameTests {
         soul.setAiEnabled(true);
         soul.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SPECIAL; // (which action a fight picks is up to the learning; this one is asked for)
         var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(11.5, 2, 7.5));
+        husk.setNoAi(true); // (it stays where it is: arrows need 3 to 16 blocks)
         h.succeedWhen(() -> {
             h.assertTrue(soul.controller().specialUses > 0, "the skeleton's own attack was used (uses " + soul.controller().specialUses + ", husk hp " + husk.getHealth() + ", options " + soul.controller().optionLog + ")");
             h.assertTrue(com.rlclones.clone.CloneManager.errors() == 0, "no controller errors: " + com.rlclones.clone.CloneManager.firstError);
