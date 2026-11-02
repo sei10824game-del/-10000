@@ -378,12 +378,45 @@ public final class CloneMobs {
         if (!playerSide(mob)) {
             return;
         }
-        CloneManager m = CloneManager.get(mob.getServer());
-        if (SYNC_READY && m.summonedAsClone()) {
-            ClonePlayer soul = m.summon(null, (ServerLevel) event.getLevel(), mob.position(), mob.getYRot());
+        adopt(mob, (ServerLevel) event.getLevel());
+    }
+
+    /** A mob already on the players' side is made a clone mob too when the setting says what clone mobs summon / infect is one. */
+    private static void adopt(Mob mob, ServerLevel level) {
+        CloneManager m = CloneManager.get(level.getServer());
+        if (SYNC_READY && m.summonedAsClone() && !mob.getPersistentData().hasUUID(SOUL)) {
+            ClonePlayer soul = m.summon(null, level, mob.position(), mob.getYRot());
             if (soul != null) {
                 link(mob, soul);
             }
+        }
+    }
+
+    /** Persistent-data key on a victim: a clone mob killed it, so what it turns into (a zombie villager...) is on the players' side. */
+    private static final String INFECTED_BY = "rlclones_infected_by_clone_mob";
+
+    /** A clone mob kills something that can turn (villager -> zombie villager): marked now, the change comes a moment later. */
+    @SubscribeEvent
+    public static void onKilledByCloneMob(LivingDeathEvent event) {
+        if (event.getSource().getEntity() instanceof Mob killer && playerSide(killer) && !event.getEntity().level().isClientSide) {
+            event.getEntity().getPersistentData().putBoolean(INFECTED_BY, true);
+        }
+    }
+
+    /** What a victim of a clone mob turns into (infection) is on the players' side - and a clone mob too, if the setting says so. */
+    @SubscribeEvent
+    public static void onInfected(net.minecraftforge.event.entity.living.LivingConversionEvent.Post event) {
+        if (event.getEntity().getPersistentData().getBoolean(INFECTED_BY) && event.getOutcome() instanceof Mob out && out.level() instanceof ServerLevel level) {
+            out.getPersistentData().putBoolean(SIDE, true);
+            adopt(out, level);
+        }
+    }
+
+    /** A clone mob's body does not change into another kind (a zombie to a drowned...): the soul is tied to this body. */
+    @SubscribeEvent
+    public static void onBodyConversion(net.minecraftforge.event.entity.living.LivingConversionEvent.Pre event) {
+        if (soulOf(event.getEntity()) != null) {
+            event.setCanceled(true);
         }
     }
 

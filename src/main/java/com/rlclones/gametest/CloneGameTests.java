@@ -403,6 +403,18 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void whatACloneZombieInfectsJoinsThePlayersSide(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var villager = h.spawn(net.minecraft.world.entity.EntityType.VILLAGER, new net.minecraft.world.phys.Vec3(5.5, 2, 3.5));
+        villager.hurt(h.getLevel().damageSources().mobAttack(body), 1000f); // (killed by the clone zombie)
+        h.getLevel().getServer().getCommands(); // (the change to a zombie villager is vanilla's, in the same tick)
+        h.succeedWhen(() -> {
+            var zv = h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.monster.ZombieVillager.class, new net.minecraft.world.phys.AABB(h.absolutePos(new net.minecraft.core.BlockPos(5, 2, 3))).inflate(6));
+            h.assertTrue(!zv.isEmpty() && com.rlclones.clone.CloneMobs.playerSide(zv.get(0)), "a zombie villager made by the clone zombie is on the players' side");
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
