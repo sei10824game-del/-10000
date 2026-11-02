@@ -91,8 +91,8 @@ public final class CloneMobs {
     }
 
     /** Tests: what a restart does. */
-    public static void forgetLinks() {
-        BODY.clear();
+    public static void forgetLink(UUID soul) {
+        BODY.remove(soul);
     }
 
     /** Tie the loaded bodies to their souls; an orphan (no such clone any more) is removed. */
