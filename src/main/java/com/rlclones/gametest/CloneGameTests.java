@@ -298,6 +298,35 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 60)
+    public static void traitsComeFromTheBody(GameTestHelper h) {
+        var T = net.minecraft.world.entity.EntityType.class;
+        var blaze = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var ender = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ENDERMAN, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
+        var husk = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.HUSK, h.absoluteVec(new net.minecraft.world.phys.Vec3(7.5, 2, 3.5)));
+        var zombie = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(9.5, 2, 3.5)));
+        var plain = clone(h, 2.5, 7.5, 0f, false);
+        h.assertTrue(com.rlclones.clone.BodyTraits.of(blaze).fire() && com.rlclones.clone.BodyTraits.of(blaze).fallImmune(), "blaze: fire and falls");
+        h.assertTrue(com.rlclones.clone.BodyTraits.of(ender).water(), "enderman: water hurts");
+        h.assertTrue(!com.rlclones.clone.BodyTraits.of(husk).sun() && com.rlclones.clone.BodyTraits.of(zombie).sun(), "husk is sun-proof, zombie burns");
+        h.assertTrue(com.rlclones.clone.BodyTraits.of(plain) == com.rlclones.clone.BodyTraits.PLAYER, "a plain clone is a player");
+        finish(h, plain);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 60)
+    public static void soulOfACloneMobTakesNoSurroundingsDamage(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        float hp = soul.getHealth();
+        soul.hurt(soul.damageSources().inFire(), 4f);
+        soul.hurt(soul.damageSources().drown(), 4f);
+        h.assertTrue(soul.getHealth() == hp, "fire and drowning do nothing to the soul itself");
+        soul.hurt(soul.damageSources().magic(), 2f);
+        h.assertTrue(soul.getHealth() < hp, "other damage still does");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

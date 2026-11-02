@@ -233,6 +233,9 @@ public final class Motor {
     /** Lava (flowing over the floor too) or fire in the cell we are about to walk into, or the one above it. */
     /** Lava or fire in the cells at the feet / head round {@code p} (one block each way): where a corner of the body can touch it. */
     private boolean lavaNear(BlockPos p) {
+        if (com.rlclones.clone.BodyTraits.of(self).fire()) {
+            return false; // a blaze's body does not mind
+        }
         ServerLevel level = self.serverLevel();
         for (BlockPos q : BlockPos.betweenClosed(p.offset(-1, 0, -1), p.offset(1, 1, 1))) {
             if (level.getFluidState(q).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(q).is(BlockTags.FIRE)) {
@@ -243,6 +246,9 @@ public final class Motor {
     }
 
     private boolean hazardAhead(float yaw, float zza, float xxa) {
+        if (com.rlclones.clone.BodyTraits.of(self).fire()) {
+            return false;
+        }
         double rad = Math.toRadians(yaw);
         double mx = -Math.sin(rad) * zza + Math.cos(rad) * xxa;
         double mz = Math.cos(rad) * zza + Math.sin(rad) * xxa;
@@ -266,6 +272,9 @@ public final class Motor {
     }
 
     private boolean deadlyDropAhead(float yaw, float zza, float xxa) {
+        if (com.rlclones.clone.BodyTraits.of(self).fallImmune()) {
+            return false;
+        }
         double rad = Math.toRadians(yaw);
         double fx = -Math.sin(rad);
         double fz = Math.cos(rad);

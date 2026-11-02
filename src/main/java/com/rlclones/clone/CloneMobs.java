@@ -158,13 +158,44 @@ public final class CloneMobs {
         }
     }
 
+    /** True while a blow taken by the body is being handed on to the soul (so the soul's own filter lets it through). */
+    private static boolean handingOn;
+
+    /** The soul takes no damage from its own surroundings (fire, lava, drowning, walls...): the body feels them (or not: a blaze) and hands the real damage on. Falls follow the body's traits. */
+    @SubscribeEvent
+    public static void onSoulEnvironment(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        if (handingOn || !(event.getEntity() instanceof ClonePlayer soul) || event.getSource().getEntity() != null || event.getSource().getDirectEntity() != null
+                || bodyOf(soul) == null) {
+            return;
+        }
+        var src = event.getSource();
+        if (src.is(net.minecraft.tags.DamageTypeTags.IS_FIRE) || src.is(net.minecraft.world.damagesource.DamageTypes.DROWN) || src.is(net.minecraft.world.damagesource.DamageTypes.IN_WALL)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.CRAMMING) || src.is(net.minecraft.world.damagesource.DamageTypes.CACTUS)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.SWEET_BERRY_BUSH) || src.is(net.minecraft.world.damagesource.DamageTypes.FREEZE)) {
+            event.setCanceled(true);
+        }
+    }
+
+    /** A fall hurts the soul only as far as the body's kind is hurt by one. */
+    @SubscribeEvent
+    public static void onSoulFall(net.minecraftforge.event.entity.living.LivingFallEvent event) {
+        if (event.getEntity() instanceof ClonePlayer soul && bodyOf(soul) != null && BodyTraits.of(soul).fallImmune()) {
+            event.setDamageMultiplier(0f);
+        }
+    }
+
     /** Blows that land on the body hurt the soul (its health, hunger and armour are the real ones); the body itself takes none. */
     @SubscribeEvent
     public static void onBodyAttacked(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
         ClonePlayer soul = soulOf(event.getEntity());
         if (soul != null && soul.isAlive() && !event.isCanceled()) {
             event.setCanceled(true);
-            soul.hurt(event.getSource(), event.getAmount());
+            handingOn = true;
+            try {
+                soul.hurt(event.getSource(), event.getAmount());
+            } finally {
+                handingOn = false;
+            }
             if (!soul.isAlive()) {
                 event.getEntity().kill();
             }

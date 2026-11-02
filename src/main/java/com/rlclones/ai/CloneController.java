@@ -950,11 +950,12 @@ public final class CloneController {
         Component detail = Component.empty();
         String plainDetail = "";
         int need = 1;
-        if (self.isInLava()) {
+        com.rlclones.clone.BodyTraits traits = com.rlclones.clone.BodyTraits.of(self);
+        if (self.isInLava() && !traits.fire()) {
             alarm = Alarm.LAVA;
-        } else if (self.isOnFire() && hp < 0.6f) {
+        } else if (self.isOnFire() && hp < 0.6f && !traits.fire()) {
             alarm = Alarm.FIRE;
-        } else if (self.isInWater() && self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(now)) {
+        } else if (self.isInWater() && !traits.breathes() && self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(now)) {
             alarm = Alarm.DROWNING;
         } else if (threats.stream().anyMatch(s -> s.entity instanceof Creeper c && c.getSwellDir() > 0 && s.entity.distanceTo(self) < 5)) {
             alarm = Alarm.EXPLOSION;
