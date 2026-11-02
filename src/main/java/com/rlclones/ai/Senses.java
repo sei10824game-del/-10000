@@ -74,7 +74,10 @@ public final class Senses {
         if (!(e instanceof Mob m) || !m.isAlive() || m.isRemoved()) {
             return false;
         }
-        if (m.getTarget() instanceof Player) {
+        if (com.rlclones.clone.CloneMobs.playerSide(m)) {
+            return false; // a clone mob (our own body, or another) is on our side
+        }
+        if (m.getTarget() instanceof Player || com.rlclones.clone.CloneMobs.playerSide(m.getTarget())) {
             return true;
         }
         if (agent != null && agent.getLastHurtByMob() == m) {
@@ -97,6 +100,7 @@ public final class Senses {
     public static boolean isFoodAnimal(Entity e) {
         // never hunt someone's named or leashed animals
         return e instanceof Mob m && m.isAlive() && !m.isBaby() && !m.hasCustomName() && !m.isLeashed() && FOOD_ANIMALS.contains(e.getType())
+                && !com.rlclones.clone.CloneMobs.playerSide(e) // (a clone mob is one of us, not dinner)
                 && !(e instanceof net.minecraft.world.entity.TamableAnimal t && t.isTame())
                 && !Animals.protectedAnimal(e); // the last two of a pen stay alive
     }
