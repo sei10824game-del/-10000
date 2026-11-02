@@ -22,7 +22,8 @@ import java.util.List;
  * Clone equipment: a clone armor stand (creative only) holds armour and items like any armor stand; hit, the stand is gone and a
  * hidden clone wears and holds them, floating about. It has no hunger and no health of its own: damage is spread over every
  * armour piece and tool it has, and when the last one breaks it is gone. Better armour it gets replaces what it wears (the clone's
- * usual equipping); a broken piece is covered by another from its bag. It has no hands for mining, building or crafting.
+ * usual equipping); a broken piece is covered by another from its bag. Everything it has gets Mending. It does what a clone does
+ * (mining, building, crafting...).
  * ponytail: only a player's blow breaks the stand (the armor stand's own hurt() skips Forge's attack event); explosions and arrows leave it standing.
  */
 @Mod.EventBusSubscriber(modid = RLClones.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
@@ -51,6 +52,7 @@ public final class CloneEquipment {
         soul.setItemSlot(EquipmentSlot.OFFHAND, stand.getItemBySlot(EquipmentSlot.OFFHAND).copy());
         m.markEquipment(soul.getUUID());
         soul.setInvisible(true);
+        mend(soul);
         stand.discard();
         return soul;
     }
@@ -73,6 +75,15 @@ public final class CloneEquipment {
             }
         }
         return out;
+    }
+
+    /** Every part gets Mending (what it wears, holds or later picks up): xp it picks up mends it. */
+    public static void mend(ClonePlayer p) {
+        for (ItemStack s : parts(p)) {
+            if (net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.MENDING, s) == 0) {
+                s.enchant(net.minecraft.world.item.enchantment.Enchantments.MENDING, 1);
+            }
+        }
     }
 
     /** Damage is spread over all its armour and tools; gone when none is left. */
@@ -111,6 +122,7 @@ public final class CloneEquipment {
             if (is(c)) {
                 c.getFoodData().setFoodLevel(20);
                 c.setHealth(c.getMaxHealth());
+                mend(c);
                 if (!c.isInvisible()) {
                     c.setInvisible(true);
                 }

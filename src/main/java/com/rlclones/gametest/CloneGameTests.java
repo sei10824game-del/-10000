@@ -430,6 +430,8 @@ public final class CloneGameTests {
         ClonePlayer eq = com.rlclones.clone.CloneEquipment.convert(stand, level);
         h.assertTrue(eq != null && stand.isRemoved(), "the stand is gone and the equipment stands in its place");
         h.assertTrue(eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE) && com.rlclones.clone.CloneEquipment.is(eq) && eq.isInvisible(), "it wears and holds what the stand had");
+        h.assertTrue(net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.MENDING, eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST)) == 1
+                && net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.MENDING, eq.getMainHandItem()) == 1, "every part has Mending");
         com.rlclones.clone.CloneEquipment.wear(eq, 10f);
         int worn = eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).getDamageValue() + eq.getMainHandItem().getDamageValue();
         h.assertTrue(worn >= 10 && eq.getHealth() == eq.getMaxHealth(), "the damage went to the parts (" + worn + "), its health is untouched");
