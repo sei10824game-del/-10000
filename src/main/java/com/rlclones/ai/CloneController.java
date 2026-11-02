@@ -3144,6 +3144,15 @@ public final class CloneController {
             }
             CombatAction prev = action;
             CombatAction free = freeHit();
+            if (free == null && forcedAction == null) {
+                // a clone mob's own attack that is ready and in reach is used (often): the learning decides the rest
+                for (int slot = 0; slot < 2 && free == null; slot++) {
+                    CombatAction sp = slot == 0 ? CombatAction.SPECIAL : CombatAction.SPECIAL2;
+                    if ((mask & sp.bit()) != 0 && Specials.ready(self, target, slot) && random.nextFloat() < 0.7f) {
+                        free = sp;
+                    }
+                }
+            }
             CombatAction pick = free != null && (mask & free.bit()) != 0 ? free : forcedAction;
             int a = pick != null && (mask & pick.bit()) != 0 ? pick.ordinal() : brain().chooseCombat(targetType, s, mask);
             if (a < 0) {

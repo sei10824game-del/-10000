@@ -40,6 +40,28 @@ public final class Specials {
         return "rlclones_sp" + slot;
     }
 
+    /**
+     * Worth using right now: the attack is ready (or already charging), the target is in its reach and in view. Not for the creeper's
+     * fuse or the enderman's jump (those are for the learning to place).
+     */
+    public static boolean ready(Player soul, Entity target, int slot) {
+        Mob b = CloneMobs.bodyOf(soul);
+        String kind = b == null ? null : kind(b, slot);
+        if (kind == null || kind.equals("explode") || kind.equals("teleport") || !(target instanceof LivingEntity t)
+                || !(CHARGES.containsKey(b.getUUID()) || available(soul, slot))) {
+            return false;
+        }
+        double d = b.distanceTo(t);
+        double max = switch (kind) {
+            case "beam", "sonic" -> 15;
+            case "ghast" -> 30;
+            case "fireball", "ranged" -> 16;
+            case "fangs" -> 12;
+            default -> 24;
+        };
+        return d <= max && d >= (kind.equals("ranged") ? 3 : 0) && (kind.equals("vex") || b.hasLineOfSight(t));
+    }
+
     /** This body has the attack and it is not cooling down. */
     public static boolean available(Player p, int slot) {
         Mob b = CloneMobs.bodyOf(p);
