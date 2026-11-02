@@ -3367,9 +3367,12 @@ public final class CloneController {
             case USE_ITEM -> useLearned(t);
             case SPECIAL, SPECIAL2 -> {
                 motor.lookAt(t);
-                if (Specials.use(self, t, action == CombatAction.SPECIAL ? 0 : 1)) {
+                int sp = Specials.act(self, t, action == CombatAction.SPECIAL ? 0 : 1);
+                if (sp == Specials.DONE) {
                     specialUses++;
                     actionDone = true;
+                } else if (sp == Specials.BUSY) {
+                    motor.stop(); // charging (a beam, a fireball, a sonic boom): stand and face it
                 } else if (gap > 3) {
                     motor.navigate(t.position(), 1.0, gap > 6);
                 }

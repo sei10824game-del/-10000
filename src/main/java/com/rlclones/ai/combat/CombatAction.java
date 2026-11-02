@@ -18,7 +18,7 @@ public enum CombatAction {
     /** Walk to a better spot nearby (walls at the sides, height over the enemy, away from hazards); see {@link Terrain}. */
     POSITION(40),
     /** A clone mob's own attack (arrow, fireball, explosion, teleport, fangs): only for bodies that have one, see {@link com.rlclones.ai.Specials}. */
-    SPECIAL(30),
+    SPECIAL(100),
     /** The evoker's vexes. */
     SPECIAL2(30);
 

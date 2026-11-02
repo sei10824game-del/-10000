@@ -376,7 +376,7 @@ public final class CloneGameTests {
         // the evoker's vexes: three come, on the players' side, and the call then has to cool down
         var soul = com.rlclones.clone.CloneMobs.soulOf(evoker);
         var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(9.5, 2, 6.5));
-        h.assertTrue(com.rlclones.ai.Specials.use(soul, husk, 1), "the vexes are called");
+        h.assertTrue(com.rlclones.ai.Specials.act(soul, husk, 1) == com.rlclones.ai.Specials.DONE, "the vexes are called");
         h.assertTrue(!com.rlclones.ai.Specials.available(soul, 1), "and the call cools down");
         finish(h, plain);
         h.succeed();
@@ -466,6 +466,21 @@ public final class CloneGameTests {
         h.assertTrue(born != null && born.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.LEATHER_CHESTPLATE) && com.rlclones.clone.CloneEquipment.is(born), "on: the spare chestplate made another equipment");
         h.assertTrue(eq.getInventory().countItem(Items.LEATHER_CHESTPLATE) == 0 && eq.getInventory().countItem(Items.STICK) == 0, "the gear and the stand's materials are used");
         h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "clonemobs")
+    public static void chargingAttacksTakeTheirTimeThenFire(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ELDER_GUARDIAN, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 7.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(8.5, 2, 7.5));
+        float hp = husk.getHealth();
+        int[] ticks = {0};
+        h.succeedWhen(() -> {
+            int r = com.rlclones.ai.Specials.act(soul, husk, 0);
+            ticks[0]++;
+            h.assertTrue(r != com.rlclones.ai.Specials.NO || ticks[0] > 1, "the beam charges (" + r + ")");
+            h.assertTrue(husk.getHealth() < hp, "and after the charge the husk is hurt (tick " + ticks[0] + ", result " + r + ")");
+        });
     }
 
     @GameTest(template = ARENA, timeoutTicks = 200)
