@@ -419,6 +419,28 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void cloneEquipmentTakesDamageOnItsPartsAndUsesUp(GameTestHelper h) {
+        var level = h.getLevel();
+        var at = h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5));
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(level, at.x, at.y, at.z);
+        stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+        stand.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+        level.addFreshEntity(stand);
+        ClonePlayer eq = com.rlclones.clone.CloneEquipment.convert(stand, level);
+        h.assertTrue(eq != null && stand.isRemoved(), "the stand is gone and the equipment stands in its place");
+        h.assertTrue(eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE) && com.rlclones.clone.CloneEquipment.is(eq) && eq.isInvisible(), "it wears and holds what the stand had");
+        com.rlclones.clone.CloneEquipment.wear(eq, 10f);
+        int worn = eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).getDamageValue() + eq.getMainHandItem().getDamageValue();
+        h.assertTrue(worn >= 10 && eq.getHealth() == eq.getMaxHealth(), "the damage went to the parts (" + worn + "), its health is untouched");
+        for (ItemStack s : List.of(eq.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST), eq.getMainHandItem())) {
+            s.setDamageValue(s.getMaxDamage() - 1);
+        }
+        com.rlclones.clone.CloneEquipment.wear(eq, 10f);
+        h.assertTrue(com.rlclones.clone.CloneManager.get(level.getServer()).byId(eq.getUUID()) == null, "with the last part broken it is gone");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

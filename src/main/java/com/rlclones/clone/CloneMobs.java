@@ -258,6 +258,9 @@ public final class CloneMobs {
 
     /** Hands to mine, build, open doors and craft: a plain clone, or a clone mob whose body is man-shaped (zombie, skeleton, illager, villager, piglin, witch). */
     public static boolean canUseHands(net.minecraft.world.entity.player.Player p) {
+        if (CloneEquipment.is(p)) {
+            return false; // armour has no hands
+        }
         Mob b = bodyOf(p);
         return b == null || b instanceof net.minecraft.world.entity.monster.Zombie || b instanceof net.minecraft.world.entity.monster.AbstractSkeleton
                 || b instanceof net.minecraft.world.entity.monster.AbstractIllager || b instanceof net.minecraft.world.entity.npc.AbstractVillager

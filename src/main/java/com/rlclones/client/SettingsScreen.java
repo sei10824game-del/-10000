@@ -14,7 +14,7 @@ import java.util.List;
 /** K key: the clone switches (same as the /rlclone commands) and the clone-mob list. Every button runs the command, then asks the server for the new state. */
 public class SettingsScreen extends Screen {
     /** Order of the packet's switches; the command word for each. */
-    static final String[] COMMANDS = {"battleroyale", "breeding", "chat", "coward", "flee", "link", "respawn", "summonedmobs", "mobfaction"};
+    static final String[] COMMANDS = {"battleroyale", "breeding", "chat", "coward", "flee", "link", "respawn", "summonedmobs", "mobfaction", "equipfaction"};
     static boolean[] switches = new boolean[COMMANDS.length];
     static java.util.Set<String> mobTypes = new java.util.TreeSet<>();
 
@@ -55,7 +55,7 @@ public class SettingsScreen extends Screen {
             String word = COMMANDS[i];
             boolean on = switches[i];
             addRenderableWidget(Button.builder(Component.translatable("rlclones.ui." + word).append(": ").append(on ? CommonComponents.OPTION_ON : CommonComponents.OPTION_OFF),
-                    b -> command("rlclone " + word + (word.equals("mobfaction") ? (on ? " hostile" : " peace") : on ? " off" : " on"))).bounds(x, y + i * 24, w, 20).build());
+                    b -> command("rlclone " + word + (word.endsWith("faction") ? (on ? " hostile" : " peace") : on ? " off" : " on"))).bounds(x, y + i * 24, w, 20).build());
         }
         addRenderableWidget(Button.builder(Component.translatable("rlclones.ui.mobs"), b -> minecraft.setScreen(new MobListScreen(this)))
                 .bounds(x, y + COMMANDS.length * 24 + 8, w, 20).build());

@@ -15,12 +15,18 @@ public final class ModItems {
     public static final RegistryObject<Item> CLONE_SPAWN_EGG = ITEMS.register("clone_spawn_egg",
             () -> new CloneSpawnEggItem(new Item.Properties()));
 
+    public static final RegistryObject<Item> CLONE_ARMOR_STAND = ITEMS.register("clone_armor_stand",
+            () -> new com.rlclones.item.CloneArmorStandItem(new Item.Properties().stacksTo(16)));
+
     private ModItems() {
     }
 
     public static void onCreativeTab(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
             event.accept(CLONE_SPAWN_EGG);
+        }
+        if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+            event.accept(CLONE_ARMOR_STAND.get().getDefaultInstance());
         }
     }
 }

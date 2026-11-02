@@ -73,6 +73,9 @@ public final class CloneCommand {
                 .then(Commands.literal("mobfaction").requires(CloneCommand::mayControl)
                         .then(Commands.literal("hostile").executes(ctx -> setMobFaction(ctx, false)))
                         .then(Commands.literal("peace").executes(ctx -> setMobFaction(ctx, true))))
+                .then(Commands.literal("equipfaction").requires(CloneCommand::mayControl)
+                        .then(Commands.literal("hostile").executes(ctx -> setEquipFaction(ctx, false)))
+                        .then(Commands.literal("peace").executes(ctx -> setEquipFaction(ctx, true))))
                 .then(Commands.literal("summonedmobs").requires(CloneCommand::mayControl)
                         .executes(ctx -> setSummonedMobs(ctx, !manager(ctx).summonedAsClone()))
                         .then(Commands.literal("on").executes(ctx -> setSummonedMobs(ctx, true)))
@@ -199,6 +202,12 @@ public final class CloneCommand {
     private static int setFlee(CommandContext<CommandSourceStack> ctx, boolean on) {
         manager(ctx).setFleeAllowed(on);
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.msg.flee_on" : "rlclones.msg.flee_off"), true);
+        return 1;
+    }
+
+    private static int setEquipFaction(CommandContext<CommandSourceStack> ctx, boolean peace) {
+        manager(ctx).setEquipPeace(peace);
+        ctx.getSource().sendSuccess(() -> Component.translatable(peace ? "rlclones.msg.equippeace_on" : "rlclones.msg.equippeace_off"), true);
         return 1;
     }
 

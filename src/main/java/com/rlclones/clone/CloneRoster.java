@@ -24,6 +24,10 @@ public class CloneRoster extends SavedData {
     public boolean summonedAsClone;
     /** /rlclone mobfaction peace: mobs of a clone mob's own kind leave it alone (hostile = they still attack it, the default). */
     public boolean mobPeace;
+    /** Clones that are clone equipment (armour that walks), by UUID. */
+    public final java.util.Set<UUID> equipment = new java.util.HashSet<>();
+    /** /rlclone equipfaction peace: mobs leave clone equipment alone. */
+    public boolean equipPeace;
     public boolean breeding;
     /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
     public boolean chatHidden;
@@ -40,6 +44,10 @@ public class CloneRoster extends SavedData {
         r.linked = tag.getBoolean("linked");
         r.respawn = tag.getBoolean("respawn");
         r.breeding = tag.getBoolean("breeding");
+        r.equipPeace = tag.getBoolean("equipPeace");
+        for (Tag t : tag.getList("equipment", Tag.TAG_INT_ARRAY)) {
+            r.equipment.add(net.minecraft.nbt.NbtUtils.loadUUID(t));
+        }
         r.mobPeace = tag.getBoolean("mobPeace");
         r.summonedAsClone = tag.getBoolean("summonedAsClone");
         r.chatHidden = tag.getBoolean("chatHidden");
@@ -80,6 +88,10 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("linked", linked);
         tag.putBoolean("respawn", respawn);
         tag.putBoolean("breeding", breeding);
+        tag.putBoolean("equipPeace", equipPeace);
+        ListTag eq = new ListTag();
+        equipment.forEach(u -> eq.add(net.minecraft.nbt.NbtUtils.createUUID(u)));
+        tag.put("equipment", eq);
         tag.putBoolean("mobPeace", mobPeace);
         tag.putBoolean("summonedAsClone", summonedAsClone);
         tag.putBoolean("chatHidden", chatHidden);
