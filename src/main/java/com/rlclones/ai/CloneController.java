@@ -732,6 +732,8 @@ public final class CloneController {
                     consumables.pearlOutOfPit();
                 }
             }
+        } else if (blastReflex(now)) {
+            idleWhy = "blast";
         } else if (shade.tick(now)) {
             idleWhy = "shade";
         } else if (cleanTarget != null) {
@@ -4150,7 +4152,9 @@ public final class CloneController {
                 away = away.add(new Vec3(toBase.x, 0, toBase.z).normalize().scale(0.9)).normalize();
                 fledHome++;
             }
-            Vec3 cover = threats.isEmpty() ? null : findCover(threats, away);
+            // (no hiding from a creeper: it comes round the corner on its own legs and goes off beside the cover; only distance helps)
+            boolean creeperAbout = threats.stream().anyMatch(t -> t.entity instanceof Creeper && Senses.gap(self, t.entity) < 12);
+            Vec3 cover = threats.isEmpty() || creeperAbout ? null : findCover(threats, away);
             if (cover != null) {
                 if (coverGoal == null || cover.distanceTo(coverGoal) > 0.5) {
                     coverReached = false;
@@ -4235,6 +4239,39 @@ public final class CloneController {
         motor.navigate(goal, 1.5, true);
         return false;
     }
+
+    /**
+     * A creeper close by has lit its fuse (or is swelling): whatever the clone was doing, it runs straight away from it at once, to 9 blocks,
+     * turning sideways when a wall is in the way. The fuse is about a second and a half; the blast reaches about four blocks.
+     */
+    private boolean blastReflex(long now) {
+        Creeper fuse = null;
+        for (Creeper c : self.level().getEntitiesOfClass(Creeper.class, self.getBoundingBox().inflate(9), c -> c.isAlive() && (c.getSwellDir() > 0 || c.isIgnited()))) {
+            if (Senses.isHostileTo(c, self) && (fuse == null || c.distanceTo(self) < fuse.distanceTo(self))) {
+                fuse = c;
+            }
+        }
+        if (fuse == null || fuse.distanceTo(self) >= 9) {
+            blastTurn = 0;
+            return false;
+        }
+        Vec3 away = self.position().subtract(fuse.position());
+        away = new Vec3(away.x, 0, away.z);
+        away = away.lengthSqr() < 1e-6 ? self.getLookAngle().scale(-1) : away.normalize();
+        if (motor.stuckCount() > 2) {
+            blastTurn = blastTurn == 0 ? (self.getRandom().nextBoolean() ? 1 : -1) : -blastTurn; // a wall that way: sideways
+        }
+        if (blastTurn != 0) {
+            away = new Vec3(-away.z * blastTurn, 0, away.x * blastTurn);
+        }
+        motor.navigate(self.position().add(away.scale(10)), 1.5, true);
+        blastRuns++;
+        return true;
+    }
+
+    private int blastTurn;
+    /** Ticks spent running from a lit fuse (diagnostics, tests). */
+    public int blastRuns;
 
     /** Times the clone ran into cover (out of the threats' sight) while fleeing. */
     public int coverTaken;

@@ -555,6 +555,21 @@ public final class CloneGameTests {
     }
 
     @GameTest(template = ARENA, timeoutTicks = 200)
+    public static void runsFromALitCreeperAtOnce(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        c.setAiEnabled(true);
+        var creeper = h.spawn(net.minecraft.world.entity.EntityType.CREEPER, new net.minecraft.world.phys.Vec3(8.5, 2, 7.5));
+        creeper.setNoAi(true);
+        creeper.ignite();
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().blastRuns > 5, "the clone runs from the lit fuse (ran " + c.controller().blastRuns + " ticks)");
+            h.assertTrue(c.distanceTo(creeper) > 2.5, "and gets away from it (" + c.distanceTo(creeper) + ")");
+            finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
