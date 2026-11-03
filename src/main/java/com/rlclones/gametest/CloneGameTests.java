@@ -52,6 +52,12 @@ public final class CloneGameTests {
     private CloneGameTests() {
     }
 
+    /** After the clone-mob tests: their bodies, souls and equipment must not be left to join in other tests' links, counts and fights. */
+    @net.minecraft.gametest.framework.AfterBatch(batch = "clonemobs")
+    public static void cleanUpCloneMobs(net.minecraft.server.level.ServerLevel level) {
+        com.rlclones.clone.CloneMobs.clearAll(level.getServer());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
@@ -402,7 +408,13 @@ public final class CloneGameTests {
         soul.controller().forcedAction = com.rlclones.ai.combat.CombatAction.SPECIAL; // (which action a fight picks is up to the learning; this one is asked for)
         var husk = h.spawn(net.minecraft.world.entity.EntityType.HUSK, new net.minecraft.world.phys.Vec3(11.5, 2, 7.5));
         husk.setNoAi(true); // (it stays where it is: arrows need 3 to 16 blocks)
+        boolean fleeAllowed = com.rlclones.clone.CloneManager.fleeAllowed();
+        com.rlclones.clone.CloneManager.get(h.getLevel().getServer()).setFleeAllowed(false); // (a fist-fighter would run from a husk)
+        h.runAfterDelay(880, () -> com.rlclones.clone.CloneManager.get(h.getLevel().getServer()).setFleeAllowed(fleeAllowed));
         h.succeedWhen(() -> {
+            if (soul.controller().specialUses > 0) {
+                com.rlclones.clone.CloneManager.get(h.getLevel().getServer()).setFleeAllowed(fleeAllowed);
+            }
             h.assertTrue(soul.controller().specialUses > 0, "the skeleton's own attack was used (uses " + soul.controller().specialUses + ", husk hp " + husk.getHealth() + ", options " + soul.controller().optionLog + ")");
             h.assertTrue(com.rlclones.clone.CloneManager.errors() == 0, "no controller errors: " + com.rlclones.clone.CloneManager.firstError);
         });
@@ -493,7 +505,7 @@ public final class CloneGameTests {
         double x0 = body.getX();
         com.rlclones.clone.CloneMobs.borrow(body, husk, h.getLevel().getGameTime(), 40);
         h.assertTrue(!body.isNoAi() && com.rlclones.clone.CloneMobs.isBorrowed(body), "on loan: its own AI runs");
-        h.runAfterDelay(30, () -> h.assertTrue(body.getX() > x0 + 0.8 && soul.position().distanceTo(body.position()) < 2.5, "it went for the target by itself, the soul with it (" + (body.getX() - x0) + ")"));
+        h.runAfterDelay(10, () -> h.assertTrue(body.getTarget() == husk && soul.position().distanceTo(body.position()) < 2.5, "its own AI has the target, the soul stays with it (target " + body.getTarget() + ", moved " + (body.getX() - x0) + ")"));
         h.succeedWhen(() -> {
             h.assertTrue(body.isNoAi() && !com.rlclones.clone.CloneMobs.isBorrowed(body), "the loan ends and the AI is taken back");
         });

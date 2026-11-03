@@ -119,6 +119,30 @@ public final class CloneMobs {
         LOADED_UNTIL.put(soul, now + 2400); // (two minutes for the clones to log in; then the body is an orphan)
     }
 
+    /** Tests: take every clone mob (body and soul) and every clone equipment out of the world. */
+    public static void clearAll(net.minecraft.server.MinecraftServer server) {
+        CloneManager m = CloneManager.get(server);
+        for (UUID soulId : new java.util.ArrayList<>(BODY.keySet())) {
+            ClonePlayer soul = m.byId(soulId);
+            for (ServerLevel l : server.getAllLevels()) {
+                if (l.getEntity(BODY.get(soulId)) instanceof Mob b) {
+                    b.discard();
+                }
+            }
+            if (soul != null) {
+                m.remove(soul, true, Component.literal("test over"));
+            }
+        }
+        BODY.clear();
+        BORROWED.clear();
+        BORROWED_TARGET.clear();
+        for (ClonePlayer c : new java.util.ArrayList<>(m.clones())) {
+            if (m.isEquipment(c.getUUID())) {
+                m.remove(c, true, Component.literal("test over"));
+            }
+        }
+    }
+
     /** Tests: what a restart does. */
     public static void forgetLink(UUID soul) {
         BODY.remove(soul);
