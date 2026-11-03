@@ -535,6 +535,22 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void hungryDeepDownItWalksUpTheStaircase(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        var stairs = c.controller().stairs();
+        var level = h.getLevel();
+        var top = h.absolutePos(new net.minecraft.core.BlockPos(2, 2, 2));
+        com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        h.assertTrue(stairs.beginAscent(), "a known staircase: the way up is taken");
+        h.assertTrue(stairs.isAscending(), "and it is a walk up");
+        clearBases(h);
+        h.assertTrue(!stairs.beginAscent(), "none known: nothing to walk up");
+        finish(h, c);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

@@ -103,6 +103,9 @@ public final class CloneController {
     private final EffectSense effects;
     private final Breeding breeding;
     private final Shade shade;
+    /** The next STAIRS start is a walk up (already prepared by beginAscent); when to look again for a way up. */
+    private boolean ascendBegun;
+    private long ascentRetryAt;
     /** How many times a clone mob's own attack was used (diagnostics, tests). */
     public int specialUses;
     private final Achievements achievements;
@@ -2454,6 +2457,15 @@ public final class CloneController {
         if (!Senses.threats(perception, self, now, 16).isEmpty()) {
             return null;
         }
+        // hungry with nothing to eat, far under the open sky (a staircase's underground world has nothing to eat): up, to the food above
+        if (hungryNoFood() && now >= ascentRetryAt && !self.level().canSeeSky(self.blockPosition().above())
+                && self.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, self.getBlockX(), self.getBlockZ()) - self.getBlockY() > 8) {
+            ascentRetryAt = now + 400;
+            if (stairs.beginAscent()) {
+                ascendBegun = true;
+                return Option.STAIRS;
+            }
+        }
         if (!hungryNoFood() && crafting.furnaceFirst() && random.nextFloat() < 0.85f) {
             if ((mask & Option.CRAFT.bit()) != 0 && Crafting.furnaceWanted(self)) {
                 urgentCrafts++;
@@ -2745,7 +2757,11 @@ public final class CloneController {
             case ACHIEVE -> achievements.begin();
             case STAIRS -> {
                 markDigStart();
-                stairs.begin();
+                if (ascendBegun) {
+                    ascendBegun = false; // (beginAscent has set it up: no begin() to undo it)
+                } else {
+                    stairs.begin();
+                }
             }
             case SHAFT -> {
                 markDigStart();

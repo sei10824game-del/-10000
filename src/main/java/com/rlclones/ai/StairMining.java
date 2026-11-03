@@ -343,6 +343,23 @@ public final class StairMining {
         motor.resetStuck();
     }
 
+    /** Underground and hungry with nothing to eat: walk up the nearest known staircase to its top (false = none known). */
+    public boolean beginAscent() {
+        Bases.Staircase s = bases().nearestStaircase(self.level().dimension(), self.position(), 160, st -> true);
+        if (s == null) {
+            return false;
+        }
+        stairs = s;
+        ticks = 0;
+        ascending = true;
+        toStage(0);
+        stuck = 0;
+        lastFeet = self.blockPosition();
+        motor.resetStuck();
+        debug = "hungry down here: up to " + s.top.toShortString();
+        return true;
+    }
+
     /** Which step of the staircase we stand on (0 = the top), -1 if none. */
     private int stepIndex(BlockPos feet) {
         Bases.Staircase s = stairs;
