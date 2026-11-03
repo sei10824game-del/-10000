@@ -2461,7 +2461,7 @@ public final class CloneController {
         if (hungryNoFood() && now >= ascentRetryAt && !self.level().canSeeSky(self.blockPosition().above())
                 && self.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, self.getBlockX(), self.getBlockZ()) - self.getBlockY() > 8) {
             ascentRetryAt = now + 400;
-            if (stairs.beginAscent()) {
+            if (stairs.beginAscent() || stairs.beginDigUp()) { // (a known staircase first; else a way is dug up through the rock)
                 ascendBegun = true;
                 return Option.STAIRS;
             }

@@ -337,6 +337,7 @@ public final class StairMining {
         }
         ticks = 0;
         ascending = false;
+        digUp = false;
         toStage(first);
         stuck = 0;
         lastFeet = self.blockPosition();
@@ -358,6 +359,70 @@ public final class StairMining {
         motor.resetStuck();
         debug = "hungry down here: up to " + s.top.toShortString();
         return true;
+    }
+
+    /** No staircase to go up (a fall into a cave...): a way is dug up through the rock, one step up and one forward at a time. */
+    private boolean digUp;
+    private Direction upDir = Direction.NORTH;
+    private int upStuck;
+
+    /** Underground with no staircase known: dig up and out (needs a pickaxe; false = cannot). */
+    public boolean beginDigUp() {
+        if (pickTier() < 0 || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            return false;
+        }
+        stairs = null;
+        digUp = true;
+        ascending = true;
+        upDir = self.getDirection();
+        upStuck = 0;
+        ticks = 0;
+        stuck = 0;
+        lastFeet = self.blockPosition();
+        motor.resetStuck();
+        debug = "no staircase known: digging up";
+        return true;
+    }
+
+    private Status digUpTick() {
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        if (level.canSeeSky(feet.above()) && level.getBlockState(feet.above(2)).isAir() || ticks > 2400) {
+            digUp = false;
+            ascending = false;
+            debug = "dug up to the open";
+            return Status.DONE; // out in the open again: food, rest
+        }
+        if (feet.equals(lastFeet)) {
+            upStuck++;
+        } else {
+            upStuck = 0;
+            lastFeet = feet;
+        }
+        if (upStuck > 120) { // not getting anywhere this way (water, hard rock): another side
+            upDir = upDir.getClockWise();
+            upStuck = 0;
+            motor.resetStuck();
+        }
+        BlockPos fwd = feet.relative(upDir);
+        for (BlockPos p : new BlockPos[]{feet.above(2), fwd.above(), fwd.above(2)}) {
+            if (solid(p)) {
+                if (!diggable(p)) {
+                    upDir = upDir.getClockWise();
+                    return Status.WORKING;
+                }
+                motor.stop();
+                Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(p)));
+                mineClaimed(p);
+                return Status.WORKING;
+            }
+        }
+        if (!solid(fwd)) { // (a gap in front: nothing to step up on: the floor is put right or the way turns)
+            upDir = upDir.getClockWise();
+            return Status.WORKING;
+        }
+        motor.moveToward(Vec3.atBottomCenterOf(fwd.above()));
+        return Status.WORKING;
     }
 
     /** Which step of the staircase we stand on (0 = the top), -1 if none. */
@@ -505,6 +570,10 @@ public final class StairMining {
     }
 
     public Status tick() {
+        if (digUp) {
+            ticks++;
+            return digUpTick();
+        }
         if (++ticks > 3000) {
             return stage < 2 && stairs != null ? failStairs("timed out in stage " + stage) : Status.DONE;
         }

@@ -547,6 +547,9 @@ public final class CloneGameTests {
         h.assertTrue(stairs.isAscending(), "and it is a walk up");
         clearBases(h);
         h.assertTrue(!stairs.beginAscent(), "none known: nothing to walk up");
+        h.assertTrue(!stairs.beginDigUp(), "and with no pickaxe it cannot dig up either");
+        c.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        h.assertTrue(stairs.beginDigUp() && stairs.isAscending(), "with a pickaxe it digs up through the rock instead");
         finish(h, c);
         h.succeed();
     }
