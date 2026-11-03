@@ -227,6 +227,8 @@ public final class CloneMobs {
                     continue; // (the body's chunk is not loaded: wait)
                 }
                 it.remove();
+                com.rlclones.RLClones.LOGGER.info("CLONE-MOB body gone for {}: {} at {}", soul.getGameProfile().getName(),
+                        soul.level() instanceof ServerLevel gl && gl.getEntity(e.getValue()) != null ? "dead" : "not found", soul.blockPosition().toShortString());
                 soul.kill(); // (the body died or was removed)
                 continue;
             }
@@ -582,7 +584,9 @@ public final class CloneMobs {
     public static void onBodyDeath(LivingDeathEvent event) {
         ClonePlayer soul = soulOf(event.getEntity());
         if (soul != null && soul.isAlive()) {
-            soul.kill();
+            // the soul dies of what killed the body (sun, a mob, a fall...), so the death list tells the truth
+            soul.setHealth(0f);
+            soul.die(event.getSource());
         }
     }
 }

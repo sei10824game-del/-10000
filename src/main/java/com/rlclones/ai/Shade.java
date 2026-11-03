@@ -32,6 +32,10 @@ public final class Shade {
             return false; // a helmet: the sun does nothing to it (for the water-hurt: still rain)
         }
         BlockPos head = p.blockPosition().above((int) Math.ceil(p.getBbHeight()) - 1);
+        net.minecraft.world.entity.Mob burning = com.rlclones.clone.CloneMobs.bodyOf(p);
+        if (t.sun() && burning != null && burning.isOnFire() && !t.fire()) {
+            return l.canSeeSky(head); // already alight under the open sky: cover now
+        }
         return l.canSeeSky(head) && ((t.sun() && l.isDay() && !l.isRaining()) || (t.water() && l.isRaining()));
     }
 
