@@ -197,6 +197,39 @@ public final class StairMining {
         return false;
     }
 
+    /** Side-lane blocks dug for room in this staircase's jams (a limit per run, so a jam does not eat the hillside). */
+    private int widenedHere;
+
+    /** How many lanes wide to dig: 1 for a lone clone, 2 with company, 3 with five others about, 4 with ten (a crowd going up and down at once). */
+    private int lanes() {
+        int others = 0;
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.distanceTo(self) < 40) {
+                others++;
+            }
+        }
+        return others == 0 ? 1 : others < 5 ? 2 : others < 10 ? 3 : 4;
+    }
+
+    /** Side-lane offsets (in blocks clockwise of the step; negative = the other side) for this many lanes. */
+    private static final int[][] LANE_OFFSETS = {{}, {}, {1}, {1, -1}, {1, -1, 2}};
+
+    /** Make room beside {@code at}: dig the first block of a side lane (feet, head, over the head); true = a block was taken. */
+    private boolean digLane(BlockPos at, net.minecraft.core.Direction dir, int lanes) {
+        for (int o : LANE_OFFSETS[lanes]) {
+            BlockPos side = o > 0 ? at.relative(dir.getClockWise(), o) : at.relative(dir.getCounterClockWise(), -o);
+            for (BlockPos p : new BlockPos[]{side.above(2), side.above(), side}) {
+                if (solid(p) && diggable(p)) {
+                    motor.stop();
+                    Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
+                    mineClaimed(p);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Another clone right beside us (we share a 1-wide hole and have not moved for a while): neither can pass the other. */
     private boolean crowdedHere() {
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
@@ -487,6 +520,11 @@ public final class StairMining {
             motor.resetStuck();
             return Status.WORKING;
         }
+        if (stuck > 15 && stairs != null && crowdedHere() && widenedHere < 24 && digLane(feet, stairs.dir, Math.max(3, lanes()))) {
+            widenedHere++; // jammed with another clone in the hole: make room beside us rather than wait (the staircase is widened where it is narrow)
+            debug = "crowded at " + feet.toShortString() + ": widening";
+            return Status.WORKING;
+        }
         if (stuck > 60 && stairs != null && crowdedHere()) {
             // pushed against another digger in the hole and not getting anywhere: a new staircase from right here (the old one stays for the others)
             debug = "crowded at " + feet.toShortString() + ": a new staircase from here";
@@ -661,16 +699,8 @@ public final class StairMining {
             return Status.WORKING;
         }
         // a second lane beside the step (feet, head, and the head room of the step down): the clones go up and down past one another instead of jamming in a one-wide hole
-        if (wide()) {
-            BlockPos side = next.relative(s.dir.getClockWise());
-            for (BlockPos p : new BlockPos[]{side.above(2), side.above(), side}) {
-                if (solid(p) && diggable(p)) {
-                    motor.stop();
-                    Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(p)));
-                    mineClaimed(p);
-                    return Status.WORKING;
-                }
-            }
+        if (wide() && digLane(next, s.dir, lanes())) { // (more lanes the more clones are about: a crowd of ten gets four)
+            return Status.WORKING;
         }
         // step down
         motor.moveToward(Vec3.atBottomCenterOf(next));

@@ -499,6 +499,30 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
+    public static void stairsGetWiderTheMoreClonesAreAbout(GameTestHelper h) {
+        ClonePlayer a = clone(h, 3.5, 3.5, 0f, false);
+        var s = a.controller().stairs();
+        java.lang.reflect.Method m;
+        try {
+            m = s.getClass().getDeclaredMethod("lanes");
+            m.setAccessible(true);
+            int alone = (int) m.invoke(s);
+            for (int i = 0; i < 5; i++) {
+                clone(h, 4.5 + i, 4.5, 0f, false);
+            }
+            int five = (int) m.invoke(s);
+            for (int i = 0; i < 6; i++) {
+                clone(h, 4.5 + i, 6.5, 0f, false);
+            }
+            int eleven = (int) m.invoke(s);
+            h.assertTrue(alone <= 2 && five == 3 && eleven == 4, "lanes: lone/with 5 others/with 11 others = " + alone + "/" + five + "/" + eleven);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
