@@ -291,16 +291,10 @@ public final class CloneGameTests {
     }
 
     @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
-    public static void handlessCloneMobsCannotMineOrBuild(GameTestHelper h) {
+    public static void aCloneMobWithoutHandsStillDoesWhatAcloneDoes(GameTestHelper h) {
         var cow = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.COW, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
-        var zombie = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 3.5)));
-        h.assertTrue(!com.rlclones.clone.CloneMobs.canUseHands(com.rlclones.clone.CloneMobs.soulOf(cow)), "a cow has no hands");
-        h.assertTrue(com.rlclones.clone.CloneMobs.canUseHands(com.rlclones.clone.CloneMobs.soulOf(zombie)), "a zombie has");
         ClonePlayer soul = com.rlclones.clone.CloneMobs.soulOf(cow);
-        soul.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
-        soul.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.COBBLESTONE, 4));
-        var at = h.absolutePos(new net.minecraft.core.BlockPos(3, 2, 5));
-        h.assertTrue(!soul.controller().motor().placeBlockAt(at) && !soul.controller().motor().mine(at.below()), "it neither builds nor mines");
+        h.assertTrue(com.rlclones.clone.CloneMobs.canUseHands(soul), "any clone mob can chop, mine and build");
         h.succeed();
     }
 
@@ -566,6 +560,18 @@ public final class CloneGameTests {
             h.assertTrue(c.controller().blastRuns > 5, "the clone runs from the lit fuse (ran " + c.controller().blastRuns + " ticks)");
             h.assertTrue(c.distanceTo(creeper) > 2.5, "and gets away from it (" + c.distanceTo(creeper) + ")");
             finish(h, c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
+    public static void aHelmetKeepsTheSunOffASunSensitiveBody(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        soul.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        h.getLevel().setDayTime(6000);
+        h.succeedWhen(() -> {
+            h.assertTrue(body.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).is(Items.IRON_HELMET), "the body wears the soul's helmet");
+            h.assertTrue(!com.rlclones.ai.Shade.exposed(soul), "and does not hide from the sun");
         });
     }
 

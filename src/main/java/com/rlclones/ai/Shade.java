@@ -27,6 +27,10 @@ public final class Shade {
         if (t == BodyTraits.PLAYER || !(p.level() instanceof ServerLevel l) || p.isInWater()) {
             return false;
         }
+        net.minecraft.world.entity.Mob body = com.rlclones.clone.CloneMobs.bodyOf(p);
+        if (t.sun() && body != null && !body.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()) {
+            return false; // a helmet: the sun does nothing to it (for the water-hurt: still rain)
+        }
         BlockPos head = p.blockPosition().above((int) Math.ceil(p.getBbHeight()) - 1);
         return l.canSeeSky(head) && ((t.sun() && l.isDay() && !l.isRaining()) || (t.water() && l.isRaining()));
     }

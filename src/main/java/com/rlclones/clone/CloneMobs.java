@@ -247,6 +247,12 @@ public final class CloneMobs {
             body.setYBodyRot(soul.yBodyRot);
             body.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             body.fallDistance = 0;
+            if (soul.tickCount % 20 == 0 && BodyTraits.of(body).sun()) {
+                var helmet = soul.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD);
+                if (body.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD) != helmet) {
+                    body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, helmet); // (the same stack: the sun wears the one helmet; a sun-sensitive body in a helmet does not burn)
+                }
+            }
             if (soul.tickCount % 100 == 0) {
                 hide(soul);
             }
@@ -345,10 +351,7 @@ public final class CloneMobs {
 
     /** Hands to mine, build, open doors and craft: a plain clone, or a clone mob whose body is man-shaped (zombie, skeleton, illager, villager, piglin, witch). */
     public static boolean canUseHands(net.minecraft.world.entity.player.Player p) {
-        Mob b = bodyOf(p);
-        return b == null || b instanceof net.minecraft.world.entity.monster.Zombie || b instanceof net.minecraft.world.entity.monster.AbstractSkeleton
-                || b instanceof net.minecraft.world.entity.monster.AbstractIllager || b instanceof net.minecraft.world.entity.npc.AbstractVillager
-                || b instanceof net.minecraft.world.entity.monster.piglin.AbstractPiglin || b instanceof net.minecraft.world.entity.monster.Witch;
+        return true; // a clone mob does what a clone does (the soul has the hands): chopping, mining, building, crafting
     }
 
     /** A blow of the soul is a blow of the body (its own damage and effects: a husk's hunger, a spider's poison...); a body with no attack of its own leaves it to the soul's fist. */
