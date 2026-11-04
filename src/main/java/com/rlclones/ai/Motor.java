@@ -398,7 +398,7 @@ public final class Motor {
         net.minecraft.core.Direction dir = net.minecraft.core.Direction.getNearest(d.x, 0, d.z);
         BlockPos lower = self.blockPosition().relative(dir);
         for (BlockPos c : new BlockPos[]{lower, lower.above()}) {
-            if (PLUGS.containsKey(c)) {
+            if (PLUGS.containsKey(c) && !PLAYER_PLACED.containsKey(c)) {
                 if (self.level().getBlockState(c).getCollisionShape(self.level(), c).isEmpty()) {
                     PLUGS.remove(c);
                     continue;
@@ -760,10 +760,22 @@ public final class Motor {
         return hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(pos) ? hit.getBlockPos().immutable() : null;
     }
 
+    /** Blocks a real player put down (a step, a bridge, a wall): the clones leave them be for half an hour. Position -> game time. */
+    public static final java.util.Map<BlockPos, Long> PLAYER_PLACED = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long PLAYER_PLACED_FOR = 36000;
+
     public boolean mine(BlockPos pos) {
         if (!com.rlclones.clone.CloneMobs.canUseHands(self)) {
             mineDebug = "no hands";
             return false;
+        }
+        Long placed = PLAYER_PLACED.get(pos);
+        if (placed != null) {
+            if (self.level().getGameTime() - placed < PLAYER_PLACED_FOR) {
+                mineDebug = "placed by a player: left alone";
+                return false;
+            }
+            PLAYER_PLACED.remove(pos);
         }
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);
