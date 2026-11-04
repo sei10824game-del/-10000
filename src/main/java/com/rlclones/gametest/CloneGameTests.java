@@ -592,13 +592,14 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 200, batch = "clonemobs")
     public static void theBookRemembersAdvancementsAndItems(GameTestHelper h) {
         var m = com.rlclones.clone.CloneManager.get(h.getLevel().getServer());
-        h.assertTrue(m.recordAdvancement("minecraft:story/mine_stone", "CloneX") && !m.recordAdvancement("minecraft:story/mine_stone", "CloneY"), "an advancement is written down once, for the first clone");
+        String adv = "rlclones:test/" + java.util.UUID.randomUUID(); // (an id nothing earned before)
+        h.assertTrue(m.recordAdvancement(adv, "CloneX") && !m.recordAdvancement(adv, "CloneY"), "an advancement is written down once, for the first clone");
         ClonePlayer c = clone(h, 4.5, 4.5, 0f, false);
         c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
         h.runAfterDelay(120, () -> {
             h.assertTrue(m.itemBook().containsKey("minecraft:diamond_sword") || m.recordItem("minecraft:diamond_sword", "x") == false, "a held item reaches the book (the scan runs every five seconds)");
             var roster = com.rlclones.clone.CloneRoster.load(m.itemBook().isEmpty() ? new net.minecraft.nbt.CompoundTag() : saveBook(m));
-            h.assertTrue(roster.itemsGot.size() == m.itemBook().size() && roster.advancementsDone.containsKey("minecraft:story/mine_stone"), "and the book is saved with the world");
+            h.assertTrue(roster.itemsGot.size() == m.itemBook().size() && roster.advancementsDone.containsKey(adv), "and the book is saved with the world");
             finish(h, c);
             h.succeed();
         });
@@ -625,6 +626,7 @@ public final class CloneGameTests {
         var goal = net.minecraft.world.phys.Vec3.atBottomCenterOf(feet.relative(net.minecraft.core.Direction.EAST, 4));
         h.succeedWhen(() -> {
             c.controller().motor().breakPlug(goal);
+            c.controller().motor().tick(); // (the clone's AI is off in this test: the motor is run here)
             h.assertTrue(h.getLevel().getBlockState(east).isAir() && h.getLevel().getBlockState(east.above()).isAir(), "the plug is dug out");
             h.assertTrue(!h.getLevel().getBlockState(wall).isAir(), "and nothing else (a stone wall behind stays)");
             finish(h, c);

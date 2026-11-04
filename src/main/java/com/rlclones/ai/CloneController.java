@@ -106,6 +106,8 @@ public final class CloneController {
     /** The next STAIRS start is a walk up (already prepared by beginAscent); when to look again for a way up. */
     private boolean ascendBegun;
     private long ascentRetryAt;
+    /** Since when the clone has been far underground with no digging to do (-1 = not). */
+    private long deepSince = -1;
     /** How many times a clone mob's own attack was used (diagnostics, tests). */
     public int specialUses;
     private final Achievements achievements;
@@ -2462,7 +2464,14 @@ public final class CloneController {
         // hungry with nothing to eat, far under the open sky (a staircase's underground world has nothing to eat): up, to the food above
         // far under the open sky and not on a digging errand (the way back is cut, or it was left down there): up, whatever it was doing; hungry with nothing to eat above all
         boolean onDigErrand = digPending(now) || option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY;
-        if ((hungryNoFood() || !onDigErrand) && now >= ascentRetryAt && !self.level().canSeeSky(self.blockPosition().above())
+        boolean deepNow = !self.level().canSeeSky(self.blockPosition().above())
+                && self.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, self.getBlockX(), self.getBlockZ()) - self.getBlockY() > 8;
+        if (!deepNow || onDigErrand) {
+            deepSince = -1; // (up in the open, or down here on purpose)
+        } else if (deepSince < 0) {
+            deepSince = now;
+        }
+        if ((hungryNoFood() || deepSince >= 0 && now - deepSince > 3000) && now >= ascentRetryAt && !self.level().canSeeSky(self.blockPosition().above())
                 && self.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, self.getBlockX(), self.getBlockZ()) - self.getBlockY() > 8) {
             ascentRetryAt = now + 400;
             if (stairs.beginAscent() || stairs.beginDigUp()) { // (a known staircase first; else a way is dug up through the rock)
