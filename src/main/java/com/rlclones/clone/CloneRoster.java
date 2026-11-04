@@ -30,6 +30,9 @@ public class CloneRoster extends SavedData {
     public boolean equipPeace;
     /** Plain armor stands turn into clone equipment too, and clone equipment makes more of itself from its spare gear. */
     public boolean plainStands;
+    /** Everything the clones (mobs and equipment too) ever earned / got: id -> who first (names live on in the book). */
+    public final Map<String, String> advancementsDone = new LinkedHashMap<>();
+    public final Map<String, String> itemsGot = new LinkedHashMap<>();
     public boolean breeding;
     /** /rlclone chat off: clones keep talking to each other but nothing shows in the players' chat. */
     public boolean chatHidden;
@@ -46,6 +49,12 @@ public class CloneRoster extends SavedData {
         r.linked = tag.getBoolean("linked");
         r.respawn = tag.getBoolean("respawn");
         r.breeding = tag.getBoolean("breeding");
+        for (String k : tag.getCompound("advancementsDone").getAllKeys()) {
+            r.advancementsDone.put(k, tag.getCompound("advancementsDone").getString(k));
+        }
+        for (String k : tag.getCompound("itemsGot").getAllKeys()) {
+            r.itemsGot.put(k, tag.getCompound("itemsGot").getString(k));
+        }
         r.equipPeace = tag.getBoolean("equipPeace");
         r.plainStands = tag.getBoolean("plainStands");
         for (Tag t : tag.getList("equipment", Tag.TAG_INT_ARRAY)) {
@@ -91,6 +100,12 @@ public class CloneRoster extends SavedData {
         tag.putBoolean("linked", linked);
         tag.putBoolean("respawn", respawn);
         tag.putBoolean("breeding", breeding);
+        CompoundTag adv = new CompoundTag();
+        advancementsDone.forEach(adv::putString);
+        tag.put("advancementsDone", adv);
+        CompoundTag its = new CompoundTag();
+        itemsGot.forEach(its::putString);
+        tag.put("itemsGot", its);
         tag.putBoolean("equipPeace", equipPeace);
         tag.putBoolean("plainStands", plainStands);
         ListTag eq = new ListTag();

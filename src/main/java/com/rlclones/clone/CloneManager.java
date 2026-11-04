@@ -271,6 +271,31 @@ public final class CloneManager {
         roster().setDirty();
     }
 
+    /** The book of what the clones have done: the first clone to earn an advancement / to hold an item is written down (true = new). */
+    public boolean recordAdvancement(String id, String who) {
+        boolean fresh = roster().advancementsDone.putIfAbsent(id, who) == null;
+        if (fresh) {
+            roster().setDirty();
+        }
+        return fresh;
+    }
+
+    public boolean recordItem(String id, String who) {
+        boolean fresh = roster().itemsGot.putIfAbsent(id, who) == null;
+        if (fresh) {
+            roster().setDirty();
+        }
+        return fresh;
+    }
+
+    public java.util.Map<String, String> advancementBook() {
+        return java.util.Collections.unmodifiableMap(roster().advancementsDone);
+    }
+
+    public java.util.Map<String, String> itemBook() {
+        return java.util.Collections.unmodifiableMap(roster().itemsGot);
+    }
+
     public boolean isEquipment(UUID id) {
         return roster().equipment.contains(id);
     }

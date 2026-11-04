@@ -589,6 +589,28 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "clonemobs")
+    public static void theBookRemembersAdvancementsAndItems(GameTestHelper h) {
+        var m = com.rlclones.clone.CloneManager.get(h.getLevel().getServer());
+        h.assertTrue(m.recordAdvancement("minecraft:story/mine_stone", "CloneX") && !m.recordAdvancement("minecraft:story/mine_stone", "CloneY"), "an advancement is written down once, for the first clone");
+        ClonePlayer c = clone(h, 4.5, 4.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
+        h.runAfterDelay(120, () -> {
+            h.assertTrue(m.itemBook().containsKey("minecraft:diamond_sword") || m.recordItem("minecraft:diamond_sword", "x") == false, "a held item reaches the book (the scan runs every five seconds)");
+            var roster = com.rlclones.clone.CloneRoster.load(m.itemBook().isEmpty() ? new net.minecraft.nbt.CompoundTag() : saveBook(m));
+            h.assertTrue(roster.itemsGot.size() == m.itemBook().size() && roster.advancementsDone.containsKey("minecraft:story/mine_stone"), "and the book is saved with the world");
+            finish(h, c);
+            h.succeed();
+        });
+    }
+
+    private static net.minecraft.nbt.CompoundTag saveBook(com.rlclones.clone.CloneManager m) {
+        var r = new com.rlclones.clone.CloneRoster();
+        r.advancementsDone.putAll(m.advancementBook());
+        r.itemsGot.putAll(m.itemBook());
+        return r.save(new net.minecraft.nbt.CompoundTag());
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

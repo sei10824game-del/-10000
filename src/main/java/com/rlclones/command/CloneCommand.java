@@ -106,6 +106,11 @@ public final class CloneCommand {
                         .then(Commands.literal("off").executes(ctx -> setFlee(ctx, false))))
                 .then(Commands.literal("giveitems").requires(CloneCommand::mayControl).executes(CloneCommand::giveItems))
                 .then(Commands.literal("list").executes(CloneCommand::list))
+                .then(achievements("achievement"))
+                .then(achievements("achivement"))
+                .then(Commands.literal("item")
+                        .executes(ctx -> showItems(ctx, 1))
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1)).executes(ctx -> showItems(ctx, IntegerArgumentType.getInteger(ctx, "page")))))
                 .then(Commands.literal("deaths").executes(CloneCommand::deaths))
                 .then(Commands.literal("remove").requires(CloneCommand::mayControl)
                         .then(Commands.literal("all").executes(ctx -> {
@@ -219,6 +224,46 @@ public final class CloneCommand {
         manager(ctx).setEquipPeace(peace);
         ctx.getSource().sendSuccess(() -> Component.translatable(peace ? "rlclones.msg.equippeace_on" : "rlclones.msg.equippeace_off"), true);
         return 1;
+    }
+
+    private static final int PER_PAGE = 15;
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> achievements(String word) {
+        return Commands.literal(word)
+                .executes(ctx -> showAchievements(ctx, 1))
+                .then(Commands.argument("page", IntegerArgumentType.integer(1)).executes(ctx -> showAchievements(ctx, IntegerArgumentType.getInteger(ctx, "page"))));
+    }
+
+    /** /rlclone achievement [page]: every advancement the clones (mobs and equipment too) have earned, with who earned it first. */
+    private static int showAchievements(CommandContext<CommandSourceStack> ctx, int page) {
+        var server = ctx.getSource().getServer();
+        com.rlclones.clone.CloneRecords.catchUp(server);
+        var book = new java.util.ArrayList<>(manager(ctx).advancementBook().entrySet());
+        return showBook(ctx, "Achievements of the clones", book, page, e -> {
+            var adv = server.getAdvancements().getAdvancement(new net.minecraft.resources.ResourceLocation(e.getKey()));
+            return adv != null && adv.getDisplay() != null ? adv.getDisplay().getTitle() : Component.literal(e.getKey());
+        }, "achievement");
+    }
+
+    /** /rlclone item [page]: every kind of item a clone has ever held, with who first had it. */
+    private static int showItems(CommandContext<CommandSourceStack> ctx, int page) {
+        var book = new java.util.ArrayList<>(manager(ctx).itemBook().entrySet());
+        return showBook(ctx, "Items the clones have got", book, page, e -> {
+            var item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(new net.minecraft.resources.ResourceLocation(e.getKey()));
+            return item == null ? Component.literal(e.getKey()) : new net.minecraft.world.item.ItemStack(item).getHoverName();
+        }, "item");
+    }
+
+    private static int showBook(CommandContext<CommandSourceStack> ctx, String title, java.util.List<java.util.Map.Entry<String, String>> book, int page,
+                                java.util.function.Function<java.util.Map.Entry<String, String>, Component> name, String word) {
+        int pages = Math.max(1, (book.size() + PER_PAGE - 1) / PER_PAGE);
+        int p = Math.min(page, pages);
+        ctx.getSource().sendSuccess(() -> Component.literal("== " + title + ": " + book.size() + " (page " + p + "/" + pages + ", /rlclone " + word + " <page>) ==").withStyle(ChatFormatting.AQUA), false);
+        for (int i = (p - 1) * PER_PAGE; i < Math.min(book.size(), p * PER_PAGE); i++) {
+            var e = book.get(i);
+            ctx.getSource().sendSuccess(() -> Component.literal(" - ").append(name.apply(e)).append(Component.literal("  [" + e.getKey() + "] by " + e.getValue()).withStyle(ChatFormatting.GRAY)), false);
+        }
+        return book.size();
     }
 
     private static int setMobFaction(CommandContext<CommandSourceStack> ctx, boolean peace) {
