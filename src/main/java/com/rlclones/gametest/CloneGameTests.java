@@ -638,7 +638,7 @@ public final class CloneGameTests {
         h.getLevel().setBlock(at, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
         com.rlclones.ai.Motor.PLUGS.put(at, 0L); // (an old plug record there)
         com.rlclones.ai.Motor.PLAYER_PLACED.put(at, h.getLevel().getGameTime());
-        h.assertTrue(!c.controller().motor().mine(at) && !h.getLevel().getBlockState(at).isAir(), "a player's block is not mined");
+        h.assertTrue(com.rlclones.ai.Motor.leftAlone(at, h.getLevel().getGameTime()), "a player's block is not for the stair work or the plug-breaking");
         h.assertTrue(!c.controller().motor().breakPlug(net.minecraft.world.phys.Vec3.atBottomCenterOf(at.relative(net.minecraft.core.Direction.EAST, 3))), "nor taken for an old plug");
         com.rlclones.ai.Motor.PLAYER_PLACED.remove(at);
         com.rlclones.ai.Motor.PLUGS.remove(at);

@@ -543,6 +543,9 @@ public final class StairMining {
     /** Safe to dig out: breakable, no liquid next to it, nobody's base. */
     private boolean diggable(BlockPos p) {
         ServerLevel level = self.serverLevel();
+        if (Motor.leftAlone(p, level.getGameTime())) {
+            return false; // a block a player put down (a step): not for the stair work to take out
+        }
         BlockState st = level.getBlockState(p);
         if (!st.getFluidState().isEmpty()) {
             return false;

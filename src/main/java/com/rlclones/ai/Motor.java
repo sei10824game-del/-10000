@@ -398,7 +398,7 @@ public final class Motor {
         net.minecraft.core.Direction dir = net.minecraft.core.Direction.getNearest(d.x, 0, d.z);
         BlockPos lower = self.blockPosition().relative(dir);
         for (BlockPos c : new BlockPos[]{lower, lower.above()}) {
-            if (PLUGS.containsKey(c) && !PLAYER_PLACED.containsKey(c)) {
+            if (PLUGS.containsKey(c) && !leftAlone(c, self.level().getGameTime())) {
                 if (self.level().getBlockState(c).getCollisionShape(self.level(), c).isEmpty()) {
                     PLUGS.remove(c);
                     continue;
@@ -764,18 +764,26 @@ public final class Motor {
     public static final java.util.Map<BlockPos, Long> PLAYER_PLACED = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long PLAYER_PLACED_FOR = 36000;
 
+    /**
+     * A block a player put down lately is not for the stair-menders and plug-breakers to dig out again (the player's step). Ordinary mining
+     * (an ore with a block in front of it) is not held back by this.
+     */
+    public static boolean leftAlone(BlockPos pos, long now) {
+        Long placed = PLAYER_PLACED.get(pos);
+        if (placed == null) {
+            return false;
+        }
+        if (now - placed >= PLAYER_PLACED_FOR) {
+            PLAYER_PLACED.remove(pos);
+            return false;
+        }
+        return true;
+    }
+
     public boolean mine(BlockPos pos) {
         if (!com.rlclones.clone.CloneMobs.canUseHands(self)) {
             mineDebug = "no hands";
             return false;
-        }
-        Long placed = PLAYER_PLACED.get(pos);
-        if (placed != null) {
-            if (self.level().getGameTime() - placed < PLAYER_PLACED_FOR) {
-                mineDebug = "placed by a player: left alone";
-                return false;
-            }
-            PLAYER_PLACED.remove(pos);
         }
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);
