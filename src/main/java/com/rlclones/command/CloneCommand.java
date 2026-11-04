@@ -6,6 +6,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.rlclones.Config;
+import com.rlclones.RLClones;
 import com.rlclones.ai.brain.Brain;
 import com.rlclones.ai.brain.EnemyKnowledge;
 import com.rlclones.clone.CloneManager;
@@ -106,6 +107,9 @@ public final class CloneCommand {
                         .then(Commands.literal("off").executes(ctx -> setFlee(ctx, false))))
                 .then(Commands.literal("giveitems").requires(CloneCommand::mayControl).executes(CloneCommand::giveItems))
                 .then(Commands.literal("list").executes(CloneCommand::list))
+                .then(Commands.literal("debug")
+                        .executes(ctx -> debug(ctx, null))
+                        .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(ctx -> debug(ctx, StringArgumentType.getString(ctx, "name")))))
                 .then(achievements("achievement"))
                 .then(achievements("achivement"))
                 .then(Commands.literal("item")
@@ -223,6 +227,31 @@ public final class CloneCommand {
     private static int setEquipFaction(CommandContext<CommandSourceStack> ctx, boolean peace) {
         manager(ctx).setEquipPeace(peace);
         ctx.getSource().sendSuccess(() -> Component.translatable(peace ? "rlclones.msg.equippeace_on" : "rlclones.msg.equippeace_off"), true);
+        return 1;
+    }
+
+    /** /rlclone debug [name]: the state of that clone (default: the nearest one) as chat lines, to paste into a bug report. */
+    private static int debug(CommandContext<CommandSourceStack> ctx, String name) {
+        CommandSourceStack src = ctx.getSource();
+        ClonePlayer c = name != null ? manager(ctx).byName(name) : null;
+        if (name == null) {
+            double best = Double.MAX_VALUE;
+            for (ClonePlayer k : manager(ctx).clones()) {
+                double d = k.distanceToSqr(src.getPosition());
+                if (d < best && k.getCommandSenderWorld() == src.getLevel()) {
+                    best = d;
+                    c = k;
+                }
+            }
+        }
+        if (c == null || c.controller() == null) {
+            src.sendFailure(Component.translatable("rlclones.cmd.unknown", name == null ? "(nearest)" : name));
+            return 0;
+        }
+        for (String line : c.controller().debugReport()) {
+            src.sendSuccess(() -> Component.literal(line), false);
+            RLClones.LOGGER.info("CLONE-DEBUG {}", line);
+        }
         return 1;
     }
 

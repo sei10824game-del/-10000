@@ -5180,6 +5180,31 @@ public final class CloneController {
         return optionTicks >= 60;
     }
 
+    /** Everything worth pasting into a bug report about this clone: where, what it is doing and why, how stuck, what is under and around it. */
+    public java.util.List<String> debugReport() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        var level = self.serverLevel();
+        BlockPos p = self.blockPosition();
+        int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, p.getX(), p.getZ());
+        out.add(self.getGameProfile().getName() + " at " + p.toShortString() + " (" + level.dimension().location() + "), surface y=" + surface + ", sky " + level.canSeeSky(p.above())
+                + ", hp " + Math.round(self.getHealth()) + "/" + Math.round(self.getMaxHealth()) + ", food " + self.getFoodData().getFoodLevel() + ", food items " + FoodAid.foodItems(self));
+        out.add("option " + (option == null ? "none" : option.key()) + " for " + optionTicks + " ticks; layer " + idleWhy + "; recent: " + optionLog.subList(Math.max(0, optionLog.size() - 8), optionLog.size()));
+        out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
+        out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
+        StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            around.append(", ").append(d.getName()).append(' ').append(level.getBlockState(p.relative(d)).getBlock().getDescriptionId().replace("block.minecraft.", ""))
+                    .append('/').append(level.getBlockState(p.relative(d).above()).getBlock().getDescriptionId().replace("block.minecraft.", ""));
+        }
+        around.append(", above ").append(level.getBlockState(p.above(2)).getBlock().getDescriptionId().replace("block.minecraft.", ""));
+        out.add(around.toString());
+        var body = com.rlclones.clone.CloneMobs.bodyOf(self);
+        if (body != null) {
+            out.add("clone mob: body " + body.getType().getDescriptionId() + " hp " + Math.round(body.getHealth()) + " noAI " + body.isNoAi());
+        }
+        return out;
+    }
+
     public String describe() {
         StringBuilder sb = new StringBuilder();
         sb.append(option == null ? "idle" : option.key());
