@@ -575,6 +575,20 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
+    public static void flyingBodiesFlyAndVexesPhase(GameTestHelper h) {
+        var blaze = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        var vex = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.VEX, h.absoluteVec(new net.minecraft.world.phys.Vec3(6.5, 2, 3.5)));
+        var zombie = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(9.5, 2, 3.5)));
+        var b = com.rlclones.clone.CloneMobs.soulOf(blaze);
+        var v = com.rlclones.clone.CloneMobs.soulOf(vex);
+        var z = com.rlclones.clone.CloneMobs.soulOf(zombie);
+        h.assertTrue(b.getAbilities().flying && b.getAbilities().mayfly && !b.phasing, "a blaze's soul flies");
+        h.assertTrue(v.getAbilities().flying && v.phasing && v.isSpectator(), "a vex's soul flies and goes through blocks");
+        h.assertTrue(!z.getAbilities().flying && !z.phasing, "a zombie's soul walks");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

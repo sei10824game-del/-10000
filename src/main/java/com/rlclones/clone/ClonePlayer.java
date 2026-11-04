@@ -21,6 +21,14 @@ import javax.annotation.Nullable;
  * {@link CloneController} instead of a network client.
  */
 public class ClonePlayer extends ServerPlayer {
+    /** A clone mob whose body goes through blocks (a vex): the soul passes through them too (the player's own collision-off state is the spectator's). */
+    public boolean phasing;
+
+    @Override
+    public boolean isSpectator() {
+        return phasing || super.isSpectator();
+    }
+
     private Brain brain;
     private final CloneController controller;
     private boolean aiEnabled = true;

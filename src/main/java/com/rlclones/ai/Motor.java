@@ -385,6 +385,12 @@ public final class Motor {
 
     public boolean navigate(Vec3 goal, double arrive, boolean run) {
         Vec3 pos = self.position();
+        if (self.getAbilities().flying && com.rlclones.clone.BodyTraits.of(self).flies()) {
+            lastGoal = goal; // a flying body goes straight there through the air (up over what is in the way)
+            lastGoalTick = self.level().getGameTime();
+            fly(goal);
+            return horizontalDistance(pos, goal) <= arrive && Math.abs(pos.y - goal.y) < 2.0;
+        }
         if (lastGoal == null || lastGoal.distanceToSqr(goal) > 16.0) {
             resetStuck(); // a new destination: earlier trouble elsewhere does not count
         }
@@ -1420,7 +1426,11 @@ public final class Motor {
         if (flyGoal != null && self.getAbilities().flying) {
             Vec3 dm = self.getDeltaMovement();
             double dy = flyGoal.y - self.getY();
-            self.setDeltaMovement(dm.x, Mth.clamp(dy * 0.35, -0.6, 0.6), dm.z);
+            double vy = Mth.clamp(dy * 0.35, -0.6, 0.6);
+            if (self.horizontalCollision && !(self instanceof com.rlclones.clone.ClonePlayer cp && cp.phasing)) {
+                vy = Math.max(vy, 0.5); // a wall in the way: up and over
+            }
+            self.setDeltaMovement(dm.x, vy, dm.z);
             if (horizontalDistance(self.position(), flyGoal) < 0.6) {
                 self.setDeltaMovement(dm.x * 0.5, self.getDeltaMovement().y, dm.z * 0.5); // hover there
             }

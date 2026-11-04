@@ -12,8 +12,8 @@ import java.util.Set;
  * (nothing changes for it). Read when asked, never written into the (shared, saved) Brain.
  * ponytail: no datapack JSON overrides yet (husk / fall-immune are a short list below); add the JSON loader when a mod mob needs it.
  */
-public record BodyTraits(boolean sun, boolean water, boolean fire, int safeDrop, boolean breathes, boolean undead) {
-    public static final BodyTraits PLAYER = new BodyTraits(false, false, false, 3, false, false);
+public record BodyTraits(boolean sun, boolean water, boolean fire, int safeDrop, boolean breathes, boolean undead, boolean flies, boolean phases) {
+    public static final BodyTraits PLAYER = new BodyTraits(false, false, false, 3, false, false, false, false);
     private static final int NEVER = Integer.MAX_VALUE;
 
     /** Types that take no fall damage. */
@@ -31,8 +31,12 @@ public record BodyTraits(boolean sun, boolean water, boolean fire, int safeDrop,
     public static BodyTraits of(Mob b) {
         boolean fire = b.fireImmune();
         boolean undead = b.getMobType() == MobType.UNDEAD;
+        boolean flies = b instanceof net.minecraft.world.entity.FlyingMob || b instanceof net.minecraft.world.entity.animal.FlyingAnimal || b instanceof net.minecraft.world.entity.ambient.Bat
+                || b instanceof net.minecraft.world.entity.monster.Vex || b instanceof net.minecraft.world.entity.monster.Blaze || b instanceof net.minecraft.world.entity.boss.wither.WitherBoss
+                || b instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon || b instanceof net.minecraft.world.entity.animal.allay.Allay
+                || b.getNavigation() instanceof net.minecraft.world.entity.ai.navigation.FlyingPathNavigation; // (other mods' flyers too)
         return new BodyTraits(undead && !fire && !SUN_PROOF.contains(b.getType()), b.isSensitiveToWater(), fire,
-                FALL_IMMUNE.contains(b.getType()) ? NEVER : 3, b.canBreatheUnderwater(), undead);
+                flies || FALL_IMMUNE.contains(b.getType()) ? NEVER : 3, b.canBreatheUnderwater(), undead, flies, b instanceof net.minecraft.world.entity.monster.Vex || b.noPhysics);
     }
 
     public boolean fallImmune() {

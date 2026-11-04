@@ -65,6 +65,18 @@ public final class CloneMobs {
         return CloneManager.get(body.getServer()).byId(body.getPersistentData().getUUID(SOUL));
     }
 
+    /** A flying body: the soul flies (creative flight, so it hangs in the air and goes where it is sent); a phasing one (vex) goes through blocks. */
+    public static void giveBodyMovement(ClonePlayer soul, Mob body) {
+        BodyTraits t = BodyTraits.of(body);
+        soul.phasing = t.phases();
+        var ab = soul.getAbilities();
+        if (t.flies() != ab.mayfly || t.flies() != ab.flying) {
+            ab.mayfly = t.flies();
+            ab.flying = t.flies();
+            soul.onUpdateAbilities();
+        }
+    }
+
     /** Out of sight (an effect, not the flag: vanilla clears the flag every tick when no effect backs it), without particles. */
     public static void hide(ClonePlayer soul) {
         var fx = soul.getEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY);
@@ -94,6 +106,7 @@ public final class CloneMobs {
         body.getPersistentData().putBoolean(SIDE, true);
         body.setNoAi(true);
         body.setPersistenceRequired();
+        giveBodyMovement(soul, body);
         hide(soul); // (armour still shows: the body wears none)
         if (soul.getServer() != null) {
             noPush(soul.getServer(), soul, body);
@@ -257,6 +270,7 @@ public final class CloneMobs {
             }
             if (soul.tickCount % 100 == 0) {
                 hide(soul);
+                giveBodyMovement(soul, body);
             }
             // the body holds the health: the soul (whose health the clone's own sense of danger reads) shows the same share of it
             float share = Math.max(0.02f, body.getHealth() / Math.max(1f, body.getMaxHealth()));
