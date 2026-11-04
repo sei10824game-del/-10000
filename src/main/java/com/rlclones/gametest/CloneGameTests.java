@@ -611,6 +611,26 @@ public final class CloneGameTests {
         return r.save(new net.minecraft.nbt.CompoundTag());
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 300)
+    public static void aCloneShutInByItsOwnPlugDigsItOut(GameTestHelper h) {
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        var feet = c.blockPosition();
+        var east = feet.relative(net.minecraft.core.Direction.EAST);
+        h.getLevel().setBlock(east, net.minecraft.world.level.block.Blocks.WHITE_WOOL.defaultBlockState(), 3);
+        h.getLevel().setBlock(east.above(), net.minecraft.world.level.block.Blocks.WHITE_WOOL.defaultBlockState(), 3);
+        var wall = feet.relative(net.minecraft.core.Direction.WEST);
+        h.getLevel().setBlock(wall, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
+        com.rlclones.ai.Motor.PLUGS.put(east, 0L);
+        com.rlclones.ai.Motor.PLUGS.put(east.above(), 0L);
+        var goal = net.minecraft.world.phys.Vec3.atBottomCenterOf(feet.relative(net.minecraft.core.Direction.EAST, 4));
+        h.succeedWhen(() -> {
+            c.controller().motor().breakPlug(goal);
+            h.assertTrue(h.getLevel().getBlockState(east).isAir() && h.getLevel().getBlockState(east.above()).isAir(), "the plug is dug out");
+            h.assertTrue(!h.getLevel().getBlockState(wall).isAir(), "and nothing else (a stone wall behind stays)");
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

@@ -383,8 +383,43 @@ public final class Motor {
         return lastGoal != null && self.level().getGameTime() - lastGoalTick < 100 ? lastGoal : null;
     }
 
+    /** Blocks the clones laid across a passage to stop an enemy (plugCorridor): a clone shut in behind one digs it out when it is the way. */
+    public static final java.util.Map<BlockPos, Long> PLUGS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Stuck against a block a clone laid across the way to {@code goal}: dig it out (the cells straight ahead, feet and head). True while at it.
+     * (Only the clones' own plugs: a wall or a door of a house is not for this.)
+     */
+    public boolean breakPlug(Vec3 goal) {
+        if (PLUGS.isEmpty() || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            return false;
+        }
+        Vec3 d = goal.subtract(self.position());
+        net.minecraft.core.Direction dir = net.minecraft.core.Direction.getNearest(d.x, 0, d.z);
+        BlockPos lower = self.blockPosition().relative(dir);
+        for (BlockPos c : new BlockPos[]{lower, lower.above()}) {
+            if (PLUGS.containsKey(c)) {
+                if (self.level().getBlockState(c).getCollisionShape(self.level(), c).isEmpty()) {
+                    PLUGS.remove(c);
+                    continue;
+                }
+                Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(c)));
+                stop();
+                if (mine(c)) {
+                    PLUGS.remove(c);
+                    resetStuck();
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean navigate(Vec3 goal, double arrive, boolean run) {
         Vec3 pos = self.position();
+        if (stuckCount >= 6 && breakPlug(goal)) {
+            return false;
+        }
         if (self.getAbilities().flying && com.rlclones.clone.BodyTraits.of(self).flies()) {
             lastGoal = goal; // a flying body goes straight there through the air (up over what is in the way)
             lastGoalTick = self.level().getGameTime();

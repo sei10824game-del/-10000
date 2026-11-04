@@ -4099,9 +4099,11 @@ public final class CloneController {
         motor.stop();
         motor.lookAt(Vec3.atCenterOf(lower));
         if (level.getBlockState(lower).canBeReplaced() ? motor.placeBlockAt(lower) : false) {
+            Motor.PLUGS.put(lower.immutable(), now);
             return true;
         }
         if (!level.getBlockState(lower).canBeReplaced() && level.getBlockState(upper).canBeReplaced() && motor.placeBlockAt(upper)) {
+            Motor.PLUGS.put(upper.immutable(), now);
             corridorPlugs++;
             plugCooldown = now + 200;
             return true;
