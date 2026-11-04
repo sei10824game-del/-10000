@@ -297,6 +297,10 @@ public final class StairMining {
                 bases().setDirty();
             }
         }
+        if (ascending && !digUp && beginDigUp()) {
+            debug = why + ": digging up instead"; // the way up is cut / blocked: through the rock to the open
+            return Status.WORKING;
+        }
         return Status.FAILED;
     }
 
@@ -346,7 +350,7 @@ public final class StairMining {
 
     /** Underground and hungry with nothing to eat: walk up the nearest known staircase to its top (false = none known). */
     public boolean beginAscent() {
-        Bases.Staircase s = bases().nearestStaircase(self.level().dimension(), self.position(), 160, st -> true);
+        Bases.Staircase s = bases().nearestStaircase(self.level().dimension(), self.position(), 160, this::usable); // (not one that has just failed: dig up instead)
         if (s == null) {
             return false;
         }

@@ -2460,7 +2460,9 @@ public final class CloneController {
             return null;
         }
         // hungry with nothing to eat, far under the open sky (a staircase's underground world has nothing to eat): up, to the food above
-        if (hungryNoFood() && now >= ascentRetryAt && !self.level().canSeeSky(self.blockPosition().above())
+        // far under the open sky and not on a digging errand (the way back is cut, or it was left down there): up, whatever it was doing; hungry with nothing to eat above all
+        boolean onDigErrand = digPending(now) || option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY;
+        if ((hungryNoFood() || !onDigErrand) && now >= ascentRetryAt && !self.level().canSeeSky(self.blockPosition().above())
                 && self.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, self.getBlockX(), self.getBlockZ()) - self.getBlockY() > 8) {
             ascentRetryAt = now + 400;
             if (stairs.beginAscent() || stairs.beginDigUp()) { // (a known staircase first; else a way is dug up through the rock)
