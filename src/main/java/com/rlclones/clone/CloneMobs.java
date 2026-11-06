@@ -82,6 +82,29 @@ public final class CloneMobs {
         }
     }
 
+    /** The soul's hit box follows the biggest of its bodies; where that does not fit it is lifted clear of the blocks. */
+    public static void syncDimensions(ClonePlayer soul) {
+        var bodies = bodiesOf(soul);
+        if (bodies.isEmpty()) {
+            return;
+        }
+        float w = 0f;
+        float h = 0f;
+        for (Mob m : bodies) {
+            w = Math.max(w, m.getBbWidth());
+            h = Math.max(h, m.getBbHeight());
+        }
+        var dims = soul.bodyDims;
+        if (dims != null && Math.abs(dims.width - w) < 0.01f && Math.abs(dims.height - h) < 0.01f) {
+            return;
+        }
+        soul.bodyDims = net.minecraft.world.entity.EntityDimensions.scalable(w, h);
+        soul.refreshDimensions();
+        for (int i = 0; i < 16 && !soul.level().noCollision(soul); i++) {
+            soul.setPos(soul.getX(), soul.getY() + 0.5, soul.getZ()); // (a big body appeared inside a tree or a wall: up out of it)
+        }
+    }
+
     /** Out of sight (an effect, not the flag: vanilla clears the flag every tick when no effect backs it), without particles. */
     public static void hide(ClonePlayer soul) {
         var fx = soul.getEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY);
@@ -284,6 +307,24 @@ public final class CloneMobs {
                 it.remove();
                 continue;
             }
+            long nowT = soul.level().getGameTime();
+            Entity raw = soul.level() instanceof ServerLevel rl ? rl.getEntity(e.getValue()) : null;
+            if (soul.isAlive() && raw instanceof Mob rm && !rm.isRemoved() && rm.isDeadOrDying()) {
+                // the body is dead or dying (it may rise again: a mutant zombie...): the soul waits for it
+                if (nowT - DYING.computeIfAbsent(soul.getUUID(), k -> nowT) > REVIVE_WAIT) {
+                    soulDies(soul);
+                    it.remove();
+                }
+                continue;
+            }
+            if (raw instanceof Mob rm2 && rm2.isAlive()) {
+                DYING.remove(soul.getUUID()); // (it rose again)
+                DYING_SRC.remove(soul.getUUID());
+            } else if (soul.isAlive() && DYING.containsKey(soul.getUUID())) { // died and is gone
+                soulDies(soul);
+                it.remove();
+                continue;
+            }
             Mob body = bodyOf(soul);
             if (body != null && !soul.isAlive()) {
                 for (Mob extra : bodiesOf(soul)) {
@@ -338,6 +379,9 @@ public final class CloneMobs {
             if (soul.tickCount % 100 == 0) {
                 hide(soul);
                 giveBodyMovement(soul, body);
+            }
+            if (soul.tickCount % 20 == 0) {
+                syncDimensions(soul);
             }
             // the body holds the health: the soul (whose health the clone's own sense of danger reads) shows the same share of it
             float share = Math.max(0.02f, body.getHealth() / Math.max(1f, body.getMaxHealth()));
@@ -394,6 +438,13 @@ public final class CloneMobs {
             return 0;
         }
         net.minecraft.world.phys.AABB box = body.getBoundingBox().deflate(0.01);
+        Vec3 goal = soul.controller().motor().recentGoal();
+        if (goal != null) { // (the soul's own box is the body's now: what blocks it is the way ahead, a little in front of it)
+            Vec3 d = new Vec3(goal.x - soul.getX(), 0, goal.z - soul.getZ());
+            if (d.lengthSqr() > 1e-4) {
+                box = box.move(d.normalize().scale(0.7));
+            }
+        }
         int made = 0;
         for (BlockPos p : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
             var st = level.getBlockState(p);
@@ -510,11 +561,16 @@ public final class CloneMobs {
         if (kinds.size() <= 1) {
             return birth(parent, childSoul, pos);
         }
+        return assemble(level, kinds, childSoul, pos, parent.getYRot(), MobSpawnType.BREEDING);
+    }
+
+    /** One body of each kind, stacked and tied to the soul (the first is the main one), the best of their stats on the main one. */
+    private static Mob assemble(ServerLevel level, java.util.List<net.minecraft.world.entity.EntityType<?>> kinds, ClonePlayer soul, Vec3 pos, float yaw, MobSpawnType how) {
         java.util.List<Mob> bodies = new java.util.ArrayList<>();
         for (var type : kinds) {
             if (type.create(level) instanceof Mob m) {
-                m.moveTo(pos.x, pos.y, pos.z, parent.getYRot(), 0f);
-                m.finalizeSpawn(level, level.getCurrentDifficultyAt(BlockPos.containing(pos)), MobSpawnType.BREEDING, null, null);
+                m.moveTo(pos.x, pos.y, pos.z, yaw, 0f);
+                m.finalizeSpawn(level, level.getCurrentDifficultyAt(BlockPos.containing(pos)), how, null, null);
                 bodies.add(m);
             }
         }
@@ -523,11 +579,25 @@ public final class CloneMobs {
         }
         Mob main = bodies.get(0);
         mergeStats(main, bodies);
-        link(main, childSoul);
+        link(main, soul);
         level.addFreshEntity(main);
         for (int i = 1; i < bodies.size(); i++) {
-            linkExtra(bodies.get(i), childSoul);
+            linkExtra(bodies.get(i), soul);
             level.addFreshEntity(bodies.get(i));
+        }
+        return main;
+    }
+
+    /** A chimera clone mob of the given kinds (the command): null = no room under the clone limit / not a mob. */
+    public static Mob summonChimera(@javax.annotation.Nullable ServerPlayer owner, ServerLevel level, java.util.List<net.minecraft.world.entity.EntityType<?>> kinds, Vec3 pos) {
+        float yaw = owner == null ? 0f : owner.getYRot();
+        ClonePlayer soul = CloneManager.get(level.getServer()).summon(owner, level, pos, yaw);
+        if (soul == null) {
+            return null;
+        }
+        Mob main = assemble(level, kinds, soul, pos, yaw, MobSpawnType.COMMAND);
+        if (main == null) {
+            CloneManager.get(level.getServer()).remove(soul, true, Component.literal("no body"));
         }
         return main;
     }
@@ -764,9 +834,28 @@ public final class CloneMobs {
     public static void onBodyDeath(LivingDeathEvent event) {
         ClonePlayer soul = soulOf(event.getEntity());
         if (soul != null && soul.isAlive()) {
-            // the soul dies of what killed the body (sun, a mob, a fall...), so the death list tells the truth
+            // not yet: a mob that rises again (a mutant zombie...) is only "dying". The tick ends the soul when the body is really gone
+            DYING.putIfAbsent(soul.getUUID(), soul.level().getGameTime());
+            DYING_SRC.put(soul.getUUID(), event.getSource());
+        }
+    }
+
+    /** Bodies that have died and may rise again: soul -> when they died; and by what. */
+    private static final java.util.Map<UUID, Long> DYING = new java.util.HashMap<>();
+    private static final java.util.Map<UUID, net.minecraft.world.damagesource.DamageSource> DYING_SRC = new java.util.HashMap<>();
+    /** Ticks a dead body is waited for before its soul dies too (a mob that revives does so within this). */
+    private static final long REVIVE_WAIT = 600;
+
+    /** The body is gone for good: the soul dies of what killed it (so the death list tells the truth), and so do any other bodies. */
+    private static void soulDies(ClonePlayer soul) {
+        var src = DYING_SRC.remove(soul.getUUID());
+        DYING.remove(soul.getUUID());
+        for (Mob extra : bodiesOf(soul)) {
+            extra.kill();
+        }
+        if (soul.isAlive()) {
             soul.setHealth(0f);
-            soul.die(event.getSource());
+            soul.die(src != null ? src : soul.damageSources().generic());
         }
     }
 }

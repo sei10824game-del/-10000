@@ -85,6 +85,14 @@ public final class CloneCommand {
                         .executes(ctx -> setSummonedMobs(ctx, !manager(ctx).summonedAsClone()))
                         .then(Commands.literal("on").executes(ctx -> setSummonedMobs(ctx, true)))
                         .then(Commands.literal("off").executes(ctx -> setSummonedMobs(ctx, false))))
+                .then(Commands.literal("summonchimera").requires(CloneCommand::mayControl)
+                        .then(Commands.argument("kinds", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> {
+                                    String rest = b.getRemaining();
+                                    return SharedSuggestionProvider.suggestResource(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKeys(),
+                                            b.createOffset(b.getStart() + rest.lastIndexOf(' ') + 1));
+                                })
+                                .executes(CloneCommand::summonChimeras)))
                 .then(Commands.literal("battleroyale").requires(CloneCommand::mayControl)
                         .executes(ctx -> setBattleRoyale(ctx, !manager(ctx).isBattleRoyale()))
                         .then(Commands.literal("on").executes(ctx -> setBattleRoyale(ctx, true)))
@@ -228,6 +236,45 @@ public final class CloneCommand {
         manager(ctx).setEquipPeace(peace);
         ctx.getSource().sendSuccess(() -> Component.translatable(peace ? "rlclones.msg.equippeace_on" : "rlclones.msg.equippeace_off"), true);
         return 1;
+    }
+
+    /** /rlclone summonchimera <kind> <kind> [<kind>...] [count]: chimera clone mobs of those kinds (every kind in each), in a ring round the caller. No cap on the count. */
+    private static int summonChimeras(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        String[] words = StringArgumentType.getString(ctx, "kinds").trim().split("\\s+");
+        int count = 1;
+        int n = words.length;
+        if (n > 1 && words[n - 1].matches("\\d+")) {
+            count = Math.max(1, Integer.parseInt(words[n - 1]));
+            n--;
+        }
+        java.util.List<net.minecraft.world.entity.EntityType<?>> kinds = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            var id = new net.minecraft.resources.ResourceLocation(words[i].contains(":") ? words[i] : "minecraft:" + words[i]);
+            if (!net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.containsKey(id)) {
+                src.sendFailure(Component.literal("Unknown entity type " + id));
+                return 0;
+            }
+            kinds.add(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getValue(id));
+        }
+        Vec3 base = src.getPosition();
+        double radius = Math.max(2, count / (Math.PI * 2));
+        int made = 0;
+        for (int i = 0; i < count; i++) {
+            double angle = i * (Math.PI * 2 / count);
+            Vec3 pos = count == 1 ? base : base.add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+            if (com.rlclones.clone.CloneMobs.summonChimera(src.getPlayer(), src.getLevel(), kinds, pos) == null) {
+                break;
+            }
+            made++;
+        }
+        int total = made;
+        if (total == 0) {
+            src.sendFailure(Component.translatable("rlclones.msg.limit", Config.cloneLimitLabel()));
+        } else {
+            src.sendSuccess(() -> Component.literal("Summoned " + total + " chimera clone mob(s) of " + kinds.stream().map(t -> net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(t).toString()).toList()), true);
+        }
+        return total;
     }
 
     /** /rlclone debug [name]: the state of that clone (default: the nearest one) as chat lines, to paste into a bug report. */

@@ -714,6 +714,35 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "clonemobs")
+    public static void aBodyThatRisesAgainKeepsItsSoul(GameTestHelper h) {
+        var body = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(body);
+        h.runAfterDelay(80, () -> {
+            body.setHealth(0f); // (a mob that revives: dead for a moment, health back before it is removed)
+            body.die(body.damageSources().generic());
+        });
+        h.succeedWhen(() -> {
+            if (body.isDeadOrDying() && !body.isRemoved()) {
+                body.deathTime = 0;
+                body.setHealth(body.getMaxHealth()); // it rises again
+            }
+            h.assertTrue(h.getLevel().getGameTime() > 0 && body.isAlive() && soul.isAlive() && h.getTick() > 150, "the body rose and the soul is still alive (" + soul.isAlive() + ")");
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "clonemobs")
+    public static void aBigCloneMobHasABigHitBoxAndChimeraCommandKindsWork(GameTestHelper h) {
+        var golem = com.rlclones.clone.CloneMobs.summon(null, h.getLevel(), net.minecraft.world.entity.EntityType.IRON_GOLEM, h.absoluteVec(new net.minecraft.world.phys.Vec3(6.5, 2, 6.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(golem);
+        com.rlclones.clone.CloneMobs.syncDimensions(soul);
+        h.assertTrue(Math.abs(soul.getBbWidth() - golem.getBbWidth()) < 0.01f && Math.abs(soul.getBbHeight() - golem.getBbHeight()) < 0.01f, "the soul's hit box is the golem's (" + soul.getBbWidth() + " x " + soul.getBbHeight() + ")");
+        var kinds = java.util.List.<net.minecraft.world.entity.EntityType<?>>of(net.minecraft.world.entity.EntityType.ZOMBIE, net.minecraft.world.entity.EntityType.SKELETON);
+        var main = com.rlclones.clone.CloneMobs.summonChimera(null, h.getLevel(), kinds, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
+        h.assertTrue(main != null && com.rlclones.clone.CloneMobs.bodiesOf(com.rlclones.clone.CloneMobs.soulOf(main)).size() == 2, "the chimera command's kinds make a two-body clone mob");
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

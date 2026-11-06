@@ -23,6 +23,19 @@ import javax.annotation.Nullable;
 public class ClonePlayer extends ServerPlayer {
     /** A clone mob whose body goes through blocks (a vex): the soul passes through them too (the player's own collision-off state is the spectator's). */
     public boolean phasing;
+    /** A clone mob's hit box is its body's (the biggest of a chimera's): it stands where the body fits, not where a player does. Null = a player's. */
+    @javax.annotation.Nullable
+    public net.minecraft.world.entity.EntityDimensions bodyDims;
+
+    @Override
+    public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
+        return bodyDims != null ? bodyDims : super.getDimensions(pose);
+    }
+
+    @Override
+    protected float getStandingEyeHeight(net.minecraft.world.entity.Pose pose, net.minecraft.world.entity.EntityDimensions dims) {
+        return bodyDims != null ? bodyDims.height * 0.85f : super.getStandingEyeHeight(pose, dims);
+    }
 
     @Override
     public boolean isSpectator() {
