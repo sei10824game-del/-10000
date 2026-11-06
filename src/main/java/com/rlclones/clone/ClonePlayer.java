@@ -33,7 +33,7 @@ public class ClonePlayer extends ServerPlayer {
     }
 
     @Override
-    protected float getStandingEyeHeight(net.minecraft.world.entity.Pose pose, net.minecraft.world.entity.EntityDimensions dims) {
+    public float getStandingEyeHeight(net.minecraft.world.entity.Pose pose, net.minecraft.world.entity.EntityDimensions dims) {
         return bodyDims != null ? bodyDims.height * 0.85f : super.getStandingEyeHeight(pose, dims);
     }
 
