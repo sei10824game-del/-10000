@@ -594,6 +594,15 @@ public final class StairMining {
     }
 
     public Status tick() {
+        motor.stairWork = true; // (the stair work itself may dig where an old staircase lies: it is the others that must leave the treads alone)
+        try {
+            return tickInner();
+        } finally {
+            motor.stairWork = false;
+        }
+    }
+
+    private Status tickInner() {
         if (digUp) {
             ticks++;
             return digUpTick();

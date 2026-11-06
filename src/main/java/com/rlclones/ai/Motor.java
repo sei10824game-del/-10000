@@ -780,12 +780,15 @@ public final class Motor {
         return true;
     }
 
+    /** Set while the stair work runs (it digs the stairs; every other mining leaves their treads alone). */
+    public boolean stairWork;
+
     public boolean mine(BlockPos pos) {
         if (!com.rlclones.clone.CloneMobs.canUseHands(self)) {
             mineDebug = "no hands";
             return false;
         }
-        if (self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos)) {
+        if (!stairWork && self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos)) {
             mineDebug = "a tread of a staircase: left alone";
             return false;
         }
