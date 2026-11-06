@@ -648,6 +648,26 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void aStaircaseTreadIsNotMinedForCobblestone(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        var level = h.getLevel();
+        var top = h.absolutePos(new net.minecraft.core.BlockPos(2, 6, 2));
+        var bases = com.rlclones.clone.Bases.get(level.getServer());
+        var s = bases.addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.end = top.relative(net.minecraft.core.Direction.EAST, 4).below(4);
+        var tread = top.relative(net.minecraft.core.Direction.EAST, 2).below(3);
+        h.assertTrue(bases.isStairTread(level.dimension(), tread), "the block a step is walked on is a tread");
+        h.assertTrue(bases.isStairTread(level.dimension(), tread.relative(net.minecraft.core.Direction.SOUTH)) || bases.isStairTread(level.dimension(), tread.relative(net.minecraft.core.Direction.NORTH)), "and the lane beside it");
+        h.assertTrue(!bases.isStairTread(level.dimension(), tread.above()) && !bases.isStairTread(level.dimension(), tread.relative(net.minecraft.core.Direction.EAST, 8)), "the air above and the rock far away are not");
+        level.setBlock(tread, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
+        h.assertTrue(!c.controller().motor().mine(tread) && !level.getBlockState(tread).isAir(), "mining refuses a tread");
+        clearBases(h);
+        finish(h, c);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

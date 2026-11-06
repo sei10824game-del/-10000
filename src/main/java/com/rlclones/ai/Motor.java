@@ -785,6 +785,10 @@ public final class Motor {
             mineDebug = "no hands";
             return false;
         }
+        if (self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos)) {
+            mineDebug = "a tread of a staircase: left alone";
+            return false;
+        }
         ServerLevel level = self.serverLevel();
         BlockState state = level.getBlockState(pos);
         if (state.isAir()) {

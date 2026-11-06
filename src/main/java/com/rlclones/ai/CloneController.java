@@ -837,7 +837,8 @@ public final class CloneController {
     }
     /** Not skipped for now, and - for planks / logs of buildings - not part of somebody's base. */
     private boolean harvestable(Perception.BlockKind kind, BlockPos p) {
-        return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && !BlockClaims.takenByOther(p, self.getUUID(), now()) && (kind != Perception.BlockKind.WOOD
+        return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && !BlockClaims.takenByOther(p, self.getUUID(), now())
+                && !com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), p) && (kind != Perception.BlockKind.WOOD
                 || com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(p), 12) == null);
     }
 

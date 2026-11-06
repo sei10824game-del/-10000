@@ -257,6 +257,34 @@ public class Bases extends SavedData {
 
     public final List<Staircase> staircases = new ArrayList<>();
 
+    /**
+     * A tread of a recorded staircase (the block each step is walked on, and the lanes dug beside it): taking it out cuts the way
+     * (cobblestone gathering used to chew the stairs up, and the clones then stacked blocks to climb them).
+     */
+    public boolean isStairTread(ResourceKey<Level> dim, BlockPos p) {
+        for (Staircase s : staircases) {
+            if (!s.dimension.equals(dim)) {
+                continue;
+            }
+            int reach = s.steps() + 3;
+            if (Math.abs(p.getX() - s.top.getX()) > reach + 3 || Math.abs(p.getZ() - s.top.getZ()) > reach + 3 || p.getY() > s.top.getY() || p.getY() < s.end.getY() - 3) {
+                continue;
+            }
+            for (int i = 0; i <= s.steps() + 1; i++) {
+                BlockPos tread = s.top.relative(s.dir, i).below(i + 1);
+                if (tread.getY() != p.getY()) {
+                    continue;
+                }
+                for (int o = -1; o <= 2; o++) {
+                    if (p.equals(o >= 0 ? tread.relative(s.dir.getClockWise(), o) : tread.relative(s.dir.getCounterClockWise(), -o))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     // ---------------------------------------------------------------- shafts dug straight down (ladder on one wall)
 
     /** A 1x1 shaft dug straight down from {@code top} (where one stands at the rim), ladders on the {@code wall} side. */
