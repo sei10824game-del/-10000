@@ -36,6 +36,10 @@ public final class CloneMobs {
 
     /** Soul -> body (rebuilt after a restart from the soul UUID kept in each body's own saved data). */
     private static final java.util.Map<UUID, UUID> BODY = new java.util.HashMap<>();
+    /** The other bodies of a chimera (cross-bred clone mob): soul -> bodies stacked on the main one. */
+    private static final java.util.Map<UUID, java.util.List<UUID>> EXTRAS = new java.util.HashMap<>();
+    /** Persistent-data key on a chimera's extra bodies (the main body holds the health). */
+    public static final String EXTRA = "rlclones_extra_body";
     /** Persistent-data key on a baby body: the game time it grows up at (types with no baby form of their own, like the zombie, grow by this). */
     public static final String GROW_AT = "rlclones_grow_at";
     /** A baby clone mob grows up after this many ticks (the animals' 20 minutes). */
@@ -114,6 +118,42 @@ public final class CloneMobs {
         BODY.put(soul.getUUID(), body.getUUID());
     }
 
+    /** A chimera's further body: stacked on the main one, no AI, its blows and damage go through the main one. */
+    public static void linkExtra(Mob body, ClonePlayer soul) {
+        body.getPersistentData().putUUID(SOUL, soul.getUUID());
+        body.getPersistentData().putBoolean(SIDE, true);
+        body.getPersistentData().putBoolean(EXTRA, true);
+        body.setNoAi(true);
+        body.setPersistenceRequired();
+        if (soul.getServer() != null) {
+            noPush(soul.getServer(), soul, body);
+        }
+        var list = EXTRAS.computeIfAbsent(soul.getUUID(), k -> new java.util.ArrayList<>());
+        if (!list.contains(body.getUUID())) {
+            list.add(body.getUUID());
+        }
+        giveBodyMovement(soul, body);
+    }
+
+    /** All the bodies of this soul: the main one first, then a chimera's others (empty = a plain clone). */
+    public static java.util.List<Mob> bodiesOf(net.minecraft.world.entity.player.Player p) {
+        Mob main = bodyOf(p);
+        if (main == null) {
+            return java.util.List.of();
+        }
+        java.util.List<Mob> out = new java.util.ArrayList<>();
+        out.add(main);
+        var extras = EXTRAS.get(p.getUUID());
+        if (extras != null && p.level() instanceof ServerLevel l) {
+            for (UUID id : extras) {
+                if (l.getEntity(id) instanceof Mob m && m.isAlive()) {
+                    out.add(m);
+                }
+            }
+        }
+        return out;
+    }
+
     /** Bodies loaded from disk whose soul is not found yet (clones log back in after the world loads): soul -> (body, give-up time). */
     private static final java.util.Map<UUID, Mob> LOADED = new java.util.HashMap<>();
     private static final java.util.Map<UUID, Long> LOADED_UNTIL = new java.util.HashMap<>();
@@ -127,9 +167,9 @@ public final class CloneMobs {
     }
 
     public static void registerLoaded(Mob mob, long now) {
-        UUID soul = mob.getPersistentData().getUUID(SOUL);
-        LOADED.put(soul, mob);
-        LOADED_UNTIL.put(soul, now + 2400); // (two minutes for the clones to log in; then the body is an orphan)
+        UUID id = mob.getUUID(); // (a chimera's bodies each wait for the one soul)
+        LOADED.put(id, mob);
+        LOADED_UNTIL.put(id, now + 2400); // (two minutes for the clones to log in; then the body is an orphan)
     }
 
     /** Tests: take every clone mob (body and soul) and every clone equipment out of the world. */
@@ -146,6 +186,16 @@ public final class CloneMobs {
                 m.remove(soul, true, Component.literal("test over"));
             }
         }
+        for (var list : EXTRAS.values()) {
+            for (UUID id : list) {
+                for (ServerLevel l : server.getAllLevels()) {
+                    if (l.getEntity(id) != null) {
+                        l.getEntity(id).discard();
+                    }
+                }
+            }
+        }
+        EXTRAS.clear();
         BODY.clear();
         BORROWED.clear();
         BORROWED_TARGET.clear();
@@ -166,10 +216,14 @@ public final class CloneMobs {
         var it = LOADED.entrySet().iterator();
         while (it.hasNext()) {
             var e = it.next();
-            ClonePlayer soul = CloneManager.get(server).byId(e.getKey());
             Mob body = e.getValue();
+            ClonePlayer soul = CloneManager.get(server).byId(body.getPersistentData().getUUID(SOUL));
             if (soul != null && body.isAlive()) {
-                link(body, soul);
+                if (body.getPersistentData().getBoolean(EXTRA)) {
+                    linkExtra(body, soul);
+                } else {
+                    link(body, soul);
+                }
                 it.remove();
                 LOADED_UNTIL.remove(e.getKey());
             } else if (!body.isAlive() || now > LOADED_UNTIL.getOrDefault(e.getKey(), 0L)) {
@@ -231,7 +285,9 @@ public final class CloneMobs {
             }
             Mob body = bodyOf(soul);
             if (body != null && !soul.isAlive()) {
-                body.kill(); // (the soul died: so does the body)
+                for (Mob extra : bodiesOf(soul)) {
+                    extra.kill(); // (the soul died: so do the bodies)
+                }
                 it.remove();
                 continue;
             }
@@ -255,6 +311,16 @@ public final class CloneMobs {
                     soul.teleportTo(level, body.getX(), body.getY(), body.getZ(), body.getYRot(), body.getXRot()); // the soul follows
                     soul.setHealth(Math.max(0.5f, Math.min(soul.getMaxHealth(), body.getHealth() / Math.max(1f, body.getMaxHealth()) * soul.getMaxHealth())));
                     continue;
+                }
+            }
+            for (Mob extra : bodiesOf(soul)) { // (all the bodies of a chimera stand in one place: the look is the two pulled together)
+                if (extra != body) {
+                    extra.moveTo(soul.getX(), soul.getY(), soul.getZ(), soul.getYRot(), soul.getXRot());
+                    extra.setYHeadRot(soul.getYHeadRot());
+                    extra.setYBodyRot(soul.yBodyRot);
+                    extra.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                    extra.fallDistance = 0;
+                    extra.setHealth(extra.getMaxHealth());
                 }
             }
             body.moveTo(soul.getX(), soul.getY(), soul.getZ(), soul.getYRot(), soul.getXRot());
@@ -351,6 +417,28 @@ public final class CloneMobs {
         return id != null && p.level() instanceof ServerLevel l && l.getEntity(id) instanceof Mob m && m.isAlive() ? m : null;
     }
 
+    /** A chimera's extra body takes no harm of its own: what the surroundings do it, the main body feels; what hits it goes to the main body. */
+    @SubscribeEvent
+    public static void onExtraHurt(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        if (!(event.getEntity() instanceof Mob extra) || !extra.getPersistentData().getBoolean(EXTRA) || event.isCanceled()) {
+            return;
+        }
+        ClonePlayer soul = soulOf(extra);
+        var src = event.getSource();
+        if (soul == null || src.is(net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL) || src.is(net.minecraft.world.damagesource.DamageTypes.FELL_OUT_OF_WORLD)) {
+            return;
+        }
+        event.setCanceled(true);
+        Mob main = bodyOf(soul);
+        boolean surroundings = src.is(net.minecraft.tags.DamageTypeTags.IS_FIRE) || src.is(net.minecraft.world.damagesource.DamageTypes.DROWN)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.IN_WALL) || src.is(net.minecraft.world.damagesource.DamageTypes.CRAMMING)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.CACTUS) || src.is(net.minecraft.world.damagesource.DamageTypes.SWEET_BERRY_BUSH)
+                || src.is(net.minecraft.world.damagesource.DamageTypes.FREEZE) || src.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION);
+        if (main != null && !surroundings) {
+            main.hurt(src, event.getAmount());
+        }
+    }
+
     /** Who gets the credit for a blow: the soul of a clone mob whose body struck it, or whose arrow / fireball / fangs / vex did (anything else: the attacker itself). */
     public static Entity credit(Entity attacker) {
         Entity src = attacker;
@@ -372,22 +460,102 @@ public final class CloneMobs {
 
     /** A blow of the soul is a blow of the body (its own damage and effects: a husk's hunger, a spider's poison...); a body with no attack of its own leaves it to the soul's fist. */
     public static boolean bodyStrike(net.minecraft.world.entity.player.Player p, Entity target) {
-        Mob b = bodyOf(p);
-        if (b == null || b.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) == null) {
+        Mob b = null;
+        double best = -1;
+        for (Mob m : bodiesOf(p)) { // (a chimera strikes with its strongest body)
+            var attr = m.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+            if (attr != null && attr.getValue() > best) {
+                best = attr.getValue();
+                b = m;
+            }
+        }
+        if (b == null) {
             return false;
         }
         b.doHurtTarget(target);
         return true;
     }
-
-    /** Clone mobs breed with their own kind only (a plain clone with a plain clone). */
-    public static boolean sameKind(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
-        Mob x = bodyOf(a);
-        Mob y = bodyOf(b);
-        return x == null ? y == null : y != null && x.getType() == y.getType();
+        b.doHurtTarget(target);
+        return true;
     }
 
-    /** The child of two clone mobs: a body of the same type, a baby if the type has a baby form (it grows up with time), else a grown one. */
+    /** Clone mobs breed with their own kind only (a plain clone with a plain clone). */
+    public static boolean compatible(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
+        Mob x = bodyOf(a);
+        Mob y = bodyOf(b);
+        return (x == null) == (y == null); // (any clone mob with any clone mob: of another kind the child is a chimera; a plain clone only with a plain one)
+    }
+
+    /** The kinds of body the two parents have between them, the first parent's first, at most three. */
+    private static java.util.List<net.minecraft.world.entity.EntityType<?>> kindsOf(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
+        java.util.LinkedHashSet<net.minecraft.world.entity.EntityType<?>> kinds = new java.util.LinkedHashSet<>();
+        for (Mob m : bodiesOf(a)) {
+            kinds.add(m.getType());
+        }
+        for (Mob m : bodiesOf(b)) {
+            kinds.add(m.getType());
+        }
+        return kinds.stream().limit(3).toList();
+    }
+
+    /**
+     * The child of two clone mobs. Of one kind: a body of that kind (a baby if the type has a baby form). Of different kinds: a chimera, one
+     * body of each kind stacked in one place (the look is the two forced together), with the best of their stats and all of their attacks;
+     * chimeras mate with chimeras and with plain clone mobs, the child taking the kinds of both (up to three).
+     */
+    public static Mob birth(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b, ClonePlayer childSoul, Vec3 pos) {
+        var kinds = kindsOf(a, b);
+        Mob parent = bodyOf(a);
+        if (parent == null || !(parent.level() instanceof ServerLevel level)) {
+            return null;
+        }
+        if (kinds.size() <= 1) {
+            return birth(parent, childSoul, pos);
+        }
+        java.util.List<Mob> bodies = new java.util.ArrayList<>();
+        for (var type : kinds) {
+            if (type.create(level) instanceof Mob m) {
+                m.moveTo(pos.x, pos.y, pos.z, parent.getYRot(), 0f);
+                m.finalizeSpawn(level, level.getCurrentDifficultyAt(BlockPos.containing(pos)), MobSpawnType.BREEDING, null, null);
+                bodies.add(m);
+            }
+        }
+        if (bodies.isEmpty()) {
+            return null;
+        }
+        Mob main = bodies.get(0);
+        mergeStats(main, bodies);
+        link(main, childSoul);
+        level.addFreshEntity(main);
+        for (int i = 1; i < bodies.size(); i++) {
+            linkExtra(bodies.get(i), childSoul);
+            level.addFreshEntity(bodies.get(i));
+        }
+        return main;
+    }
+
+    /** The best of every stat the bodies have goes to the main body (the one that holds the health). */
+    private static void mergeStats(Mob main, java.util.List<Mob> all) {
+        for (var attr : java.util.List.of(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH, net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE,
+                net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED, net.minecraft.world.entity.ai.attributes.Attributes.ARMOR,
+                net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS, net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE,
+                net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_KNOCKBACK, net.minecraft.world.entity.ai.attributes.Attributes.FLYING_SPEED)) {
+            double best = Double.NEGATIVE_INFINITY;
+            for (Mob m : all) {
+                var inst = m.getAttribute(attr);
+                if (inst != null) {
+                    best = Math.max(best, inst.getBaseValue());
+                }
+            }
+            var mine = main.getAttribute(attr);
+            if (mine != null && best > Double.NEGATIVE_INFINITY) {
+                mine.setBaseValue(best);
+            }
+        }
+        main.setHealth(main.getMaxHealth());
+    }
+
+    /** The child of two clone mobs of one kind: a body of the same type, a baby if the type has a baby form (it grows up with time), else a grown one. */
     public static Mob birth(Mob parent, ClonePlayer childSoul, Vec3 pos) {
         if (!(parent.getType().create(parent.level()) instanceof Mob kid) || !(parent.level() instanceof ServerLevel level)) {
             return null;

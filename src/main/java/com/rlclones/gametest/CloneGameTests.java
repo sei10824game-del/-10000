@@ -238,7 +238,7 @@ public final class CloneGameTests {
         for (ClonePlayer p : List.of(a, b, c)) {
             p.getInventory().add(new ItemStack(Items.BREAD, 8));
         }
-        h.assertTrue(com.rlclones.clone.CloneMobs.sameKind(a, b) && !com.rlclones.clone.CloneMobs.sameKind(a, c), "same kind only");
+        h.assertTrue(com.rlclones.clone.CloneMobs.compatible(a, b) && com.rlclones.clone.CloneMobs.compatible(a, c), "clone mobs mate with clone mobs of any kind");
         ClonePlayer kidSoul = m.breed(a, b);
         h.assertTrue(kidSoul != null && com.rlclones.clone.CloneMobs.bodyOf(kidSoul) != null, "a child soul with a body");
         var kid = com.rlclones.clone.CloneMobs.bodyOf(kidSoul);
@@ -681,6 +681,36 @@ public final class CloneGameTests {
         h.assertTrue(!c.controller().stairs().beginAscent(), "a flooded one is not used");
         clearBases(h);
         finish(h, c);
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
+    public static void twoKindsOfCloneMobMakeAChimeraWithTheBestOfBoth(GameTestHelper h) {
+        var level = h.getLevel();
+        CloneManager m = CloneManager.get(level.getServer());
+        m.setBreeding(true);
+        var golem = com.rlclones.clone.CloneMobs.summon(null, level, net.minecraft.world.entity.EntityType.IRON_GOLEM, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 3.5)));
+        var blaze = com.rlclones.clone.CloneMobs.summon(null, level, net.minecraft.world.entity.EntityType.BLAZE, h.absoluteVec(new net.minecraft.world.phys.Vec3(6.5, 2, 3.5)));
+        var zombie = com.rlclones.clone.CloneMobs.summon(null, level, net.minecraft.world.entity.EntityType.ZOMBIE, h.absoluteVec(new net.minecraft.world.phys.Vec3(8.5, 2, 3.5)));
+        ClonePlayer g = com.rlclones.clone.CloneMobs.soulOf(golem);
+        ClonePlayer b = com.rlclones.clone.CloneMobs.soulOf(blaze);
+        ClonePlayer z = com.rlclones.clone.CloneMobs.soulOf(zombie);
+        for (ClonePlayer p : List.of(g, b)) {
+            p.getInventory().add(new ItemStack(Items.BREAD, 8));
+        }
+        ClonePlayer kid = m.breed(g, b);
+        m.setBreeding(false);
+        h.assertTrue(kid != null, "a golem and a blaze make a child");
+        var bodies = com.rlclones.clone.CloneMobs.bodiesOf(kid);
+        h.assertTrue(bodies.size() == 2 && bodies.get(0).getType() == net.minecraft.world.entity.EntityType.IRON_GOLEM && bodies.get(1).getType() == net.minecraft.world.entity.EntityType.BLAZE, "a golem body and a blaze body, stacked");
+        h.assertTrue(bodies.get(0).getMaxHealth() >= 100f, "the golem's health (" + bodies.get(0).getMaxHealth() + ")");
+        var traits = com.rlclones.clone.BodyTraits.of(kid);
+        h.assertTrue(traits.fire() && traits.flies(), "the blaze's fire and flight");
+        h.assertTrue(com.rlclones.ai.Specials.available(kid, 0), "and the blaze's fireballs");
+        // a chimera with another clone mob: the child has the kinds of all three
+        ClonePlayer third = m.summon(null, level, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 5.5)), 0f);
+        com.rlclones.clone.CloneMobs.birth(kid, z, third, h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5, 2, 5.5)));
+        h.assertTrue(com.rlclones.clone.CloneMobs.bodiesOf(third).size() == 3, "a chimera crossed with a zombie: three kinds (" + com.rlclones.clone.CloneMobs.bodiesOf(third).size() + ")");
         h.succeed();
     }
 

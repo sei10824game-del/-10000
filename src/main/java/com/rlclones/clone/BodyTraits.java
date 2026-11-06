@@ -24,8 +24,17 @@ public record BodyTraits(boolean sun, boolean water, boolean fire, int safeDrop,
     private static final Set<EntityType<?>> SUN_PROOF = Set.of(EntityType.HUSK, EntityType.WITHER_SKELETON, EntityType.ZOMBIFIED_PIGLIN, EntityType.ZOGLIN);
 
     public static BodyTraits of(Player p) {
-        Mob b = CloneMobs.bodyOf(p);
-        return b == null ? PLAYER : of(b);
+        var bodies = CloneMobs.bodiesOf(p);
+        if (bodies.isEmpty()) {
+            return PLAYER;
+        }
+        BodyTraits t = of(bodies.get(0));
+        for (int i = 1; i < bodies.size(); i++) { // a chimera: every strength of every body, a weakness only when all have it
+            BodyTraits o = of(bodies.get(i));
+            t = new BodyTraits(t.sun() && o.sun(), t.water() && o.water(), t.fire() || o.fire(), Math.max(t.safeDrop(), o.safeDrop()), t.breathes() || o.breathes(),
+                    t.undead() || o.undead(), t.flies() || o.flies(), t.phases() || o.phases());
+        }
+        return t;
     }
 
     public static BodyTraits of(Mob b) {

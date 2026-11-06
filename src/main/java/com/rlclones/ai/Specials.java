@@ -42,6 +42,25 @@ public final class Specials {
                 : b instanceof RangedAttackMob ? "ranged" : null;
     }
 
+    /** One attack of one body: a chimera has the attacks of all its bodies (the first two are the two combat actions). */
+    private record Part(Mob body, int inner) {
+    }
+
+    private static Part part(Player p, int slot) {
+        java.util.List<Part> list = new java.util.ArrayList<>();
+        boolean first = true;
+        for (Mob b : CloneMobs.bodiesOf(p)) {
+            for (int s = 0; s < 2; s++) {
+                String k = kind(b, s);
+                if (k != null && (first || !k.equals("borrow"))) { // (another mod's AI on loan is for the main body only)
+                    list.add(new Part(b, s));
+                }
+            }
+            first = false;
+        }
+        return slot < list.size() ? list.get(slot) : null;
+    }
+
     private static String key(int slot) {
         return "rlclones_sp" + slot;
     }
@@ -51,8 +70,9 @@ public final class Specials {
      * fuse or the enderman's jump (those are for the learning to place).
      */
     public static boolean ready(Player soul, Entity target, int slot) {
-        Mob b = CloneMobs.bodyOf(soul);
-        String kind = b == null ? null : kind(b, slot);
+        Part pt = part(soul, slot);
+        Mob b = pt == null ? null : pt.body();
+        String kind = b == null ? null : kind(b, pt.inner());
         if (kind == null || kind.equals("explode") || kind.equals("teleport") || !(target instanceof LivingEntity t)
                 || !(CHARGES.containsKey(b.getUUID()) || CloneMobs.isBorrowed(b) || available(soul, slot))) {
             return false;
@@ -71,8 +91,8 @@ public final class Specials {
 
     /** This body has the attack and it is not cooling down. */
     public static boolean available(Player p, int slot) {
-        Mob b = CloneMobs.bodyOf(p);
-        return b != null && kind(b, slot) != null && p.level().getGameTime() >= b.getPersistentData().getLong(key(slot));
+        Part pt = part(p, slot);
+        return pt != null && p.level().getGameTime() >= pt.body().getPersistentData().getLong(key(slot));
     }
 
     public static final int NO = 0;
@@ -101,11 +121,12 @@ public final class Specials {
      * target stays in view and in reach) or {@link #NO} (not possible from here).
      */
     public static int act(com.rlclones.clone.ClonePlayer soul, Entity target, int slot) {
-        Mob b = CloneMobs.bodyOf(soul);
-        if (b == null || !(target instanceof LivingEntity t) || !(b.level() instanceof ServerLevel level) || kind(b, slot) == null) {
+        Part pt = part(soul, slot);
+        Mob b = pt == null ? null : pt.body();
+        if (b == null || !(target instanceof LivingEntity t) || !(b.level() instanceof ServerLevel level)) {
             return NO;
         }
-        String kind = kind(b, slot);
+        String kind = kind(b, pt.inner());
         if (kind.equals("borrow")) {
             long now = level.getGameTime();
             if (CloneMobs.isBorrowed(b)) {
@@ -175,11 +196,12 @@ public final class Specials {
 
     /** Use an instant attack on {@code target}; false = not possible from here (too far, no line of sight...). */
     public static boolean use(com.rlclones.clone.ClonePlayer soul, Entity target, int slot) {
-        Mob b = CloneMobs.bodyOf(soul);
+        Part pt = part(soul, slot);
+        Mob b = pt == null ? null : pt.body();
         if (b == null || !(target instanceof LivingEntity t) || !available(soul, slot) || !(b.level() instanceof ServerLevel level)) {
             return false;
         }
-        String kind = kind(b, slot);
+        String kind = kind(b, pt.inner());
         double d = b.distanceTo(t);
         long now = level.getGameTime();
         long cooldown;

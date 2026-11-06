@@ -51,7 +51,7 @@ public final class Breeding {
         }
         Player best = null;
         for (ClonePlayer c : m.clones()) {
-            if (c != self && c.level() == self.level() && c.distanceTo(self) < 48 && eligible(c) && com.rlclones.clone.CloneMobs.sameKind(c, self) && Senses.isAllyOf(c, self)
+            if (c != self && c.level() == self.level() && c.distanceTo(self) < 48 && eligible(c) && com.rlclones.clone.CloneMobs.compatible(c, self) && Senses.isAllyOf(c, self)
                     && (best == null || c.distanceTo(self) < best.distanceTo(self))) {
                 best = c;
             }
