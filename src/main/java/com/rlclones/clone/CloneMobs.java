@@ -17,6 +17,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -483,7 +484,7 @@ public final class CloneMobs {
         return (x == null) == (y == null); // (any clone mob with any clone mob: of another kind the child is a chimera; a plain clone only with a plain one)
     }
 
-    /** The kinds of body the two parents have between them, the first parent's first, at most three. */
+    /** The kinds of body the two parents have between them, the first parent's first (no limit: a chimera keeps every kind it was bred from). */
     private static java.util.List<net.minecraft.world.entity.EntityType<?>> kindsOf(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
         java.util.LinkedHashSet<net.minecraft.world.entity.EntityType<?>> kinds = new java.util.LinkedHashSet<>();
         for (Mob m : bodiesOf(a)) {
@@ -492,13 +493,13 @@ public final class CloneMobs {
         for (Mob m : bodiesOf(b)) {
             kinds.add(m.getType());
         }
-        return kinds.stream().limit(3).toList();
+        return List.copyOf(kinds);
     }
 
     /**
      * The child of two clone mobs. Of one kind: a body of that kind (a baby if the type has a baby form). Of different kinds: a chimera, one
      * body of each kind stacked in one place (the look is the two forced together), with the best of their stats and all of their attacks;
-     * chimeras mate with chimeras and with plain clone mobs, the child taking the kinds of both (up to three).
+     * chimeras mate with chimeras and with plain clone mobs, the child taking the kinds of both (no limit).
      */
     public static Mob birth(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b, ClonePlayer childSoul, Vec3 pos) {
         var kinds = kindsOf(a, b);
