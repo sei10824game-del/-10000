@@ -475,11 +475,8 @@ public final class CloneMobs {
         b.doHurtTarget(target);
         return true;
     }
-        b.doHurtTarget(target);
-        return true;
-    }
 
-    /** Clone mobs breed with their own kind only (a plain clone with a plain clone). */
+    /** Clone mobs breed with clone mobs of any kind, a plain clone with a plain clone. */
     public static boolean compatible(net.minecraft.world.entity.player.Player a, net.minecraft.world.entity.player.Player b) {
         Mob x = bodyOf(a);
         Mob y = bodyOf(b);
