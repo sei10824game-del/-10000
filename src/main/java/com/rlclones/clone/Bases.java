@@ -235,6 +235,8 @@ public class Bases extends SavedData {
         public boolean finished;
         /** Times a clone failed to follow it (not saved): two and it is given up. */
         public int failures;
+        /** Water has got into it (not saved): nobody goes down it any more (an underground lake / aquifer was opened). */
+        public boolean flooded;
         /** At the target depth the staircase goes on as a level tunnel (not saved): its tip, its direction, cells dug. */
         @Nullable
         public BlockPos tunnelEnd;

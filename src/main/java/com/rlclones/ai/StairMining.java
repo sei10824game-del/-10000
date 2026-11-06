@@ -172,6 +172,9 @@ public final class StairMining {
     }
 
     private boolean usable(Bases.Staircase s) {
+        if (s.flooded) {
+            return false;
+        }
         Long t = avoid.get(s.top);
         return t == null || self.level().getGameTime() >= t;
     }
@@ -346,6 +349,20 @@ public final class StairMining {
         stuck = 0;
         lastFeet = self.blockPosition();
         motor.resetStuck();
+    }
+
+    /** Water at our feet / head, or in the next steps down the staircase. */
+    private boolean waterOnTheWay(BlockPos feet, Bases.Staircase s) {
+        ServerLevel level = self.serverLevel();
+        for (int i = 0; i <= 3; i++) {
+            BlockPos step = i == 0 ? feet : feet.relative(s.dir, i).below(i);
+            for (BlockPos p : new BlockPos[]{step, step.above()}) {
+                if (level.getFluidState(p).is(net.minecraft.tags.FluidTags.WATER)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Underground and hungry with nothing to eat: walk up the nearest known staircase to its top (false = none known). */
@@ -590,6 +607,17 @@ public final class StairMining {
         } else {
             stuck = 0;
             lastFeet = feet;
+        }
+        if (stairs != null && !stairs.flooded && ticks % 5 == 0 && waterOnTheWay(feet, stairs)) {
+            stairs.flooded = true; // water in the stairs: nobody goes down them (and the crowd in them comes up)
+            bases().setDirty();
+            debug = "water in the staircase at " + feet.toShortString() + ": up and out";
+            if (!ascending) {
+                ascending = true;
+                toStage(0);
+                motor.resetStuck();
+                stuck = 0;
+            }
         }
         if (stuck > 20 && ticks % 4 == 0) {
             // an empty boat / minecart left in the hole is in the way (it neither lets us pass nor takes a block laid in its cell): break it up

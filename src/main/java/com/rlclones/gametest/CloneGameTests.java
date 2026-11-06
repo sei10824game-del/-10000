@@ -668,6 +668,22 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void aFloodedStaircaseIsNotUsedAnyMore(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        var level = h.getLevel();
+        var top = h.absolutePos(new net.minecraft.core.BlockPos(2, 6, 2));
+        var s = com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.end = top.relative(net.minecraft.core.Direction.EAST, 4).below(4);
+        h.assertTrue(c.controller().stairs().beginAscent(), "a staircase that works can be walked up");
+        s.flooded = true;
+        h.assertTrue(!c.controller().stairs().beginAscent(), "a flooded one is not used");
+        clearBases(h);
+        finish(h, c);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
