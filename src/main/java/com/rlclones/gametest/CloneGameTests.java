@@ -802,6 +802,27 @@ public final class CloneGameTests {
         h.succeedWhen(() -> h.assertTrue(main.isRemoved() && other.isRemoved(), "both bodies are gone (main removed " + main.isRemoved() + ", other removed " + other.isRemoved() + ")"));
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 60)
+    public static void aMissingTreadOfAStaircaseIsFoundForRepair(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 16));
+        var level = h.getLevel();
+        var top = h.absolutePos(new net.minecraft.core.BlockPos(4, 6, 7));
+        var s = com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.end = top.relative(net.minecraft.core.Direction.EAST, 3).below(3);
+        for (int i = 0; i <= 3; i++) {
+            level.setBlock(top.relative(net.minecraft.core.Direction.EAST, i).below(i + 1), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
+        }
+        h.assertTrue(c.controller().scanTreads() == 0, "a whole staircase needs no mending");
+        var hole = top.relative(net.minecraft.core.Direction.EAST, 2).below(3);
+        level.setBlock(hole, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        h.assertTrue(c.controller().scanTreads() == 1 && c.controller().motor().repairs.contains(hole), "the missing tread is on the repair list");
+        clearBases(h);
+        finish(h, c);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

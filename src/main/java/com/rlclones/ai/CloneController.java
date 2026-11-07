@@ -4261,8 +4261,40 @@ public final class CloneController {
 
     private long repairSince;
 
+    /**
+     * Any clone near a recorded staircase looks now and then for treads that are missing (dug out by someone, fallen in) and puts them on its
+     * repair list; the holes are filled with whatever block of no worth it carries. Public for the test.
+     */
+    public int scanTreads() {
+        if (self.getServer() == null || Equipment.pillarBlockSlot(self) < 0) {
+            return 0;
+        }
+        ServerLevel level = self.serverLevel();
+        int added = 0;
+        for (var s : com.rlclones.clone.Bases.get(self.getServer()).staircases) {
+            if (!s.dimension.equals(level.dimension()) || s.top.distSqr(self.blockPosition()) > 48 * 48 || s.flooded) {
+                continue;
+            }
+            for (int i = 0; i <= s.steps(); i++) {
+                BlockPos tread = s.top.relative(s.dir, i).below(i + 1);
+                if (!level.isLoaded(tread) || motor.repairs.contains(tread)) {
+                    continue;
+                }
+                var st = level.getBlockState(tread);
+                if ((st.isAir() || st.canBeReplaced()) && st.getFluidState().isEmpty() && motor.repairs.size() < 6) {
+                    motor.repairs.add(tread.immutable());
+                    added++;
+                }
+            }
+        }
+        return added;
+    }
+
     /** The holes this clone dug in a staircase's treads are filled with whatever block of no worth it has (cobblestone, dirt...). True while at it. */
     private boolean repairTreads(long now) {
+        if (motor.repairs.isEmpty() && (now + self.getId()) % 100 == 0 && option != Option.FIGHT && option != Option.FLEE && !escaping) {
+            scanTreads(); // (anyone mends the stairs, not only whoever dug the hole)
+        }
         BlockPos hole = motor.repairs.peek();
         if (hole == null) {
             repairSince = 0;
@@ -5271,7 +5303,7 @@ public final class CloneController {
                 + ", hp " + Math.round(self.getHealth()) + "/" + Math.round(self.getMaxHealth()) + ", food " + self.getFoodData().getFoodLevel() + ", food items " + FoodAid.foodItems(self));
         out.add("option " + (option == null ? "none" : option.key()) + " for " + optionTicks + " ticks; layer " + idleWhy + "; recent: " + optionLog.subList(Math.max(0, optionLog.size() - 8), optionLog.size()));
         out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
-        out.add("campfire: " + campfire.report());
+        out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
         StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));
         for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
