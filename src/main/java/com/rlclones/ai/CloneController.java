@@ -736,6 +736,8 @@ public final class CloneController {
             }
         } else if (blastReflex(now)) {
             idleWhy = "blast";
+        } else if (repairTreads(now)) {
+            idleWhy = "repair";
         } else if (shade.tick(now)) {
             idleWhy = "shade";
         } else if (cleanTarget != null) {
@@ -838,7 +840,7 @@ public final class CloneController {
     /** Not skipped for now, and - for planks / logs of buildings - not part of somebody's base. */
     private boolean harvestable(Perception.BlockKind kind, BlockPos p) {
         return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && !BlockClaims.takenByOther(p, self.getUUID(), now())
-                && !com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), p) && (kind != Perception.BlockKind.WOOD
+                && (kind == Perception.BlockKind.ORE || !com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), p)) && (kind != Perception.BlockKind.WOOD
                 || com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(p), 12) == null);
     }
 
@@ -4252,6 +4254,39 @@ public final class CloneController {
         }
         motor.navigate(goal, 1.5, true);
         return false;
+    }
+
+    private long repairSince;
+
+    /** The holes this clone dug in a staircase's treads are filled with whatever block of no worth it has (cobblestone, dirt...). True while at it. */
+    private boolean repairTreads(long now) {
+        BlockPos hole = motor.repairs.peek();
+        if (hole == null) {
+            repairSince = 0;
+            return false;
+        }
+        if (repairSince == 0) {
+            repairSince = now;
+        }
+        ServerLevel level = self.serverLevel();
+        int slot = Equipment.pillarBlockSlot(self);
+        if (slot < 0 || now - repairSince > 600 || !level.getBlockState(hole).canBeReplaced() && !level.getBlockState(hole).isAir()) {
+            motor.repairs.poll(); // (no block to fill with, or it took too long, or it is already filled)
+            repairSince = 0;
+            return !motor.repairs.isEmpty();
+        }
+        if (self.getEyePosition().distanceTo(Vec3.atCenterOf(hole)) > 4.0) {
+            motor.navigate(Vec3.atCenterOf(hole.above()), 1.5, false);
+            return true;
+        }
+        Equipment.select(self, slot);
+        motor.stop();
+        motor.lookAt(Vec3.atCenterOf(hole));
+        if (motor.placeBlockAt(hole)) {
+            motor.repairs.poll();
+            repairSince = 0;
+        }
+        return true;
     }
 
     /**

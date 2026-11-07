@@ -780,6 +780,9 @@ public final class Motor {
         return true;
     }
 
+    /** Treads of staircases this clone has dug a hole in (ore taken out of them) and must fill. */
+    public final java.util.ArrayDeque<BlockPos> repairs = new java.util.ArrayDeque<>();
+
     /** Set while the stair work runs (it digs the stairs; every other mining leaves their treads alone). */
     public boolean stairWork;
 
@@ -788,7 +791,8 @@ public final class Motor {
             mineDebug = "no hands";
             return false;
         }
-        if (!stairWork && self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos)) {
+        if (!stairWork && !self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES) && self.getServer() != null
+                && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos)) { // (an ore in a tread is taken, and the tread made good: see repairs)
             mineDebug = "a tread of a staircase: left alone";
             return false;
         }
@@ -847,7 +851,11 @@ public final class Motor {
         }
         if (breakProgress >= 1.0F) {
             level.destroyBlockProgress(self.getId(), pos, -1);
+            boolean tread = !stairWork && self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos);
             self.gameMode.destroyBlock(pos);
+            if (tread) {
+                repairs.add(pos.immutable()); // a hole in a staircase's tread: filled with a block of no worth, so the stairs keep their shape
+            }
             resetMining();
             if (state.is(net.minecraftforge.common.Tags.Blocks.ORES) && self instanceof com.rlclones.clone.ClonePlayer cp && cp.controller() != null) {
                 cp.controller().perception().noteVein(pos); // the rest of the vein is looked for at once, whoever broke the first

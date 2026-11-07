@@ -758,6 +758,33 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 300)
+    public static void anOreInAStaircaseTreadIsTakenAndTheTreadMadeGood(GameTestHelper h) {
+        clearBases(h);
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, true);
+        c.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE, 16));
+        var level = h.getLevel();
+        var top = h.absolutePos(new net.minecraft.core.BlockPos(5, 6, 7));
+        var s = com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.end = top.relative(net.minecraft.core.Direction.EAST, 2).below(2);
+        var tread = top.relative(net.minecraft.core.Direction.EAST, 1).below(2);
+        level.setBlock(tread, net.minecraft.world.level.block.Blocks.IRON_ORE.defaultBlockState(), 3);
+        h.assertTrue(com.rlclones.clone.Bases.get(level.getServer()).isStairTread(level.dimension(), tread), "the ore is in a tread");
+        c.setPos(tread.getX() + 0.5, tread.getY() + 1, tread.getZ() + 1.5);
+        h.succeedWhen(() -> {
+            if (!level.getBlockState(tread).is(net.minecraft.world.level.block.Blocks.IRON_ORE)) {
+                h.assertTrue(!level.getBlockState(tread).isAir(), "the ore is gone and the tread is made good again");
+            } else {
+                c.controller().motor().mine(tread);
+                c.controller().motor().tick();
+                h.assertTrue(false, "mining the ore");
+            }
+            clearBases(h);
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
