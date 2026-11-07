@@ -231,6 +231,8 @@ public final class Storage {
                 }
             } else if ((s.is(Items.IRON_INGOT) || s.is(Items.DIAMOND)) && Progression.need(p) == Progression.Need.NONE) {
                 out.add(i); // nothing left to make from it: into the base chest, for a friend who is short
+            } else if (Crafting.modGearMaterial(p, s) && p.getInventory().countItem(it) <= 64) {
+                // (copper for a copper set: it is carried, not put away)
             } else if (!KEEP.contains(it)) {
                 out.add(i);
             }
@@ -286,6 +288,9 @@ public final class Storage {
                 return false;
             }
             Item it = s.getItem();
+            if (Crafting.modGearMaterial(p, s)) {
+                return p.getInventory().countItem(it) < 32; // the ingots for the gear a mod adds: fetched from the chest
+            }
             if (it instanceof ArmorItem a) {
                 ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
                 double wornDef = worn.getItem() instanceof ArmorItem x ? x.getDefense() : 0;

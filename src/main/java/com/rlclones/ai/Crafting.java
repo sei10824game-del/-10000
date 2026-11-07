@@ -366,47 +366,94 @@ public final class Crafting {
     private static Object modOwner;
     private static List<Entry> modGear = List.of();
 
+    private static java.util.Map<Item, List<Entry>> modGearByIngredient = java.util.Map.of();
+
+    /** The recipes of other mods' armour / weapons / tools (read from the recipe manager once per world). */
+    private static void ensureModGear(ServerPlayer sp) {
+        var manager = sp.serverLevel().getRecipeManager();
+        if (modOwner == manager) {
+            return;
+        }
+        List<Entry> list = new ArrayList<>();
+        for (Entry e : index(sp)) {
+            Item it = e.result().getItem();
+            var key = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(it);
+            if (key != null && !key.getNamespace().equals("minecraft") && (it instanceof net.minecraft.world.item.ArmorItem || it instanceof SwordItem || it instanceof TieredItem)) {
+                list.add(e);
+            }
+        }
+        java.util.Map<Item, List<Entry>> byIngredient = new java.util.HashMap<>();
+        for (Entry e : list) {
+            for (var ing : e.recipe().getIngredients()) {
+                for (ItemStack st : ing.getItems()) {
+                    var es = byIngredient.computeIfAbsent(st.getItem(), k -> new ArrayList<>());
+                    if (!es.contains(e)) {
+                        es.add(e);
+                    }
+                }
+            }
+        }
+        modGear = list;
+        modGearByIngredient = byIngredient;
+        modOwner = manager;
+    }
+
+    /** The mod gear would beat what is worn / held (armour by defence in its slot, a sword by damage, a tool by tier). */
+    private static boolean modBetter(Player p, ItemStack result) {
+        Item it = result.getItem();
+        boolean better;
+        if (it instanceof net.minecraft.world.item.ArmorItem a) {
+            ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
+            better = !(worn.getItem() instanceof net.minecraft.world.item.ArmorItem w) || a.getDefense() + a.getToughness() > w.getDefense() + w.getToughness() + 0.01;
+            for (ItemStack st : p.getInventory().items) {
+                better &= !(st.getItem() instanceof net.minecraft.world.item.ArmorItem b) || b.getEquipmentSlot() != a.getEquipmentSlot()
+                        || a.getDefense() + a.getToughness() > b.getDefense() + b.getToughness() + 0.01;
+            }
+        } else if (it instanceof SwordItem) {
+            better = Equipment.attackDamage(result) > bestWeapon(p) + 0.01;
+        } else if (it instanceof PickaxeItem || it instanceof AxeItem || it instanceof net.minecraft.world.item.ShovelItem || it instanceof HoeItem) {
+            int have = it instanceof PickaxeItem ? tierOf(p, PickaxeItem.class) : it instanceof AxeItem ? tierOf(p, AxeItem.class)
+                    : it instanceof HoeItem ? tierOf(p, HoeItem.class) : tierOf(p, net.minecraft.world.item.ShovelItem.class);
+            better = ((TieredItem) it).getTier().getLevel() > have;
+        } else {
+            better = false;
+        }
+        return better;
+    }
+
+    /**
+     * An ingredient of some other mod's armour / weapon / tool that would beat what this clone has (copper ingots for a copper set...): kept in the
+     * bag and fetched from the chest, not put away as a surplus - the gear needs a bagful of it before it can be made.
+     */
+    public static boolean modGearMaterial(Player p, ItemStack s) {
+        if (!(p instanceof ServerPlayer sp) || s.isEmpty()) {
+            return false;
+        }
+        ensureModGear(sp);
+        var es = modGearByIngredient.get(s.getItem());
+        if (es == null) {
+            return false;
+        }
+        for (Entry e : es) {
+            if (modBetter(p, e.result())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Armour / weapons / tools of other mods that the bag holds the materials for and that beat what we wear / hold: made as well (their recipes are read, not named here). */
     private static void addModGear(Player p, List<Item> out) {
         if (!(p instanceof ServerPlayer sp)) {
             return;
         }
-        var manager = sp.serverLevel().getRecipeManager();
-        if (modOwner != manager) {
-            List<Entry> list = new ArrayList<>();
-            for (Entry e : index(sp)) {
-                Item it = e.result().getItem();
-                var key = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(it);
-                if (key != null && !key.getNamespace().equals("minecraft") && (it instanceof net.minecraft.world.item.ArmorItem || it instanceof SwordItem || it instanceof TieredItem)) {
-                    list.add(e);
-                }
-            }
-            modGear = list;
-            modOwner = manager;
-        }
+        ensureModGear(sp);
         for (Entry e : modGear) {
             Item it = e.result().getItem();
             if (out.contains(it) || !canCraft(p, e.recipe())) {
                 continue;
             }
-            boolean better;
-            if (it instanceof net.minecraft.world.item.ArmorItem a) {
-                ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
-                better = !(worn.getItem() instanceof net.minecraft.world.item.ArmorItem w) || a.getDefense() + a.getToughness() > w.getDefense() + w.getToughness() + 0.01;
-                for (ItemStack st : p.getInventory().items) {
-                    better &= !(st.getItem() instanceof net.minecraft.world.item.ArmorItem b) || b.getEquipmentSlot() != a.getEquipmentSlot()
-                            || a.getDefense() + a.getToughness() > b.getDefense() + b.getToughness() + 0.01;
-                }
-            } else if (it instanceof SwordItem) {
-                better = Equipment.attackDamage(e.result()) > bestWeapon(p) + 0.01;
-            } else if (it instanceof PickaxeItem || it instanceof AxeItem || it instanceof net.minecraft.world.item.ShovelItem || it instanceof HoeItem) {
-                int have = it instanceof PickaxeItem ? tierOf(p, PickaxeItem.class) : it instanceof AxeItem ? tierOf(p, AxeItem.class)
-                        : it instanceof HoeItem ? tierOf(p, HoeItem.class) : tierOf(p, net.minecraft.world.item.ShovelItem.class);
-                better = ((TieredItem) it).getTier().getLevel() > have;
-            } else {
-                better = false;
-            }
-            if (better) {
+            if (modBetter(p, e.result())) {
                 out.add(it);
             }
         }
