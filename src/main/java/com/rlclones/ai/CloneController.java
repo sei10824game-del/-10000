@@ -5178,6 +5178,9 @@ public final class CloneController {
             // a log up in the air cannot be walked to: go to the foot of the trunk (then scaffold up if it is still out of reach)
             motor.navigate(kind == Perception.BlockKind.LOG ? new Vec3(center.x, Math.min(center.y, self.getY()), center.z) : motor.approachPoint(blockTarget),
                     kind == Perception.BlockKind.LOG ? 2.5 : 1.5, false);
+            if (motor.stuckCount() > 3 && kind == Perception.BlockKind.ORE && tunnelToOre()) {
+                return false; // an ore in sight with rock between: the rock is dug through, straight to it
+            }
             if (motor.stuckCount() > 3) {
                 traceHarvest("stuck " + self.blockPosition().toShortString());
                 skipBlocks.put(blockTarget.immutable(), now());
@@ -5216,6 +5219,36 @@ public final class CloneController {
             return blocksDone >= (moreTree ? 24 : 8); // R-18: a tree half cut is cut to the top
         }
         return false;
+    }
+
+    /** Blocks dug through to reach the ore being harvested (a limit per target). */
+    private int oreTunnel;
+    private BlockPos oreTunnelFor;
+
+    /** The first block between us and the ore is dug out (the clone cannot walk to it): a tunnel straight to the ore, a block at a time. True while at it. */
+    private boolean tunnelToOre() {
+        if (blockTarget == null || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            return false;
+        }
+        if (!blockTarget.equals(oreTunnelFor)) {
+            oreTunnelFor = blockTarget;
+            oreTunnel = 0;
+        }
+        if (oreTunnel >= 40) {
+            return false;
+        }
+        BlockPos wall = motor.obstruction(blockTarget);
+        if (wall == null || !safeToDig(wall) || !hasPickFor(self.serverLevel().getBlockState(wall)) || BlockClaims.takenByOther(wall, self.getUUID(), now())) {
+            return false;
+        }
+        Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)));
+        motor.stop();
+        motor.lookAt(Vec3.atCenterOf(wall));
+        if (motor.mine(wall)) {
+            oreTunnel++;
+            motor.resetStuck();
+        }
+        return true;
     }
 
     private boolean runRest() {

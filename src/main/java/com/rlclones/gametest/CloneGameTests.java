@@ -818,6 +818,26 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 600)
+    public static void anOreBehindRockIsDugToDirectly(GameTestHelper h) {
+        for (int x = 8; x <= 12; x++) {
+            for (int y = 2; y <= 3; y++) {
+                for (int z = 6; z <= 8; z++) {
+                    h.setBlock(new BlockPos(x, y, z), Blocks.STONE);
+                }
+            }
+        }
+        h.setBlock(new BlockPos(11, 2, 7), Blocks.IRON_ORE);
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, true);
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.RAW_IRON) + c.getInventory().countItem(Items.IRON_ORE) >= 1 || c.getCloneBrain().obtained("minecraft:raw_iron"),
+                    "the iron ore behind the rock is mined (options " + c.controller().optionLog + " " + c.controller().harvestDebug + " mine=" + c.controller().motor().mineDebug + ")");
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
