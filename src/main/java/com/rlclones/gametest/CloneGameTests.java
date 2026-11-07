@@ -769,6 +769,7 @@ public final class CloneGameTests {
         var s = com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
         s.end = top.relative(net.minecraft.core.Direction.EAST, 2).below(2);
         var tread = top.relative(net.minecraft.core.Direction.EAST, 1).below(2);
+        level.setBlock(tread.below(), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3); // (a face to put the repair against)
         level.setBlock(tread, net.minecraft.world.level.block.Blocks.IRON_ORE.defaultBlockState(), 3);
         h.assertTrue(com.rlclones.clone.Bases.get(level.getServer()).isStairTread(level.dimension(), tread), "the ore is in a tread");
         c.setPos(tread.getX() + 0.5, tread.getY() + 1, tread.getZ() + 1.5);
