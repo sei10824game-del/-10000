@@ -5271,6 +5271,7 @@ public final class CloneController {
                 + ", hp " + Math.round(self.getHealth()) + "/" + Math.round(self.getMaxHealth()) + ", food " + self.getFoodData().getFoodLevel() + ", food items " + FoodAid.foodItems(self));
         out.add("option " + (option == null ? "none" : option.key()) + " for " + optionTicks + " ticks; layer " + idleWhy + "; recent: " + optionLog.subList(Math.max(0, optionLog.size() - 8), optionLog.size()));
         out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
+        out.add("campfire: " + campfire.report());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
         StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));
         for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {

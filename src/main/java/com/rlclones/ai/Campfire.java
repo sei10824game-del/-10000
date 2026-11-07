@@ -36,6 +36,11 @@ public final class Campfire {
     public int cooked;
     public String debug = "";
 
+    /** For /rlclone debug: where the cooking stands (stage, how many were loaded, the last note). */
+    public String report() {
+        return stage + " loaded=" + loaded + " raw in bag=" + (rawSlot() >= 0) + " " + debug;
+    }
+
     public Campfire(ClonePlayer self, Motor motor) {
         this.self = self;
         this.motor = motor;
