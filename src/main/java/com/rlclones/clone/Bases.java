@@ -260,6 +260,32 @@ public class Bases extends SavedData {
     public final List<Staircase> staircases = new ArrayList<>();
 
     /**
+     * The space a recorded staircase needs (its steps' feet and head cells, the lanes beside, and the two cells before its top): a furnace or a
+     * table put there makes the stairs get cut about it (and cut again) every time.
+     */
+    public boolean isStairSpace(ResourceKey<Level> dim, BlockPos p) {
+        for (Staircase s : staircases) {
+            if (!s.dimension.equals(dim)) {
+                continue;
+            }
+            int reach = s.steps() + 6;
+            if (Math.abs(p.getX() - s.top.getX()) > reach || Math.abs(p.getZ() - s.top.getZ()) > reach || p.getY() > s.top.getY() + 3 || p.getY() < s.end.getY() - 1) {
+                continue;
+            }
+            for (int i = -2; i <= s.steps() + 1; i++) {
+                BlockPos base = s.top.relative(s.dir, i).below(Math.max(i, 0));
+                for (int o = -1; o <= 2; o++) {
+                    BlockPos lane = o >= 0 ? base.relative(s.dir.getClockWise(), o) : base.relative(s.dir.getCounterClockWise(), -o);
+                    if (lane.getX() == p.getX() && lane.getZ() == p.getZ() && p.getY() >= lane.getY() && p.getY() <= lane.getY() + 2) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * A tread of a recorded staircase (the block each step is walked on, and the lanes dug beside it): taking it out cuts the way
      * (cobblestone gathering used to chew the stairs up, and the clones then stacked blocks to climb them).
      */

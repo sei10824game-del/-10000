@@ -1328,6 +1328,9 @@ public final class Crafting {
         }
         for (Direction d : Direction.Plane.HORIZONTAL) {
             BlockPos spot = feet.relative(d);
+            if (stairSpace(level, spot)) {
+                continue; // not in the way of a staircase: the stairs would be cut about it, and cut again
+            }
             if (level.getBlockState(spot).canBeReplaced() && level.getBlockState(spot.above()).canBeReplaced()
                     && !level.getBlockState(spot.below()).getCollisionShape(level, spot.below()).isEmpty()) {
                 motor.lookAt(Vec3.atCenterOf(spot));
@@ -1341,7 +1344,7 @@ public final class Crafting {
         for (Direction d : Direction.Plane.HORIZONTAL) {
             for (int up = 0; up <= 1; up++) {
                 BlockPos spot = feet.relative(d).above(up);
-                if (level.getBlockState(spot).canBeReplaced() && motor.placeBlockAt(spot)) {
+                if (!stairSpace(level, spot) && level.getBlockState(spot).canBeReplaced() && motor.placeBlockAt(spot)) {
                     placed(spot);
                     return;
                 }
@@ -1354,6 +1357,11 @@ public final class Crafting {
         }
         placeDebug = sb.toString().replace("Block{minecraft:", "").replace("}", "");
         stage = -1;
+    }
+
+    /** The spot is where a recorded staircase runs (or its entrance): no station goes there. */
+    private boolean stairSpace(ServerLevel level, BlockPos spot) {
+        return self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairSpace(level.dimension(), spot);
     }
 
     @Nullable

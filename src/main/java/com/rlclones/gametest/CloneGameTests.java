@@ -785,6 +785,21 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void noStationGoesWhereAStaircaseRuns(GameTestHelper h) {
+        clearBases(h);
+        var level = h.getLevel();
+        var top = h.absolutePos(new net.minecraft.core.BlockPos(2, 6, 7));
+        var bases = com.rlclones.clone.Bases.get(level.getServer());
+        var s = bases.addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.end = top.relative(net.minecraft.core.Direction.EAST, 3).below(3);
+        h.assertTrue(bases.isStairSpace(level.dimension(), top) && bases.isStairSpace(level.dimension(), top.relative(net.minecraft.core.Direction.EAST, 2).below(2).above()), "the steps and their head room are the stairs'");
+        h.assertTrue(bases.isStairSpace(level.dimension(), top.relative(net.minecraft.core.Direction.WEST)), "and so is the way in");
+        h.assertTrue(!bases.isStairSpace(level.dimension(), top.relative(net.minecraft.core.Direction.NORTH, 6)), "the ground well beside is free");
+        clearBases(h);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);
