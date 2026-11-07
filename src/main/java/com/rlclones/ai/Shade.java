@@ -39,16 +39,26 @@ public final class Shade {
         return l.canSeeSky(head) && ((t.sun() && l.isDay() && !l.isRaining()) || (t.water() && l.isRaining()));
     }
 
+    /** The body is alight (the sun set it going and the fire burns on a while in the shade): water puts it out. */
+    private boolean burning() {
+        net.minecraft.world.entity.Mob b = com.rlclones.clone.CloneMobs.bodyOf(self);
+        return b != null && b.isOnFire() && !BodyTraits.of(self).fire() && !self.isInWater();
+    }
+
     /** Walk to cover while the sky hurts; true = busy with it this tick. */
     public boolean tick(long now) {
-        if (!exposed(self)) {
+        boolean burning = burning();
+        if (!exposed(self) && !burning) {
             goal = null;
             return false;
         }
         ServerLevel level = self.serverLevel();
         if (goal == null && now >= nextSearch) {
-            nextSearch = now + 100;
-            goal = find(level);
+            nextSearch = now + (burning ? 20 : 100);
+            goal = burning ? findWater(level) : null;
+            if (goal == null) {
+                goal = find(level);
+            }
         }
         if (goal == null) {
             return false;
@@ -59,6 +69,21 @@ public final class Shade {
         }
         motor.navigate(Vec3.atBottomCenterOf(goal), 1.0, true);
         return true;
+    }
+
+    /** Water to jump into within 16 blocks: a water cell with open air above (the nearest). */
+    private BlockPos findWater(ServerLevel level) {
+        BlockPos me = self.blockPosition();
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(me.offset(-16, -4, -16), me.offset(16, 3, 16))) {
+            double d = p.distSqr(me);
+            if (d < bestD && level.getFluidState(p).is(net.minecraft.tags.FluidTags.WATER) && level.getBlockState(p.above()).getCollisionShape(level, p.above()).isEmpty()) {
+                best = p.immutable();
+                bestD = d;
+            }
+        }
+        return best;
     }
 
     private BlockPos find(ServerLevel level) {

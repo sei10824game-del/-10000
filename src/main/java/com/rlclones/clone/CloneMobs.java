@@ -384,6 +384,9 @@ public final class CloneMobs {
             if (soul.tickCount % 20 == 0) {
                 syncDimensions(soul);
             }
+            if (body.isOnFire() && !BodyTraits.of(soul).fire()) {
+                soul.setRemainingFireTicks(Math.max(soul.getRemainingFireTicks(), 40)); // (the soul burns for the clone's own fire sense: water, a bucket, a potion; the damage is the body's)
+            }
             // the body holds the health: the soul (whose health the clone's own sense of danger reads) shows the same share of it
             float share = Math.max(0.02f, body.getHealth() / Math.max(1f, body.getMaxHealth()));
             soul.setHealth(Math.max(0.5f, Math.min(soul.getMaxHealth(), share * soul.getMaxHealth())));
