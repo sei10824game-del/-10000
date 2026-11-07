@@ -838,6 +838,18 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "clonemobs")
+    public static void aChimerasOtherBodiesDieWithTheMainOne(GameTestHelper h) {
+        var kinds = java.util.List.<net.minecraft.world.entity.EntityType<?>>of(net.minecraft.world.entity.EntityType.ZOMBIE, net.minecraft.world.entity.EntityType.SKELETON);
+        var main = com.rlclones.clone.CloneMobs.summonChimera(null, h.getLevel(), kinds, h.absoluteVec(new net.minecraft.world.phys.Vec3(4.5, 2, 4.5)));
+        var soul = com.rlclones.clone.CloneMobs.soulOf(main);
+        var bodies = com.rlclones.clone.CloneMobs.bodiesOf(soul);
+        var other = bodies.get(1);
+        h.assertTrue(bodies.size() == 2, "two bodies");
+        h.runAfterDelay(20, () -> main.kill());
+        h.succeedWhen(() -> h.assertTrue(main.isRemoved() && other.isRemoved(), "both bodies are gone (main removed " + main.isRemoved() + ", other removed " + other.isRemoved() + ")"));
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

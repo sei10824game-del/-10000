@@ -327,9 +327,10 @@ public final class CloneMobs {
             }
             Mob body = bodyOf(soul);
             if (body != null && !soul.isAlive()) {
-                for (Mob extra : bodiesOf(soul)) {
-                    extra.kill(); // (the soul died: so do the bodies)
+                for (Mob any : rawBodies(soul)) {
+                    any.kill(); // (the soul died: so do the bodies)
                 }
+                EXTRAS.remove(soul.getUUID());
                 it.remove();
                 continue;
             }
@@ -846,13 +847,33 @@ public final class CloneMobs {
     /** Ticks a dead body is waited for before its soul dies too (a mob that revives does so within this). */
     private static final long REVIVE_WAIT = 600;
 
+    /** Every body of this soul as it stands, dead or dying included (bodiesOf wants a living main body; a chimera's others must be found when it has died). */
+    private static java.util.List<Mob> rawBodies(ClonePlayer soul) {
+        java.util.List<Mob> out = new java.util.ArrayList<>();
+        if (!(soul.level() instanceof ServerLevel l)) {
+            return out;
+        }
+        java.util.List<UUID> ids = new java.util.ArrayList<>();
+        if (BODY.containsKey(soul.getUUID())) {
+            ids.add(BODY.get(soul.getUUID()));
+        }
+        ids.addAll(EXTRAS.getOrDefault(soul.getUUID(), java.util.List.of()));
+        for (UUID id : ids) {
+            if (l.getEntity(id) instanceof Mob m) {
+                out.add(m);
+            }
+        }
+        return out;
+    }
+
     /** The body is gone for good: the soul dies of what killed it (so the death list tells the truth), and so do any other bodies. */
     private static void soulDies(ClonePlayer soul) {
         var src = DYING_SRC.remove(soul.getUUID());
         DYING.remove(soul.getUUID());
-        for (Mob extra : bodiesOf(soul)) {
-            extra.kill();
+        for (Mob body : rawBodies(soul)) {
+            body.discard(); // every body of it, a chimera's others and a main body that never rose again
         }
+        EXTRAS.remove(soul.getUUID());
         if (soul.isAlive()) {
             soul.setHealth(0f);
             soul.die(src != null ? src : soul.damageSources().generic());
