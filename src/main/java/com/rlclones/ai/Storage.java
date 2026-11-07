@@ -74,6 +74,14 @@ public final class Storage {
     private final Set<BlockPos> looted = new HashSet<>();
     private final Map<BlockPos, Boolean> strayCache = new HashMap<>();
     private final Set<BlockPos> fullChests = new HashSet<>();
+    /** Stacks thrown away instead of stored (diagnostics). */
+    public int discarded;
+    /** A chest was wanted (all full) and there was no wood to make one: wood is fetched first. */
+    private boolean chestWoodShort;
+
+    public boolean chestWoodShort() {
+        return chestWoodShort && count(Items.CHEST) == 0 && !hasChestOrMaterial();
+    }
     /** Chests that could not be reached / opened; not tried again for a while. */
     private final Map<BlockPos, Long> unreachable = new HashMap<>();
 
@@ -117,6 +125,26 @@ public final class Storage {
             return 3;
         }
         return -1;
+    }
+
+    /**
+     * Surplus that is not worth a chest slot (it was filling the chests: dozens of wooden swords, hoes, spare stone tools): a cheap tool or sword
+     * (wood, gold, stone) that is not the best one the clone has, and junk blocks. Thrown away instead of stored. Returns how many stacks.
+     */
+    public static int discardWorthless(Player p) {
+        Inventory inv = p.getInventory();
+        int n = 0;
+        for (int i : unneededSlots(p)) {
+            ItemStack s = inv.items.get(i);
+            Item it = s.getItem();
+            boolean cheapTool = it instanceof TieredItem t && t.getTier().getLevel() <= 1 && !s.isEnchanted();
+            boolean junkBlock = StairMining.isJunk(it);
+            if (cheapTool || junkBlock) {
+                inv.items.set(i, ItemStack.EMPTY);
+                n++;
+            }
+        }
+        return n;
     }
 
     /** Inventory slots holding things this clone cannot use right now (seeds surplus, duplicate weapons / gear, junk). */
@@ -674,6 +702,7 @@ public final class Storage {
                 if (base == null) {
                     return Status.FAILED;
                 }
+                discarded += discardWorthless(self);
                 if (unneededSlots(self).isEmpty()) {
                     return Status.DONE;
                 }
@@ -727,6 +756,7 @@ public final class Storage {
         if (crafting.tick() == Crafting.Status.DONE && count(Items.CHEST) == 0) {
             if (++openTries > 3) {
                 crafting.forcedTarget = null;
+                chestWoodShort = !hasChestOrMaterial(); // no wood for a chest: fetch some (the base has too few chests)
             }
         }
         return false;

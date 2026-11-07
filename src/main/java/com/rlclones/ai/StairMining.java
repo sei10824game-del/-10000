@@ -903,6 +903,10 @@ public final class StairMining {
         return Status.WORKING;
     }
 
+    public static boolean isJunk(net.minecraft.world.item.Item it) {
+        return JUNK.contains(it);
+    }
+
     private static final java.util.Set<net.minecraft.world.item.Item> JUNK = java.util.Set.of(Items.GRANITE, Items.DIORITE, Items.ANDESITE, Items.TUFF,
             Items.DIRT, Items.COARSE_DIRT, Items.GRAVEL, Items.COBBLED_DEEPSLATE, Items.DEEPSLATE, Items.CALCITE, Items.SMOOTH_BASALT, Items.DRIPSTONE_BLOCK);
 

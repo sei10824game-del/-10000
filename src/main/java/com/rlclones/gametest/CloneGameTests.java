@@ -801,6 +801,23 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 60)
+    public static void cheapSurplusToolsAreThrownAwayNotStored(GameTestHelper h) {
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        c.getInventory().add(new ItemStack(Items.WOODEN_SWORD));
+        c.getInventory().add(new ItemStack(Items.WOODEN_HOE));
+        c.getInventory().add(new ItemStack(Items.STONE_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        c.getInventory().add(new ItemStack(Items.GRANITE, 32));
+        c.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+        int before = com.rlclones.ai.Storage.unneededSlots(c).size();
+        int gone = com.rlclones.ai.Storage.discardWorthless(c);
+        h.assertTrue(gone >= 2 && c.getInventory().countItem(Items.GRANITE) == 0, "wooden spares and junk blocks go (" + gone + " of " + before + ")");
+        h.assertTrue(c.getInventory().countItem(Items.DIAMOND) == 3 && c.getInventory().countItem(Items.STONE_PICKAXE) == 1, "the diamonds and the best pickaxe stay");
+        finish(h, c);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

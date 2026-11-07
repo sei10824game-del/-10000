@@ -2494,6 +2494,9 @@ public final class CloneController {
         if (!hungryNoFood() && stoneDig(mask) && (mask & Option.STAIRS.bit()) != 0 && now - lastDigEnd >= 300 && random.nextFloat() < 0.8f) {
             return Option.STAIRS; // the wooden pickaxe and no rock in sight: down to the stone, not wandering about above it
         }
+        if ((mask & Option.GATHER_WOOD.bit()) != 0 && !hungryNoFood() && storage.chestWoodShort() && random.nextFloat() < 0.8f) {
+            return Option.GATHER_WOOD; // every chest is full and there is no wood for another: wood first
+        }
         if ((mask & Option.GATHER_WOOD.bit()) != 0 && !hungryNoFood() && (Crafting.pickaxeWoodShort(self) || Crafting.spareWoodShort(self)) && random.nextFloat() < 0.9f) {
             return Option.GATHER_WOOD; // the ingots / cobblestone for the next pickaxe are in the bag and the sticks are not (the soak: iron in hand, no iron pickaxe)
         }
