@@ -743,6 +743,21 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100)
+    public static void stairsAreDugAsBigAsTheBody(GameTestHelper h) {
+        ClonePlayer c = clone(h, 6.5, 7.5, 0f, false);
+        var next = c.blockPosition().relative(net.minecraft.core.Direction.EAST);
+        int small = c.controller().stairs().bodyCells(next).size();
+        c.bodyDims = net.minecraft.world.entity.EntityDimensions.scalable(2.4f, 3.6f);
+        c.refreshDimensions();
+        int big = c.controller().stairs().bodyCells(next).size();
+        h.assertTrue(small == 3 && big >= 12, "a player's step is 3 cells (" + small + "); a 2.4 x 3.6 body's is many more (" + big + ")");
+        c.bodyDims = null;
+        c.refreshDimensions();
+        finish(h, c);
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 200)
     public static void cloneIsRealPlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, true);

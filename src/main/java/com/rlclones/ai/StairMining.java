@@ -203,6 +203,65 @@ public final class StairMining {
     /** Side-lane blocks dug for room in this staircase's jams (a limit per run, so a jam does not eat the hillside). */
     private int widenedHere;
 
+    /** Wider or taller than a player: it does not fit the one-wide, two-high hole of a stair. */
+    private boolean bigBody() {
+        return self.getBbWidth() > 0.8f || self.getBbHeight() > 2.0f;
+    }
+
+    /**
+     * Every cell the body occupies when it stands on the step at {@code next} (its own width and height, and one block more for the head room of the
+     * step down), highest first: a player's is the three cells it always was; a mutant zombie's is as many as it takes.
+     */
+    public java.util.List<BlockPos> bodyCells(BlockPos next) {
+        double w = Math.max(0.6, self.getBbWidth());
+        double h = Math.max(1.8, self.getBbHeight()) + 1.0;
+        double cx = next.getX() + 0.5;
+        double cz = next.getZ() + 0.5;
+        java.util.List<BlockPos> out = new java.util.ArrayList<>();
+        for (BlockPos p : BlockPos.betweenClosed(BlockPos.containing(cx - w / 2 + 0.01, next.getY() + 0.01, cz - w / 2 + 0.01),
+                BlockPos.containing(cx + w / 2 - 0.01, next.getY() + h - 0.01, cz + w / 2 - 0.01))) {
+            out.add(p.immutable());
+        }
+        out.sort((a, b) -> b.getY() - a.getY());
+        return out;
+    }
+
+    /** Side-lane blocks a big body took out because it could not get on (a per-staircase limit). */
+    private int bodyDug;
+
+    /** A big body stuck on the way: the blocks its box would touch a little way ahead (not the floor) are dug out, one at a time. True while at it. */
+    private boolean clearAhead() {
+        if (bodyDug >= 300) {
+            return false;
+        }
+        Vec3 g = motor.recentGoal();
+        Vec3 d = g == null ? Vec3.ZERO : new Vec3(g.x - self.getX(), 0, g.z - self.getZ());
+        if (d.lengthSqr() < 1e-4 && stairs != null) {
+            d = new Vec3(stairs.dir.getStepX(), 0, stairs.dir.getStepZ());
+        }
+        if (d.lengthSqr() < 1e-4) {
+            return false;
+        }
+        net.minecraft.world.phys.AABB box = self.getBoundingBox().move(d.normalize().scale(0.8)).inflate(0.05, -0.05, 0.05);
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        for (BlockPos p : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            if (p.getY() < feet.getY() || !solid(p) || !diggable(p)) {
+                continue;
+            }
+            var shape = level.getBlockState(p).getCollisionShape(level, p);
+            if (shape.isEmpty() || !shape.bounds().move(p).intersects(box)) {
+                continue;
+            }
+            motor.stop();
+            Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(p)));
+            bodyDug++;
+            mineClaimed(p);
+            return true;
+        }
+        return false;
+    }
+
     /** How many lanes wide to dig: 1 for a lone clone, 2 with company, 3 with five others about, 4 with ten (a crowd going up and down at once). */
     private int lanes() {
         int others = 0;
@@ -617,6 +676,10 @@ public final class StairMining {
             stuck = 0;
             lastFeet = feet;
         }
+        if (stuck > 12 && bigBody() && !digUp && clearAhead()) {
+            debug = "big body stuck at " + feet.toShortString() + ": digging room"; // its own size, not a player's
+            return Status.WORKING;
+        }
         if (stairs != null && !stairs.flooded && ticks % 5 == 0 && waterOnTheWay(feet, stairs)) {
             stairs.flooded = true; // water in the stairs: nobody goes down them (and the crowd in them comes up)
             bases().setDirty();
@@ -800,7 +863,7 @@ public final class StairMining {
         }
         // the next step: one ahead, one down from the end; head room for walking down into it
         BlockPos next = s.end.relative(s.dir).below();
-        BlockPos[] clear = {next.above(2), next.above(), next};
+        java.util.List<BlockPos> clear = bodyCells(next); // (the cells the whole body needs at that step, not a player's three)
         for (BlockPos p : clear) {
             if (solid(p)) {
                 if (!diggable(p)) {
