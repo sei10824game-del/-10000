@@ -226,12 +226,12 @@ public final class StairMining {
         return out;
     }
 
-    /** Side-lane blocks a big body took out because it could not get on (a per-staircase limit). */
+    /** Side-lane blocks a big body took out because it could not get on (a per-staircase limit, 40). */
     private int bodyDug;
 
     /** A big body stuck on the way: the blocks its box would touch a little way ahead (not the floor) are dug out, one at a time. True while at it. */
     private boolean clearAhead() {
-        if (bodyDug >= 300) {
+        if (bodyDug >= 40 || !self.horizontalCollision || motor.stuckCount() < 6) { // only when really pressed against a block (not when standing still to dig or wait)
             return false;
         }
         Vec3 g = motor.recentGoal();
