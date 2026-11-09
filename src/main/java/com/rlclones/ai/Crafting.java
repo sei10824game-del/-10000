@@ -1223,6 +1223,8 @@ public final class Crafting {
     }
 
     public void reset() {
+        awayTicks = 0;
+        awayTarget = null;
         placeOnly = false;
         placeItem = null;
         closeUi();
@@ -1370,6 +1372,17 @@ public final class Crafting {
         Equipment.select(self, slot);
         ServerLevel level = self.serverLevel();
         BlockPos feet = self.blockPosition();
+        if (awayTicks < 300 && stairSpaceAround(level, feet)) {
+            awayTicks++;
+            if (awayTarget == null) {
+                awayTarget = spotAwayFromStairs(level, feet); // (looked for once: the search is not cheap)
+            }
+            BlockPos away = awayTarget;
+            if (away != null) {
+                motor.navigate(Vec3.atBottomCenterOf(away), 0.8, false); // at the mouth of a staircase: step off to where a station is no hindrance, then put it down
+                return;
+            }
+        }
         if (nicheStation(level, feet, slot)) {
             return; // in a tunnel: into the wall, not into the way
         }
@@ -1404,6 +1417,46 @@ public final class Crafting {
         }
         placeDebug = sb.toString().replace("Block{minecraft:", "").replace("}", "");
         stage = -1;
+    }
+
+    private int awayTicks;
+    private BlockPos awayTarget;
+
+    /** The cell or one of the four beside it is where a staircase runs. */
+    private boolean stairSpaceAround(ServerLevel level, BlockPos feet) {
+        if (stairSpace(level, feet)) {
+            return true;
+        }
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            if (stairSpace(level, feet.relative(d))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The nearest standable cell (6 out at most, a step or two up or down) with no staircase in or beside it. */
+    @javax.annotation.Nullable
+    private BlockPos spotAwayFromStairs(ServerLevel level, BlockPos feet) {
+        BlockPos best = null;
+        int bestD = Integer.MAX_VALUE;
+        for (int dx = -6; dx <= 6; dx++) {
+            for (int dz = -6; dz <= 6; dz++) {
+                for (int dy = -2; dy <= 2; dy++) {
+                    BlockPos p = feet.offset(dx, dy, dz);
+                    int dist = dx * dx + dz * dz + dy * dy;
+                    if (dist >= bestD || !level.isLoaded(p) || !level.getBlockState(p).getCollisionShape(level, p).isEmpty()
+                            || !level.getBlockState(p.above()).getCollisionShape(level, p.above()).isEmpty()
+                            || level.getBlockState(p.below()).getCollisionShape(level, p.below()).isEmpty() || !level.getFluidState(p).isEmpty()
+                            || stairSpaceAround(level, p)) {
+                        continue;
+                    }
+                    best = p;
+                    bestD = dist;
+                }
+            }
+        }
+        return best;
     }
 
     /** The spot is where a recorded staircase runs (or its entrance): no station goes there. */
