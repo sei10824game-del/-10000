@@ -4305,7 +4305,7 @@ public final class CloneController {
         }
         ServerLevel level = self.serverLevel();
         int slot = Equipment.pillarBlockSlot(self);
-        if (slot < 0 || now - repairSince > 600 || !level.getBlockState(hole).canBeReplaced() && !level.getBlockState(hole).isAir()) {
+        if (slot < 0 || now - repairSince > 200 || !level.getBlockState(hole).canBeReplaced() && !level.getBlockState(hole).isAir()) {
             motor.repairs.poll(); // (no block to fill with, or it took too long, or it is already filled)
             repairSince = 0;
             return !motor.repairs.isEmpty();
@@ -4313,6 +4313,15 @@ public final class CloneController {
         if (self.getEyePosition().distanceTo(Vec3.atCenterOf(hole)) > 4.0) {
             motor.navigate(Vec3.atCenterOf(hole.above()), 1.5, false);
             return true;
+        }
+        if (!self.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, new net.minecraft.world.phys.AABB(hole), e -> e != self && e.isAlive() && !e.isSpectator()).isEmpty()) {
+            motor.repairs.add(motor.repairs.poll()); // somebody stands in the cell (a crowd on the stairs): no block can be laid there, next hole; the whole queue times out after 200 ticks
+            if (now - repairSince > 200) {
+                motor.repairs.clear();
+                repairSince = 0;
+                return false;
+            }
+            return false;
         }
         Equipment.select(self, slot);
         motor.stop();
