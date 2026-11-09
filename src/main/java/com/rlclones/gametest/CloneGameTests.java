@@ -537,6 +537,7 @@ public final class CloneGameTests {
         var level = h.getLevel();
         var top = h.absolutePos(new net.minecraft.core.BlockPos(2, 2, 2));
         com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.finished = true;
         h.assertTrue(stairs.beginAscent(), "a known staircase: the way up is taken");
         h.assertTrue(stairs.isAscending(), "and it is a walk up");
         clearBases(h);

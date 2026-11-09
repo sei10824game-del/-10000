@@ -4272,7 +4272,7 @@ public final class CloneController {
         ServerLevel level = self.serverLevel();
         int added = 0;
         for (var s : com.rlclones.clone.Bases.get(self.getServer()).staircases) {
-            if (!s.dimension.equals(level.dimension()) || s.top.distSqr(self.blockPosition()) > 48 * 48 || s.flooded) {
+            if (!s.dimension.equals(level.dimension()) || s.top.distSqr(self.blockPosition()) > 48 * 48 || s.flooded || !s.finished) { // (a staircase still being dug has no holes to mend: its cells are the work)
                 continue;
             }
             for (int i = 0; i <= s.steps(); i++) {

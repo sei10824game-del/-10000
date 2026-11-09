@@ -415,9 +415,48 @@ public final class Motor {
         return false;
     }
 
+    /**
+     * A big body (taller / wider than a player) pressed against leaves, branches, a ledge: the path was made for a player. The blocks its box
+     * touches a little way ahead (not the floor) are dug out, one at a time. True while at it.
+     */
+    private boolean breakBodyWay(Vec3 goal) {
+        if (stairWork || !self.horizontalCollision || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)
+                || !(self.getBbWidth() > 0.8f || self.getBbHeight() > 2.0f)) {
+            return false;
+        }
+        Vec3 d = new Vec3(goal.x - self.getX(), 0, goal.z - self.getZ());
+        if (d.lengthSqr() < 1e-4) {
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        net.minecraft.world.phys.AABB box = self.getBoundingBox().move(d.normalize().scale(0.6)).inflate(0.05, -0.05, 0.05);
+        int floorY = self.blockPosition().getY();
+        for (BlockPos p : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            BlockState st = level.getBlockState(p);
+            if (p.getY() < floorY || st.isAir() || !st.getFluidState().isEmpty() || st.getDestroySpeed(level, p) < 0 || leftAlone(p, level.getGameTime())) {
+                continue;
+            }
+            var shape = st.getCollisionShape(level, p);
+            if (shape.isEmpty() || !shape.bounds().move(p).intersects(box)) {
+                continue;
+            }
+            Equipment.select(self, Equipment.bestToolSlot(self, st));
+            stop();
+            lookAt(Vec3.atCenterOf(p));
+            if (mine(p)) {
+                resetStuck();
+            }
+            return true;
+        }
+        return false;
+    }
+
     public boolean navigate(Vec3 goal, double arrive, boolean run) {
         Vec3 pos = self.position();
         if (stuckCount >= 6 && breakPlug(goal)) {
+            return false;
+        }
+        if (stuckCount >= 8 && breakBodyWay(goal)) {
             return false;
         }
         if (self.getAbilities().flying && com.rlclones.clone.BodyTraits.of(self).flies()) {
