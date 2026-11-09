@@ -1438,7 +1438,7 @@ public final class Crafting {
             for (Direction d : Direction.Plane.HORIZONTAL) {
                 BlockPos wall = feet.relative(d);
                 BlockState st = level.getBlockState(wall);
-                if (solidFull(level, wall) && st.getDestroySpeed(level, wall) >= 0 && !st.hasBlockEntity() && quietBehind(level, wall)
+                if (solidFull(level, wall) && !stairSpace(level, wall) && st.getDestroySpeed(level, wall) >= 0 && !st.hasBlockEntity() && quietBehind(level, wall)
                         && (!st.requiresCorrectToolForDrops() || Equipment.bestToolSlot(self, st) >= 0)) {
                     niche = wall.immutable();
                     break;

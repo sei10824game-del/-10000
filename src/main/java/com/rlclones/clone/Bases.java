@@ -268,13 +268,14 @@ public class Bases extends SavedData {
             if (!s.dimension.equals(dim)) {
                 continue;
             }
-            int reach = s.steps() + 6;
-            if (Math.abs(p.getX() - s.top.getX()) > reach || Math.abs(p.getZ() - s.top.getZ()) > reach || p.getY() > s.top.getY() + 3 || p.getY() < s.end.getY() - 1) {
+            int more = s.finished ? 2 : 40; // (a staircase still being dug runs on below its recorded end)
+            int reach = s.steps() + more + 6;
+            if (Math.abs(p.getX() - s.top.getX()) > reach || Math.abs(p.getZ() - s.top.getZ()) > reach || p.getY() > s.top.getY() + 3 || p.getY() < s.end.getY() - more) {
                 continue;
             }
-            for (int i = -2; i <= s.steps() + 1; i++) {
+            for (int i = -2; i <= s.steps() + more; i++) {
                 BlockPos base = s.top.relative(s.dir, i).below(Math.max(i, 0));
-                for (int o = -1; o <= 2; o++) {
+                for (int o = -3; o <= 4; o++) { // (the lanes dug beside the steps, and the wall beyond them: a niche there is cut away at the next widening)
                     BlockPos lane = o >= 0 ? base.relative(s.dir.getClockWise(), o) : base.relative(s.dir.getCounterClockWise(), -o);
                     if (lane.getX() == p.getX() && lane.getZ() == p.getZ() && p.getY() >= lane.getY() && p.getY() <= lane.getY() + 2) {
                         return true;
