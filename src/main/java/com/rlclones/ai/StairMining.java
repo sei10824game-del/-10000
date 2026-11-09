@@ -295,7 +295,7 @@ public final class StairMining {
     /** Another clone right beside us (we share a 1-wide hole and have not moved for a while): neither can pass the other. */
     private boolean crowdedHere() {
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
-            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.distanceTo(self) < 1.6) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.distanceTo(self) < Math.max(1.6, self.getBbWidth() + 1.2 + p.getBbWidth() * 0.5)) {
                 return true;
             }
         }
