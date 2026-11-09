@@ -522,7 +522,7 @@ public final class CloneGameTests {
                 clone(h, 4.5 + i, 6.5, 0f, false);
             }
             int eleven = (int) m.invoke(s);
-            h.assertTrue(alone <= five && five <= eleven && eleven == 4 && alone < 4, "lanes grow with the clones about (other tests leave clones too): " + alone + "/" + five + "/" + eleven);
+            h.assertTrue(alone <= five && five <= eleven && eleven == 3 && alone < 3, "lanes grow with the clones about (other tests leave clones too): " + alone + "/" + five + "/" + eleven);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
         }

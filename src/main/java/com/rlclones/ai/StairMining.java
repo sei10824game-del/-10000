@@ -261,16 +261,16 @@ public final class StairMining {
         }
         return false;
     }
-
+    /** How many lanes wide to dig: 1 for a lone clone, 2 with company, 3 (two side lanes) with four or more within 16 blocks. */
     /** How many lanes wide to dig: 1 for a lone clone, 2 with company, 3 with five others about, 4 with ten (a crowd going up and down at once). */
     private int lanes() {
         int others = 0;
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
-            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.distanceTo(self) < 40) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer && p.isAlive() && p.distanceTo(self) < 16) {
                 others++;
             }
         }
-        return others == 0 ? 1 : others < 5 ? 2 : others < 10 ? 3 : 4;
+        return others == 0 ? 1 : others < 4 ? 2 : 3; // never more than two side lanes: a crowd digs five-wide caverns and the pace drops to nothing
     }
 
     /** Side-lane offsets (in blocks clockwise of the step; negative = the other side) for this many lanes. */
