@@ -810,6 +810,7 @@ public final class CloneGameTests {
         var level = h.getLevel();
         var top = h.absolutePos(new net.minecraft.core.BlockPos(4, 6, 7));
         var s = com.rlclones.clone.Bases.get(level.getServer()).addStaircase(level.dimension(), top, net.minecraft.core.Direction.EAST);
+        s.finished = true;
         s.end = top.relative(net.minecraft.core.Direction.EAST, 3).below(3);
         for (int i = 0; i <= 3; i++) {
             level.setBlock(top.relative(net.minecraft.core.Direction.EAST, i).below(i + 1), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
