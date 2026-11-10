@@ -115,6 +115,7 @@ public final class CloneCommand {
                         .then(Commands.literal("off").executes(ctx -> setFlee(ctx, false))))
                 .then(Commands.literal("giveitems").requires(CloneCommand::mayControl).executes(CloneCommand::giveItems))
                 .then(Commands.literal("list").executes(CloneCommand::list))
+                .then(Commands.literal("perf").executes(CloneCommand::perf))
                 .then(Commands.literal("debug")
                         .executes(ctx -> debug(ctx, null))
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(ctx -> debug(ctx, StringArgumentType.getString(ctx, "name")))))
@@ -278,6 +279,28 @@ public final class CloneCommand {
     }
 
     /** /rlclone debug [name]: the state of that clone (default: the nearest one) as chat lines, to paste into a bug report. */
+    /** Where the server's time goes: the first call starts timing, the second reports (tick time, the clones' thinking by section, the clone mobs' body sync). */
+    private static int perf(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        if (!com.rlclones.ai.Prof.on) {
+            com.rlclones.ai.Prof.reset();
+            com.rlclones.ai.Prof.on = true;
+            src.sendSuccess(() -> Component.literal("perf: timing started - run /rlclone perf again in 10 seconds or more"), false);
+            return 1;
+        }
+        com.rlclones.ai.Prof.on = false;
+        int clones = manager(ctx).clones().size();
+        long ticks = Math.max(1, com.rlclones.ai.Prof.serverTicks);
+        double aiMs = com.rlclones.ai.Prof.NANOS[com.rlclones.ai.Prof.TOTAL] / 1e6 / ticks;
+        double mobMs = com.rlclones.ai.Prof.mobNanos / 1e6 / ticks;
+        String head = String.format(java.util.Locale.ROOT, "perf: server %.1f ms/tick (50 = full), %d clones, over %d ticks | clone AI %.1f ms/tick | clone mob sync %.1f ms/tick | the rest (vanilla, other mods) %.1f ms/tick",
+                src.getServer().getAverageTickTime(), clones, ticks, aiMs, mobMs, Math.max(0, src.getServer().getAverageTickTime() - aiMs - mobMs));
+        String detail = "per clone tick: " + com.rlclones.ai.Prof.report();
+        src.sendSuccess(() -> Component.literal(head), false);
+        src.sendSuccess(() -> Component.literal(detail), false);
+        return 1;
+    }
+
     private static int debug(CommandContext<CommandSourceStack> ctx, String name) {
         CommandSourceStack src = ctx.getSource();
         ClonePlayer c = name != null ? manager(ctx).byName(name) : null;

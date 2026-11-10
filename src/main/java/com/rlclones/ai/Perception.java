@@ -210,10 +210,14 @@ public final class Perception {
         }
         Prof.add(Prof.P_VISION, pv);
         long pb = Prof.t();
-        if (((now / 4) & 1) == 0) {
+        // both every 8 ticks, by the time since the last one (not by the tick number: a look comes when (now + id) is a multiple of 4, so
+        // "now & 7 == id & 7" never came true for a clone with an odd id, and it never looked for the ores next to it)
+        if (now - lastBlockScan >= 8) {
+            lastBlockScan = now;
             scanBlocks();
         }
-        if ((now & 7) == (self.getId() & 7)) {
+        if (now - lastOreScan >= 8) {
+            lastOreScan = now;
             scanNearOres();
         }
         Prof.add(Prof.P_BLOCKS, pb);
@@ -222,6 +226,7 @@ public final class Perception {
     private static final double NEAR = 24.0;
     private static final int FAR_EVERY = 2;
     private int updates;
+    private long lastBlockScan = Long.MIN_VALUE / 2, lastOreScan = Long.MIN_VALUE / 2;
     /** What the last full-range look found beyond NEAR blocks. */
     private final List<Entity> farSeen = new java.util.ArrayList<>();
 

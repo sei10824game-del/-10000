@@ -10,6 +10,8 @@ public final class Prof {
     public static boolean on;
     public static final long[] NANOS = new long[NAMES.length];
     public static long cloneTicks;
+    /** The clone mobs' body sync (per server tick, all bodies), and the server ticks it was timed over. */
+    public static long mobNanos, serverTicks;
 
     private Prof() {
     }
@@ -27,6 +29,8 @@ public final class Prof {
     public static void reset() {
         java.util.Arrays.fill(NANOS, 0L);
         cloneTicks = 0;
+        mobNanos = 0;
+        serverTicks = 0;
     }
 
     /** Microseconds per clone tick, by section. */

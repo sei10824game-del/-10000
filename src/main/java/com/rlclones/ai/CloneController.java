@@ -564,15 +564,28 @@ public final class CloneController {
     /** Ticks this clone's mind has run (since it was summoned / respawned). */
     private long ticksLived;
 
+    /** No enemy in sight at the last look. */
+    private boolean calm;
+
     private void tickInner() {
         ticksLived++;
         long now = now();
         trackRewards();
         attacks.tick(now);
-        if (((now + self.getId()) & 3) == 0 || !lookedAround) {
+        // a look every 4 ticks; in a big crowd (over 24 players and clones) a clone with no enemy in sight and unhurt looks every 8: half the cost
+        // of seeing, and a quarter of a second later at worst in noticing something new (in a fight or hurt it is every 4 as ever)
+        boolean calmCrowd = calm && self.level().players().size() > 24 && option != Option.FIGHT && option != Option.FLEE && self.hurtTime == 0;
+        if (((now + self.getId()) & (calmCrowd ? 7 : 3)) == 0 || !lookedAround) {
             lookedAround = true; // a first look around before the very first decision
             long p = Prof.t();
             perception.update(now);
+            calm = true;
+            for (Perception.Seen seen : perception.visible()) {
+                if (seen.entity instanceof Mob m && Senses.isHostileTo(m, self)) {
+                    calm = false;
+                    break;
+                }
+            }
             observeWorld(now);
             Prof.add(Prof.PERCEPTION, p);
             p = Prof.t();

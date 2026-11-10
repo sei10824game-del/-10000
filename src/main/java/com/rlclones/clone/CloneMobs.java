@@ -290,6 +290,15 @@ public final class CloneMobs {
     /** Every tick: each body goes to its soul's place and facing; a body or soul that is gone takes the other with it. */
     @SubscribeEvent
     public static void onServerTick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
+        long p = com.rlclones.ai.Prof.t();
+        syncTick(event);
+        if (com.rlclones.ai.Prof.on && event.phase == net.minecraftforge.event.TickEvent.Phase.END) {
+            com.rlclones.ai.Prof.mobNanos += System.nanoTime() - p;
+            com.rlclones.ai.Prof.serverTicks++;
+        }
+    }
+
+    private static void syncTick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
         if (event.phase != net.minecraftforge.event.TickEvent.Phase.END) {
             return;
         }
