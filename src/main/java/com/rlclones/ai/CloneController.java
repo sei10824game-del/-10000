@@ -2917,6 +2917,11 @@ public final class CloneController {
                 return true;
             }
         }
+        if (optionTicks > 100 && self.getFoodData().getFoodLevel() <= 6 && hungryNoFood() && option != Option.HUNT && option != Option.FISH
+                && option != Option.FARM && option != Option.EXPLORE && option != Option.FETCH && option != Option.EAT && option != Option.COLLECT
+                && option != Option.ANIMALS) {
+            return true; // starving with nothing to eat: whatever this is (storing, feeding others, digging) gives way to finding food (soak: 6 of 12 starved in STORE / FEED)
+        }
         // a smelt waiting (ore in the bag and a furnace at hand, or iron ready in it): digging and the like give way, or the iron is never taken
         // (the soak left raw iron in the bag and finished batches in the furnace for thousands of ticks)
         return optionTicks > 200 && (option == Option.STAIRS || option == Option.SHAFT || option == Option.QUARRY || option == Option.MINE || option == Option.EXPLORE)
