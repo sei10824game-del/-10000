@@ -1372,7 +1372,7 @@ public final class Crafting {
         Equipment.select(self, slot);
         ServerLevel level = self.serverLevel();
         BlockPos feet = self.blockPosition();
-        if (awayTicks < 300 && stairSpaceAround(level, feet)) {
+        if (awayTicks < 120 && stairSpaceAround(level, feet)) {
             awayTicks++;
             if (awayTarget == null) {
                 awayTarget = spotAwayFromStairs(level, feet); // (looked for once: the search is not cheap)
@@ -1424,11 +1424,11 @@ public final class Crafting {
 
     /** The cell or one of the four beside it is where a staircase runs. */
     private boolean stairSpaceAround(ServerLevel level, BlockPos feet) {
-        if (stairSpace(level, feet)) {
+        if (stairSpaceWide(level, feet)) {
             return true;
         }
         for (Direction d : Direction.Plane.HORIZONTAL) {
-            if (stairSpace(level, feet.relative(d))) {
+            if (stairSpaceWide(level, feet.relative(d))) {
                 return true;
             }
         }
@@ -1464,6 +1464,11 @@ public final class Crafting {
         return self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairSpace(level.dimension(), spot);
     }
 
+    /** The same with the walls beyond the lanes and the unfinished run: where nothing is to be put if there is another place. */
+    private boolean stairSpaceWide(ServerLevel level, BlockPos spot) {
+        return self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairSpace(level.dimension(), spot, true);
+    }
+
     @Nullable
     private BlockPos niche;
 
@@ -1491,7 +1496,7 @@ public final class Crafting {
             for (Direction d : Direction.Plane.HORIZONTAL) {
                 BlockPos wall = feet.relative(d);
                 BlockState st = level.getBlockState(wall);
-                if (solidFull(level, wall) && !stairSpace(level, wall) && st.getDestroySpeed(level, wall) >= 0 && !st.hasBlockEntity() && quietBehind(level, wall)
+                if (solidFull(level, wall) && !stairSpaceWide(level, wall) && st.getDestroySpeed(level, wall) >= 0 && !st.hasBlockEntity() && quietBehind(level, wall)
                         && (!st.requiresCorrectToolForDrops() || Equipment.bestToolSlot(self, st) >= 0)) {
                     niche = wall.immutable();
                     break;
