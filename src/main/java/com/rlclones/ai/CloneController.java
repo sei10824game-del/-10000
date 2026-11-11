@@ -2373,7 +2373,7 @@ public final class CloneController {
         if (source.getEntity() != null && (openAlarm != null || answering != null || now() - lastAlarm < 1200)) {
             helpBonus(+1); // died in a fight it had called for help in (or came to help in): the call asked for too few
         }
-        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel()
+        lastDeath = source.getMsgId() + "@" + self.blockPosition().toShortString() + " option=" + option + " food=" + self.getFoodData().getFoodLevel() + " foodItems=" + FoodAid.foodItems(self) + " hasFood=" + Senses.hasFood(self)
                 + " fall=" + (int) self.fallDistance + " pits=" + pits.busy() + " doorBreath=" + doorBreath.busy() + " lastOpts=" + lastOptionsShort()
                 + " attacker=" + (source.getEntity() == null ? "-" : Perception.typeId(source.getEntity()))
                 + " feet=" + self.level().getBlockState(self.blockPosition()).getBlock().getDescriptionId().replace("block.minecraft.", "")

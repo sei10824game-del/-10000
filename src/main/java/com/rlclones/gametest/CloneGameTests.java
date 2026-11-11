@@ -522,7 +522,7 @@ public final class CloneGameTests {
                 clone(h, 4.5 + i, 6.5, 0f, false);
             }
             int eleven = (int) m.invoke(s);
-            h.assertTrue(alone <= five && five <= eleven && eleven == 3 && alone < 3, "lanes grow with the clones about (other tests leave clones too): " + alone + "/" + five + "/" + eleven);
+            h.assertTrue(alone <= five && five <= eleven && eleven == 4 && alone < 3, "lanes grow with the clones about (other tests leave clones too): " + alone + "/" + five + "/" + eleven);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
         }
@@ -6528,7 +6528,7 @@ public final class CloneGameTests {
         return "log=" + (inv.countItem(Items.OAK_LOG) + inv.countItem(Items.BIRCH_LOG) + inv.countItem(Items.SPRUCE_LOG)) + " plank=" + (inv.countItem(Items.OAK_PLANKS)
                 + inv.countItem(Items.BIRCH_PLANKS) + inv.countItem(Items.SPRUCE_PLANKS)) + " cobble=" + inv.countItem(Items.COBBLESTONE) + " coal=" + inv.countItem(Items.COAL)
                 + " raw_iron=" + inv.countItem(Items.RAW_IRON) + " iron=" + inv.countItem(Items.IRON_INGOT) + " diamond=" + inv.countItem(Items.DIAMOND)
-                + " food=" + c.getFoodData().getFoodLevel() + " hp=" + (int) c.getHealth() + " y=" + c.getBlockY();
+                + " food=" + c.getFoodData().getFoodLevel() + " foodItems=" + com.rlclones.ai.FoodAid.foodItems(c) + " hasFood=" + com.rlclones.ai.Senses.hasFood(c) + " hp=" + (int) c.getHealth() + " y=" + c.getBlockY();
     }
 
     // ------------------------------------------------------------------ Round 11 (S11-1): water

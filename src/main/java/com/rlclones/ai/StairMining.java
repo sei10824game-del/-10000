@@ -270,7 +270,7 @@ public final class StairMining {
                 others++;
             }
         }
-        return others == 0 ? 1 : others < 4 ? 2 : 3; // never more than two side lanes: a crowd digs five-wide caverns and the pace drops to nothing
+        return others == 0 ? 1 : others < 4 ? 2 : others < 8 ? 3 : 4; // (only clones within 16 blocks count: a crowd of eight or more at one dig gets the wide stairs it needs to pass, other clones elsewhere do not widen it)
     }
 
     /** Side-lane offsets (in blocks clockwise of the step; negative = the other side) for this many lanes. */
