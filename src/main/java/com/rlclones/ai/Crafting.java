@@ -261,8 +261,21 @@ public final class Crafting {
     }
 
     @Nullable
+    /** Tables / furnaces a walk did not get to: left out until the time given. */
+    private final java.util.Map<BlockPos, Long> unreachable = new java.util.HashMap<>();
+
+    private boolean reachable(@javax.annotation.Nullable BlockPos p) {
+        if (p == null || unreachable.isEmpty()) {
+            return p != null;
+        }
+        long now = self.level().getGameTime();
+        unreachable.values().removeIf(t -> t < now);
+        return !unreachable.containsKey(p);
+    }
+
     private BlockPos nearest(Perception.BlockKind kind, double radius) {
-        return Senses.nearestBlock(perception, self, kind, radius);
+        BlockPos p = Senses.nearestBlock(perception, self, kind, radius);
+        return reachable(p) ? p : null;
     }
 
     private static int count(Player p, Item item) {
@@ -1105,7 +1118,7 @@ public final class Crafting {
     // Perception is per clone; the static planner only knows about stations the player can see right now.
     private static boolean tableNearby(Player p) {
         return p instanceof com.rlclones.clone.ClonePlayer c
-                && Senses.nearestBlock(c.controller().perception(), p, Perception.BlockKind.TABLE, 24) != null;
+                && c.controller().crafting().reachable(Senses.nearestBlock(c.controller().perception(), p, Perception.BlockKind.TABLE, 24)); // (a table no walk gets to is no table: another is made)
     }
 
     private static boolean furnaceNearby(Player p) {
@@ -1247,6 +1260,13 @@ public final class Crafting {
     public Status tick() {
         timer++;
         if (timer > 400 || actions > 12) {
+            if (stage == 2 && station != null && timer > 400) {
+                // walked the whole time and never got to the table / furnace (it is across a pit, on another level): not that one for a while, and this
+                // counts as a failure (it used to end quietly, and the same walk was chosen again for hours: soak, a clone with wood and stone and no pickaxe)
+                unreachable.put(station.immutable(), self.level().getGameTime() + 2400);
+                perception.forgetBlock(station);
+                return giveUp();
+            }
             reset();
             return Status.DONE;
         }
@@ -1356,7 +1376,7 @@ public final class Crafting {
             return;
         }
         BlockPos existing = item == Items.FURNACE && placeOnly && furnaceBusy() ? null : existingStation(item); // (a busy furnace is no reason not to put down another)
-        if (existing != null) {
+        if (existing != null && reachable(existing)) {
             // one stands within a dozen blocks (not necessarily in view): use it, do not put down another beside it
             perception.noteBlock(existing);
             if (placeOnly) {
