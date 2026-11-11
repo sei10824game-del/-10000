@@ -212,7 +212,7 @@ public final class Perception {
         long pb = Prof.t();
         // both every 8 ticks, by the time since the last one (not by the tick number: a look comes when (now + id) is a multiple of 4, so
         // "now & 7 == id & 7" never came true for a clone with an odd id, and it never looked for the ores next to it)
-        if (now - lastBlockScan >= 8) {
+        if (((now / 4) & 1) == 0 || now - lastBlockScan >= 8) { // (every other look of four ticks as before; the time rule is for a clone that looks every eight)
             lastBlockScan = now;
             scanBlocks();
         }
