@@ -1488,7 +1488,9 @@ public final class Motor {
             sprint = true; // swimming is sprinting in water
         }
         boolean canSprint = sprint && zza >= 0.8f && !using && !sneak && !self.hasEffect(MobEffects.BLINDNESS)
-                && (self.getFoodData().getFoodLevel() > 6 || self.getAbilities().mayfly);
+                && (self.getFoodData().getFoodLevel() > 6 || self.getAbilities().mayfly)
+                && (self.getFoodData().getFoodLevel() > 14 || FoodAid.foodItems(self) > 0 || self.getAbilities().mayfly || self.isInWater() || self.getHealth() < 8f);
+        // (sprinting burns a food point every 40 blocks, walking none: with nothing to eat and the gauge below 14 the clone walks, unless it swims or is hurt and running away)
         if (self.isSprinting() != canSprint) {
             self.setSprinting(canSprint);
         }
