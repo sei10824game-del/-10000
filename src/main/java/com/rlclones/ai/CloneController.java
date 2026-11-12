@@ -2369,6 +2369,23 @@ public final class CloneController {
         return log.length() > 120 ? log.substring(log.length() - 120) : log;
     }
 
+    /** What stands in the cells round the head and feet at death (for suffocation / fire deaths): up, and the four sides at head height, then at the feet. */
+    private String deathSurroundings() {
+        StringBuilder sb = new StringBuilder();
+        BlockPos head = BlockPos.containing(self.getEyePosition());
+        BlockPos feet = self.blockPosition();
+        sb.append("up=").append(blockName(head.above()));
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            sb.append(' ').append(d.getName().charAt(0)).append("h=").append(blockName(head.relative(d))).append(" f=").append(blockName(feet.relative(d)));
+        }
+        sb.append(" below=").append(blockName(feet.below()));
+        return sb.toString();
+    }
+
+    private String blockName(BlockPos p) {
+        return self.level().getBlockState(p).getBlock().getDescriptionId().replace("block.minecraft.", "");
+    }
+
     public void onDeath(DamageSource source) {
         if (source.getEntity() != null && (openAlarm != null || answering != null || now() - lastAlarm < 1200)) {
             helpBonus(+1); // died in a fight it had called for help in (or came to help in): the call asked for too few
@@ -2378,7 +2395,7 @@ public final class CloneController {
                 + " attacker=" + (source.getEntity() == null ? "-" : Perception.typeId(source.getEntity()))
                 + " feet=" + self.level().getBlockState(self.blockPosition()).getBlock().getDescriptionId().replace("block.minecraft.", "")
                 + " head=" + self.level().getBlockState(BlockPos.containing(self.getEyePosition())).getBlock().getDescriptionId().replace("block.minecraft.", "")
-                + " scaf=" + scaffold.size();
+                + " scaf=" + scaffold.size() + " box=" + String.format(java.util.Locale.ROOT, "%.2fx%.2f", self.getBbWidth(), self.getBbHeight()) + " around=" + deathSurroundings();
         DEATHS.merge(source.getMsgId() + (source.getEntity() == null ? "" : " by " + Perception.typeId(source.getEntity())) + " during " + option, 1, Integer::sum);
         com.rlclones.RLClones.LOGGER.info("CLONE-DEATH {} {} t={}", self.getGameProfile().getName(), lastDeath, self.level().getGameTime());
         if (option != null) {
