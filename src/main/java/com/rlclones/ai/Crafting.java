@@ -261,6 +261,17 @@ public final class Crafting {
     }
 
     @Nullable
+    /** Three or more other clones within 8 blocks: a walk that does not arrive is the crowd's doing, and no reason for yet another table. */
+    private boolean crowded() {
+        int n = 0;
+        for (Player p : self.level().players()) {
+            if (p != self && p.distanceToSqr(self) < 64) {
+                n++;
+            }
+        }
+        return n >= 3;
+    }
+
     /** Tables / furnaces a walk did not get to: left out until the time given. */
     private final java.util.Map<BlockPos, Long> unreachable = new java.util.HashMap<>();
 
@@ -1260,7 +1271,7 @@ public final class Crafting {
     public Status tick() {
         timer++;
         if (timer > 400 || actions > 12) {
-            if (stage == 2 && station != null && timer > 400) {
+            if (stage == 2 && station != null && timer > 400 && !crowded()) {
                 // walked the whole time and never got to the table / furnace (it is across a pit, on another level): not that one for a while, and this
                 // counts as a failure (it used to end quietly, and the same walk was chosen again for hours: soak, a clone with wood and stone and no pickaxe)
                 unreachable.put(station.immutable(), self.level().getGameTime() + 2400);

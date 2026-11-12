@@ -749,6 +749,8 @@ public final class CloneController {
             }
         } else if (blastReflex(now)) {
             idleWhy = "blast";
+        } else if (scatterReflex(now)) {
+            idleWhy = "scatter";
         } else if (repairTreads(now)) {
             idleWhy = "repair";
         } else if (shade.tick(now)) {
@@ -1778,7 +1780,7 @@ public final class CloneController {
         if (breeding.canStart()) {
             mask |= Option.BREED.bit();
         }
-        if (!hungryNoFood() && stairs.wanted()) {
+        if (!hungryNoFood() && stairs.wanted() && (option == Option.STAIRS || diggersNear(24) < MAX_DIGGERS)) {
             mask |= Option.STAIRS.bit(); // (when idle, or while iron / diamonds are to be had: see startOption)
         }
         if (!hungryNoFood() && shafts.wanted()) {
@@ -2934,7 +2936,46 @@ public final class CloneController {
         option = null;
     }
 
+    private long scatterUntil;
+    private Vec3 scatterGoal;
+
+    /**
+     * Packed in with a dozen others in a block or two (the queue in a staircase, the foot of one tree: three hundred clones made "cramming" deaths
+     * of it, at 24): walk off a few blocks in a random direction before anything else, and a different one each time.
+     */
+    private boolean scatterReflex(long now) {
+        if (now < scatterUntil && scatterGoal != null) {
+            motor.navigate(scatterGoal, 1.0, false);
+            return motor.stuckCount() <= 6;
+        }
+        if ((now + self.getId()) % 20 != 0 || self.isCreative()) {
+            return false;
+        }
+        if (self.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, self.getBoundingBox().inflate(0.6, 0.3, 0.6), e -> e != self && e.isAlive()).size() < 12) {
+            return false;
+        }
+        double a = self.getRandom().nextDouble() * Math.PI * 2;
+        scatterGoal = self.position().add(Math.cos(a) * 5, 0, Math.sin(a) * 5);
+        scatterUntil = now + 60;
+        return false; // (from the next tick on)
+    }
+
     /** Hungry (6 or less of 20) with something to eat in the bag that is not kept for the furnace. */
+    /** At most this many clones dig stairs within 24 blocks of one another: a crowd of three hundred at one site made a cavern of it and nobody got on. */
+    private static final int MAX_DIGGERS = 6;
+
+    /** Other clones within {@code r} blocks that are digging stairs or a shaft just now. */
+    public int diggersNear(double r) {
+        int n = 0;
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p != self && p instanceof ClonePlayer c && c.controller() != null && p.isAlive() && p.distanceToSqr(self) < r * r
+                    && (c.controller().option() == Option.STAIRS || c.controller().option() == Option.SHAFT)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     private boolean hungerReflex() {
         return !self.isCreative() && self.getFoodData().getFoodLevel() <= 6 && Equipment.bestFoodSlot(self) >= 0 && !self.isUsingItem();
     }
