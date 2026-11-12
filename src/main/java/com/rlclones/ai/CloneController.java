@@ -4369,7 +4369,14 @@ public final class CloneController {
                     continue;
                 }
                 var st = level.getBlockState(tread);
-                if ((st.isAir() || st.canBeReplaced()) && st.getFluidState().isEmpty() && motor.repairs.size() < 6) {
+                // a real hole has a solid tread on both sides of it along the line (the ends count when the other side is solid): in a cave the
+                // "treads" are open air and filling them put blocks floating in the caverns (and in the way) that clones then got caught on
+                BlockPos before = s.top.relative(s.dir, i - 1).below(i);
+                BlockPos after = s.top.relative(s.dir, i + 1).below(i + 2);
+                boolean beforeSolid = i == 0 || !level.getBlockState(before).getCollisionShape(level, before).isEmpty();
+                boolean afterSolid = i >= s.steps() || !level.getBlockState(after).getCollisionShape(level, after).isEmpty();
+                if ((st.isAir() || st.canBeReplaced()) && st.getFluidState().isEmpty() && beforeSolid && afterSolid
+                        && motor.repairs.size() < 6) {
                     motor.repairs.add(tread.immutable());
                     added++;
                 }
