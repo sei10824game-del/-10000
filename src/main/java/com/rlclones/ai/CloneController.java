@@ -2967,13 +2967,16 @@ public final class CloneController {
     /** Other clones within {@code r} blocks that are digging stairs or a shaft just now. */
     public int diggersNear(double r) {
         int n = 0;
+        int all = 0;
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
-            if (p != self && p instanceof ClonePlayer c && c.controller() != null && p.isAlive() && p.distanceToSqr(self) < r * r
-                    && (c.controller().option() == Option.STAIRS || c.controller().option() == Option.SHAFT)) {
-                n++;
+            if (p != self && p instanceof ClonePlayer c && c.controller() != null && p.isAlive() && p.distanceToSqr(self) < r * r) {
+                all++;
+                if (c.controller().option() == Option.STAIRS || c.controller().option() == Option.SHAFT) {
+                    n++;
+                }
             }
         }
-        return n;
+        return all < 30 ? 0 : n; // (only in a real crowd: with a dozen about nobody is held back from digging - the soak got no iron when they were)
     }
 
     private boolean hungerReflex() {

@@ -267,8 +267,9 @@ public final class StairMining {
         int others = 0;
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
             if (p != self && p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && p.isAlive() && p.distanceTo(self) < 16
-                    && (c.controller().option() == com.rlclones.ai.strategy.Option.STAIRS || c.controller().option() == com.rlclones.ai.strategy.Option.SHAFT)) {
-                others++; // (the ones digging here; a crowd passing by does not widen the hole)
+                    && (c.controller().option() == com.rlclones.ai.strategy.Option.STAIRS || c.controller().option() == com.rlclones.ai.strategy.Option.SHAFT
+                    || p.distanceTo(self) < 6 && self.level().players().size() < 30)) {
+                others++; // (the ones digging here; in a crowd of thirty or more a crowd passing by does not widen the hole)
             }
         }
         return others == 0 ? 1 : others < 4 ? 2 : others < 8 ? 3 : 4; // (only clones within 16 blocks count: a crowd of eight or more at one dig gets the wide stairs it needs to pass, other clones elsewhere do not widen it)
