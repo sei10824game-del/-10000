@@ -2477,6 +2477,9 @@ public final class CloneController {
         if (!Senses.threats(perception, self, now, 16).isEmpty()) {
             return null;
         }
+        if (hungerReflex() && (mask & Option.EAT.bit()) != 0) {
+            return Option.EAT; // the gauge is low and there is food in the bag: eat before anything else (soak: died at food 0 with eleven items, a long dig never stopped to eat)
+        }
         // hungry with nothing to eat, far under the open sky (a staircase's underground world has nothing to eat): up, to the food above
         // far under the open sky and not on a digging errand (the way back is cut, or it was left down there): up, whatever it was doing; hungry with nothing to eat above all
         boolean onDigErrand = digPending(now) || option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY;
@@ -2914,9 +2917,18 @@ public final class CloneController {
         option = null;
     }
 
+    /** Hungry (6 or less of 20) with something to eat in the bag that is not kept for the furnace. */
+    private boolean hungerReflex() {
+        return !self.isCreative() && self.getFoodData().getFoodLevel() <= 6 && Equipment.bestFoodSlot(self) >= 0 && !self.isUsingItem();
+    }
+
     private boolean shouldInterrupt(long now) {
         if (optionTicks < 10) {
             return false;
+        }
+        if (optionTicks > 20 && option != Option.EAT && option != Option.FIGHT && option != Option.FLEE && hungerReflex()
+                && Senses.threats(perception, self, now, 16).isEmpty()) {
+            return true; // a long dig / trip does not go on at food 0 with a meal in the bag
         }
         if (option == Option.FIGHT) {
             return optionTicks > 60 && self.getHealth() <= self.getMaxHealth() * 0.35f && (action == null || actionDone);
