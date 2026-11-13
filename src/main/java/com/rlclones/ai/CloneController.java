@@ -749,6 +749,8 @@ public final class CloneController {
             }
         } else if (blastReflex(now)) {
             idleWhy = "blast";
+        } else if (fireStepReflex()) {
+            idleWhy = "fire-step";
         } else if (scatterReflex(now)) {
             idleWhy = "scatter";
         } else if (repairTreads(now)) {
@@ -2938,6 +2940,34 @@ public final class CloneController {
         option = null;
     }
 
+    /** In a fire / a lit campfire (two of five soak deaths: a hunt and a tree felled over one): out to a free cell beside it at once. */
+    private boolean fireStepReflex() {
+        if (com.rlclones.clone.BodyTraits.of(self).fire() || self.fireImmune() || self.hasEffect(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE)) {
+            return false;
+        }
+        ServerLevel level = self.serverLevel();
+        BlockPos feet = self.blockPosition();
+        if (!burning(level, feet) && !burning(level, feet.above())) {
+            return false;
+        }
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            BlockPos to = feet.relative(d);
+            if (!burning(level, to) && !burning(level, to.above()) && level.getBlockState(to).getCollisionShape(level, to).isEmpty()
+                    && level.getBlockState(to.above()).getCollisionShape(level, to.above()).isEmpty()
+                    && !level.getBlockState(to.below()).getCollisionShape(level, to.below()).isEmpty()) {
+                motor.moveToward(Vec3.atBottomCenterOf(to));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean burning(ServerLevel level, BlockPos p) {
+        BlockState st = level.getBlockState(p);
+        return st.is(net.minecraft.tags.BlockTags.FIRE) || st.is(net.minecraft.tags.BlockTags.CAMPFIRES)
+                && st.hasProperty(net.minecraft.world.level.block.CampfireBlock.LIT) && st.getValue(net.minecraft.world.level.block.CampfireBlock.LIT);
+    }
+
     private long scatterUntil;
     private Vec3 scatterGoal;
 
@@ -2982,7 +3012,8 @@ public final class CloneController {
     }
 
     private boolean hungerReflex() {
-        return !self.isCreative() && self.getFoodData().getFoodLevel() <= 6 && Equipment.bestFoodSlot(self) >= 0 && !self.isUsingItem();
+        return !self.isCreative() && self.getFoodData().getFoodLevel() <= 6 && !self.isUsingItem()
+                && (Equipment.bestFoodSlot(self) >= 0 || FoodAid.goodFood(self.getOffhandItem()) && !Equipment.keepForFurnace(self, self.getOffhandItem())); // (the off hand is where the food at the ready is kept)
     }
 
     private boolean shouldInterrupt(long now) {
