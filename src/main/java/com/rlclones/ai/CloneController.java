@@ -1671,7 +1671,7 @@ public final class CloneController {
             digGate.merge("health", 1, Integer::sum);
             return null;
         }
-        if (self.getFoodData().getFoodLevel() < 10 && FoodAid.foodItems(self) < 2) { // enough for a long way down: food first (the clone eats on its own when hungry)
+        if (self.getFoodData().getFoodLevel() < 10 && FoodAid.foodItems(self) < 2 || self.getFoodData().getFoodLevel() < 15 && FoodAid.foodItems(self) == 0) { // enough for a long way down (nothing in the bag: the gauge alone is not, 6 of 7 soak deaths were deep down with no food at all): food first (the clone eats on its own when hungry)
             digGate.merge("food", 1, Integer::sum);
             if ((mask & Option.HUNT.bit()) != 0) {
                 return Option.HUNT;
