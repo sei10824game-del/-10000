@@ -428,7 +428,7 @@ public final class StairMining {
 
     /** Underground and hungry with nothing to eat: walk up the nearest known staircase to its top (false = none known). */
     public boolean beginAscent() {
-        Bases.Staircase s = bases().nearestStaircase(self.level().dimension(), self.position(), 160, this::usable); // (not one that has just failed: dig up instead)
+        Bases.Staircase s = bases().exitStaircase(self.serverLevel(), self.position(), 160, this::usable); // (the one whose top is nearest the open sky, not a branch inside the shaft; not one that has just failed: dig up instead)
         if (s == null) {
             return false;
         }
@@ -750,6 +750,12 @@ public final class StairMining {
                     if (ascending) {
                         ascending = false;
                         debug = "back at the top " + s.top.toShortString();
+                        if (!self.level().canSeeSky(feet.above()) && self.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, feet.getX(), feet.getZ()) - feet.getY() > 8) {
+                            avoid.put(s.top, self.level().getGameTime() + 1200); // the top of a branch inside the shaft: still deep down; on to the next way up
+                            if (beginAscent()) {
+                                return Status.WORKING;
+                            }
+                        }
                         return Status.DONE; // up in the open again: food, rest
                     }
                     toStage(1);

@@ -432,6 +432,32 @@ public class Bases extends SavedData {
         return nearestStaircase(dim, pos, radius, s -> true);
     }
 
+    /**
+     * The way OUT: the staircase whose top is nearest the open sky (a branch dug inside a shaft has its top deep underground: going "up to
+     * the top" of it left clones where they were, and the soak starved them there), weighed against how far away it is.
+     */
+    @Nullable
+    public Staircase exitStaircase(net.minecraft.server.level.ServerLevel level, Vec3 pos, double radius, java.util.function.Predicate<Staircase> ok) {
+        Staircase best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (Staircase s : staircases) {
+            if (s.dimension != level.dimension() || !ok.test(s)) {
+                continue;
+            }
+            double d = Math.min(Vec3.atCenterOf(s.top).distanceTo(pos), Vec3.atCenterOf(s.end).distanceTo(pos));
+            if (d > radius) {
+                continue;
+            }
+            int surface = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, s.top.getX(), s.top.getZ());
+            double score = d + 4.0 * Math.max(0, surface - s.top.getY());
+            if (score < bestScore) {
+                bestScore = score;
+                best = s;
+            }
+        }
+        return best;
+    }
+
     @Nullable
     public Staircase nearestStaircase(ResourceKey<Level> dim, Vec3 pos, double radius, java.util.function.Predicate<Staircase> ok) {
         Staircase best = null;
