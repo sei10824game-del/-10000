@@ -2744,6 +2744,8 @@ public final class CloneController {
             o = forcedOption.ordinal();
         } else if (now < forceFightUntil && (mask & Option.FIGHT.bit()) != 0) {
             o = Option.FIGHT.ordinal(); // no way out: fight
+        } else if (hungerReflex() && (mask & Option.EAT.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
+            o = Option.EAT.ordinal(); // before a trip's promise too (soak: starved on an expedition at food 0 with three items in the bag)
         } else if (committed != null && (mask & committed.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
             o = committed.ordinal(); // a promise: keep going with the group until the trip is over
         } else {
