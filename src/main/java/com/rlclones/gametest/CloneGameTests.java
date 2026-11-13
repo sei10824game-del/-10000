@@ -2056,7 +2056,7 @@ public final class CloneGameTests {
                     + " harvest=" + c.controller().harvestDebug + " mine=" + c.controller().motor().mineDebug + " pos="
                     + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
-                    + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced
+                    + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced + " place=[" + c.controller().crafting().placeDebug + "] onGround=" + c.onGround()
                     + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog + " " + c.controller().crafting().debug()
                     + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath + " pos=" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             finish(h, c);
