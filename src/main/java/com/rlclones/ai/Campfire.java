@@ -224,7 +224,13 @@ public final class Campfire {
         }
         Direction face = self.getDirection();
         BlockPos feet = self.blockPosition();
+        if (!level().canSeeSky(feet.above())) {
+            return null; // out in the open only: a fire put down in a cave or a tunnel is in somebody's way
+        }
         for (BlockPos cell : new BlockPos[]{feet.relative(face, 2), feet.relative(face.getClockWise(), 2), feet.relative(face.getCounterClockWise(), 2)}) {
+            if (self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairSpace(level().dimension(), cell, true)) {
+                continue; // not in a staircase or its walls: the stair work walks through it and burns (two soak deaths at one campfire in a shaft)
+            }
             if (level().getBlockState(cell).isAir() && level().getBlockState(cell.below()).isFaceSturdy(level(), cell.below(), Direction.UP)) {
                 Equipment.select(self, slot);
                 if (motor.placeBlockAt(cell) && level().getBlockState(cell).getBlock() instanceof CampfireBlock) {
