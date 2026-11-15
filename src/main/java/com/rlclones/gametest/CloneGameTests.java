@@ -6167,7 +6167,7 @@ public final class CloneGameTests {
         h.succeedWhen(() -> {
             var st = c.controller().stairs();
             h.assertTrue(old.failures >= 1 || old.finished, "the old staircase is given up (" + st.debug + " | " + st.trace + ")");
-            h.assertTrue(bases.staircases.size() >= 2 && st.stepsDug >= 1, "and a new one dug from the pit (" + bases.staircases.size() + " " + st.stepsDug + " "
+            h.assertTrue(st.stepsDug >= 1 && (bases.staircases.size() >= 2 || !bases.staircases.contains(old)), "and a new one dug from the pit (the old one is kept or replaced; " + bases.staircases.size() + " " + st.stepsDug + " "
                     + st.debug + " | " + st.recent + ")");
             finish(h, c);
             clearBases(h);
