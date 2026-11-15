@@ -294,6 +294,18 @@ public final class StairMining {
         return false;
     }
 
+    /** Other clones within 16 blocks that are digging stairs or a shaft just now. */
+    private int diggersAround() {
+        int n = 0;
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p != self && p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && p.isAlive() && p.distanceTo(self) < 16
+                    && (c.controller().option() == com.rlclones.ai.strategy.Option.STAIRS || c.controller().option() == com.rlclones.ai.strategy.Option.SHAFT)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     /** Another clone right beside us (we share a 1-wide hole and have not moved for a while): neither can pass the other. */
     private boolean crowdedHere() {
         for (net.minecraft.world.entity.player.Player p : self.level().players()) {
@@ -389,6 +401,9 @@ public final class StairMining {
     public void begin() {
         trace("begin@" + self.blockPosition().toShortString());
         stairs = bases().nearestStaircase(self.level().dimension(), self.position(), 64, this::usable);
+        if (stairs != null && diggersAround() >= 5 && !onStairs(self.blockPosition()) && self.getRandom().nextFloat() < 0.6f) {
+            stairs = null; // five or more are at this shaft already: a staircase of our own (the same shaft for everyone is no luck if it has no iron: soak, 0 of 12)
+        }
         int first = stairs == null ? 2 : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig
         if (stairs != null) {
             resumed++;
