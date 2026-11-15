@@ -2946,20 +2946,24 @@ public final class CloneController {
             return false;
         }
         ServerLevel level = self.serverLevel();
-        BlockPos feet = self.blockPosition();
-        if (!burning(level, feet) && !burning(level, feet.above())) {
-            return false;
-        }
-        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
-            BlockPos to = feet.relative(d);
-            if (!burning(level, to) && !burning(level, to.above()) && level.getBlockState(to).getCollisionShape(level, to).isEmpty()
-                    && level.getBlockState(to.above()).getCollisionShape(level, to.above()).isEmpty()
-                    && !level.getBlockState(to.below()).getCollisionShape(level, to.below()).isEmpty()) {
-                motor.moveToward(Vec3.atBottomCenterOf(to));
-                return true;
+        net.minecraft.world.phys.AABB box = self.getBoundingBox().inflate(0.15, 0.05, 0.15);
+        BlockPos hot = null;
+        for (BlockPos p : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            if (burning(level, p)) {
+                hot = p.immutable(); // (the box touches it: a lit campfire burns whoever overlaps it, not only who stands in its cell)
+                break;
             }
         }
-        return false;
+        if (hot == null) {
+            return false;
+        }
+        Vec3 away = new Vec3(self.getX() - (hot.getX() + 0.5), 0, self.getZ() - (hot.getZ() + 0.5));
+        if (away.lengthSqr() < 1.0E-4) {
+            away = new Vec3(1, 0, 0);
+        }
+        away = away.normalize();
+        motor.moveToward(self.position().add(away.scale(1.6)));
+        return true;
     }
 
     private static boolean burning(ServerLevel level, BlockPos p) {
