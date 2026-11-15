@@ -2620,6 +2620,15 @@ public final class CloneController {
             }
         }
         if ((mask & Option.FARM.bit()) != 0 && FoodAid.foodItems(self) < 6) {
+            if (hungryNoFood()) {
+                // starving and the field gives nothing (soak: twenty FARMs in a row at food 0 and dead): three fruitless rounds and it goes looking elsewhere
+                farmFruitless = FoodAid.foodItems(self) > farmItemsBefore ? 0 : farmFruitless + 1;
+                farmItemsBefore = FoodAid.foodItems(self);
+                if (farmFruitless >= 3 && (mask & Option.EXPLORE.bit()) != 0) {
+                    farmFruitless = 0;
+                    return Option.EXPLORE;
+                }
+            }
             return Option.FARM; // food to be had close by (ripe crops, berries, melons, hay): take it before it is needed
         }
         if ((mask & Option.PORTAL.bit()) != 0 && Progression.tier(self) >= 3 && !hungryNoFood() && !leanOnFood() && random.nextFloat() < 0.4f) {
@@ -2972,6 +2981,8 @@ public final class CloneController {
                 && st.hasProperty(net.minecraft.world.level.block.CampfireBlock.LIT) && st.getValue(net.minecraft.world.level.block.CampfireBlock.LIT);
     }
 
+    private int farmFruitless;
+    private int farmItemsBefore;
     private long scatterUntil;
     private Vec3 scatterGoal;
 
