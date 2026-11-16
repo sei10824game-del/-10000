@@ -1270,6 +1270,9 @@ public final class CloneController {
         long now = now();
         lastEnvHurt = now;
         ServerLevel level = self.serverLevel();
+        if (source.is(net.minecraft.world.damagesource.DamageTypes.IN_FIRE)) {
+            lastFireHurt = now;
+        }
         if (source.is(net.minecraft.world.damagesource.DamageTypes.IN_FIRE) && now - lastFireLog > 40) {
             lastFireLog = now;
             StringBuilder hot = new StringBuilder();
@@ -2965,6 +2968,9 @@ public final class CloneController {
         if (com.rlclones.clone.BodyTraits.of(self).fire() || self.fireImmune() || self.hasEffect(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE)) {
             return false;
         }
+        if (now() - lastFireHurt > 15) {
+            return false; // only once it has been burned (it stands by its campfire to cook on purpose: pushing it off every tick starved a soak)
+        }
         ServerLevel level = self.serverLevel();
         net.minecraft.world.phys.AABB box = self.getBoundingBox().inflate(0.15, 0.05, 0.15);
         BlockPos hot = null;
@@ -2993,6 +2999,7 @@ public final class CloneController {
     }
 
     private long lastFireLog = -100000;
+    private long lastFireHurt = -100000;
     private int farmFruitless;
     private int farmItemsBefore;
     private long scatterUntil;
