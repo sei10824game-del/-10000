@@ -273,7 +273,7 @@ public final class StairMining {
                 others++; // (the ones digging here; in a crowd of thirty or more a crowd passing by does not widen the hole)
             }
         }
-        return others == 0 ? 1 : others < 4 ? 2 : others < 8 ? 3 : 4; // (only clones within 16 blocks count: a crowd of eight or more at one dig gets the wide stairs it needs to pass, other clones elsewhere do not widen it)
+        return others == 0 ? 1 : 2; // a tidy staircase is one or two wide, whatever the crowd: the crowd is spread over more staircases (SHAFT_CAPACITY), not over a wider hole
     }
 
     /** Side-lane offsets (in blocks clockwise of the step; negative = the other side) for this many lanes. */
@@ -811,7 +811,7 @@ public final class StairMining {
             motor.resetStuck();
             return Status.WORKING;
         }
-        if (stuck > 15 && stairs != null && crowdedHere() && widenedHere < 24 && digLane(feet, stairs.dir, Math.max(3, lanes()))) {
+        if (stuck > 15 && stairs != null && crowdedHere() && widenedHere < 4 && digLane(feet, stairs.dir, 2)) {
             widenedHere++; // jammed with another clone in the hole: make room beside us rather than wait (the staircase is widened where it is narrow)
             debug = "crowded at " + feet.toShortString() + ": widening";
             return Status.WORKING;
