@@ -4,6 +4,7 @@ import com.rlclones.Config;
 import com.rlclones.clone.Bases;
 import com.rlclones.clone.ClonePlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -294,6 +295,76 @@ public final class StairMining {
         return false;
     }
 
+    /** Most clones that may be in or at one staircase at a time (its zone: within 6 blocks of the line, from the top down to 3 below the end). */
+    private static final int SHAFT_CAPACITY = 5;
+
+    /** How many other clones are in the zone of staircase {@code s} just now, whatever they are doing there (a jam is made of all of them). */
+    private int occupancy(Bases.Staircase s) {
+        int n = 0;
+        Vec3 a = Vec3.atBottomCenterOf(s.top);
+        Vec3 b = Vec3.atBottomCenterOf(s.end);
+        double abx = b.x - a.x;
+        double abz = b.z - a.z;
+        double len2 = Math.max(1.0E-6, abx * abx + abz * abz);
+        for (net.minecraft.world.entity.player.Player p : self.level().players()) {
+            if (p == self || !(p instanceof com.rlclones.clone.ClonePlayer) || !p.isAlive() || p.getY() > s.top.getY() + 3 || p.getY() < s.end.getY() - 3) {
+                continue;
+            }
+            double t = Mth.clamp(((p.getX() - a.x) * abx + (p.getZ() - a.z) * abz) / len2, 0.0, 1.0);
+            double dx = p.getX() - (a.x + abx * t);
+            double dz = p.getZ() - (a.z + abz * t);
+            if (dx * dx + dz * dz < 36.0) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** A recorded staircase within 12 blocks of {@code feet} (the top or the end): a new one dug here would be its neighbour. */
+    private boolean staircaseNear(BlockPos feet) {
+        for (Bases.Staircase s : bases().staircases) {
+            if (s.dimension == self.level().dimension() && (s.top.distSqr(feet) < 144 || s.end.distSqr(feet) < 144)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Where to start a staircase of our own: 14 to 28 blocks from every recorded top, out in the open on the surface; null when none was found. */
+    @javax.annotation.Nullable
+    private BlockPos freshSite() {
+        ServerLevel level = self.serverLevel();
+        BlockPos from = self.blockPosition();
+        for (int i = 0; i < 16; i++) {
+            double a = self.getRandom().nextDouble() * Math.PI * 2;
+            double r = 14 + self.getRandom().nextDouble() * 14;
+            int x = from.getX() + (int) Math.round(Math.cos(a) * r);
+            int z = from.getZ() + (int) Math.round(Math.sin(a) * r);
+            if (!level.hasChunk(x >> 4, z >> 4)) {
+                continue;
+            }
+            int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            BlockPos p = new BlockPos(x, y, z);
+            if (!level.getFluidState(p.below()).isEmpty() || !level.getFluidState(p).isEmpty() || Math.abs(y - from.getY()) > 12) {
+                continue;
+            }
+            boolean clear = true;
+            for (Bases.Staircase st : bases().staircases) {
+                if (st.dimension == level.dimension() && (st.top.distSqr(p) < 196 || st.end.distSqr(p) < 196)) {
+                    clear = false;
+                    break;
+                }
+            }
+            if (clear) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /** Where this clone walks to before it starts a staircase of its own (stage 4). */
+    private BlockPos siteGoal;
+
     /** Other clones within 16 blocks that are digging stairs or a shaft just now. */
     private int diggersAround() {
         int n = 0;
@@ -401,10 +472,20 @@ public final class StairMining {
     public void begin() {
         trace("begin@" + self.blockPosition().toShortString());
         stairs = bases().nearestStaircase(self.level().dimension(), self.position(), 64, this::usable);
-        if (stairs != null && diggersAround() >= 5 && !onStairs(self.blockPosition()) && self.getRandom().nextFloat() < 0.6f) {
-            stairs = null; // five or more are at this shaft already: a staircase of our own (the same shaft for everyone is no luck if it has no iron: soak, 0 of 12)
+        siteGoal = null;
+        if (stairs != null && !onStairs(self.blockPosition()) && occupancy(stairs) >= SHAFT_CAPACITY) {
+            // this shaft is full (a crowd packed head to toe in one hole: nobody digs, they cram): another one with room, else a staircase of our own
+            Bases.Staircase roomy = bases().nearestStaircase(self.level().dimension(), self.position(), 64, x -> usable(x) && occupancy(x) < SHAFT_CAPACITY);
+            if (roomy != null) {
+                stairs = roomy;
+            } else {
+                stairs = null;
+            }
         }
-        int first = stairs == null ? 2 : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig
+        if (stairs == null && self.level().players().size() >= 8 && self.level().canSeeSky(self.blockPosition().above()) && staircaseNear(self.blockPosition())) {
+            siteGoal = freshSite(); // not beside the others (the pits and caverns of a crowd digging side by side): out to open ground first
+        }
+        int first = stairs == null ? (siteGoal != null ? 4 : 2) : 0; // 0: walk to the top of a known staircase, 1: down it, 2: dig, 4: out to a site of our own first
         if (stairs != null) {
             resumed++;
             BlockPos feet = self.blockPosition();
@@ -826,6 +907,21 @@ public final class StairMining {
             }
             case 3 -> {
                 return tunnelTick(feet);
+            }
+            case 4 -> {
+                if (siteGoal == null || ticks > 900 || Motor.horizontalDistance(self.position(), Vec3.atBottomCenterOf(siteGoal)) < 3.0) {
+                    siteGoal = null;
+                    toStage(2);
+                    motor.resetStuck();
+                    return Status.WORKING;
+                }
+                motor.navigate(Vec3.atBottomCenterOf(siteGoal), 1.5, false);
+                debug = "out to a site of our own " + siteGoal.toShortString();
+                if (motor.stuckCount() > 10) {
+                    siteGoal = null;
+                    toStage(2);
+                }
+                return Status.WORKING;
             }
             default -> {
                 return digTick(feet);
