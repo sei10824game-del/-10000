@@ -1270,6 +1270,17 @@ public final class CloneController {
         long now = now();
         lastEnvHurt = now;
         ServerLevel level = self.serverLevel();
+        if (source.is(net.minecraft.world.damagesource.DamageTypes.IN_FIRE) && now - lastFireLog > 40) {
+            lastFireLog = now;
+            StringBuilder hot = new StringBuilder();
+            for (BlockPos p : BlockPos.betweenClosed(self.blockPosition().offset(-2, -1, -2), self.blockPosition().offset(2, 2, 2))) {
+                if (burning(level, p)) {
+                    hot.append(p.subtract(self.blockPosition()).toShortString()).append(' ').append(level.getBlockState(p).getBlock().getDescriptionId().replace("block.minecraft.", "")).append("; ");
+                }
+            }
+            com.rlclones.RLClones.LOGGER.info("FIRE-HIT {} at {} box={} option={} hp={} onFire={} hot=[{}] idle={}", self.getGameProfile().getName(), self.blockPosition().toShortString(),
+                    self.getBoundingBox().toString(), option, (int) self.getHealth(), self.isOnFire(), hot, idleWhy);
+        }
         if (NOT_FROM_BLOCKS.stream().anyMatch(source::is)) {
             return;
         }
@@ -2981,6 +2992,7 @@ public final class CloneController {
                 && st.hasProperty(net.minecraft.world.level.block.CampfireBlock.LIT) && st.getValue(net.minecraft.world.level.block.CampfireBlock.LIT);
     }
 
+    private long lastFireLog = -100000;
     private int farmFruitless;
     private int farmItemsBefore;
     private long scatterUntil;
