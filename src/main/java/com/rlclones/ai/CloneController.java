@@ -734,7 +734,9 @@ public final class CloneController {
         Prof.add(Prof.HAZARD, ph);
         long ps = Prof.t();
         idleWhyTick = now;
-        if (itemBusy) {
+        if (fireStepReflex()) {
+            idleWhy = "fire-step"; // first of all: FIRE-HIT showed clones hurt ten times beside a campfire while the item branch (idle=item) held the tick
+        } else if (itemBusy) {
             // drinking / scooping water / waiting for a pearl: nothing else this tick
             idleWhy = "item";
         } else if (escaping) {
@@ -749,8 +751,6 @@ public final class CloneController {
             }
         } else if (blastReflex(now)) {
             idleWhy = "blast";
-        } else if (fireStepReflex()) {
-            idleWhy = "fire-step";
         } else if (scatterReflex(now)) {
             idleWhy = "scatter";
         } else if (repairTreads(now)) {
