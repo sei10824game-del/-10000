@@ -2466,6 +2466,8 @@ public final class CloneController {
             optionTicks++;
             return; // an ore right in front of us comes first
         }
+        long popt = Prof.t();
+        Option timed = option;
         boolean done = switch (option) {
             case FIGHT -> runFight(now, false);
             case HUNT -> runFight(now, true);
@@ -2496,6 +2498,7 @@ public final class CloneController {
             case STAIRS -> stairs.tick() != StairMining.Status.WORKING;
             case SHAFT -> shafts.tick() != ShaftMining.Status.WORKING;
         };
+        Prof.addOption(timed.ordinal(), popt);
         optionTicks++;
         optionReward -= 0.005f;
         if (option != null && (done || optionTicks >= option.maxTicks || shouldInterrupt(now))) {
