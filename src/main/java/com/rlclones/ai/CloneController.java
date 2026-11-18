@@ -197,6 +197,7 @@ public final class CloneController {
         this.crafting = new Crafting(self, motor, perception);
         this.escape = new Escape(self, motor);
         this.storage = new Storage(self, motor, perception, crafting);
+        this.civicWork = new com.rlclones.ai.civilization.CivicWork(self, motor, perception, crafting);
         this.farming = new Farming(self, motor);
         this.expedition = new Expedition(self, motor);
         this.discovery = new Discovery(self, motor, perception);
@@ -1790,7 +1791,7 @@ public final class CloneController {
         if (self.onGround() && portals.hasWork()) {
             mask |= Option.PORTAL.bit();
         }
-        if (foodAid.canHelp() || itemAid.canHelp()) {
+        if (civicWork.canHelp() || foodAid.canHelp() || itemAid.canHelp()) {
             mask |= Option.FEED.bit(); // food for the starving, or what a friend asked for
         }
         if (breeding.canStart()) {
@@ -2492,7 +2493,7 @@ public final class CloneController {
             case FISH -> fishing.tick() != Fishing.Status.WORKING;
             case SALVAGE -> runHarvest(Perception.BlockKind.WOOD) || !needWood() && blocksDone >= 2;
             case PORTAL -> portals.tick() != Portals.Status.WORKING;
-            case FEED -> feedingItems ? itemAid.helpTick() != ItemAid.Status.WORKING : foodAid.helpTick() != FoodAid.Status.WORKING;
+            case FEED -> feedingCivic ? !civicWork.tick() : feedingItems ? itemAid.helpTick() != ItemAid.Status.WORKING : foodAid.helpTick() != FoodAid.Status.WORKING;
             case BREED -> breeding.tick() != Breeding.Status.WORKING;
             case ACHIEVE -> achievements.tick() != Achievements.Status.WORKING;
             case STAIRS -> stairs.tick() != StairMining.Status.WORKING;
@@ -2704,6 +2705,9 @@ public final class CloneController {
     public int fishHunts;
     private boolean huntFish;
     private boolean feedingItems;
+    private boolean feedingCivic;
+    private final com.rlclones.ai.civilization.CivicWork civicWork;
+    public com.rlclones.ai.civilization.CivicWork civicWork() { return civicWork; }
 
     /** The nearest fish we could catch for food, seen lately. */
     @Nullable
@@ -2830,6 +2834,8 @@ public final class CloneController {
             case FISH -> fishing.begin();
             case PORTAL -> portals.begin();
             case FEED -> {
+                feedingCivic = civicWork.begin();
+                if (feedingCivic) break;
                 feedingItems = !foodAid.canHelp() && itemAid.canHelp();
                 if (feedingItems) {
                     itemAid.begin();
@@ -2889,6 +2895,7 @@ public final class CloneController {
         if (option == null) {
             return;
         }
+        if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
         endedOption = option.name();
         endedAfter = optionTicks;
         if (option == Option.STAIRS || option == Option.SHAFT || option == Option.MINE || option == Option.QUARRY || option == Option.GATHER_WOOD || option == Option.FARM) {

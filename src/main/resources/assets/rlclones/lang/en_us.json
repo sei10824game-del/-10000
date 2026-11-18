@@ -141,5 +141,15 @@
   "rlclones.chat.need": "Does anyone have %s to spare? (need %s)",
   "rlclones.chat.give": "Bringing %s some %s",
   "rlclones.cmd.gave_item": "%s got %s x%s",
-  "rlclones.cmd.gave_items": "Gave %s clone(s) a random usable item each (no two the same)"
+  "rlclones.cmd.gave_items": "Gave %s clone(s) a random usable item each (no two the same)",
+  "rlclones.civic.accept": "I'll take %s's request and deliver the supplies!",
+  "rlclones.civic.complete": "Delivery to %s complete!",
+  "rlclones.civic.empty": "Community board: no open requests.",
+  "rlclones.civic.entry": "Requester %s | %s x%s | Courier: %s",
+  "rlclones.civic.unclaimed": "Open",
+  "rlclones.civic.invalid_item": "Specify a valid item ID or food.",
+  "rlclones.civic.posted": "Request posted. A courier will look for supplies and deliver them.",
+  "rlclones.civic.full": "The community board is full. Please try later.",
+  "rlclones.civic.cancelled": "Your community board requests have been cancelled.",
+  "rlclones.civic.food": "Food"
 }

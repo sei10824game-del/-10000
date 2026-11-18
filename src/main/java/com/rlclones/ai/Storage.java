@@ -63,6 +63,8 @@ public final class Storage {
     private final Crafting crafting;
     private final Builder builder;
 
+    private Predicate<ItemStack> supplyWanted;
+    private int supplyRemaining;
     private Mode mode;
     private int stage;
     private int ticks;
@@ -320,7 +322,7 @@ public final class Storage {
     @Nullable
     private BlockPos fetchableChest() {
         Bases bases = Bases.get(self.getServer());
-        Predicate<ItemStack> want = wants(self);
+        Predicate<ItemStack> want = supplyWanted != null ? supplyWanted : wants(self);
         BlockPos best = null;
         double bestD = 128;
         for (Bases.Base b : bases.bases) {
@@ -334,7 +336,8 @@ public final class Storage {
                 }
                 for (var e : bases.contents(b.dimension, c).entrySet()) {
                     Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(e.getKey()));
-                    if (item != null && want.test(new ItemStack(item))) {
+                    if (item != null && want.test(new ItemStack(item))
+                            && (supplyWanted == null || !FoodAid.goodFood(new ItemStack(item)) || e.getValue() > FoodAid.RESERVE)) {
                         bestD = d;
                         best = c;
                         break;
@@ -451,6 +454,8 @@ public final class Storage {
         if (self.containerMenu != self.inventoryMenu) {
             self.closeContainer();
         }
+        supplyWanted = null;
+        supplyRemaining = 0;
         this.mode = mode;
         stage = 0;
         ticks = 0;
@@ -461,6 +466,20 @@ public final class Storage {
         crafting.forcedTarget = null;
     }
 
+    /** Use known shared chests and the ordinary visit/open path for a delivery. */
+    public boolean canSupply(Predicate<ItemStack> wanted) {
+        Predicate<ItemStack> previous = supplyWanted;
+        supplyWanted = wanted;
+        try { return fetchableChest() != null; }
+        finally { supplyWanted = previous; }
+    }
+
+    public void beginSupply(Predicate<ItemStack> wanted, int count) {
+        begin(Mode.FETCH);
+        supplyWanted = wanted;
+        supplyRemaining = Math.max(1, Math.min(64, count));
+    }
+
     public void reset() {
         if (self.containerMenu != self.inventoryMenu) {
             self.closeContainer();
@@ -468,6 +487,8 @@ public final class Storage {
         crafting.forcedTarget = null;
         crafting.reset();
         mode = null;
+        supplyWanted = null;
+        supplyRemaining = 0;
     }
 
     public Status tick() {
@@ -525,6 +546,20 @@ public final class Storage {
         return visit(target, menu -> {
             Map<Item, Integer> before = snapshot();
             for (Slot slot : containerSlots(menu)) {
+                if (supplyWanted != null) {
+                    if (supplyRemaining <= 0 || freeSlots(self) <= 0 || !supplyWanted.test(slot.getItem())) continue;
+                    int reserve = FoodAid.goodFood(slot.getItem()) ? FoodAid.RESERVE : 0;
+                    int amount = Math.min(supplyRemaining, Math.max(0, slot.getItem().getCount() - reserve));
+                    if (amount == 0) continue;
+                    ItemStack taken = slot.safeTake(amount, amount, self);
+                    int extracted = taken.getCount();
+                    self.getInventory().add(taken);
+                    int remainder = taken.getCount();
+                    if (!taken.isEmpty()) slot.safeInsert(taken);
+                    supplyRemaining -= extracted - remainder;
+                    menu.broadcastChanges();
+                    continue;
+                }
                 if (!slot.getItem().isEmpty() && wants(self).test(slot.getItem()) && freeSlots(self) > 0) {
                     menu.clicked(slot.index, 0, ClickType.QUICK_MOVE, self);
                     Equipment.manage(self, true);

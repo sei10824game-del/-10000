@@ -141,5 +141,15 @@
   "rlclones.chat.need": "%sを持っていたら分けてください！（%s個）",
   "rlclones.chat.give": "%sに%sを持っていくよ",
   "rlclones.cmd.gave_item": "%s に %s を %s 個渡しました",
-  "rlclones.cmd.gave_items": "%s 体のクローンにそれぞれ違うランダムな使えるアイテムを渡しました"
+  "rlclones.cmd.gave_items": "%s 体のクローンにそれぞれ違うランダムな使えるアイテムを渡しました",
+  "rlclones.civic.accept": "%sさんの依頼を引き受けた。物資を届けるよ！",
+  "rlclones.civic.complete": "%sさんへの配送完了！",
+  "rlclones.civic.empty": "共同掲示板：現在、依頼はありません。",
+  "rlclones.civic.entry": "依頼者 %s ｜ %s ×%s ｜ 担当：%s",
+  "rlclones.civic.unclaimed": "募集中",
+  "rlclones.civic.invalid_item": "有効なアイテムIDか food を指定してください。",
+  "rlclones.civic.posted": "共同掲示板に依頼を登録しました。担当者が在庫を探して届けます。",
+  "rlclones.civic.full": "共同掲示板がいっぱいです。しばらく待ってください。",
+  "rlclones.civic.cancelled": "自分の掲示板依頼を取り消しました。",
+  "rlclones.civic.food": "食料"
 }

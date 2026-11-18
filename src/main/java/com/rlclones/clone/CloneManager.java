@@ -53,6 +53,9 @@ public final class CloneManager {
     private static CloneManager instance;
     private static int errorCount;
 
+    private final com.rlclones.ai.civilization.WorkBoard workBoard = new com.rlclones.ai.civilization.WorkBoard();
+    public com.rlclones.ai.civilization.WorkBoard workBoard() { return workBoard; }
+
     private final MinecraftServer server;
     private final Map<UUID, ClonePlayer> clones = new LinkedHashMap<>();
     private final Map<UUID, Long> deadSince = new HashMap<>();

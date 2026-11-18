@@ -82,6 +82,7 @@ public final class ItemAid {
         if (self.isCreative() || last != null && now - last < 1200) {
             return false;
         }
+        com.rlclones.ai.civilization.CivicWork.post(self, k, Math.max(1, Math.min(64, count)));
         lastAsked.put(k, now);
         asked++;
         int x = Mth.floor(self.getX());
@@ -263,6 +264,7 @@ public final class ItemAid {
         double bestD = Double.MAX_VALUE;
         for (Ask a : asks) {
             Player p = online(a.from);
+            if (com.rlclones.ai.civilization.CivicWork.handledByBoard(self, a.from, a.item)) continue;
             if (p == null || p.distanceTo(self) > 64 || has(p, a.item) || spare(self, a.item) <= 0 && !offered.contains(a)) {
                 continue;
             }
@@ -353,7 +355,7 @@ public final class ItemAid {
     /** Items tossed to a friend (entity id -> who it is for): nobody else picks them up (the giver least of all). */
     private static final Map<Integer, UUID> GIFTS = new HashMap<>();
 
-    private static void gift(@Nullable ItemEntity e, UUID to) {
+    public static void gift(@Nullable ItemEntity e, UUID to) {
         if (e != null) {
             e.setTarget(to);
             if (GIFTS.size() > 256) {

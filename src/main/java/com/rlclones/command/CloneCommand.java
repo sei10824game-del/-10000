@@ -46,6 +46,46 @@ public final class CloneCommand {
     private CloneCommand() {
     }
 
+    private static int showBoard(CommandContext<CommandSourceStack> ctx) {
+        var source = ctx.getSource();
+        var viewer = source.getPlayer();
+        var jobs = manager(ctx).workBoard().jobs(source.getLevel().getGameTime()).stream()
+                .filter(job -> viewer == null || job.key.team().equals(com.rlclones.ai.civilization.CivicWork.team(viewer))
+                        && job.key.dimension().equals(viewer.level().dimension().location().toString())).toList();
+        if (jobs.isEmpty()) source.sendSuccess(() -> Component.translatable("rlclones.civic.empty"), false);
+        for (var job : jobs) {
+            var requester = source.getServer().getPlayerList().getPlayer(job.key.requester());
+            var owner = job.worker(source.getLevel().getGameTime());
+            var worker = owner == null ? null : source.getServer().getPlayerList().getPlayer(owner);
+            Component itemName;
+            if (job.key.item().equals(com.rlclones.ai.civilization.WorkBoard.FOOD)) itemName = Component.translatable("rlclones.civic.food");
+            else itemName = new net.minecraft.world.item.ItemStack(net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
+                    new net.minecraft.resources.ResourceLocation(job.key.item()))).getHoverName();
+            source.sendSuccess(() -> Component.translatable("rlclones.civic.entry",
+                    requester == null ? job.key.requester().toString() : requester.getGameProfile().getName(),
+                    itemName, job.count,
+                    worker == null ? Component.translatable("rlclones.civic.unclaimed") : worker.getGameProfile().getName()), false);
+        }
+        return jobs.size();
+    }
+
+    private static int postBoard(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var requester = ctx.getSource().getPlayerOrException();
+        String item = net.minecraft.commands.arguments.ResourceLocationArgument.getId(ctx, "item").toString();
+        if (item.equals("minecraft:food")) item = com.rlclones.ai.civilization.WorkBoard.FOOD;
+        else {
+            var id = net.minecraft.resources.ResourceLocation.tryParse(item);
+            if (id == null || !net.minecraftforge.registries.ForgeRegistries.ITEMS.containsKey(id)
+                    || net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(id) == net.minecraft.world.item.Items.AIR) {
+                ctx.getSource().sendFailure(Component.translatable("rlclones.civic.invalid_item"));
+                return 0;
+            }
+        }
+        boolean posted = com.rlclones.ai.civilization.CivicWork.post(requester, item, IntegerArgumentType.getInteger(ctx, "count"));
+        ctx.getSource().sendSuccess(() -> Component.translatable(posted ? "rlclones.civic.posted" : "rlclones.civic.full"), false);
+        return posted ? 1 : 0;
+    }
+
     private static CloneManager manager(CommandContext<CommandSourceStack> ctx) {
         return CloneManager.get(ctx.getSource().getServer());
     }
@@ -56,6 +96,23 @@ public final class CloneCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         d.register(Commands.literal("rlclone")
+                .then(Commands.literal("board")
+                        .executes(CloneCommand::showBoard)
+                        .then(Commands.literal("cancel").requires(CloneCommand::mayControl).executes(ctx -> {
+                            var player = ctx.getSource().getPlayerOrException();
+                            var board = manager(ctx).workBoard();
+                            int removed = 0;
+                            for (var job : board.jobs(player.level().getGameTime())) {
+                                if (job.key.requester().equals(player.getUUID())) { board.cancel(job.key); removed++; }
+                            }
+                            ctx.getSource().sendSuccess(() -> Component.translatable("rlclones.civic.cancelled"), false);
+                            return removed;
+                        }))
+                        .then(Commands.literal("request").requires(CloneCommand::mayControl)
+                                .then(Commands.argument("item", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(java.util.List.of("food", "minecraft:iron_pickaxe", "minecraft:torch", "minecraft:cobblestone"), builder))
+                                        .then(Commands.argument("count", IntegerArgumentType.integer(1, 64))
+                                                .executes(CloneCommand::postBoard)))))
                 .then(Commands.literal("summon").requires(CloneCommand::mayControl)
                         .executes(ctx -> summon(ctx, 1, ClonePlayer.DEFAULT_TEAM))
                         .then(Commands.literal("team").then(Commands.argument("team", StringArgumentType.word())

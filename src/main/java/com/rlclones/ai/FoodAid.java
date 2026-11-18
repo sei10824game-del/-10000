@@ -97,6 +97,7 @@ public final class FoodAid {
     /** Every second: starving with no food at all - ask the others (at most once a minute). */
     public void tick(long now) {
         if (self.getFoodData().getFoodLevel() <= 6 && foodItems(self) == 0 && !Senses.hasFood(self) && now - lastAsk > 1200 && !self.isCreative()) {
+            com.rlclones.ai.civilization.CivicWork.post(self, com.rlclones.ai.civilization.WorkBoard.FOOD, 4);
             lastAsk = now;
             asked++;
             int x = Mth.floor(self.getX());
@@ -149,6 +150,7 @@ public final class FoodAid {
         Ask best = null;
         double bestScore = Double.MAX_VALUE;
         for (Ask a : asks) {
+            if (com.rlclones.ai.civilization.CivicWork.handledByBoard(self, a.from, com.rlclones.ai.civilization.WorkBoard.FOOD)) continue;
             Player p = online(a.from);
             // still without food in the bag and not full: a bite somebody else gave does not end the request
             if (p == null || p.distanceTo(self) > 64 || foodItems(p) >= 2 || p.getFoodData().getFoodLevel() >= 17) {
