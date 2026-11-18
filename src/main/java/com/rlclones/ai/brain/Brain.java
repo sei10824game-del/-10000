@@ -457,7 +457,9 @@ public final class Brain {
      * @param imitated true if the transition was observed on another agent
      */
     public void learn(String tableName, int s, int a, float r, int s2, boolean terminal, float gamma, int nextMask, float weight, boolean imitated) {
-        if (a < 0) {
+        if (a < 0 || a >= (STRATEGY.equals(tableName) ? Option.COUNT : CombatAction.COUNT)
+                || !Float.isFinite(r) || !Float.isFinite(gamma) || gamma < 0f || gamma > 1f
+                || !Float.isFinite(weight) || weight <= 0f) {
             return;
         }
         apply(tableName, s, a, r, s2, terminal, gamma, nextMask, weight, true);
@@ -489,6 +491,9 @@ public final class Brain {
             return;
         }
         QTable.Entry e = table(tableName).get(s, prior(tableName));
+        if (a >= e.demo.length) {
+            return;
+        }
         if (e.demo[a] < Integer.MAX_VALUE) {
             e.demo[a]++;
         }
@@ -498,7 +503,7 @@ public final class Brain {
         QTable table = table(tableName);
         QTable.Prior prior = prior(tableName);
         QTable.Entry e = table.get(s, prior);
-        if (a >= e.q.length) {
+        if (a < 0 || a >= e.q.length) {
             return;
         }
         float target = r;
@@ -710,6 +715,9 @@ public final class Brain {
     }
 
     public void absorb(Brain b) {
+        if (b == this) {
+            return;
+        }
         strategy.mergeFrom(b.strategy);
         b.combat.forEach((k, v) -> combatTable(k).mergeFrom(v));
         b.knowledge.forEach((k, v) -> knowledge(k).merge(v));
@@ -722,6 +730,10 @@ public final class Brain {
         deaths += b.deaths;
         members += b.members;
         b.harmfulBlocks.object2IntEntrySet().forEach(e -> harmfulBlocks.mergeInt(e.getKey(), e.getIntValue(), Integer::sum));
+        // A direct observation of harm overrides an older correction; otherwise retain
+        // corrections so that linking/unlinking cannot reintroduce disproven hearsay.
+        safeBlocks.addAll(b.safeBlocks);
+        safeBlocks.removeAll(harmfulBlocks.keySet());
         b.effectSamples.object2IntEntrySet().forEach(e -> {
             int mine = effectSamples.getInt(e.getKey());
             int theirs = e.getIntValue();

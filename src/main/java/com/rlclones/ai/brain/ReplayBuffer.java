@@ -26,6 +26,9 @@ public final class ReplayBuffer {
     private int size;
 
     public ReplayBuffer(int capacity) {
+        if (capacity < 1) {
+            throw new IllegalArgumentException("capacity must be positive");
+        }
         items = new Transition[capacity];
     }
 
@@ -60,10 +63,18 @@ public final class ReplayBuffer {
     }
 
     public void addAll(ReplayBuffer other) {
+        if (other == this) {
+            return;
+        }
         for (int i = 0; i < other.size; i++) {
-            Transition t = other.items[i];
+            Transition t = other.oldest(i);
             add(t.table, t.s, t.a, t.r, t.s2, t.terminal, t.gamma, t.nextMask, t.weight);
         }
+    }
+
+    /** Iterate in insertion order, including after the ring wraps. */
+    private Transition oldest(int offset) {
+        return items[(next - size + items.length + offset) % items.length];
     }
 
     public byte[] toBytes() {
@@ -72,7 +83,7 @@ public final class ReplayBuffer {
             DataOutputStream out = new DataOutputStream(bytes);
             out.writeInt(size);
             for (int i = 0; i < size; i++) {
-                Transition t = items[i];
+                Transition t = oldest(i);
                 out.writeUTF(t.table);
                 out.writeInt(t.s);
                 out.writeByte(t.a);
@@ -96,17 +107,24 @@ public final class ReplayBuffer {
         }
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data))) {
             int n = in.readInt();
+            // Each record has at least a two-byte UTF length and 26 bytes of fields.
+            if (n < 0 || n > (data.length - 4) / 28) {
+                return;
+            }
             for (int i = 0; i < n; i++) {
                 String table = in.readUTF();
                 int s = in.readInt();
-                int a = in.readByte();
+                int a = in.readUnsignedByte();
                 float r = in.readFloat();
                 int s2 = in.readInt();
                 boolean terminal = in.readBoolean();
                 float gamma = in.readFloat();
                 int mask = in.readInt();
                 float weight = in.readFloat();
-                add(table, s, a, r, s2, terminal, gamma, mask, weight);
+                if (!table.isEmpty() && Float.isFinite(r) && Float.isFinite(gamma)
+                        && gamma >= 0f && gamma <= 1f && Float.isFinite(weight) && weight > 0f) {
+                    add(table, s, a, r, s2, terminal, gamma, mask, weight);
+                }
             }
         } catch (IOException ignored) {
             // A truncated buffer only loses old memories.

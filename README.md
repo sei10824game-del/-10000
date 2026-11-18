@@ -347,6 +347,7 @@
 
 ## ビルドとテスト
 ```
+./gradlew test               # 学習表・経験バッファの単体テスト
 ./gradlew build              # build/libs/rlclones-1.0.0.jar
 ./gradlew runGameTestServer  # 実サーバー上で受け入れテスト（GameTest）を実行
 ```

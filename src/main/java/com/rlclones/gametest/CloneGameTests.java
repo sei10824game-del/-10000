@@ -989,6 +989,48 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 20)
+    public static void correctedKnowledgeSurvivesLinkAndUnlink(GameTestHelper h) {
+        String block = "minecraft:moss_block";
+        Brain corrected = new Brain();
+        corrected.learnHarmful(block);
+        corrected.unlearnHarmful(block);
+        Brain merged = Brain.merge(List.of(corrected, new Brain()));
+        h.assertTrue(merged.provenSafe(block) && !merged.isHarmful(block),
+                "linking keeps corrections to mistaken harmful-block knowledge");
+        h.assertTrue(merged.copy().provenSafe(block), "unlinking keeps corrections");
+        Brain directEvidence = new Brain();
+        directEvidence.learnHarmful(block);
+        Brain forward = Brain.merge(List.of(corrected, directEvidence));
+        Brain reverse = Brain.merge(List.of(directEvidence, corrected));
+        h.assertTrue(forward.isHarmful(block) && !forward.provenSafe(block)
+                        && reverse.isHarmful(block) && !reverse.provenSafe(block),
+                "direct evidence of harm takes precedence in either merge order");
+        long before = corrected.ownUpdates;
+        corrected.absorb(corrected);
+        h.assertTrue(corrected.ownUpdates == before && corrected.members == 1,
+                "self-merge cannot duplicate experience or membership");
+        h.succeed();
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 20)
+    public static void invalidExperienceDoesNotCorruptBrain(GameTestHelper h) {
+        Brain brain = new Brain();
+        int state = CombatState.encode(2, 2, 2, 2, 0, 0, 1);
+        brain.learn("minecraft:zombie", state, CombatAction.COUNT, 1f, 0, true, 0f, 0, 1f, false);
+        brain.learn("minecraft:zombie", state, 0, Float.NaN, 0, true, 0f, 0, 1f, false);
+        brain.learn("minecraft:zombie", state, 0, 1f, 0, false, Float.POSITIVE_INFINITY, 0, 1f, false);
+        brain.learn("minecraft:zombie", state, 0, 1f, 0, true, 0f, 0, -1f, false);
+        h.assertTrue(brain.ownUpdates == 0 && brain.totalStates() == 0,
+                "invalid experiences do not create states, increment counters or enter replay");
+        brain.recordDemo("minecraft:zombie", state, CombatAction.COUNT);
+        brain.learn("minecraft:zombie", state, 0, 1f, 0, true, 0f, 0, 1f, false);
+        h.assertTrue(brain.ownUpdates == 1
+                        && Float.isFinite(brain.combatTable("minecraft:zombie").peek(state).q[0]),
+                "valid learning still works after invalid input");
+        h.succeed();
+    }
+
     // ------------------------------------------------------------------ AC: X links all clones' learning
 
     @GameTest(template = ARENA, timeoutTicks = 60, batch = "link")

@@ -38,6 +38,9 @@ public final class QTable {
     private final Int2ObjectOpenHashMap<Entry> map = new Int2ObjectOpenHashMap<>();
 
     public QTable(int actions) {
+        if (actions < 1 || actions > Integer.SIZE) {
+            throw new IllegalArgumentException("actions must be between 1 and 32");
+        }
         this.actions = actions;
     }
 
@@ -102,6 +105,12 @@ public final class QTable {
 
     /** Merge another table into this one, weighting every Q value by how often it was updated. */
     public void mergeFrom(QTable other) {
+        if (actions != other.actions) {
+            throw new IllegalArgumentException("Cannot merge tables with different action counts");
+        }
+        if (other == this) {
+            return;
+        }
         for (Int2ObjectMap.Entry<Entry> oe : other.map.int2ObjectEntrySet()) {
             Entry src = oe.getValue();
             Entry dst = map.get(oe.getIntKey());
@@ -117,10 +126,11 @@ public final class QTable {
             for (int a = 0; a < actions; a++) {
                 int n1 = dst.n[a];
                 int n2 = src.n[a];
-                if (n1 + n2 == 0) {
-                    dst.q[a] = (dst.q[a] + src.q[a]) * 0.5f;
+                long total = (long) n1 + n2;
+                if (total == 0) {
+                    dst.q[a] = (float) (((double) dst.q[a] + src.q[a]) * 0.5);
                 } else {
-                    dst.q[a] = (dst.q[a] * n1 + src.q[a] * n2) / (float) (n1 + n2);
+                    dst.q[a] = (float) (((double) dst.q[a] * n1 + (double) src.q[a] * n2) / total);
                 }
                 dst.n[a] = saturatingAdd(n1, n2);
                 dst.demo[a] = saturatingAdd(dst.demo[a], src.demo[a]);
@@ -165,18 +175,24 @@ public final class QTable {
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data))) {
             int actions = in.readInt();
             int size = in.readInt();
+            // Validate dimensions before allocating entries or iterating over an untrusted save.
+            long entryBytes = 8L + 12L * actions;
+            if (actions < 1 || actions > Integer.SIZE || size < 0
+                    || 8L + size * entryBytes != data.length) {
+                return table;
+            }
             for (int i = 0; i < size; i++) {
                 int key = in.readInt();
                 Entry e = new Entry(expectedActions);
-                e.visits = in.readInt();
+                e.visits = Math.max(0, in.readInt());
                 for (int a = 0; a < actions; a++) {
                     float q = in.readFloat();
                     int n = in.readInt();
                     int d = in.readInt();
                     if (a < expectedActions) {
-                        e.q[a] = q;
-                        e.n[a] = n;
-                        e.demo[a] = d;
+                        e.q[a] = Float.isFinite(q) ? q : 0f;
+                        e.n[a] = Math.max(0, n);
+                        e.demo[a] = Math.max(0, d);
                     }
                 }
                 table.map.put(key, e);
