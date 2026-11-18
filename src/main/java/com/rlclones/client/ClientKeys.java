@@ -69,6 +69,15 @@ public final class ClientKeys {
         if (smokeReported || !Boolean.getBoolean("rlclones.smokeTest") || mc.getOverlay() != null || mc.screen == null) {
             return;
         }
+        // Exercise the transformed SkinManager, including refmap remapping, before reporting readiness.
+        long before = com.rlclones.clone.CloneProfiles.avoidedLookups();
+        var synthetic = com.rlclones.clone.CloneProfiles.mark(new com.mojang.authlib.GameProfile(
+                java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"), "CloneSkinSmoke"));
+        mc.getSkinManager().registerSkins(synthetic, (type, location, texture) -> {}, true);
+        if (com.rlclones.clone.CloneProfiles.avoidedLookups() != before + 1) {
+            throw new IllegalStateException("Synthetic profile skin guard was not applied");
+        }
+        RLClones.LOGGER.info("RLCLONES_SKIN_GUARD_READY");
         smokeReported = true;
         List<KeyMapping> all = Arrays.asList(mc.options.keyMappings);
         boolean registered = all.contains(ClientSetup.SUMMON) && all.contains(ClientSetup.LINK) && all.contains(ClientSetup.RESPAWN)

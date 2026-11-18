@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.rlclones.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "rlclones.refmap.json",
+  "client": ["CloneSkinMixin"],
+  "injectors": {"defaultRequire": 1}
+}

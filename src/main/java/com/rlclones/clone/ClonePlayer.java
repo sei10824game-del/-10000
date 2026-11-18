@@ -50,7 +50,7 @@ public class ClonePlayer extends ServerPlayer {
     private String cloneTeam = DEFAULT_TEAM;
 
     public ClonePlayer(MinecraftServer server, ServerLevel level, GameProfile profile, Brain brain) {
-        super(server, level, profile);
+        super(server, level, CloneProfiles.mark(profile));
         this.brain = brain;
         this.controller = new CloneController(this);
         this.setMaxUpStep(0.6F);
