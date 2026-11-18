@@ -31,9 +31,13 @@ public abstract class CloneSkinMixin {
         if (!CloneProfiles.isSynthetic(profile)) return;
         ci.cancel();
         CloneProfiles.recordAvoidedLookup();
-        var textures = CloneProfiles.suppliedTextures(profile, sessionService, requireSecure);
-        if (textures.isEmpty()) return; // PlayerInfo already provides a bundled default skin.
-        Minecraft.getInstance().execute(() -> textures.forEach((type, texture) ->
-                registerTexture(texture, type, callback)));
+        // Textureless clones need neither an executor task nor a network request.
+        if (!profile.getProperties().containsKey("textures")) return;
+        net.minecraft.Util.backgroundExecutor().execute(() -> {
+            var textures = CloneProfiles.suppliedTextures(profile, sessionService, requireSecure);
+            if (textures.isEmpty()) return; // PlayerInfo already provides a bundled default skin.
+            Minecraft.getInstance().execute(() -> textures.forEach((type, texture) ->
+                    registerTexture(texture, type, callback)));
+        });
     }
 }
