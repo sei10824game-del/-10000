@@ -830,9 +830,12 @@ public final class Motor {
             mineDebug = "no hands";
             return false;
         }
-        if (!stairWork && !self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES) && self.getServer() != null
-                && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos)) { // (an ore in a tread is taken, and the tread made good: see repairs)
-            mineDebug = "a tread of a staircase: left alone";
+        boolean repairingTread = !stairWork && self.getServer() != null
+                && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos);
+        if (repairingTread && (!self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES)
+                || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(self) < 0
+                || !repairs.isEmpty())) {
+            mineDebug = "stair tread: keep intact until it can be restored";
             return false;
         }
         ServerLevel level = self.serverLevel();
@@ -890,16 +893,16 @@ public final class Motor {
         }
         if (breakProgress >= 1.0F) {
             level.destroyBlockProgress(self.getId(), pos, -1);
-            boolean tread = !stairWork && self.getServer() != null && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos);
             self.gameMode.destroyBlock(pos);
-            if (tread) {
+            boolean removed = level.getBlockState(pos).isAir() || !level.getBlockState(pos).is(state.getBlock());
+            if (repairingTread && removed && !repairs.contains(pos)) {
                 repairs.add(pos.immutable()); // a hole in a staircase's tread: filled with a block of no worth, so the stairs keep their shape
             }
             resetMining();
             if (state.is(net.minecraftforge.common.Tags.Blocks.ORES) && self instanceof com.rlclones.clone.ClonePlayer cp && cp.controller() != null) {
                 cp.controller().perception().noteVein(pos); // the rest of the vein is looked for at once, whoever broke the first
             }
-            return level.getBlockState(pos).isAir() || !level.getBlockState(pos).is(state.getBlock());
+            return removed;
         }
         return false;
     }

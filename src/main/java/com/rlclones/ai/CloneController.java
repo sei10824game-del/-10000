@@ -4433,25 +4433,30 @@ public final class CloneController {
         ServerLevel level = self.serverLevel();
         int added = 0;
         for (var s : com.rlclones.clone.Bases.get(self.getServer()).staircases) {
-            if (!s.dimension.equals(level.dimension()) || s.top.distSqr(self.blockPosition()) > 48 * 48 || s.flooded || !s.finished) { // (a staircase still being dug has no holes to mend: its cells are the work)
+            if (!s.dimension.equals(level.dimension()) || s.flooded) {
                 continue;
             }
-            for (int i = 0; i <= s.steps(); i++) {
-                BlockPos tread = s.top.relative(s.dir, i).below(i + 1);
-                if (!level.isLoaded(tread) || motor.repairs.contains(tread)) {
-                    continue;
-                }
-                var st = level.getBlockState(tread);
-                // a real hole has a solid tread on both sides of it along the line (the ends count when the other side is solid): in a cave the
-                // "treads" are open air and filling them put blocks floating in the caverns (and in the way) that clones then got caught on
-                BlockPos before = s.top.relative(s.dir, i - 1).below(i);
-                BlockPos after = s.top.relative(s.dir, i + 1).below(i + 2);
-                boolean beforeSolid = i == 0 || !level.getBlockState(before).getCollisionShape(level, before).isEmpty();
-                boolean afterSolid = i >= s.steps() || !level.getBlockState(after).getCollisionShape(level, after).isEmpty();
-                if ((st.isAir() || st.canBeReplaced()) && st.getFluidState().isEmpty() && beforeSolid && afterSolid
-                        && motor.repairs.size() < 6) {
-                    motor.repairs.add(tread.immutable());
-                    added++;
+            // Only inspect the nearby, already excavated section, including active stairs.
+            int near = s.top.getY() - self.blockPosition().getY();
+            for (int i = Math.max(0, near - 4); i <= Math.min(s.steps(), near + 4); i++) {
+                for (int lane : new int[]{0, 1, -1, 2}) {
+                    BlockPos tread = s.top.relative(s.dir, i).below(i + 1).relative(s.dir.getClockWise(), lane);
+                    if (self.getEyePosition().distanceToSqr(Vec3.atCenterOf(tread)) > 36
+                            || !level.isLoaded(tread) || motor.repairs.contains(tread)) continue;
+                    var st = level.getBlockState(tread);
+                    BlockPos before = tread.relative(s.dir.getOpposite()).above();
+                    BlockPos after = tread.relative(s.dir).below();
+                    boolean beforeSolid = i == 0 || !level.getBlockState(before).getCollisionShape(level, before).isEmpty();
+                    boolean afterSolid = i >= s.steps() || !level.getBlockState(after).getCollisionShape(level, after).isEmpty();
+                    // Side lanes are only repaired where a walkable lane was opened, never through a wall.
+                    boolean openLane = lane == 0 || level.getBlockState(tread.above()).getCollisionShape(level, tread.above()).isEmpty()
+                            && level.getBlockState(tread.above(2)).getCollisionShape(level, tread.above(2)).isEmpty()
+                            && (i > 0 && beforeSolid || i < s.steps() && afterSolid);
+                    if ((st.isAir() || st.canBeReplaced()) && st.getFluidState().isEmpty() && (beforeSolid || afterSolid)
+                            && openLane && motor.repairs.size() < 6) {
+                        motor.repairs.add(tread.immutable());
+                        added++;
+                    }
                 }
             }
         }
@@ -4459,7 +4464,7 @@ public final class CloneController {
     }
 
     /** The holes this clone dug in a staircase's treads are filled with whatever block of no worth it has (cobblestone, dirt...). True while at it. */
-    private boolean repairTreads(long now) {
+    public boolean repairTreads(long now) {
         if (motor.repairs.isEmpty() && (now + self.getId()) % 100 == 0 && option != Option.FIGHT && option != Option.FLEE && !escaping) {
             scanTreads(); // (anyone mends the stairs, not only whoever dug the hole)
         }
@@ -4473,7 +4478,9 @@ public final class CloneController {
         }
         ServerLevel level = self.serverLevel();
         int slot = Equipment.pillarBlockSlot(self);
-        if (slot < 0 || now - repairSince > 200 || !level.getBlockState(hole).canBeReplaced() && !level.getBlockState(hole).isAir()) {
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || slot < 0 || now - repairSince > 200
+                || !level.getFluidState(hole).isEmpty()
+                || !level.getBlockState(hole).canBeReplaced() && !level.getBlockState(hole).isAir()) {
             motor.repairs.poll(); // (no block to fill with, or it took too long, or it is already filled)
             repairSince = 0;
             return !motor.repairs.isEmpty();
@@ -4481,6 +4488,22 @@ public final class CloneController {
         if (self.getEyePosition().distanceTo(Vec3.atCenterOf(hole)) > 4.0) {
             motor.navigate(Vec3.atCenterOf(hole.above()), 1.5, false);
             return true;
+        }
+        if (self.getBoundingBox().intersects(new AABB(hole))) {
+            // Never try to place a block through ourselves: step onto a supported cell first.
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                for (int dy : new int[]{0, 1, -1}) {
+                    BlockPos stand = self.blockPosition().relative(d).offset(0, dy, 0);
+                    AABB box = self.getBoundingBox().move(Vec3.atBottomCenterOf(stand).subtract(self.position()));
+                    if (box.intersects(new AABB(hole)) || !level.getFluidState(stand).isEmpty()
+                            || !level.getBlockState(stand.below()).isFaceSturdy(level, stand.below(), Direction.UP)
+                            || !level.noCollision(self, box)) continue;
+                    motor.moveToward(Vec3.atBottomCenterOf(stand));
+                    if (dy > 0) motor.jump();
+                    return true;
+                }
+            }
+            return false; // Keep the repair pending; emergency escape still has priority.
         }
         if (!self.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, new net.minecraft.world.phys.AABB(hole), e -> e != self && e.isAlive() && !e.isSpectator()).isEmpty()) {
             motor.repairs.add(motor.repairs.poll()); // somebody stands in the cell (a crowd on the stairs): no block can be laid there, next hole; the whole queue times out after 200 ticks
@@ -4497,6 +4520,14 @@ public final class CloneController {
         if (motor.placeBlockAt(hole)) {
             motor.repairs.poll();
             repairSince = 0;
+        } else {
+            // Adjacent stair treads touch diagonally. Rebuild one support beneath the
+            // missing tread first when no face is available at its intended height.
+            BlockPos support = hole.below();
+            if (level.getBlockState(support).canBeReplaced() && level.getFluidState(support).isEmpty()
+                    && !com.rlclones.clone.Bases.get(self.getServer()).isStairSpace(level.dimension(), support)) {
+                motor.placeBlockAt(support);
+            }
         }
         return true;
     }
@@ -5135,8 +5166,9 @@ public final class CloneController {
             BlockPos done = reflexOre;
             perception.forgetBlock(done);
             reflexOre = null;
-            reflexCollect = done;
-            reflexCollectTicks = 40;
+            // Repair a mined stair tread before chasing drops into its hole.
+            reflexCollect = motor.repairs.contains(done) ? null : done;
+            reflexCollectTicks = reflexCollect == null ? 0 : 40;
             for (BlockPos p : BlockPos.betweenClosed(done.offset(-1, -1, -1), done.offset(1, 1, 1))) {
                 if (Perception.classify(level.getBlockState(p)) == Perception.BlockKind.ORE) {
                     perception.noteBlock(p); // the rest of the vein

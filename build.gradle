@@ -41,7 +41,7 @@ minecraft {
         }
 
         gameTestServer {
-            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'forge.enabledGameTestNamespaces', System.getProperty('rlclones.gameTestNamespaces', "${mod_id},rlclones_stair_repair")
         }
     }
 }
