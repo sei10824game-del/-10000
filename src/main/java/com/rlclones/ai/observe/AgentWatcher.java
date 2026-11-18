@@ -45,6 +45,7 @@ public final class AgentWatcher {
     private final Supplier<Brain> brain;
     private final ToLongFunction<Entity> sinceEnemyAttack;
     private final Map<UUID, Trace> traces = new HashMap<>();
+    private final Set<UUID> seen = new HashSet<>();
     public long observedTransitions;
 
     public AgentWatcher(ServerPlayer self, Perception perception, Supplier<Brain> brain, ToLongFunction<Entity> sinceEnemyAttack) {
@@ -63,7 +64,7 @@ public final class AgentWatcher {
 
     public void update(long now) {
         int watched = 0;
-        Set<UUID> seen = new HashSet<>();
+        seen.clear();
         float weight = (float) Config.get(Config.IMITATION_WEIGHT, 0.8);
         for (Perception.Seen s : perception.visible()) {
             if (!(s.entity instanceof ServerPlayer agent) || agent == self || agent.isSpectator()) {
@@ -129,7 +130,7 @@ public final class AgentWatcher {
             t.combatState = -1;
             return;
         }
-        List<AgentEvents.Event> recent = AgentEvents.between(agent.getUUID(), now - 20, now);
+        List<AgentEvents.Event> recent = AgentEvents.sharedBetween(agent.getUUID(), now - 20, now);
         Entity enemy = focusEnemy(agent, recent);
         if (enemy == null) {
             t.combatState = -1;
@@ -146,7 +147,7 @@ public final class AgentWatcher {
             return;
         }
         Entity enemy = agent.level().getEntity(t.enemyId);
-        List<AgentEvents.Event> events = AgentEvents.between(agent.getUUID(), t.tick, now);
+        List<AgentEvents.Event> events = AgentEvents.sharedBetween(agent.getUUID(), t.tick, now);
         int action = inferAction(agent, t, enemy, events);
         if (action < 0) {
             return;
@@ -261,7 +262,7 @@ public final class AgentWatcher {
         if (t.stratState < 0) {
             return;
         }
-        List<AgentEvents.Event> events = AgentEvents.between(agent.getUUID(), t.stratTick, now);
+        List<AgentEvents.Event> events = AgentEvents.sharedBetween(agent.getUUID(), t.stratTick, now);
         Option option = inferOption(agent, t, events, now);
         long dt = Math.max(1, now - t.stratTick);
         float reward = strategyReward(events) - 0.005f * dt;

@@ -511,3 +511,12 @@ Java 17でウォームアップ後の処理時間と一時メモリ割り当て�
 依頼は未更新で2分後に消え、担当者が中断した場合は引き継げます。再起動時に依頼と予約をリセットし、クローンの不足は必要に応じて再登録されます。
 
 専用の検証は `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_civic` で実行できます。
+
+
+### 多数のクローンの処理負荷
+
+階段の保護判定を座標から直接計算し、複数のクローンが同じ個体を観察するときのイベント一覧を共有します。AIの判断・学習頻度を間引く変更や、新たな人数上限は追加していません。新しい行動イベントは同じtick内でも次の取得に反映します。
+
+`./gradlew benchmarkCrowd` で50・150・300体相当の部品処理の時間とメモリ割り当て量を比較できます。ゲーム全体のFPSを表す数値ではありません。詳細は [PERFORMANCE.md](PERFORMANCE.md) を参照してください。
+
+回帰検証は `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_crowd,rlclones_civic,rlclones_stair_repair` で実行できます。

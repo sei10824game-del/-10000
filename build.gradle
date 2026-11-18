@@ -41,7 +41,7 @@ minecraft {
         }
 
         gameTestServer {
-            property 'forge.enabledGameTestNamespaces', System.getProperty('rlclones.gameTestNamespaces', "${mod_id},rlclones_stair_repair,rlclones_civic")
+            property 'forge.enabledGameTestNamespaces', System.getProperty('rlclones.gameTestNamespaces', "${mod_id},rlclones_stair_repair,rlclones_civic,rlclones_crowd")
         }
     }
 }
@@ -109,4 +109,12 @@ tasks.register('benchmarkPerception', JavaExec) {
 mixin {
     add sourceSets.main, 'rlclones.refmap.json'
     config 'rlclones.mixins.json'
+}
+
+tasks.register('benchmarkCrowd', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.rlclones.clone.CrowdOptimizationBenchmark'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    jvmArgs '-Xms256m', '-Xmx512m'
 }

@@ -25,13 +25,22 @@ public final class AgentEvents {
     }
 
     private static final long KEEP_TICKS = 200;
-    private static final Map<UUID, ArrayDeque<Event>> LOGS = new HashMap<>();
+    private record Range(long from, long to, List<Event> events) {}
+    private static final class AgentLog {
+        final ArrayDeque<Event> events = new ArrayDeque<>();
+        final Range[] ranges = new Range[4];
+        int next;
+        void invalidate() { java.util.Arrays.fill(ranges, null); next = 0; }
+    }
+    private static final Map<UUID, AgentLog> LOGS = new HashMap<>();
 
     private AgentEvents() {
     }
 
     public static void record(UUID agent, long tick, Kind kind, float amount, int targetId, int flags) {
-        ArrayDeque<Event> log = LOGS.computeIfAbsent(agent, k -> new ArrayDeque<>());
+        AgentLog entry = LOGS.computeIfAbsent(agent, k -> new AgentLog());
+        entry.invalidate();
+        ArrayDeque<Event> log = entry.events;
         log.addLast(new Event(tick, kind, amount, targetId, flags));
         while (!log.isEmpty() && (tick - log.peekFirst().tick() > KEEP_TICKS || log.size() > 256)) {
             log.pollFirst();
@@ -40,12 +49,12 @@ public final class AgentEvents {
 
     /** Events with {@code from < tick <= to}. */
     public static List<Event> between(UUID agent, long from, long to) {
-        ArrayDeque<Event> log = LOGS.get(agent);
-        if (log == null || log.isEmpty()) {
+        AgentLog entry = LOGS.get(agent);
+        if (entry == null || entry.events.isEmpty()) {
             return List.of();
         }
         List<Event> out = new ArrayList<>();
-        for (Event e : log) {
+        for (Event e : entry.events) {
             if (e.tick() > from && e.tick() <= to) {
                 out.add(e);
             }
@@ -53,13 +62,30 @@ public final class AgentEvents {
         return out;
     }
 
+    /** Immutable shared snapshot; recording or pruning invalidates every cached range for this agent. */
+    public static List<Event> sharedBetween(UUID agent, long from, long to) {
+        AgentLog entry = LOGS.get(agent);
+        if (entry == null || entry.events.isEmpty()) return List.of();
+        for (Range range : entry.ranges) {
+            if (range != null && range.from == from && range.to == to) return range.events;
+        }
+        List<Event> snapshot = List.copyOf(between(agent, from, to));
+        entry.ranges[entry.next] = new Range(from, to, snapshot);
+        entry.next = (entry.next + 1) % entry.ranges.length;
+        return snapshot;
+    }
+
     public static void prune(long now) {
-        Iterator<Map.Entry<UUID, ArrayDeque<Event>>> it = LOGS.entrySet().iterator();
+        Iterator<Map.Entry<UUID, AgentLog>> it = LOGS.entrySet().iterator();
         while (it.hasNext()) {
-            ArrayDeque<Event> log = it.next().getValue();
+            AgentLog entry = it.next().getValue();
+            ArrayDeque<Event> log = entry.events;
+            boolean changed = false;
             while (!log.isEmpty() && now - log.peekFirst().tick() > KEEP_TICKS) {
                 log.pollFirst();
+                changed = true;
             }
+            if (changed) entry.invalidate();
             if (log.isEmpty()) {
                 it.remove();
             }
