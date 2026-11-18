@@ -1,6 +1,7 @@
 package com.rlclones.ai;
 
 import com.rlclones.Config;
+import com.rlclones.ai.util.NearestCandidates;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -84,6 +85,8 @@ public final class Perception {
     }
 
     private static final int MAX_BLOCKS = 128;
+    private static final int MAX_VISION_CHECKS = 64;
+    private final NearestCandidates<Entity> candidates = new NearestCandidates<>(MAX_VISION_CHECKS);
     private static final int MEMORY_TICKS = 200;
 
     private final ServerPlayer self;
@@ -138,47 +141,29 @@ public final class Perception {
         java.util.function.Predicate<Entity> wanted = e -> e.isAlive() && !e.isSpectator()
                 && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
                 || isRetrievable(e));
-        List<Entity> candidates = new java.util.ArrayList<>();
+        candidates.clear();
+        if (full) farSeen.clear();
         for (Entity e : level.getEntities(self, self.getBoundingBox().inflate(reach), wanted)) {
-            if (e.getBoundingBox().getCenter().distanceToSqr(eye) <= reach * reach) {
-                candidates.add(e);
-            }
-        }
-        if (full) {
-            farSeen.clear();
-            for (Entity e : candidates) {
-                if (e.getBoundingBox().getCenter().distanceToSqr(eye) > NEAR * NEAR) {
+            double centerDistance = e.getBoundingBox().getCenter().distanceToSqr(eye);
+            if (centerDistance <= reach * reach) {
+                candidates.offer(e, e.distanceToSqr(eye));
+                if (full && centerDistance > NEAR * NEAR) {
                     farSeen.add(e);
                 }
             }
-        } else {
+        }
+        if (!full) {
             for (Entity e : farSeen) {
                 if (e.isAlive() && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2) {
-                    candidates.add(e);
+                    candidates.offer(e, e.distanceToSqr(eye));
                 }
             }
         }
-        if (candidates.size() > 1) {
-            double[] keys = new double[candidates.size()];
-            Integer[] order = new Integer[keys.length];
-            for (int i = 0; i < keys.length; i++) {
-                keys[i] = candidates.get(i).distanceToSqr(eye);
-                order[i] = i;
-            }
-            java.util.Arrays.sort(order, (a, b) -> Double.compare(keys[a], keys[b]));
-            List<Entity> sorted = new java.util.ArrayList<>(keys.length);
-            for (Integer i : order) {
-                sorted.add(candidates.get(i));
-            }
-            candidates = sorted;
-        }
+        candidates.sort();
         Prof.add(Prof.P_ENTITIES, pe);
         long pv = Prof.t();
-        int checked = 0;
-        for (Entity e : candidates) {
-            if (checked++ >= 64) {
-                break;
-            }
+        for (int i = 0; i < candidates.size(); i++) {
+            Entity e = candidates.get(i);
             if (!canSee(e, range)) {
                 continue;
             }
@@ -199,6 +184,7 @@ public final class Perception {
             s.visible = true;
             visible.add(s);
         }
+        candidates.clear();
         for (Seen s : memory.values()) {
             if (s.lastSeen != now) {
                 s.visible = false;

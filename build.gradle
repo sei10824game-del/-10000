@@ -91,3 +91,13 @@ tasks.withType(JavaCompile).configureEach {
 tasks.named('test', Test).configure {
     useJUnitPlatform()
 }
+
+// Reproducible comparison of perception candidate selection (time and allocations).
+tasks.register('benchmarkPerception', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.rlclones.ai.util.PerceptionSelectionBenchmark'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}

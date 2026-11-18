@@ -347,7 +347,7 @@
 
 ## ビルドとテスト
 ```
-./gradlew test               # 学習表・経験バッファの単体テスト
+./gradlew test               # 学習データ・視認候補選別の単体テスト
 ./gradlew build              # build/libs/rlclones-1.0.0.jar
 ./gradlew runGameTestServer  # 実サーバー上で受け入れテスト（GameTest）を実行
 ```
@@ -472,3 +472,11 @@ GameTest（`src/main/java/com/rlclones/gametest/CloneGameTests.java`）で確認
 * `/rlclone coward on` で戦わず逃げるだけになり、off で戻ること
 * 拠点の横に2×2の無限水源を作ること
 * 効果（再生・不運）の良し悪しを学習し、悪い効果を牛乳で消すこと／毒の残留雲を悪いと学習して出て近寄らないこと
+
+
+### 視認候補処理の性能比較
+
+`./gradlew benchmarkPerception` で、以前の全件ソートと最適化した近傍64件の選別を比較できます。
+Java 17でウォームアップ後の処理時間と一時メモリ割り当て量を計測し、先頭64件が同じことも確認します。
+これは候補の選別処理だけの比較です。ゲーム全体のFPS・tick時間の改善率を表すものではありません。
+詳細は [PERFORMANCE.md](PERFORMANCE.md) を参照してください。
