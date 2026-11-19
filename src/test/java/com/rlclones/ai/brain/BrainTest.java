@@ -6,6 +6,15 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BrainTest {
+    @Test void oreMethodsAreSavedAndSharedIndependentlyOfRecovery() {
+        Brain a=new Brain();a.oreWork.record(2,3,1,true);a.recovery.record(0,1,-1,false);
+        Brain copy=a.copy();copy.oreWork.record(2,3,0,false);
+        assertEquals(1,a.oreWork.trials());
+        Brain merged=Brain.merge(List.of(a,copy));assertEquals(3,merged.oreWork.trials());assertEquals(2,merged.oreWork.wins());
+        assertEquals(2,merged.recovery.trials());assertEquals(0,merged.recovery.wins());
+        assertTrue(merged.summary().stream().anyMatch(s->s.startsWith("鉱石の取りかかり")));
+    }
+
     @Test void recoverySurvivesCopyAndSharedBrainMerge() {
         Brain a=new Brain(); a.recovery.record(3,1,1,true);
         Brain copy=a.copy(); copy.recovery.record(3,1,-1,false);

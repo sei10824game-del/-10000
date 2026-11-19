@@ -183,6 +183,8 @@ public final class CloneController {
     private boolean eatStarted;
     private int closeTicks;
 
+    private final OreWorkLearning oreWorkLearning;
+
     // reward tracking
     private float lastHealth = -1;
     private int lastFood = -1;
@@ -193,6 +195,7 @@ public final class CloneController {
         this.self = self;
         this.perception = new Perception(self);
         this.motor = new Motor(self);
+        this.oreWorkLearning = new OreWorkLearning(self, perception);
         this.watcher = new AgentWatcher(self, perception, self::getCloneBrain, this::sinceEnemyAttack);
         this.crafting = new Crafting(self, motor, perception);
         this.escape = new Escape(self, motor);
@@ -2075,6 +2078,10 @@ public final class CloneController {
         optionReward += Math.min(count, 5) * 0.2f;
     }
 
+    public void onConfirmedMining(BlockState state, BlockPos pos) {
+        oreWorkLearning.onBroken(state, pos);
+    }
+
     public void onBlockBroken(BlockState state, BlockPos pos) {
         discovery.onBroken(state, pos);
         brain().learnBlock(Perception.blockId(state));
@@ -2899,6 +2906,7 @@ public final class CloneController {
         if (option == null) {
             return;
         }
+        if (died) oreWorkLearning.failed(); else oreWorkLearning.cancel();
         if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
         endedOption = option.name();
         endedAfter = optionTicks;
@@ -5327,12 +5335,14 @@ public final class CloneController {
         }
         if (blockTarget != null && perception.kindAt(blockTarget) != (harvestKind != null ? harvestKind : kind)) {
             perception.forgetBlock(blockTarget);
+            oreWorkLearning.cancel();
             blockTarget = null;
         }
         if (blockTarget == null) {
             long at = now();
             skipBlocks.values().removeIf(t -> at - t > 1200);
             harvestKind = kind;
+            oreWorkLearning.cancel();
             blockTarget = null;
             if (kind == Perception.BlockKind.STONE) {
                 // quarrying: an ore in sight is worth far more than plain stone - it goes first
@@ -5351,6 +5361,8 @@ public final class CloneController {
             if (blockTarget == null) {
                 blockTarget = Senses.nearestBlock(perception, self, kind, kind == Perception.BlockKind.LOG ? 32 : 24, p -> harvestable(kind, p));
             }
+            if (kind == Perception.BlockKind.ORE && option == Option.MINE)
+                blockTarget = oreWorkLearning.select(blockTarget,24,p -> harvestable(kind,p) && safeToDig(p));
             blockTicks = 0;
             if (blockTarget == null) {
                 return true;
@@ -5358,12 +5370,14 @@ public final class CloneController {
             BlockClaims.claim(blockTarget, self.getUUID(), now()); // mine, says the clone: the others take another
             if ((kind == Perception.BlockKind.ORE || kind == Perception.BlockKind.STONE) && !hasPickFor(level.getBlockState(blockTarget))) {
                 if (toolUp(level.getBlockState(blockTarget))) {
+                    oreWorkLearning.cancel();
                     blockTarget = null;
                     return true; // the pickaxe first (or the wood for it)
                 }
                 harvestDebug = "no tool " + blockTarget.toShortString();
                 skipBlocks.put(blockTarget.immutable(), now()); // nothing we can get that breaks this one
                 perception.forgetBlock(blockTarget);
+                oreWorkLearning.cancel();
                 blockTarget = null;
                 return false;
             }
@@ -5372,12 +5386,14 @@ public final class CloneController {
                 harvestDebug = "base " + blockTarget.toShortString();
                 skipBlocks.put(blockTarget.immutable(), now()); // never take a base apart (seen again at once: skip it a while)
                 perception.forgetBlock(blockTarget);
+                oreWorkLearning.cancel();
                 blockTarget = null;
                 return false;
             }
             if (kind != Perception.BlockKind.LOG && (!safeToDig(blockTarget) || kind == Perception.BlockKind.STONE && blockTarget.getY() > self.getBlockY() + 3)) {
                 harvestDebug = "unsafe " + blockTarget.toShortString();
                 perception.forgetBlock(blockTarget); // (often only from where we stand right now: no long skip)
+                oreWorkLearning.cancel();
                 blockTarget = null;
                 return false;
             }
@@ -5385,6 +5401,7 @@ public final class CloneController {
             traceHarvest("t" + blockTarget.toShortString());
             if (perception.kindAt(blockTarget) != harvestKind) {
                 perception.forgetBlock(blockTarget);
+                oreWorkLearning.cancel();
                 blockTarget = null;
                 return false;
             }
@@ -5392,6 +5409,7 @@ public final class CloneController {
         }
         blockTicks++;
         if (!BlockClaims.claim(blockTarget, self.getUUID(), now())) {
+            oreWorkLearning.cancel();
             blockTarget = null; // another clone got there first (the same moment): look for another block
             return false;
         }
@@ -5399,9 +5417,11 @@ public final class CloneController {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget))); // the right tool for the job
         }
         if (blockTicks > 240) {
+            oreWorkLearning.failed();
             traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)) + " " + motor.mineDebug);
             skipBlocks.put(blockTarget.immutable(), now());
             perception.forgetBlock(blockTarget);
+            oreWorkLearning.cancel();
             blockTarget = null;
             return false;
         }
@@ -5423,6 +5443,7 @@ public final class CloneController {
                 traceHarvest("scaf-skip");
                 skipBlocks.put(blockTarget.immutable(), now());
                 perception.forgetBlock(blockTarget);
+                oreWorkLearning.cancel();
                 blockTarget = null;
                 return false;
             }
@@ -5434,9 +5455,11 @@ public final class CloneController {
                 return false; // an ore in sight with rock between: the rock is dug through, straight to it
             }
             if (motor.stuckCount() > 3) {
+                oreWorkLearning.failed();
                 traceHarvest("stuck " + self.blockPosition().toShortString());
                 skipBlocks.put(blockTarget.immutable(), now());
                 perception.forgetBlock(blockTarget);
+                oreWorkLearning.cancel();
                 blockTarget = null;
             }
             return false;
@@ -5457,6 +5480,7 @@ public final class CloneController {
             BlockPos done = blockTarget;
             perception.forgetBlock(done);
             BlockClaims.release(done, self.getUUID());
+            oreWorkLearning.cancel();
             blockTarget = null;
             // (a trunk goes on down to the ground: its foot is known to be there even when the leaves hide it)
             int down = kind == Perception.BlockKind.LOG ? -12 : -1;
@@ -5524,6 +5548,7 @@ public final class CloneController {
         out.add("option " + (option == null ? "none" : option.key()) + " for " + optionTicks + " ticks; layer " + idleWhy + "; recent: " + optionLog.subList(Math.max(0, optionLog.size() - 8), optionLog.size()));
         out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
         out.add(motor.recoveryReport());
+        out.add(oreWorkLearning.report());
         out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
         StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));

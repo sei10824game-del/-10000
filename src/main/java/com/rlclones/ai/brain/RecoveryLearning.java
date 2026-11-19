@@ -52,8 +52,11 @@ public final class RecoveryLearning {
     public long trials() {long n=0;for(int count:samples)n+=count;return n;}
     public long wins() {long n=0;for(int count:successes)n+=count;return n;}
     public String report() {
-        String[] names={"左","右","浮上","後退"};
-        StringBuilder out=new StringBuilder("水中の立て直し: 試行="+trials()+" 成功="+wins());
+        return report("水中の立て直し", new String[]{"左","右","浮上","後退"});
+    }
+    public String report(String title, String[] names) {
+        if (names.length != ACTIONS) throw new IllegalArgumentException("four action names required");
+        StringBuilder out=new StringBuilder(title+": 試行="+trials()+" 成功="+wins());
         for(int a=0;a<4;a++) {long n=0,w=0;double sum=0;for(int s=0;s<8;s++){int i=s*4+a;n+=samples[i];w+=successes[i];sum+=(double)value[i]*samples[i];}
             if(n>0) out.append(String.format(Locale.ROOT," %s=%d/%d(評価%.2f)",names[a],w,n,sum/n));}
         return out.toString();

@@ -910,6 +910,8 @@ public final class Motor {
             level.destroyBlockProgress(self.getId(), pos, -1);
             self.gameMode.destroyBlock(pos);
             boolean removed = level.getBlockState(pos).isAir() || !level.getBlockState(pos).is(state.getBlock());
+            if (removed && self instanceof com.rlclones.clone.ClonePlayer clone && clone.controller() != null)
+                clone.controller().onConfirmedMining(state, pos);
             if (repairingTread && removed && !repairs.contains(pos)) {
                 repairs.add(pos.immutable()); // a hole in a staircase's tread: filled with a block of no worth, so the stairs keep their shape
             }

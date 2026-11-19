@@ -34,6 +34,7 @@ public final class Brain {
     private final Random random = new Random();
 
     public final RecoveryLearning recovery = new RecoveryLearning();
+    public final RecoveryLearning oreWork = new RecoveryLearning();
 
     public long ownUpdates;
     public long imitationUpdates;
@@ -527,6 +528,7 @@ public final class Brain {
         CompoundTag tag = new CompoundTag();
         tag.putInt("version", 1);
         tag.putByteArray("recovery", recovery.save());
+        tag.putByteArray("oreWork", oreWork.save());
         tag.putByteArray("strategy", strategy.toBytes());
         CompoundTag c = new CompoundTag();
         combat.forEach((k, v) -> c.putByteArray(k, v.toBytes()));
@@ -607,6 +609,7 @@ public final class Brain {
     public static Brain load(CompoundTag tag) {
         Brain b = new Brain();
         b.recovery.merge(RecoveryLearning.load(tag.getByteArray("recovery")));
+        b.oreWork.merge(RecoveryLearning.load(tag.getByteArray("oreWork")));
         b.strategy.mergeFrom(QTable.fromBytes(tag.getByteArray("strategy"), Option.COUNT));
         CompoundTag c = tag.getCompound("combat");
         for (String k : c.getAllKeys()) {
@@ -723,6 +726,7 @@ public final class Brain {
             return;
         }
         recovery.merge(b.recovery);
+        oreWork.merge(b.oreWork);
         strategy.mergeFrom(b.strategy);
         b.combat.forEach((k, v) -> combatTable(k).mergeFrom(v));
         b.knowledge.forEach((k, v) -> knowledge(k).merge(v));
@@ -796,6 +800,7 @@ public final class Brain {
     public List<String> summary() {
         List<String> lines = new ArrayList<>();
         lines.add(recovery.report());
+        lines.add(oreWork.report("鉱石の取りかかり", new String[]{"近距離","高低差","まとまり","明るさ"}));
         lines.add(String.format(Locale.ROOT, "states=%d enemyTypes=%d knownTypes=%d own=%d imitated=%d replayed=%d kills=%d deaths=%d members=%d",
                 totalStates(), combat.size(), knowledge.size(), ownUpdates, imitationUpdates, replayUpdates, kills, deaths, members));
         return lines;
