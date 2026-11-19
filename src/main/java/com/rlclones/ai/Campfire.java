@@ -79,11 +79,24 @@ public final class Campfire {
     /** A lit campfire within 16 blocks (nearest), else null. */
     @Nullable
     public BlockPos existing() {
-        BlockPos c = self.blockPosition();
+        return nearest(level(), self.blockPosition());
+    }
+
+    @Nullable
+    public static BlockPos nearest(ServerLevel level, BlockPos c) {
+        com.rlclones.ai.util.SectionPresence sections = null;
+        int checked = 0;
         var cursor = new BlockPos.MutableBlockPos();
         for (var offset : FIRE_OFFSETS) {
             cursor.set(c.getX() + offset.x(), c.getY() + offset.y(), c.getZ() + offset.z());
-            var st = level().getBlockState(cursor);
+            // Nearby fires need no palette setup. The expensive absent/distant case benefits from filtering.
+            if (checked++ >= 32) {
+                if (sections == null) sections = new com.rlclones.ai.util.SectionPresence(level,
+                        c.offset(-16, -4, -16), c.offset(16, 4, 16),
+                        state -> state.getBlock() instanceof CampfireBlock && state.getValue(CampfireBlock.LIT));
+                if (!sections.mayContain(cursor)) continue;
+            }
+            var st = level.getBlockState(cursor);
             if (st.getBlock() instanceof CampfireBlock && st.getValue(CampfireBlock.LIT)) return cursor.immutable();
         }
         return null;

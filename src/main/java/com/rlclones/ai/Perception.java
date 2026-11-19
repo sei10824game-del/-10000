@@ -337,10 +337,12 @@ public final class Perception {
         if (level.getBrightness(net.minecraft.world.level.LightLayer.SKY, c) >= 8) {
             return; // out in the open: the rays do well enough
         }
+        var oreSections = new com.rlclones.ai.util.SectionPresence(level, c.offset(-6, -4, -6), c.offset(6, 4, 6),
+                state -> state.is(Tags.Blocks.ORES));
         Vec3 eye = self.getEyePosition();
         Vec3 look = self.getViewVector(1.0F);
         for (BlockPos p : BlockPos.betweenClosed(c.offset(-6, -4, -6), c.offset(6, 4, 6))) {
-            if (blocks.containsKey(p) || !level.getBlockState(p).is(Tags.Blocks.ORES)) {
+            if (blocks.containsKey(p) || !oreSections.mayContain(p) || !level.getBlockState(p).is(Tags.Blocks.ORES)) {
                 continue;
             }
             Vec3 to = Vec3.atCenterOf(p).subtract(eye);
