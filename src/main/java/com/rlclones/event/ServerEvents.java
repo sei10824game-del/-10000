@@ -86,6 +86,20 @@ public final class ServerEvents {
     // ------------------------------------------------------------------ lifecycle
 
     @SubscribeEvent
+    public static void onReloadListeners(net.minecraftforge.event.AddReloadListenerEvent event) {
+        event.addListener(new net.minecraft.server.packs.resources.SimplePreparableReloadListener<Object>() {
+            @Override
+            protected Object prepare(net.minecraft.server.packs.resources.ResourceManager resources,
+                                     net.minecraft.util.profiling.ProfilerFiller profiler) { return new Object(); }
+            @Override
+            protected void apply(Object prepared, net.minecraft.server.packs.resources.ResourceManager resources,
+                                 net.minecraft.util.profiling.ProfilerFiller profiler) {
+                com.rlclones.ai.Crafting.invalidateRecipes();
+            }
+        });
+    }
+
+    @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         CloneManager.get(event.getServer()).restore();
     }
@@ -101,6 +115,7 @@ public final class ServerEvents {
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         CloneManager.shutdown();
+        com.rlclones.ai.Crafting.invalidateRecipes();
         DAMAGE_TAKEN.clear();
         SHIELD_CHECKS.clear();
     }

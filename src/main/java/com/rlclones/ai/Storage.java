@@ -169,7 +169,7 @@ public final class Storage {
         for (int i = 0; i < inv.items.size(); i++) {
             if (inv.items.get(i).getItem() instanceof ArmorItem a) {
                 Integer cur = bestArmor.get(a.getEquipmentSlot());
-                if (cur == null || a.getDefense() > ((ArmorItem) inv.items.get(cur).getItem()).getDefense()) {
+                if (cur == null || Equipment.armorScore(inv.items.get(i)) > Equipment.armorScore(inv.items.get(cur))) {
                     bestArmor.put(a.getEquipmentSlot(), i);
                 }
             }
@@ -193,8 +193,8 @@ public final class Storage {
                 }
             } else if (it instanceof ArmorItem a) {
                 ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
-                double wornDef = worn.getItem() instanceof ArmorItem w ? w.getDefense() : -1;
-                if (bestArmor.get(a.getEquipmentSlot()) != i || a.getDefense() <= wornDef) {
+                double wornDef = Equipment.armorScore(worn);
+                if (bestArmor.get(a.getEquipmentSlot()) != i || Equipment.armorScore(s) <= wornDef) {
                     out.add(i);
                 }
             } else if (it instanceof ShieldItem) {
@@ -231,10 +231,10 @@ public final class Storage {
                 if (!launcher) {
                     out.add(i);
                 }
-            } else if ((s.is(Items.IRON_INGOT) || s.is(Items.DIAMOND)) && Progression.need(p) == Progression.Need.NONE) {
-                out.add(i); // nothing left to make from it: into the base chest, for a friend who is short
             } else if (Crafting.modGearMaterial(p, s) && p.getInventory().countItem(it) <= 64) {
-                // (copper for a copper set: it is carried, not put away)
+                // Materials for any craftable armor/tool upgrade are useful, regardless of namespace.
+            } else if ((s.is(Items.IRON_INGOT) || s.is(Items.DIAMOND)) && Progression.need(p) == Progression.Need.NONE) {
+                out.add(i);
             } else if (!KEEP.contains(it)) {
                 out.add(i);
             }
@@ -294,9 +294,7 @@ public final class Storage {
                 return p.getInventory().countItem(it) < 32; // the ingots for the gear a mod adds: fetched from the chest
             }
             if (it instanceof ArmorItem a) {
-                ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
-                double wornDef = worn.getItem() instanceof ArmorItem x ? x.getDefense() : 0;
-                return a.getDefense() > wornDef;
+                return Crafting.armorImproves(p, s);
             }
             if (Equipment.attackDamage(s) > bestWeapon + 0.5 && !(it instanceof PickaxeItem) && !(it instanceof ShovelItem) && !(it instanceof HoeItem)) {
                 return true;
@@ -321,8 +319,16 @@ public final class Storage {
 
     @Nullable
     private BlockPos fetchableChest() {
+        return fetchableChest(supplyWanted != null ? supplyWanted : wants(self));
+    }
+
+    public boolean armorSuppliesAvailable() {
+        return fetchableChest(stack -> Crafting.armorImproves(self, stack)
+                || self.getInventory().countItem(stack.getItem()) < 32 && Crafting.armorMaterial(self, stack)) != null;
+    }
+
+    private BlockPos fetchableChest(Predicate<ItemStack> want) {
         Bases bases = Bases.get(self.getServer());
-        Predicate<ItemStack> want = supplyWanted != null ? supplyWanted : wants(self);
         BlockPos best = null;
         double bestD = 128;
         for (Bases.Base b : bases.bases) {

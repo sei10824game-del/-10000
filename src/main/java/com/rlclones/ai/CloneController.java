@@ -2589,6 +2589,10 @@ public final class CloneController {
             urgentCrafts++;
             return Option.CRAFT; // a furnace for the raw food / ore, the first bucket
         }
+        if ((mask & Option.FETCH.bit()) != 0 && !hungryNoFood() && storage.armorSuppliesAvailable()) {
+            return Option.FETCH; // usable armor/materials in a known warehouse should not wait indefinitely.
+        }
+
         if ((mask & Option.QUARRY.bit()) != 0 && !hungryNoFood() && Progression.need(self) == Progression.Need.STONE
                 && Senses.nearestBlock(perception, self, Perception.BlockKind.ORE, 24) != null) {
             return Option.QUARRY; // ore in sight but only a wooden pickaxe: cobblestone first (a stone pickaxe is two sticks and three of it), then the ore

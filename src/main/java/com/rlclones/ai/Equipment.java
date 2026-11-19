@@ -672,7 +672,7 @@ public final class Equipment {
         return -1;
     }
 
-    private static double armorScore(ItemStack s) {
+    public static double armorScore(ItemStack s) {
         if (s.getItem() instanceof ArmorItem a) {
             return a.getDefense() + a.getToughness() * 0.5 + (s.isEnchanted() ? 0.25 : 0);
         }

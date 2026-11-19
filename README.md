@@ -520,3 +520,16 @@ Java 17でウォームアップ後の処理時間と一時メモリ割り当て�
 `./gradlew benchmarkCrowd` で50・150・300体相当の部品処理の時間とメモリ割り当て量を比較できます。ゲーム全体のFPSを表す数値ではありません。詳細は [PERFORMANCE.md](PERFORMANCE.md) を参照してください。
 
 回帰検証は `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_crowd,rlclones_civic,rlclones_stair_repair` で実行できます。
+
+
+### MOD防具の製作と素材の利用
+
+通常の作業台レシピを持つ防具・武器・道具は、アイテムIDの名前空間にかかわらず製作候補にします。Copper Age Backportのように `minecraft:copper_chestplate` を追加するMODにも対応します。
+
+今の装備や所持品より良い防具が作れる場合は優先して製作し、装備します。必要な素材は不要品として預けず、既知の拠点チェストにあれば取り出しを促します。防具の防御だけでなく強靭さも倉庫・製作・装備で同じ基準で比較します。作業台がない場合は、木材があればその準備から進めます。通常のデータ再読み込み(`/reload`)でもレシピ索引を更新します。
+
+対象は通常の作業台レシピと標準の防具スロットです。専用加工機やCurios等の独自スロットの操作を新たに追加するものではありません。
+
+基本の回帰検証は `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_gear`。Copper Age Backportを導入した開発環境では、実MOD用の `rlclones_copper_compat` 名前空間を選択できます。
+
+Copper Age Backport Forge 1.20.1 / 0.1.5との実併用検証で、倉庫の銅インゴット24個から銅防具一式の製作・装備を確認しています。Copper Age Backport本体は別途導入してください。

@@ -119,6 +119,7 @@ public final class Crafting {
     private int workInv = -1;
     private long workSeen = Long.MIN_VALUE;
     private boolean workCached;
+    private long workRecipeGeneration = -1;
     @Nullable
     private Item workForced;
 
@@ -127,10 +128,11 @@ public final class Crafting {
         long now = self.level().getGameTime();
         int inv = self.getInventory().getTimesChanged();
         long seen = perception.lastUpdate();
-        if (now == workTick && inv == workInv && seen == workSeen && forcedTarget == workForced) {
+        if (now == workTick && inv == workInv && seen == workSeen && forcedTarget == workForced && workRecipeGeneration == recipeGeneration) {
             return workCached;
         }
         workCached = plan(self) != null || smeltWork() || furnaceReady() || stationToPlace() != null || doneFurnace() != null;
+        workRecipeGeneration = recipeGeneration;
         workForced = forcedTarget;
         workTick = now;
         workInv = inv;
@@ -336,14 +338,17 @@ public final class Crafting {
     }
 
     private static boolean armorUpgrade(Player p, ArmorItem target) {
-        EquipmentSlot slot = target.getEquipmentSlot();
-        double worn = p.getItemBySlot(slot).getItem() instanceof ArmorItem a ? a.getDefense() : 0;
-        for (ItemStack s : p.getInventory().items) {
-            if (s.getItem() instanceof ArmorItem a && a.getEquipmentSlot() == slot) {
-                worn = Math.max(worn, a.getDefense());
-            }
-        }
-        return target.getDefense() > worn;
+        return armorImproves(p, new ItemStack(target));
+    }
+
+    public static boolean armorImproves(Player p, ItemStack target) {
+        if (!(target.getItem() instanceof ArmorItem armor)) return false;
+        var slot = armor.getEquipmentSlot();
+        double best = Equipment.armorScore(p.getItemBySlot(slot));
+        for (ItemStack stack : p.getInventory().items)
+            if (stack.getItem() instanceof ArmorItem other && other.getEquipmentSlot() == slot)
+                best = Math.max(best, Equipment.armorScore(stack));
+        return Equipment.armorScore(target) > best + 0.01;
     }
 
     /** Items that would improve the clone, most important first. */
@@ -389,10 +394,11 @@ public final class Crafting {
 
     private static Object modOwner;
     private static List<Entry> modGear = List.of();
+    private static List<Entry> freeGear = List.of();
 
     private static java.util.Map<Item, List<Entry>> modGearByIngredient = java.util.Map.of();
 
-    /** The recipes of other mods' armour / weapons / tools (read from the recipe manager once per world). */
+    /** Recipe-driven equipment of any namespace; rebuilt after recipe reload. */
     private static void ensureModGear(ServerPlayer sp) {
         var manager = sp.serverLevel().getRecipeManager();
         if (modOwner == manager) {
@@ -401,13 +407,15 @@ public final class Crafting {
         List<Entry> list = new ArrayList<>();
         for (Entry e : index(sp)) {
             Item it = e.result().getItem();
-            var key = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(it);
-            if (key != null && !key.getNamespace().equals("minecraft") && (it instanceof net.minecraft.world.item.ArmorItem || it instanceof SwordItem || it instanceof TieredItem)) {
+            // Recipes can be supplied by mods/datapacks even when their output uses a vanilla item ID.
+            if (it instanceof ArmorItem || it instanceof SwordItem || it instanceof TieredItem) {
                 list.add(e);
             }
         }
         java.util.Map<Item, List<Entry>> byIngredient = new java.util.HashMap<>();
+        List<Entry> free = new ArrayList<>();
         for (Entry e : list) {
+            if (e.recipe().getIngredients().stream().allMatch(ing -> ing.isEmpty())) free.add(e);
             for (var ing : e.recipe().getIngredients()) {
                 for (ItemStack st : ing.getItems()) {
                     var es = byIngredient.computeIfAbsent(st.getItem(), k -> new ArrayList<>());
@@ -418,6 +426,7 @@ public final class Crafting {
             }
         }
         modGear = list;
+        freeGear = free;
         modGearByIngredient = byIngredient;
         modOwner = manager;
     }
@@ -427,12 +436,7 @@ public final class Crafting {
         Item it = result.getItem();
         boolean better;
         if (it instanceof net.minecraft.world.item.ArmorItem a) {
-            ItemStack worn = p.getItemBySlot(a.getEquipmentSlot());
-            better = !(worn.getItem() instanceof net.minecraft.world.item.ArmorItem w) || a.getDefense() + a.getToughness() > w.getDefense() + w.getToughness() + 0.01;
-            for (ItemStack st : p.getInventory().items) {
-                better &= !(st.getItem() instanceof net.minecraft.world.item.ArmorItem b) || b.getEquipmentSlot() != a.getEquipmentSlot()
-                        || a.getDefense() + a.getToughness() > b.getDefense() + b.getToughness() + 0.01;
-            }
+            better = armorImproves(p, result);
         } else if (it instanceof SwordItem) {
             better = Equipment.attackDamage(result) > bestWeapon(p) + 0.01;
         } else if (it instanceof PickaxeItem || it instanceof AxeItem || it instanceof net.minecraft.world.item.ShovelItem || it instanceof HoeItem) {
@@ -449,7 +453,9 @@ public final class Crafting {
      * An ingredient of some other mod's armour / weapon / tool that would beat what this clone has (copper ingots for a copper set...): kept in the
      * bag and fetched from the chest, not put away as a surplus - the gear needs a bagful of it before it can be made.
      */
-    public static boolean modGearMaterial(Player p, ItemStack s) {
+    public static boolean modGearMaterial(Player p, ItemStack s) { return gearMaterial(p, s, false); }
+    public static boolean armorMaterial(Player p, ItemStack s) { return gearMaterial(p, s, true); }
+    private static boolean gearMaterial(Player p, ItemStack s, boolean armorOnly) {
         if (!(p instanceof ServerPlayer sp) || s.isEmpty()) {
             return false;
         }
@@ -459,10 +465,27 @@ public final class Crafting {
             return false;
         }
         for (Entry e : es) {
+            if (armorOnly && !(e.result().getItem() instanceof ArmorItem)) continue;
             if (modBetter(p, e.result())) {
                 return true;
             }
         }
+        return false;
+    }
+
+    private static java.util.Set<Entry> gearCandidates(ServerPlayer p) {
+        ensureModGear(p);
+        java.util.Set<Entry> candidates = new java.util.LinkedHashSet<>(freeGear);
+        for (ItemStack stack : p.getInventory().items) {
+            var uses = modGearByIngredient.get(stack.getItem());
+            if (!stack.isEmpty() && uses != null) candidates.addAll(uses);
+        }
+        return candidates;
+    }
+
+    private static boolean craftableArmor(ServerPlayer p) {
+        for (Entry e : gearCandidates(p))
+            if (e.result().getItem() instanceof ArmorItem && armorImproves(p, e.result()) && canCraft(p, e.recipe())) return true;
         return false;
     }
 
@@ -472,14 +495,24 @@ public final class Crafting {
             return;
         }
         ensureModGear(sp);
-        for (Entry e : modGear) {
-            Item it = e.result().getItem();
-            if (out.contains(it) || !canCraft(p, e.recipe())) {
-                continue;
-            }
-            if (modBetter(p, e.result())) {
-                out.add(it);
-            }
+        java.util.Set<Entry> candidates = gearCandidates(sp);
+        List<Entry> available = new ArrayList<>();
+        for (Entry e : candidates) {
+            if (modBetter(p, e.result()) && canCraft(p, e.recipe())) available.add(e);
+        }
+        available.sort(java.util.Comparator.<Entry>comparingDouble(e -> Equipment.armorScore(e.result())).reversed()
+                .thenComparing(e -> e.recipe().getId().toString()));
+        java.util.Set<Item> added = new java.util.HashSet<>();
+        Item forced = p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null ? c.controller().crafting().forcedTarget : null;
+        int priority = forced != null && !out.isEmpty() && out.get(0) == forced ? 1 : 0;
+        for (Entry e : available) {
+            Item item = e.result().getItem();
+            if (!added.add(item) || item == forced && out.contains(item)) continue;
+            if (item instanceof ArmorItem) {
+                // Complete a useful armor set before discretionary tools/cosmetics.
+                out.remove(item);
+                out.add(priority++, item);
+            } else if (!out.contains(item)) out.add(item);
         }
     }
 
@@ -697,6 +730,17 @@ public final class Crafting {
     }
 
     private record Entry(CraftingRecipe recipe, ItemStack result) {
+    }
+
+    private static long recipeGeneration;
+    public static void invalidateRecipes() {
+        cacheOwner = null;
+        modOwner = null;
+        cache = List.of();
+        modGear = List.of();
+        freeGear = List.of();
+        modGearByIngredient = java.util.Map.of();
+        recipeGeneration++;
     }
 
     private static Object cacheOwner;
@@ -1089,6 +1133,7 @@ public final class Crafting {
     }
 
     /** Crafting that should not wait for the policy to get round to it (a furnace for the raw food/ore, the first bucket, a pickaxe for mining). */
+    private long armorUrgentAt = -1000;
     public boolean urgent() {
         if (forcedTarget instanceof PickaxeItem) {
             return true;
@@ -1116,6 +1161,10 @@ public final class Crafting {
             return true;
         }
         boolean tableAccess = count(self, Items.CRAFTING_TABLE) > 0 || tableNearby(self) || countTag(self, ItemTags.PLANKS) + countTag(self, ItemTags.LOGS) * 4 >= 4;
+        if (tableAccess && now - armorUrgentAt >= 100) {
+            armorUrgentAt = now;
+            if (forcedTarget == null && craftableArmor(self)) return true;
+        }
         return tableAccess && (furnaceWanted(self) || firstBucketWanted(self)) || stationToPlace() == Items.FURNACE;
     }
 
