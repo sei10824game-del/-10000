@@ -53,7 +53,7 @@ public final class OreWorkLearning {
         for(int a=1;a<4;a++){boolean different=true;for(int b=0;b<a;b++)if((mask&(1<<b))!=0&&best[a].equals(best[b]))different=false;if(different)mask|=1<<a;}
         if(Integer.bitCount(mask)<2)return fallback;
         state=(self.level().getMaxLocalRawBrightness(self.blockPosition())<8?1:0)|(heights?2:0)|(clusters?4:0);
-        owner=self.getCloneBrain();method=owner.oreWork.choose(state,mask,random);
+        owner=self.getCloneBrain();method=owner.chooseMethod(1,state,mask,random);
         target=best[method].immutable();dimension=self.level().dimension();started=self.level().getGameTime();health=self.getHealth();
         tools.clear();
         for(var stack:self.getInventory().items) if(stack.getItem() instanceof net.minecraft.world.item.TieredItem&&stack.isDamageableItem())
@@ -82,7 +82,9 @@ public final class OreWorkLearning {
         long elapsed=self.level().getGameTime()-started;
         if(owner==self.getCloneBrain()&&dimension==self.level().dimension()&&elapsed>=0&&elapsed<=300) {
             float damage=Math.max(0,health-self.getHealth());
-            owner.oreWork.record(state,method,reward(mined,(int)elapsed,damage,wear()),mined);
+            float result=reward(mined,(int)elapsed,damage,wear());
+            owner.recordMethod(1,state,method,result,mined);
+            DevelopmentLearning.publish(self,1,state,method,result,mined);
         }
         cancel();
     }

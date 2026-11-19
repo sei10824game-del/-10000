@@ -1337,7 +1337,7 @@ public final class Motor {
                 | (lastGoal != null && lastGoal.y > self.getY()+0.5 ? 4 : 0);
         recoveryBrain = recoveryBrain();
         escapeAction = recoveryBrain == null ? (mask == 0 ? -1 : Integer.numberOfTrailingZeros(mask))
-                : recoveryBrain.recovery.choose(recoveryState,mask,recoveryRandom);
+                : recoveryBrain.chooseMethod(0,recoveryState,mask,recoveryRandom);
         if (escapeAction < 0) { escapeTicks = 0; return; }
         escapeTried |= 1 << escapeAction;
         escapeTicks = 30;
@@ -1358,7 +1358,8 @@ public final class Motor {
         float damage = Math.max(0,recoveryHealth-self.getHealth());
         boolean success = com.rlclones.ai.brain.RecoveryLearning.succeeded(moved,progress,damage,exited);
         float reward = com.rlclones.ai.brain.RecoveryLearning.reward(moved,progress,damage,recoveryAir-self.getAirSupply(),exited);
-        recoveryBrain.recovery.record(recoveryState,escapeAction,reward,success);
+        recoveryBrain.recordMethod(0,recoveryState,escapeAction,reward,success);
+        if(self instanceof com.rlclones.clone.ClonePlayer clone)DevelopmentLearning.publish(clone,0,recoveryState,escapeAction,reward,success);
         return success;
     }
 

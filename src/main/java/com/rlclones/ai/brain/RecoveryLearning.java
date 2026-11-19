@@ -48,6 +48,7 @@ public final class RecoveryLearning {
         return Math.max(-2,(succeeded(moved,progress,damage,exited)?1f:moved<0.3?-0.6f:-0.1f)
                 -Math.min(1.5f,Math.max(0,damage)*0.25f)-Math.min(0.5f,Math.max(0,airLost)/300f));
     }
+    public int samples(int state,int action) {return samples[state*4+action];}
     public float value(int state,int action) {return value[state*4+action];}
     public long trials() {long n=0;for(int count:samples)n+=count;return n;}
     public long wins() {long n=0;for(int count:successes)n+=count;return n;}

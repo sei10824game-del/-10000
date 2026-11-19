@@ -184,6 +184,8 @@ public final class CloneController {
     private int closeTicks;
 
     private final OreWorkLearning oreWorkLearning;
+    private final DevelopmentLearning development;
+    private final SafeItemTrials safeTrials;
 
     // reward tracking
     private float lastHealth = -1;
@@ -252,6 +254,8 @@ public final class CloneController {
             Brain b = self.getCloneBrain();
             return b != null && b.isHarmful(id);
         });
+        safeTrials = new SafeItemTrials(self,perception);
+        development = new DevelopmentLearning(self,perception,crafting,storage,lighting,civicWork);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
     }
@@ -558,6 +562,7 @@ public final class CloneController {
 
     public void tick() {
         long p0 = Prof.t();
+        safeTrials.tick();
         tickInner();
         if (Prof.on) {
             Prof.add(Prof.TOTAL, p0);
@@ -1859,6 +1864,7 @@ public final class CloneController {
 
     /** Only perceive and learn from others (used when the clone's own AI is switched off). */
     public void passiveTick() {
+        safeTrials.stop();
         long now = now();
         if (option != null) {
             finishOption(false);
@@ -2056,6 +2062,7 @@ public final class CloneController {
             return;
         }
         if (victim == target || Senses.isHostileTo(victim, self) || Senses.isFoodAnimal(victim)) {
+            safeTrials.used();
             stepReward += amount;
             if (Senses.isHostileTo(victim, self)) {
                 optionReward += amount * 0.2f;
@@ -2069,6 +2076,7 @@ public final class CloneController {
             optionReward += 6f;
             brain().kills++;
         } else if (Senses.isFoodAnimal(victim)) {
+            development.food();
             stepReward += 4f;
             optionReward += 2f;
         }
@@ -2078,8 +2086,14 @@ public final class CloneController {
         optionReward += Math.min(count, 5) * 0.2f;
     }
 
+    public void onFoodConsumed(net.minecraft.world.item.ItemStack stack) {safeTrials.consumed(stack);}
+
     public void onConfirmedMining(BlockState state, BlockPos pos) {
+        safeTrials.used();
         oreWorkLearning.onBroken(state, pos);
+        var kind=Perception.classify(state);
+        if(kind==Perception.BlockKind.ORE||kind==Perception.BlockKind.LOG)development.resource();
+        if(state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop&&crop.isMaxAge(state))development.food();
     }
 
     public void onBlockBroken(BlockState state, BlockPos pos) {
@@ -2094,6 +2108,7 @@ public final class CloneController {
     }
 
     public void onCrafted(net.minecraft.world.item.ItemStack stack) {
+        development.crafted();
         net.minecraft.world.item.Item item = stack.getItem();
         boolean gear = item instanceof net.minecraft.world.item.TieredItem || item instanceof net.minecraft.world.item.ArmorItem
                 || item instanceof net.minecraft.world.item.ShieldItem;
@@ -2470,6 +2485,8 @@ public final class CloneController {
             itemAid.announceDigging(); // R-27
             persona.announceDig(); // R-44
         }
+        if(option==Option.MINE&&development.interruptPreparation(now)){finishOption(false);return;}
+        if(option==Option.MINE&&development.prepareTick()){optionTicks++;return;}
         if (ORE_REFLEX.contains(option) && oreReflex(now)) {
             optionTicks++;
             return; // an ore right in front of us comes first
@@ -2510,7 +2527,7 @@ public final class CloneController {
         optionTicks++;
         optionReward -= 0.005f;
         if (option != null && (done || optionTicks >= option.maxTicks || shouldInterrupt(now))) {
-            finishOption(false);
+            finishOption(false,done||optionTicks>=option.maxTicks);
         }
     }
 
@@ -2793,6 +2810,7 @@ public final class CloneController {
             o = committed.ordinal(); // a promise: keep going with the group until the trip is over
         } else {
             Option pull = drive(now, mask);
+            if(pull==null)pull=development.roleChoice(mask,now);
             o = pull != null ? pull.ordinal() : brain().chooseStrategy(s, mask);
         }
         if (o < 0) {
@@ -2800,6 +2818,7 @@ public final class CloneController {
             return;
         }
         option = Option.VALUES[o];
+        development.start(option);
         String why = "";
         if (option == Option.FIGHT || option == Option.FLEE) {
             List<Perception.Seen> th = Senses.threats(perception, self, now, 16);
@@ -2902,10 +2921,12 @@ public final class CloneController {
     private Option lastWork;
     private long lastWorkAt;
 
-    private void finishOption(boolean died) {
+    private void finishOption(boolean died) { finishOption(died,false); }
+    private void finishOption(boolean died,boolean completed) {
         if (option == null) {
             return;
         }
+        development.finish(died,completed);
         if (died) oreWorkLearning.failed(); else oreWorkLearning.cancel();
         if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
         endedOption = option.name();
@@ -4002,6 +4023,9 @@ public final class CloneController {
             Equipment.select(self, slot);
             useItem = AttackLearning.itemId(self.getMainHandItem());
             useMode = brain().chooseItemUse(useItem, self.getRandom());
+            if(useMode!=AttackLearning.SWING&&brain().itemUseTries(useItem,useMode)==0&&!SafeItemTrials.canTryWeapon(self,self.getMainHandItem(),lt,perception)){
+                useMode=-1;actionDone=true;return;
+            }
             useStarted = false;
             useDealtBefore = attacks.dealtTo(lt);
         }
@@ -4754,7 +4778,7 @@ public final class CloneController {
     public int offhandMeals;
 
     private boolean runEat() {
-        if (!eatStarted && FoodAid.goodFood(self.getOffhandItem()) && !Equipment.keepForFurnace(self, self.getOffhandItem()) && self.canEat(false)) {
+        if (!eatStarted && FoodAid.goodFood(self.getOffhandItem()) && !Equipment.keepForFurnace(self, self.getOffhandItem()) && self.canEat(false) && safeTrials.beforeOffhandFood()) {
             eatStarted = motor.useHeldItem(InteractionHand.OFF_HAND) && self.isUsingItem(); // food at the ready in the other hand
             offhandMeals += eatStarted ? 1 : 0;
             if (eatStarted) {
@@ -4762,7 +4786,7 @@ public final class CloneController {
             }
         }
         if (!eatStarted) {
-            int slot = Equipment.bestFoodSlot(self);
+            int slot = safeTrials.foodSlot(Equipment.bestFoodSlot(self));
             if (slot < 0 && self.getFoodData().getFoodLevel() > 2 && Campfire.hasRaw(self) && campfire.available()) {
                 campfire.hurry(); // only raw food in the bag and a fire to cook it on: cooked first (the fire work starts at once)
                 return true;
@@ -5549,6 +5573,8 @@ public final class CloneController {
         out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
         out.add(motor.recoveryReport());
         out.add(oreWorkLearning.report());
+        out.add(development.report());
+        out.add(safeTrials.report());
         out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
         StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));

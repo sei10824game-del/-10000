@@ -547,6 +547,7 @@ public final class ServerEvents {
     public static void onFinishUsing(LivingEntityUseItemEvent.Finish event) {
         if (event.getEntity() instanceof ServerPlayer p && event.getItem().isEdible()) {
             AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.EAT, 1, -1, 0);
+            var controller=controllerOf(p);if(controller!=null)controller.onFoodConsumed(event.getItem());
         }
     }
 

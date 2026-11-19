@@ -85,6 +85,7 @@ public final class AgentWatcher {
                 continue;
             }
             if (weight > 0) {
+                observeWork(agent,t.tick,now);
                 learnCombat(t, agent, now, weight);
                 if (now - t.stratTick >= 40 || !agent.isAlive()) {
                     learnStrategy(t, agent, now, weight);
@@ -96,6 +97,18 @@ public final class AgentWatcher {
             t.pos = agent.position();
         }
         traces.keySet().retainAll(seen);
+    }
+
+    private void observeWork(ServerPlayer agent,long from,long now) {
+        if(!com.rlclones.ai.civilization.CivicWork.team(agent).equals(com.rlclones.ai.civilization.CivicWork.team(self)))return;
+        if(agent instanceof com.rlclones.clone.ClonePlayer clone && clone.getCloneBrain()==brain.get())return;
+        // A success may be published after our previous update in the same tick.
+        // Hints are idempotent bits, so rereading that boundary cannot double-count experience.
+        for(var event:AgentEvents.sharedBetween(agent.getUUID(),from-1,now)) {
+            if(event.kind()!=AgentEvents.Kind.WORK_SUCCESS||event.amount()<=0)continue;
+            int domain=event.flags(),state=event.targetId()/4,method=event.targetId()%4;
+            brain.get().evidence.suggest(domain,state,method);
+        }
     }
 
     // ------------------------------------------------------------------ combat imitation

@@ -35,6 +35,23 @@ public final class Brain {
 
     public final RecoveryLearning recovery = new RecoveryLearning();
     public final RecoveryLearning oreWork = new RecoveryLearning();
+    public final RecoveryLearning workflow = new RecoveryLearning(), roles = new RecoveryLearning();
+    public final LearningEvidence evidence = new LearningEvidence();
+    public final TrialMemory itemTrials = new TrialMemory();
+    public RecoveryLearning methodTable(int domain) {
+        return switch(domain){case 0->recovery;case 1->oreWork;case 2->workflow;case 3->roles;default->throw new IllegalArgumentException("domain");};
+    }
+    public int chooseMethod(int domain,int state,int mask,java.util.Random random) {
+        if(domain<0||domain>=LearningEvidence.DOMAINS||state<0||state>=8||(mask&15)==0)return -1;
+        var table=methodTable(domain);int suggested=evidence.suggested(domain,state)&mask;
+        int untried=0;for(int a=0;a<4;a++)if((suggested&(1<<a))!=0&&table.samples(state,a)==0)untried|=1<<a;
+        return table.choose(state,untried!=0?untried:mask,random);
+    }
+    public void recordMethod(int domain,int state,int method,float reward,boolean success) {
+        if(!LearningEvidence.valid(domain,state,method)||!Float.isFinite(reward))return;
+        var table=methodTable(domain);long before=table.trials();table.record(state,method,reward,success);
+        if(table.trials()>before)evidence.record(domain,success);
+    }
 
     public long ownUpdates;
     public long imitationUpdates;
@@ -529,6 +546,7 @@ public final class Brain {
         tag.putInt("version", 1);
         tag.putByteArray("recovery", recovery.save());
         tag.putByteArray("oreWork", oreWork.save());
+        tag.putByteArray("workflow", workflow.save());tag.putByteArray("roles", roles.save());tag.putByteArray("learningEvidence",evidence.save());tag.put("itemTrials",itemTrials.save());
         tag.putByteArray("strategy", strategy.toBytes());
         CompoundTag c = new CompoundTag();
         combat.forEach((k, v) -> c.putByteArray(k, v.toBytes()));
@@ -610,6 +628,8 @@ public final class Brain {
         Brain b = new Brain();
         b.recovery.merge(RecoveryLearning.load(tag.getByteArray("recovery")));
         b.oreWork.merge(RecoveryLearning.load(tag.getByteArray("oreWork")));
+        b.workflow.merge(RecoveryLearning.load(tag.getByteArray("workflow")));b.roles.merge(RecoveryLearning.load(tag.getByteArray("roles")));
+        var savedEvidence=LearningEvidence.load(tag.getByteArray("learningEvidence"));b.evidence.mergeHints(savedEvidence);b.evidence.copyHistoryFrom(savedEvidence);b.itemTrials.merge(TrialMemory.load(tag.getCompound("itemTrials")));
         b.strategy.mergeFrom(QTable.fromBytes(tag.getByteArray("strategy"), Option.COUNT));
         CompoundTag c = tag.getCompound("combat");
         for (String k : c.getAllKeys()) {
@@ -727,6 +747,7 @@ public final class Brain {
         }
         recovery.merge(b.recovery);
         oreWork.merge(b.oreWork);
+        workflow.merge(b.workflow);roles.merge(b.roles);evidence.mergeHints(b.evidence);itemTrials.merge(b.itemTrials);
         strategy.mergeFrom(b.strategy);
         b.combat.forEach((k, v) -> combatTable(k).mergeFrom(v));
         b.knowledge.forEach((k, v) -> knowledge(k).merge(v));
@@ -799,8 +820,11 @@ public final class Brain {
 
     public List<String> summary() {
         List<String> lines = new ArrayList<>();
-        lines.add(recovery.report());
-        lines.add(oreWork.report("鉱石の取りかかり", new String[]{"近距離","高低差","まとまり","明るさ"}));
+        lines.add(itemTrials.report());
+        lines.add(recovery.report()+" "+evidence.report(0));
+        lines.add(workflow.report("採掘前の手順",new String[]{"直接","照明","倉庫整理","道具準備"})+" "+evidence.report(2));
+        lines.add(roles.report("集落の役割",new String[]{"食料","資源","製作","配送"})+" "+evidence.report(3));
+        lines.add(oreWork.report("鉱石の取りかかり", new String[]{"近距離","高低差","まとまり","明るさ"})+" "+evidence.report(1));
         lines.add(String.format(Locale.ROOT, "states=%d enemyTypes=%d knownTypes=%d own=%d imitated=%d replayed=%d kills=%d deaths=%d members=%d",
                 totalStates(), combat.size(), knowledge.size(), ownUpdates, imitationUpdates, replayUpdates, kills, deaths, members));
         return lines;

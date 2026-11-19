@@ -456,6 +456,8 @@ public final class Equipment {
                 continue;
             }
             double score = foodScore(p, s);
+            if(p instanceof com.rlclones.clone.ClonePlayer clone && clone.getCloneBrain().itemTrials.harmful(SafeItemTrials.key("food",s)))
+                score-=p.getFoodData().getFoodLevel()>6?1000:2;
             if (keepForFurnace(p, s)) {
                 continue; // (to be cooked: eating the catch raw gave back no more than catching it cost)
             }

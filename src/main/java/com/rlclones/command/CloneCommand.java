@@ -205,6 +205,9 @@ public final class CloneCommand {
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(CloneCommand::inventory)))
                 .then(Commands.literal("brain")
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(CloneCommand::brain)))
+                .then(Commands.literal("trials")
+                        .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES).executes(ctx -> showTrials(ctx,1))
+                                .then(Commands.argument("page", IntegerArgumentType.integer(1)).executes(ctx -> showTrials(ctx,IntegerArgumentType.getInteger(ctx,"page"))))))
                 .then(Commands.literal("knowledge")
                         .then(Commands.argument("name", StringArgumentType.word()).suggests(NAMES)
                                 .executes(CloneCommand::knowledgeList)
@@ -593,6 +596,13 @@ public final class CloneCommand {
         }
         c.setAiEnabled(on);
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? "rlclones.cmd.ai_on" : "rlclones.cmd.ai_off", name), true);
+        return 1;
+    }
+
+    private static int showTrials(CommandContext<CommandSourceStack> ctx,int page) {
+        String name=StringArgumentType.getString(ctx,"name");var clone=manager(ctx).byName(name);
+        if(clone==null){ctx.getSource().sendFailure(Component.translatable("rlclones.cmd.unknown",name));return 0;}
+        for(String line:clone.getCloneBrain().itemTrials.details(page))ctx.getSource().sendSuccess(()->Component.literal(line),false);
         return 1;
     }
 

@@ -1,0 +1,11 @@
+package com.rlclones.ai.brain;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+class LearningEvidenceTest {
+    @Test void demonstrationsAreHintsAndNotOwnSuccess(){var brain=new Brain();brain.evidence.suggest(1,3,2);assertEquals(0,brain.oreWork.trials());assertEquals(2,brain.chooseMethod(1,3,15,new java.util.Random(1)));assertEquals(0,brain.oreWork.wins());brain.recordMethod(1,3,2,-1,false);assertEquals(1,brain.oreWork.trials());assertTrue(brain.evidence.report(1).contains("直近=0/1"));}
+    @Test void recentAndPreviousWindowsHaveRealChronology(){var evidence=new LearningEvidence();for(int i=0;i<16;i++)evidence.record(0,false);for(int i=0;i<16;i++)evidence.record(0,true);assertEquals("直近=16/16 前期間=0/16",evidence.report(0));evidence.record(0,false);assertEquals("直近=15/16 前期間=1/16",evidence.report(0));}
+    @Test void copiesKeepWindowsAndCorruptDataIsIgnored(){var evidence=new LearningEvidence();evidence.suggest(3,7,1);evidence.record(3,true);var copy=LearningEvidence.load(evidence.save());assertEquals(2,copy.suggested(3,7));assertEquals(evidence.report(3),copy.report(3));assertEquals("直近=0/0 前期間=0/0",LearningEvidence.load(new byte[3]).report(3));var bytes=evidence.save();bytes[4]=(byte)255;assertEquals(0,LearningEvidence.load(bytes).suggested(0,0));}
+    @Test void mergingHintsDoesNotInventOrderingAcrossBrains(){var a=new LearningEvidence();var b=new LearningEvidence();a.record(0,true);b.record(0,false);b.suggest(0,1,3);a.mergeHints(b);assertEquals(8,a.suggested(0,1));assertEquals("直近=1/1 前期間=0/0",a.report(0));}
+    @Test void ownMethodsAndItemEvidenceSurviveBrainCopyAndMerge(){var a=new Brain();a.recordMethod(2,1,1,1,true);a.recordMethod(3,2,0,-1,false);a.itemTrials.record("food|example:meal",-1,true);var copy=a.copy();assertEquals(a.evidence.report(2),copy.evidence.report(2));assertEquals(1,copy.workflow.wins());var merged=Brain.merge(java.util.List.of(a,copy));assertEquals(2,merged.workflow.trials());assertTrue(merged.itemTrials.harmful("food|example:meal"));assertEquals(0,Brain.load(new net.minecraft.nbt.CompoundTag()).workflow.trials());}
+    @Test void invalidFeedbackDoesNotChangeWindows(){var a=new Brain();a.recordMethod(2,8,1,1,true);a.recordMethod(2,1,1,Float.NaN,true);assertEquals(0,a.workflow.trials());assertEquals("直近=0/0 前期間=0/0",a.evidence.report(2));}
+}
