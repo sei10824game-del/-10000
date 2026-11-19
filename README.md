@@ -533,3 +533,11 @@ Java 17でウォームアップ後の処理時間と一時メモリ割り当て�
 基本の回帰検証は `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_gear`。Copper Age Backportを導入した開発環境では、実MOD用の `rlclones_copper_compat` 名前空間を選択できます。
 
 Copper Age Backport Forge 1.20.1 / 0.1.5との実併用検証で、倉庫の銅インゴット24個から銅防具一式の製作・装備を確認しています。Copper Age Backport本体は別途導入してください。
+
+### 焚き火の調理と探索
+
+点火済み焚き火の実際の空き枠に生食材を追加し、焼き上がって枠が空いたら残りを補充します。投入失敗を「4個投入済み」と扱わず、再試行します。食材を全部焼き終えた後は回収のため少し待ち、危険時は中断します。
+
+近い座標から探索することで、焚き火が見つかった後の不要なブロック確認を省きます。探索範囲や判断・学習の頻度は維持し、同じtickの設置・消火も反映します。焚き火が見つからない場合の確認数は従来と同じです。
+
+専用検証: `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_campfire`

@@ -17,8 +17,8 @@ import javax.annotation.Nullable;
 /**
  * Raw food in the bag and a campfire (it needs no fuel): laid on it, four at a time, and the clone stays by it until it is done. With no campfire about
  * but one in the bag, it is put down on the spot; the crafting makes one (3 sticks, coal, 3 logs) when there is raw food and nothing to cook it on. A
- * campfire is preferred to a furnace for food (nothing to burn). ponytail: a campfire within 16 blocks; four items per round, 700 ticks of waiting, the
- * cooked food falls out by the fire and is picked up as the clone stands there; add a furnace fallback for ore if it ever matters.
+ * campfire is preferred to a furnace for food (nothing to burn). Empty slots are refilled while raw food remains;
+ * actual cooking completion is followed by a short pickup interval. Threats always interrupt cooking.
  */
 public final class Campfire {
     private enum Stage {IDLE, GO, LOAD, WAIT}
@@ -80,20 +80,17 @@ public final class Campfire {
     @Nullable
     public BlockPos existing() {
         BlockPos c = self.blockPosition();
-        BlockPos best = null;
-        double bestD = Double.MAX_VALUE;
-        for (BlockPos p : BlockPos.betweenClosed(c.offset(-16, -4, -16), c.offset(16, 4, 16))) {
-            var st = level().getBlockState(p);
-            if (st.getBlock() instanceof CampfireBlock && st.getValue(CampfireBlock.LIT)) {
-                double d = p.distSqr(c);
-                if (d < bestD) {
-                    bestD = d;
-                    best = p.immutable();
-                }
-            }
+        var cursor = new BlockPos.MutableBlockPos();
+        for (var offset : FIRE_OFFSETS) {
+            cursor.set(c.getX() + offset.x(), c.getY() + offset.y(), c.getZ() + offset.z());
+            var st = level().getBlockState(cursor);
+            if (st.getBlock() instanceof CampfireBlock && st.getValue(CampfireBlock.LIT)) return cursor.immutable();
         }
-        return best;
+        return null;
     }
+
+    private static final java.util.List<com.rlclones.ai.util.NearbyOffsets.Offset> FIRE_OFFSETS =
+            com.rlclones.ai.util.NearbyOffsets.ordered(16, 4);
 
     private boolean hurry;
 
@@ -131,9 +128,12 @@ public final class Campfire {
             hurry = false;
             ticks = 0;
             loaded = 0;
+            waitUntil = 0;
             fails = 0;
         }
-        if (threatened || ++ticks > 900 || !(level().getBlockState(fire).getBlock() instanceof CampfireBlock)) {
+        var state = level().getBlockState(fire);
+        if (threatened || (++ticks > 900 && stage != Stage.WAIT) || !(state.getBlock() instanceof CampfireBlock)
+                || !state.getValue(CampfireBlock.LIT)) {
             stage = Stage.IDLE;
             cooldownUntil = now + 100; // (a threat passes: the fire is gone back to soon)
             return false;
@@ -151,6 +151,7 @@ public final class Campfire {
                     return true;
                 }
                 stage = Stage.LOAD;
+                ticks = 0;
             }
             case LOAD -> {
                 motor.stop();
@@ -163,9 +164,10 @@ public final class Campfire {
                         }
                     }
                 }
-                if (slot < 0 || loaded >= 4 || onFire >= 4) {
+                if (slot < 0 || onFire >= 4) {
                     debug = "load done slot=" + slot + " loaded=" + loaded + " onFire=" + onFire;
-                    waitUntil = now + 700;
+                    waitUntil = Math.max(waitUntil, now + 700);
+                    ticks = 0;
                     stage = Stage.WAIT;
                     return true;
                 }
@@ -180,26 +182,50 @@ public final class Campfire {
                 }
                 var hand = self.getMainHandItem();
                 int before = hand.getCount();
+                int cookingTime = level().getRecipeManager().getRecipeFor(RecipeType.CAMPFIRE_COOKING,
+                        new net.minecraft.world.SimpleContainer(hand.copy()), level())
+                        .map(net.minecraft.world.item.crafting.CampfireCookingRecipe::getCookingTime).orElse(600);
                 self.gameMode.useItemOn(self, level(), hand, InteractionHand.MAIN_HAND, new BlockHitResult(c.add(0, 0.4, 0), Direction.UP, fire, false));
                 self.swing(InteractionHand.MAIN_HAND);
                 if (self.getInventory().getItem(self.getInventory().selected).getCount() < before || self.getInventory().getItem(self.getInventory().selected).isEmpty()) {
                     loaded++;
                     cooked++;
                     fails = 0;
+                    ticks = 0;
+                    waitUntil = Math.max(waitUntil, now + cookingTime + 100L);
                 } else if (++fails >= 4) {
                     debug = "refused " + hand.getItem() + " onFire=" + onFire;
-                    loaded = 4; // would not take it (full)
+                    stage = Stage.IDLE;
+                    cooldownUntil = now + 20; // retry actual empty slots; refusal does not mean four items were loaded.
+                    return false;
                 }
             }
             case WAIT -> {
+                int onFire = 0;
+                if (level().getBlockEntity(fire) instanceof net.minecraft.world.level.block.entity.CampfireBlockEntity be)
+                    for (ItemStack stack : be.getItems()) if (!stack.isEmpty()) onFire++;
+                if (onFire < 4 && rawSlot() >= 0) {
+                    stage = Stage.LOAD;
+                    ticks = 0;
+                    fails = 0;
+                    return true;
+                }
                 if (self.getEyePosition().distanceTo(c) > 2.2) {
                     motor.navigate(Vec3.atBottomCenterOf(fire), 1.5, false);
                 } else {
                     motor.stop();
                 }
-                if (now >= waitUntil) {
+                // Stay for actual cooking, then allow nearby drops to be picked up.
+                if (onFire > 0) {
+                    ticks = 0;
+                } else if (ticks >= 40) {
                     stage = Stage.IDLE;
                     cooldownUntil = now + 40;
+                    return false;
+                }
+                if (onFire > 0 && now >= waitUntil) {
+                    stage = Stage.IDLE;
+                    cooldownUntil = now + 100;
                     return false;
                 }
             }

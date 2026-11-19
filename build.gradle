@@ -41,7 +41,7 @@ minecraft {
         }
 
         gameTestServer {
-            property 'forge.enabledGameTestNamespaces', System.getProperty('rlclones.gameTestNamespaces', "${mod_id},rlclones_stair_repair,rlclones_civic,rlclones_crowd,rlclones_gear")
+            property 'forge.enabledGameTestNamespaces', System.getProperty('rlclones.gameTestNamespaces', "${mod_id},rlclones_stair_repair,rlclones_civic,rlclones_crowd,rlclones_gear,rlclones_campfire")
         }
     }
 }
