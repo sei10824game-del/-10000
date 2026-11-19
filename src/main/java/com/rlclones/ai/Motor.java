@@ -83,6 +83,21 @@ public final class Motor {
     private Vec3 escapeBase;
     private int escapeStage;
     private int escapeTicks;
+    private int escapeAction, escapeTried;
+    private int recoveryState;
+    private Vec3 recoveryStart, recoveryGoal;
+    private float recoveryHealth;
+    private int recoveryAir;
+    private long recoveryStarted;
+    private com.rlclones.ai.brain.Brain recoveryBrain;
+    private final java.util.Random recoveryRandom = new java.util.Random();
+    private com.rlclones.ai.brain.Brain recoveryBrain() {
+        return self instanceof com.rlclones.clone.ClonePlayer clone ? clone.getCloneBrain() : null;
+    }
+    public String recoveryReport() {
+        if (recoveryBrain() == null) return "water recovery: no clone brain";
+        return recoveryBrain().recovery.report() + " active=" + (recoveryStart != null);
+    }
     @Nullable
     private Vec3 wetAnchor;
     private int wetTicks;
@@ -1258,53 +1273,91 @@ public final class Motor {
         return (float) Mth.clamp(-Math.toDegrees(Math.atan2(dy, horiz)), -40, 50);
     }
 
-    /**
-     * R-24: swimming into a corner (no headway for 20 ticks) goes nowhere. Try, 30 ticks each: left, right, straight up,
-     * back (up first when air is low). ponytail: no BFS to the nearest air cell, "up" covers it; add if it drowns anyway.
-     */
+    /** A maximum of four distinct recovery attempts. Emergency air handling bypasses learning. */
     private void waterEscape() {
         if (!self.isInWater() || self.isPassenger() || self.isInLava() || self.getAbilities().flying || (moveDir == null && escapeTicks <= 0)) {
-            wetAnchor = null;
-            wetTicks = 0;
-            escapeTicks = 0;
+            if (!self.isInWater() && self.isAlive()) finishRecovery(true);
+            else recoveryStart = null;
+            wetAnchor = null; wetTicks = 0; escapeTicks = 0;
             return;
+        }
+        if (lowRecoveryAir()) {
+            recoveryStart = null;
+            if (escapeTicks > 0) escapeAction = 2;
         }
         if (escapeTicks > 0) {
             Vec3 b = escapeBase;
-            switch (escapeStage % 4) {
-                case 0 -> moveDir = new Vec3(b.z, 0, -b.x);
-                case 1 -> moveDir = new Vec3(-b.z, 0, b.x);
-                case 2 -> moveDir = null;
-                default -> moveDir = new Vec3(-b.x, 0, -b.z);
-            }
-            if (escapeStage % 4 == 2) {
-                jump = true;
-                dive = false;
-            }
+            moveDir = switch (escapeAction) {
+                case 0 -> new Vec3(b.z, 0, -b.x);
+                case 1 -> new Vec3(-b.z, 0, b.x);
+                case 2 -> null;
+                default -> new Vec3(-b.x, 0, -b.z);
+            };
+            if (escapeAction == 2) { jump = true; dive = false; }
             if (--escapeTicks == 0) {
+                boolean success = finishRecovery(false);
                 escapeStage++;
-                escapeTicks = escapeStage < 4 ? 30 : 0;
-                wetAnchor = self.position();
-                wetTicks = 0;
+                if (!success && escapeStage < 4) beginRecovery();
+                wetAnchor = self.position(); wetTicks = 0;
             }
             return;
         }
-        if (wetAnchor == null) {
-            wetAnchor = self.position();
-        }
-        if (++wetTicks < 20) {
-            return;
-        }
+        if (wetAnchor == null) wetAnchor = self.position();
+        if (++wetTicks < 20) return;
         boolean stuck = self.position().distanceTo(wetAnchor) < 0.3;
-        wetAnchor = self.position();
-        wetTicks = 0;
+        wetAnchor = self.position(); wetTicks = 0;
         if (stuck) {
             Vec3 h = new Vec3(moveDir.x, 0, moveDir.z);
-            escapeBase = h.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : h.normalize();
-            escapeStage = self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(self.level().getGameTime()) ? 2 : 0;
-            escapeTicks = 30;
+            escapeBase = h.lengthSqr() < 1e-4 ? new Vec3(1,0,0) : h.normalize();
+            escapeStage = 0; escapeTried = 0;
+            beginRecovery();
             waterEscapes++;
         }
+    }
+
+    private boolean lowRecoveryAir() {
+        return self.getAirSupply() < self.getMaxAirSupply() * Caution.airUp(self.level().getGameTime());
+    }
+
+    private void beginRecovery() {
+        recoveryStart = null;
+        if (lowRecoveryAir()) { escapeAction = 2; escapeTicks = 30; return; }
+        int mask = 0;
+        Vec3[] directions = {new Vec3(escapeBase.z,0,-escapeBase.x), new Vec3(-escapeBase.z,0,escapeBase.x),
+                new Vec3(0,1,0), new Vec3(-escapeBase.x,0,-escapeBase.z)};
+        for (int a=0;a<4;a++) {
+            Vec3 step = directions[a].scale(0.6);
+            BlockPos cell = BlockPos.containing(self.position().add(step));
+            if ((escapeTried & (1 << a)) == 0 && !self.level().getFluidState(cell).is(net.minecraft.tags.FluidTags.LAVA)
+                    && self.level().noCollision(self, self.getBoundingBox().move(step))) mask |= 1 << a;
+        }
+        recoveryState = (self.horizontalCollision ? 1 : 0) | (self.isUnderWater() ? 2 : 0)
+                | (lastGoal != null && lastGoal.y > self.getY()+0.5 ? 4 : 0);
+        recoveryBrain = recoveryBrain();
+        escapeAction = recoveryBrain == null ? (mask == 0 ? -1 : Integer.numberOfTrailingZeros(mask))
+                : recoveryBrain.recovery.choose(recoveryState,mask,recoveryRandom);
+        if (escapeAction < 0) { escapeTicks = 0; return; }
+        escapeTried |= 1 << escapeAction;
+        escapeTicks = 30;
+        if (recoveryBrain != null && lastGoal != null && self.level().getGameTime()-lastGoalTick <= 5) {
+            recoveryStart = self.position(); recoveryGoal = lastGoal;
+            recoveryHealth = self.getHealth(); recoveryAir = self.getAirSupply(); recoveryStarted = self.level().getGameTime();
+        }
+    }
+
+    private boolean finishRecovery(boolean exited) {
+        if (recoveryStart == null) return false;
+        Vec3 start = recoveryStart; recoveryStart = null;
+        if (recoveryBrain != recoveryBrain() || lastGoal == null || recoveryGoal.distanceToSqr(lastGoal)>4
+                || lowRecoveryAir() || !self.isAlive() || self.level().getGameTime()-recoveryStarted<5
+                || self.level().getGameTime()-lastGoalTick>5) return false;
+        double moved = self.position().distanceTo(start);
+        double progress = start.distanceTo(recoveryGoal)-self.position().distanceTo(recoveryGoal);
+        float damage = Math.max(0,recoveryHealth-self.getHealth());
+        boolean success = com.rlclones.ai.brain.RecoveryLearning.succeeded(moved,progress,damage,exited);
+        float reward = com.rlclones.ai.brain.RecoveryLearning.reward(moved,progress,damage,recoveryAir-self.getAirSupply(),exited);
+        recoveryBrain.recovery.record(recoveryState,escapeAction,reward,success);
+        return success;
     }
 
     private int breathSteps;
@@ -1414,7 +1467,7 @@ public final class Motor {
         ladderAssist();
         flight();
         waterEscape();
-        breathSteer();
+        if (breathSteer()) recoveryStart = null; // emergency steering must not be credited to the learned action.
         sweepAhead();
         boolean stroke = swimStroke();
         // rotation

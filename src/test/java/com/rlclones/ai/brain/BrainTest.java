@@ -6,6 +6,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BrainTest {
+    @Test void recoverySurvivesCopyAndSharedBrainMerge() {
+        Brain a=new Brain(); a.recovery.record(3,1,1,true);
+        Brain copy=a.copy(); copy.recovery.record(3,1,-1,false);
+        assertEquals(1,a.recovery.trials()); assertEquals(2,copy.recovery.trials());
+        Brain merged=Brain.merge(List.of(a,copy));
+        assertEquals(3,merged.recovery.trials());assertEquals(2,merged.recovery.wins());
+        assertTrue(merged.summary().stream().anyMatch(line->line.contains("試行=3")));
+        assertEquals(0,Brain.load(new net.minecraft.nbt.CompoundTag()).recovery.trials());
+    }
+
     @Test
     void correctedKnowledgeSurvivesMergeAndCopy() {
         Brain corrected = new Brain();

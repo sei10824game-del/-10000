@@ -33,6 +33,8 @@ public final class Brain {
     private final ReplayBuffer replay = new ReplayBuffer(4096);
     private final Random random = new Random();
 
+    public final RecoveryLearning recovery = new RecoveryLearning();
+
     public long ownUpdates;
     public long imitationUpdates;
     public long replayUpdates;
@@ -524,6 +526,7 @@ public final class Brain {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("version", 1);
+        tag.putByteArray("recovery", recovery.save());
         tag.putByteArray("strategy", strategy.toBytes());
         CompoundTag c = new CompoundTag();
         combat.forEach((k, v) -> c.putByteArray(k, v.toBytes()));
@@ -603,6 +606,7 @@ public final class Brain {
 
     public static Brain load(CompoundTag tag) {
         Brain b = new Brain();
+        b.recovery.merge(RecoveryLearning.load(tag.getByteArray("recovery")));
         b.strategy.mergeFrom(QTable.fromBytes(tag.getByteArray("strategy"), Option.COUNT));
         CompoundTag c = tag.getCompound("combat");
         for (String k : c.getAllKeys()) {
@@ -718,6 +722,7 @@ public final class Brain {
         if (b == this) {
             return;
         }
+        recovery.merge(b.recovery);
         strategy.mergeFrom(b.strategy);
         b.combat.forEach((k, v) -> combatTable(k).mergeFrom(v));
         b.knowledge.forEach((k, v) -> knowledge(k).merge(v));
@@ -790,6 +795,7 @@ public final class Brain {
 
     public List<String> summary() {
         List<String> lines = new ArrayList<>();
+        lines.add(recovery.report());
         lines.add(String.format(Locale.ROOT, "states=%d enemyTypes=%d knownTypes=%d own=%d imitated=%d replayed=%d kills=%d deaths=%d members=%d",
                 totalStates(), combat.size(), knowledge.size(), ownUpdates, imitationUpdates, replayUpdates, kills, deaths, members));
         return lines;
