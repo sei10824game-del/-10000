@@ -40,6 +40,12 @@ public final class ShaftMining {
     private int craftTries;
     private int lastLadders;
     private BlockPos lastFeet = BlockPos.ZERO;
+    @Nullable private BlockPos repairCell;
+    private int repairTries;
+    private boolean repairingReturn;
+    private int returnBottom, lastRoutePlacement = -1;
+    public int supportsPlaced;
+    private static final int[] REPAIR_OFFSETS = {0, 1, 2, -1};
 
     /** Dig down to here at most; unset (MIN_VALUE) = what the next step needs (iron: 16, diamonds: -58), see {@link Progression}. */
     public int targetY = Integer.MIN_VALUE;
@@ -102,7 +108,7 @@ public final class ShaftMining {
 
     /** A pickaxe, ladders (or what they are made of), no iron / diamond gear yet, up on the surface or near a shaft to carry on. */
     public boolean wanted() {
-        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || !hasPickaxe() || StairMining.ironGeared(self) && !Progression.digWanted(self) || self.isInWater()
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true) || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || !hasPickaxe() || StairMining.ironGeared(self) && !Progression.digWanted(self) || self.isInWater()
                 || self.getBlockY() <= target()) {
             return false;
         }
@@ -116,6 +122,8 @@ public final class ShaftMining {
     public void begin() {
         shaft = bases().nearestShaft(self.level().dimension(), self.position(), 64, me(), self.level().getGameTime());
         if (shaft != null) {
+            shaft.digger = me();
+            shaft.lastDug = self.level().getGameTime();
             resumed++;
             debug = "resume " + shaft.top.toShortString() + " depth " + shaft.depth();
             trace("resume@" + shaft.top.toShortString());
@@ -126,6 +134,7 @@ public final class ShaftMining {
         craftTries = 0;
         lastLadders = ladders();
         lastFeet = self.blockPosition();
+        repairCell = null; repairTries = 0; repairingReturn = false; lastRoutePlacement = -1;
         motor.resetStuck();
     }
 
@@ -139,7 +148,83 @@ public final class ShaftMining {
     }
 
     private boolean ladderAt(BlockPos p) {
-        return self.level().getBlockState(p).getBlock() instanceof LadderBlock;
+        BlockState state = self.level().getBlockState(p);
+        return state.getBlock() instanceof LadderBlock && state.canSurvive(self.level(), p)
+                && state.getFluidState().isEmpty();
+    }
+
+    private enum Repair { READY, WORKING, BLOCKED }
+
+    private boolean inReach(BlockPos wall) {
+        Vec3 hit = Vec3.atCenterOf(wall).add(-shaft.wall.getStepX() * 0.5, 0, -shaft.wall.getStepZ() * 0.5);
+        return self.getEyePosition().distanceTo(hit) <= Motor.BLOCK_REACH;
+    }
+
+    private boolean supported(BlockPos cell) {
+        BlockPos wall = cell.relative(shaft.wall);
+        return self.level().getBlockState(wall).isFaceSturdy(self.level(), wall, shaft.wall.getOpposite());
+    }
+
+    /** Build a genuine attachment face while the old floor still supports the digger. */
+    private Repair support(BlockPos cell) {
+        if (supported(cell)) return Repair.READY;
+        BlockPos wall = cell.relative(shaft.wall);
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || !inReach(wall)
+                || !self.level().getFluidState(wall).isEmpty()) return Repair.BLOCKED;
+        int slot = Equipment.pillarBlockSlot(self);
+        if (slot < 0) return Repair.BLOCKED;
+        Equipment.select(self, slot);
+        if (motor.placeBlockAt(wall) && supported(cell)) {
+            supportsPlaced++;
+            return Repair.READY;
+        }
+        return Repair.WORKING;
+    }
+
+    /** One rung at a time, with the real inventory and placement interaction. */
+    private Repair rung(BlockPos cell) {
+        if (ladderAt(cell)) return Repair.READY;
+        motor.stop();
+        motor.sneak(true); // hold the last sound rung even when materials/permissions prevent the next one
+        if (!cell.equals(repairCell)) { repairCell = cell.immutable(); repairTries = 0; }
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || ladders() == 0
+                || !inReach(cell.relative(shaft.wall)) || !self.level().getBlockState(cell).canBeReplaced()
+                || !self.level().getFluidState(cell).isEmpty()) return Repair.BLOCKED;
+        if (++repairTries > 80) return Repair.BLOCKED;
+        motor.stop();
+        motor.sneak(true);
+        Repair backing = support(cell);
+        if (backing != Repair.READY) return backing;
+        Equipment.select(self, slotOf(Items.LADDER));
+        motor.useOnFace(cell.relative(shaft.wall), shaft.wall.getOpposite());
+        if (!ladderAt(cell)) return Repair.WORKING;
+        laddersPlaced++;
+        repairTries = 0;
+        return Repair.READY;
+    }
+
+    /** Current rung first (including while falling), then nearby return rungs and the next known rung below. */
+    private Repair repairNearby(BlockPos feet) {
+        if (shaft == null || !inColumn(feet)) return Repair.READY;
+        int lowest = Math.min(shaft.end.getY(), feet.getY());
+        for (int offset : REPAIR_OFFSETS) {
+            BlockPos cell = feet.offset(0, offset, 0);
+            if (cell.getY() < lowest || cell.getY() >= shaft.top.getY() || ladderAt(cell)) continue;
+            if (offset < 0 && (stage == 4 || !self.level().getBlockState(cell).canBeReplaced())) continue;
+            if (!inReach(cell.relative(shaft.wall))) continue;
+            Repair result = rung(cell);
+            if (result != Repair.READY) {
+                debug = "repair ladder " + cell.toShortString() + " " + result;
+                return result;
+            }
+        }
+        return Repair.READY;
+    }
+
+    private boolean returnPathIntact(int bottom) {
+        for (int y = bottom; y < shaft.top.getY(); y++)
+            if (!ladderAt(new BlockPos(shaft.top.getX(), y, shaft.top.getZ()))) return false;
+        return true;
     }
 
     /** Safe to dig out: breakable, no liquid next to it, nobody's base. */
@@ -166,6 +251,14 @@ public final class ShaftMining {
     public Status tick() {
         if (++ticks > 4000) {
             return Status.DONE;
+        }
+        if (shaft != null) {
+            long now = self.level().getGameTime();
+            if (!shaft.digger.isEmpty() && !shaft.digger.equals(me()) && now - shaft.lastDug < 200) {
+                debug = "shaft reserved by " + shaft.digger;
+                return Status.FAILED;
+            }
+            shaft.digger = me(); shaft.lastDug = now;
         }
         BlockPos feet = self.blockPosition();
         if (feet.equals(lastFeet)) {
@@ -257,13 +350,22 @@ public final class ShaftMining {
             stage = 1;
             return Status.WORKING;
         }
-        motor.stop();
-        Vec3 c = new Vec3(s.top.getX() + 0.5, self.getY(), s.top.getZ() + 0.5);
-        if (Motor.horizontalDistance(self.position(), c) > 0.2) {
-            motor.moveToward(c);
+        Repair repair = repairNearby(feet);
+        if (repair != Repair.READY) {
+            if (repair == Repair.BLOCKED) stage = 4;
+            return Status.WORKING;
         }
+        motor.stop();
+        motor.dare(); // the checked ladder column is an intentional descent, not an accidental edge
+        Vec3 c = new Vec3(s.top.getX() + 0.5, self.getY(), s.top.getZ() + 0.5);
+        if (Motor.horizontalDistance(self.position(), c) > 0.05) {
+            motor.movePrecisely(c);
+        }
+        motor.sneak(false);
         if (self.onGround() && (feet.getY() <= s.end.getY() || stuck > 20)) {
-            stage = 3;
+            returnBottom = Math.max(feet.getY(), s.end.getY());
+            if (returnPathIntact(returnBottom)) stage = 3;
+            else { repairingReturn = true; stage = 4; debug = "repair return route before digging"; }
         }
         return Status.WORKING;
     }
@@ -305,8 +407,19 @@ public final class ShaftMining {
             motor.navigate(Vec3.atBottomCenterOf(s.top), 0.3, false);
             return Status.WORKING;
         }
-        if (!self.onGround()) {
-            return Status.WORKING; // still sliding down
+        Repair repair = repairNearby(feet);
+        if (repair != Repair.READY) {
+            if (repair == Repair.BLOCKED) stage = 4;
+            return Status.WORKING;
+        }
+        BlockPos existingBelow = feet.below();
+        if (feet.getY() > target() && (ladderAt(existingBelow) || self.level().getBlockState(existingBelow).isAir())) {
+            Repair next = rung(existingBelow);
+            stage = next == Repair.BLOCKED ? 4 : next == Repair.READY ? 2 : 3;
+            return Status.WORKING;
+        }
+        if (!self.onGround() && !(self.onClimbable() && solid(feet.below()) && self.getY() - feet.getY() < 0.15)) {
+            return Status.WORKING; // still sliding down; an actual supported ladder foot is also safe
         }
         if (feet.getY() < s.end.getY()) {
             s.end = feet.immutable();
@@ -314,57 +427,51 @@ public final class ShaftMining {
             bases().setDirty();
         }
         Vec3 c = new Vec3(s.top.getX() + 0.5, self.getY(), s.top.getZ() + 0.5);
-        if (Motor.horizontalDistance(self.position(), c) > 0.15) {
-            motor.moveToward(c); // dead centre: the ladder goes beside us, the hole right under us
-            motor.sneak(true); // small careful steps
+        if (Motor.horizontalDistance(self.position(), c) > 0.05) {
+            motor.movePrecisely(c); // slow down near the centre; sneak would prevent stepping into the shaft
             return Status.WORKING;
         }
         motor.stop();
-        if (feet.getY() < s.top.getY() && !ladderAt(feet)) {
-            if (ladders() == 0) {
-                debug = "out of ladders at " + feet.toShortString();
-                stage = 4;
-                return Status.WORKING;
-            }
-            BlockPos wallBlock = feet.relative(s.wall);
-            if (!solid(wallBlock)) {
-                int slot = Equipment.pillarBlockSlot(self);
-                if (slot < 0) {
-                    debug = "no wall for the ladder at " + feet.toShortString();
-                    stage = 4;
-                    return Status.WORKING;
-                }
-                Equipment.select(self, slot);
-                motor.placeBlockAt(wallBlock);
-                return Status.WORKING;
-            }
-            Equipment.select(self, slotOf(Items.LADDER));
-            motor.useOnFace(wallBlock, s.wall.getOpposite());
-            if (ladderAt(feet)) {
-                laddersPlaced++;
-            } else if (stuck > 60) {
-                debug = "the ladder will not stay at " + feet.toShortString();
-                stage = 4;
-            }
-            return Status.WORKING;
-        }
+        BlockPos below = feet.below();
         if (ladders() == 0) {
             debug = "out of ladders at " + feet.toShortString();
             stage = 4;
             return Status.WORKING;
         }
-        BlockPos below = feet.below();
-        if (feet.getY() <= target() || !diggable(below) || !solid(below.below()) && !self.level().getBlockState(below.below()).isAir()
+        if (feet.getY() <= target() || !diggable(below) || !solid(below.below()) && !ladderAt(below.below()) && !self.level().getBlockState(below.below()).isAir()
                 || self.level().getBlockState(below.below()).isAir() && !solid(below.below(2))) {
             s.finished = true; // bedrock, liquid, a cave under us: this shaft ends here
             bases().setDirty();
-            debug = "bottom at " + feet.toShortString() + " (" + self.level().getBlockState(below) + ")";
+            debug = "bottom at " + feet.toShortString() + " target=" + target() + " diggable=" + diggable(below)
+                    + " lower=" + self.level().getBlockState(below.below()) + " (" + self.level().getBlockState(below) + ")";
             stage = 4;
             return Status.WORKING;
         }
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+            debug = "shaft digging/placement disabled"; stage = 4; return Status.WORKING;
+        }
+        int drop = self.level().getBlockState(below.below()).isAir() ? 2 : 1;
+        int needed = 0;
+        for (int i = 0; i < drop; i++) if (!ladderAt(below.below(i))) needed++;
+        if (ladders() < needed) {
+            debug = "need " + needed + " ladders before opening " + below.toShortString();
+            stage = 4;
+            return Status.WORKING;
+        }
+        for (int i = 0; i < drop; i++) {
+            Repair backing = support(below.below(i));
+            if (backing != Repair.READY) {
+                debug = "support needed before digging " + below.below(i).toShortString();
+                if (backing == Repair.BLOCKED || stuck > 80) stage = 4;
+                return Status.WORKING;
+            }
+        }
         self.setXRot(90f);
         Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(below)));
-        motor.mine(below);
+        if (motor.mine(below)) {
+            // Fill the intermediate level too, before the next physics step can drop past it.
+            for (int i = 0; i < drop; i++) if (rung(below.below(i)) != Repair.READY) break;
+        }
         if (stuck > 400) {
             debug = "cannot dig " + below.toShortString();
             stage = 4;
@@ -382,33 +489,21 @@ public final class ShaftMining {
         return -1;
     }
 
-    /** A ladder missing in the cell above (broken, or never put): one is put there from the ladder below, if we carry any. */
-    private boolean mendGap(BlockPos feet, Bases.Shaft s) {
-        BlockPos gap = feet.above();
-        if (gap.getY() >= s.top.getY() || ladderAt(gap) || !ladderAt(feet) || !self.level().getBlockState(gap).isAir()) {
-            return false;
-        }
-        int slot = self.getInventory().findSlotMatchingItem(new ItemStack(Items.LADDER));
-        BlockPos wall = gap.relative(s.wall);
-        if (slot < 0 || !solid(wall)) {
-            return false; // none to spare / no wall: the climb goes on as before (stuck -> the escape reflex)
-        }
-        Equipment.select(self, slot);
-        motor.stop();
-        if (motor.useOnFace(wall, s.wall.getOpposite()) && ladderAt(gap)) {
-            laddersPlaced++;
-        }
-        return true;
-    }
-
     /** Back up the ladders and out onto the rim. */
     private Status climbTick(BlockPos feet) {
         Bases.Shaft s = shaft;
         if (s == null) {
             return Status.DONE;
         }
-        s.digger = "";
+        if (repairingReturn && (ticks % 20 == 0 || lastRoutePlacement != laddersPlaced)) {
+            lastRoutePlacement = laddersPlaced;
+            if (returnPathIntact(returnBottom)) {
+                repairingReturn = false; stage = 2; repairCell = null; stuck = 0;
+                return Status.WORKING;
+            }
+        }
         if (!inColumn(feet) && feet.getY() >= s.top.getY()) {
+            s.digger = "";
             climbedOut++;
             return Status.DONE;
         }
@@ -416,8 +511,9 @@ public final class ShaftMining {
             debug += " | stuck climbing at " + feet.toShortString();
             return Status.DONE; // the escape reflex takes it from here
         }
-        if (inColumn(feet) && mendGap(feet, s)) {
-            return Status.WORKING;
+        if (inColumn(feet)) {
+            Repair repair = repairNearby(feet);
+            if (repair != Repair.READY) return Status.WORKING;
         }
         Direction out = s.wall;
         if (solid(s.top.relative(s.wall)) || !solid(s.top.relative(s.wall).below())) {
@@ -432,6 +528,26 @@ public final class ShaftMining {
         motor.moveToward(Vec3.atBottomCenterOf(s.top.relative(out))); // into the ladder wall: up we go
         motor.jump();
         return Status.WORKING;
+    }
+
+    /** Also mend old/completed routes in passing; never extend their depth or travel to an unseen hole. */
+    public boolean repairKnownRoute() {
+        if (ladders() == 0 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || self.isInWater() || !self.isAlive()) return false;
+        BlockPos feet = self.blockPosition();
+        long now = self.level().getGameTime();
+        for (Bases.Shaft known : bases().shafts) {
+            if (known.dimension != self.level().dimension() || feet.getX() != known.top.getX() || feet.getZ() != known.top.getZ()
+                    || feet.getY() < known.end.getY() || feet.getY() >= known.top.getY()
+                    || !known.digger.isEmpty() && !known.digger.equals(me()) && now - known.lastDug < 200) continue;
+            Bases.Shaft saved = shaft; int savedStage = stage;
+            int beforeLadders = laddersPlaced, beforeSupports = supportsPlaced;
+            try {
+                shaft = known; stage = 2;
+                Repair result = repairNearby(feet);
+                return result == Repair.WORKING || beforeLadders != laddersPlaced || beforeSupports != supportsPlaced;
+            } finally { shaft = saved; stage = savedStage; }
+        }
+        return false;
     }
 
     public boolean busy() {

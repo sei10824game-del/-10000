@@ -704,6 +704,10 @@ public final class CloneController {
         if (!itemBusy && !escaping) {
             itemBusy = stairGuard.tick(now); // monsters coming down the staircase: a block makes the step one high, the fight hits their feet; taken out when it is quiet
         }
+        if (!itemBusy && !escaping && !threatened && option != Option.SHAFT && option != Option.FIGHT && option != Option.FLEE
+                && (now + self.getId()) % 10 == 0) {
+            itemBusy = shafts.repairKnownRoute();
+        }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = campfire.tick(now, threatened); // raw food in the bag: laid on a campfire (one is put down if it is in the bag)
         }

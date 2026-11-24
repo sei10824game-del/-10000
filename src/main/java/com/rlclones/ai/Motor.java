@@ -352,6 +352,14 @@ public final class Motor {
         moveDirection(point.subtract(self.position()));
     }
 
+    /** Converge on the middle of a narrow ladder column without sneak's edge-clamping or overshooting. */
+    public void movePrecisely(Vec3 point) {
+        Vec3 delta = new Vec3(point.x - self.getX(), 0, point.z - self.getZ());
+        double distance = delta.length();
+        moveDir = distance < 1e-6 ? null : delta.scale(Math.min(1.0, distance * 2.0) / distance);
+        noHop = true;
+    }
+
     public void moveAwayFrom(Vec3 point) {
         moveDirection(self.position().subtract(point));
     }
