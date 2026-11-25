@@ -21,9 +21,17 @@ public final class DevelopmentTests {
     private static Object field(Object object,String name){try{var f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);}catch(ReflectiveOperationException e){throw new RuntimeException(e);}}
     private static DevelopmentLearning development(com.rlclones.clone.ClonePlayer clone){return (DevelopmentLearning)field(clone.controller(),"development");}
     private static void floor(GameTestHelper h){for(var p:BlockPos.betweenClosed(h.absolutePos(new BlockPos(4,1,4)),h.absolutePos(new BlockPos(12,1,12))))h.getLevel().setBlock(p,Blocks.STONE.defaultBlockState(),3);}
+    /** Make lighting-preparation tests independent of accumulated world time and surface terrain. */
+    private static void darkRoom(GameTestHelper h,com.rlclones.clone.ClonePlayer c){
+        for(var p:BlockPos.betweenClosed(new BlockPos(4,1,4),new BlockPos(12,5,10))) {
+            boolean shell=p.getY()==1||p.getY()==5||p.getX()==4||p.getX()==12||p.getZ()==4||p.getZ()==10;
+            h.setBlock(p,shell?Blocks.STONE:Blocks.AIR);
+        }
+        Vec3 p=h.absoluteVec(new Vec3(7.5,2,7.5));c.teleportTo(p.x,p.y,p.z);
+    }
     @GameTest(template="arena",batch="development",timeoutTicks=240)
     public static void lightPreparationAndActualMiningProduceOwnEvidence(GameTestHelper h){
-        var c=GearRecipeTests.clone(h);floor(h);var d=development(c);c.getInventory().setItem(0,new ItemStack(Items.IRON_PICKAXE));c.getInventory().setItem(1,new ItemStack(Items.TORCH,8));
+        var c=GearRecipeTests.clone(h);darkRoom(h,c);var d=development(c);c.getInventory().setItem(0,new ItemStack(Items.IRON_PICKAXE));c.getInventory().setItem(1,new ItemStack(Items.TORCH,8));
         var ore=h.absolutePos(new BlockPos(9,2,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
         for(int s=0;s<8;s++)for(int a=0;a<4;a++)c.getCloneBrain().workflow.record(s,a,a==1?1:-1,false);
         ((java.util.Random)field(d,"random")).setSeed(1);
@@ -50,7 +58,8 @@ public final class DevelopmentTests {
     }
     @GameTest(template="arena",batch="development",timeoutTicks=40)
     public static void nearbyThreatKeepsOptionalRolesOutOfCombatDecisions(GameTestHelper h){
-        var c=GearRecipeTests.clone(h);var hostile=h.spawn(EntityType.HUSK,new Vec3(10,2,7));
+        var c=GearRecipeTests.clone(h);darkRoom(h,c);var hostile=h.spawn(EntityType.HUSK,new Vec3(10,2,7));hostile.setNoAi(true);
+        h.runAtTickTime(5,()->{
         c.controller().perception().hear(hostile,hostile.position(),h.getLevel().getGameTime());
         h.assertTrue(!Senses.threats(c.controller().perception(),c,h.getLevel().getGameTime(),24).isEmpty(),"hostile is known to the clone");
         h.assertTrue(development(c).roleChoice(Option.HUNT.bit()|Option.MINE.bit(),h.getLevel().getGameTime())==null,"optional roles must not replace combat decisions");
@@ -59,6 +68,7 @@ public final class DevelopmentTests {
         var d=development(c);((java.util.Random)field(d,"random")).setSeed(1);d.start(Option.MINE);
         h.assertTrue(d.interruptPreparation(h.getLevel().getGameTime()),"a new threat interrupts optional preparation immediately");d.finish(false,false);
         h.assertTrue(c.getCloneBrain().workflow.wins()==0,"interrupted preparation has no fabricated success");hostile.discard();h.succeed();
+        });
     }
     @GameTest(template="arena",batch="development",timeoutTicks=200)
     public static void watchedSuccessIsAHintUntilSelfVerification(GameTestHelper h){

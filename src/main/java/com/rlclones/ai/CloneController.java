@@ -186,6 +186,8 @@ public final class CloneController {
     private final OreWorkLearning oreWorkLearning;
     private final DevelopmentLearning development;
     private final Survival survival;
+    private final RangedBow rangedBow;
+    public RangedBow rangedBow(){return rangedBow;}
     public Survival survival(){return survival;}
     public void prepareMiningReturn(String reason){
         if(reason.contains("lighting")){itemAid.need(Items.TORCH,8);if(Crafting.torchMakeable(self)){crafting.forcedTarget=Items.TORCH;nextOption=Option.CRAFT;}}
@@ -263,6 +265,7 @@ public final class CloneController {
         });
         safeTrials = new SafeItemTrials(self,perception);
         survival = new Survival(self);
+        rangedBow = new RangedBow(self,motor);
         development = new DevelopmentLearning(self,perception,crafting,storage,lighting,civicWork);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
@@ -589,6 +592,7 @@ public final class CloneController {
         long now = now();
         trackRewards();
         attacks.tick(now);
+        rangedBow.tick(now);
         // a look every 4 ticks; in a big crowd (over 24 players and clones) a clone with no enemy in sight and unhurt looks every 8: half the cost
         // of seeing, and a quarter of a second later at worst in noticing something new (in a fight or hurt it is every 4 as ever)
         boolean calmCrowd = calm && self.level().players().size() > 24 && option != Option.FIGHT && option != Option.FLEE && self.hurtTime == 0;
@@ -3441,7 +3445,8 @@ public final class CloneController {
             }
         }
         if (!died && self.isUsingItem() && (action == CombatAction.BLOCK || action == CombatAction.SHOOT || action == CombatAction.USE_ITEM)) {
-            if ((action == CombatAction.SHOOT || action == CombatAction.USE_ITEM) && !drawnBow()) {
+            if ((action == CombatAction.SHOOT || action == CombatAction.USE_ITEM) && !drawnBow()
+                    && Equipment.rangedKind(self.getUseItem())==Equipment.RangedKind.NONE) {
                 self.releaseUsingItem();
             } else {
                 self.stopUsingItem(); // a half-aimed bow is lowered, not loosed (it might be pointing at a friend)
@@ -3679,6 +3684,7 @@ public final class CloneController {
             Equipment.select(self, slot);
             held = self.getMainHandItem();
         }
+        if(rangedBow.reposition(t,now())){lobDraw=0;return;}
         Entity friend = allyInLine(t);
         if (friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.CROSSBOW) {
             // a crossbow bolt flies straight into the friend: take the bow, which can lob over him
@@ -3713,7 +3719,13 @@ public final class CloneController {
         shootDebug = "friend=" + (friend != null) + " kind=" + Equipment.rangedKind(held) + " lob=" + lobDraw + " pitch=" + (int) self.getXRot()
                 + "/" + (int) lobPitch + " using=" + self.isUsingItem() + " t=" + actionTicks;
         if (lobDraw > 0) {
-            aimLob(t, self.isUsingItem() ? Math.max(lobDraw, self.getTicksUsingItem() + 1) : lobDraw);
+            aimLob(t, self.isUsingItem() ? Math.max(lobDraw, self.getTicksUsingItem()) : lobDraw);
+        } else if(Equipment.rangedKind(held)==Equipment.RangedKind.BOW) {
+            var aim=rangedBow.aim(t,20,false,now());
+            if(aim==null){self.stopUsingItem();actionDone=true;return;}
+            motor.lookAngles(aim.yaw(),aim.pitch());
+        } else if(Equipment.rangedKind(held)==Equipment.RangedKind.CROSSBOW&&!CrossbowItem.containsChargedProjectile(held,Items.FIREWORK_ROCKET)) {
+            var aim=rangedBow.boltAim(t);if(aim==null){actionDone=true;return;}motor.lookAngles(aim.yaw(),aim.pitch());
         } else {
             aimProjectile(t, Equipment.projectileSpeed(held));
         }
@@ -3723,6 +3735,8 @@ public final class CloneController {
                 if (held.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(held)) {
                     if (actionTicks >= 2 && canSee) {
                         boolean rocket = CrossbowItem.containsChargedProjectile(held, Items.FIREWORK_ROCKET);
+                        boolean multi=net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.MULTISHOT,held)>0;
+                        if(!rangedBow.safeBolt(t,multi,rocket)){heldShots++;if(rangedBow.friendBlocked)rangedBow.reposition(t,now(),true);actionDone=true;return;}
                         if (motor.useHeldItem(hand)) { // loaded: right-click fires
                             rocketShots += rocket ? 1 : 0;
                             offhandShots += hand == InteractionHand.OFF_HAND ? 1 : 0;
@@ -3761,7 +3775,7 @@ public final class CloneController {
             default -> {
                 if (!self.isUsingItem()) {
                     // a lob: start drawing only once the bow points up the arc (a short draw leaves no time to turn)
-                    boolean ready = lobDraw == 0 || Math.abs(self.getXRot() - lobPitch) < 4;
+                    boolean ready = lobDraw == 0 || Math.abs(self.getXRot() - lobPitch) < .4;
                     if (actionTicks < (lobDraw > 0 ? 12 : 3)) {
                         if (ready) {
                             motor.useHeldItem(hand);
@@ -3774,10 +3788,12 @@ public final class CloneController {
                 if (lobDraw > 0) {
                     int drawn = self.getTicksUsingItem();
                     if (drawn >= lobDraw) {
-                        if (arrowClearsFriends(drawn)) {
-                            self.releaseUsingItem(); // a high arc over the friend's head
+                        if (arrowClearsFriends(drawn,t)) {
+                            rangedBow.releasing(t,now());
+                            self.releaseUsingItem(); // physics-validated release
                             arcShots++;
                             actionDone = true;
+                        } else if(rangedBow.friendBlocked&&rangedBow.reposition(t,now(),true)){return;
                         } else if (drawn > lobDraw + 30) {
                             self.stopUsingItem(); // the aim never came right: lower the bow
                             actionDone = true;
@@ -3789,14 +3805,16 @@ public final class CloneController {
                     self.stopUsingItem(); // no arc to be had: never loose straight through a friend
                     actionDone = true;
                 } else if (gap < 1.5 || (self.getTicksUsingItem() >= 20 && canSee)) {
-                    if (arrowClearsFriends(self.getTicksUsingItem())) {
+                    if (arrowClearsFriends(self.getTicksUsingItem(),t)) {
                         offhandShots += self.getUsedItemHand() == InteractionHand.OFF_HAND ? 1 : 0;
                         arrowsLoosed++;
                         if (vantageFromY > -1e9 && self.getY() > vantageFromY + 0.5 && vantageDebug.length() < 400) {
                             vantageDebug += " shot@" + String.format(java.util.Locale.ROOT, "%.1f/%d", self.getY() - vantageFromY, (int) self.getXRot());
                         }
+                        rangedBow.releasing(t,now());
                         self.releaseUsingItem();
-                    } else {
+                    } else if(rangedBow.friendBlocked&&rangedBow.reposition(t,now(),true)){return;
+                    } else if(self.getTicksUsingItem()<50){heldShots++;return;}else {
                         self.stopUsingItem();
                     }
                     actionDone = true;
@@ -4153,99 +4171,15 @@ public final class CloneController {
     public String shootDebug = "";
     private int lobDraw;
 
-    /** Friends seen in the last minute: we know where they stand even while looking elsewhere (up a lob, say). */
-    private final java.util.Map<Entity, Long> recentAllies = new java.util.HashMap<>();
-
     /** A player / clone of ours standing in the straight line of fire. */
-    private Entity allyInLine(Entity t) {
-        Vec3 eye = self.getEyePosition();
-        Vec3 aim = t.getBoundingBox().getCenter();
-        double dist = eye.distanceTo(aim);
-        long now = now();
-        for (Perception.Seen s : perception.visible()) {
-            if (s.entity != self && Senses.isAllyOf(s.entity, self)) {
-                recentAllies.put(s.entity, now);
-            }
-        }
-        recentAllies.entrySet().removeIf(e -> now - e.getValue() > 1200 || !e.getKey().isAlive() || e.getKey().level() != self.level());
-        for (Entity a : recentAllies.keySet()) {
-            if (a == t || !Senses.isAllyOf(a, self)) {
-                continue;
-            }
-            if (a.distanceTo(self) < dist && a.getBoundingBox().inflate(0.6).clip(eye, aim).isPresent()) {
-                return a;
-            }
-        }
-        return null;
-    }
+    private Entity allyInLine(Entity t) {return rangedBow.friendInLine(t,rangedBow.origin());}
 
-    /** Follows the arrow a bow drawn {@code drawn} ticks would loose right now: true if it flies past every friend. */
-    private boolean arrowClearsFriends(int drawn) {
-        float f = Math.min(1f, drawn / 20f);
-        double speed = Math.min(1.0, (f * f + f * 2) / 3) * 3.0;
-        Vec3 pos = self.getEyePosition().subtract(0, 0.1, 0);
-        Vec3 vel = self.getViewVector(1f).scale(speed);
-        java.util.List<AABB> friends = new java.util.ArrayList<>();
-        for (Entity a : recentAllies.keySet()) {
-            if (a != self && a.isAlive() && a.level() == self.level() && a.distanceTo(self) < 64) {
-                friends.add(a.getBoundingBox().inflate(0.5));
-            }
-        }
-        if (friends.isEmpty()) {
-            return true;
-        }
-        double floor = self.getY() - 8;
-        for (int i = 0; i < 100 && pos.y > floor; i++) {
-            Vec3 next = pos.add(vel);
-            for (AABB bb : friends) {
-                if (bb.contains(pos) || bb.clip(pos, next).isPresent()) {
-                    return false;
-                }
-            }
-            if (self.level().clip(new ClipContext(pos, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self)).getType() != HitResult.Type.MISS) {
-                return true; // stuck in a block before reaching anyone
-            }
-            pos = next;
-            vel = vel.scale(0.99).add(0, -0.05, 0);
-        }
-        return true;
-    }
-
-    private static final double LOB_ANGLE = Math.toRadians(55);
-
-    /** How long to draw the bow so that a steep shot comes down on {@code t} (a weaker draw = a shorter, higher arc). */
-    private int lobDrawTicks(Entity t) {
-        Vec3 eye = self.getEyePosition();
-        Vec3 aim = t.getBoundingBox().getCenter();
-        double x = Math.sqrt((aim.x - eye.x) * (aim.x - eye.x) + (aim.z - eye.z) * (aim.z - eye.z));
-        double dy = aim.y - eye.y;
-        double denom = 2 * Math.cos(LOB_ANGLE) * Math.cos(LOB_ANGLE) * (x * Math.tan(LOB_ANGLE) - dy);
-        if (denom <= 0) {
-            return 20;
-        }
-        double v = Math.sqrt(0.05 * x * x / denom) * 1.04; // a little extra for the air drag
-        double power = Mth.clamp(v / 3.0, 0.12, 1.0);
-        double f = -1 + Math.sqrt(1 + 3 * power);
-        return Mth.clamp((int) Math.ceil(f * 20), 3, 20);
-    }
-
-    /** Aim the steep (high) solution for the arrow speed a draw of {@code draw} ticks gives. */
-    private void aimLob(Entity t, int draw) {
-        float f = Math.min(1f, draw / 20f);
-        double v = Math.min(1.0, (f * f + f * 2) / 3) * 3.0;
-        Vec3 eye = self.getEyePosition();
-        Vec3 aim = t.getBoundingBox().getCenter();
-        double dx = aim.x - eye.x;
-        double dz = aim.z - eye.z;
-        double x = Math.sqrt(dx * dx + dz * dz);
-        double dy = aim.y - eye.y;
-        double g = 0.05;
-        double v2 = v * v;
-        double root = v2 * v2 - g * (g * x * x + 2 * dy * v2);
-        double angle = root < 0 ? Math.PI / 4 : Math.atan((v2 + Math.sqrt(root)) / (g * Math.max(0.1, x)));
-        float yaw = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
-        lobPitch = (float) -Math.toDegrees(angle);
-        motor.lookAngles(yaw, lobPitch);
+    private boolean arrowClearsFriends(int drawn,Entity enemy){return rangedBow.safe(enemy,drawn);}
+    private int lobDrawTicks(Entity t){return rangedBow.lobDraw(t,now());}
+    private void aimLob(Entity t,int draw){
+        var aim=rangedBow.aim(t,draw,true,now());
+        if(aim==null){self.stopUsingItem();lobDraw=0;return;}
+        lobPitch=aim.pitch();motor.lookAngles(aim.yaw(),lobPitch);
     }
 
     private float lobPitch;
@@ -5633,6 +5567,7 @@ public final class CloneController {
         out.add(development.report());
         out.add(safeTrials.report());
         out.add(survival.report());
+        out.add("遠距離の射線確保="+rangedBow.repositioned+" 軌道保留="+rangedBow.blocked);
         out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
         StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));

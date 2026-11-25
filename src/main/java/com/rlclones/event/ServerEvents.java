@@ -282,6 +282,7 @@ public final class ServerEvents {
         if (victim instanceof ClonePlayer cp && attacker == null && event.getSource().getDirectEntity() == null) {
             cp.controller().onEnvironmentDamage(event.getSource());
         }
+        if(attacker instanceof ClonePlayer shooter&&event.getSource().getDirectEntity() instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow)shooter.controller().rangedBow().damage(arrow,victim,amount);
         if (Senses.isAgent(attacker)) {
             boolean hostile = Senses.isHostileTo(victim, (LivingEntity) attacker);
             AgentEvents.record(attacker.getUUID(), now, AgentEvents.Kind.DEALT, amount, victim.getId(), hostile ? AgentEvents.FLAG_HOSTILE : 0);
@@ -371,6 +372,7 @@ public final class ServerEvents {
             return;
         }
         Entity owner = projectile.getOwner();
+        if(owner instanceof ClonePlayer clone&&projectile instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow)clone.controller().rangedBow().launched(arrow,owner.level().getGameTime());
         if (owner instanceof LivingEntity) {
             com.rlclones.ai.AttackTells.attacked(owner, true); // a shot (a skeleton's arrow, a rival clone's bow)
         }
@@ -435,6 +437,7 @@ public final class ServerEvents {
         if (proj.level().isClientSide || event.isCanceled()) {
             return;
         }
+        if(proj.getOwner() instanceof ClonePlayer shooter&&proj instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow)shooter.controller().rangedBow().impact(arrow,proj.level().getGameTime(),event.getRayTraceResult());
         if (proj.getOwner() instanceof ClonePlayer cp && cp.controller() != null
                 && event.getRayTraceResult() instanceof net.minecraft.world.phys.EntityHitResult hit && hit.getEntity() instanceof LivingEntity victim) {
             cp.controller().onProjectileHit(victim, proj);

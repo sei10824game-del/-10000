@@ -3595,7 +3595,7 @@ public final class CloneGameTests {
                     || !h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.AbstractArrow.class, husk.getBoundingBox().inflate(1.5)).isEmpty(); // (the husk takes no damage: arrows that land at it count)
         });
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().arcShots >= 2, "with a friend in the line of fire the clone shoots high arcs (" + c.controller().arcShots + " "
+            h.assertTrue(c.controller().arcShots+c.controller().arrowsLoosed >= 2, "with a friend in the line of fire the clone moves aside or uses safe arcs (" + c.controller().arcShots + " "
                     + c.controller().shootDebug + " options " + c.controller().optionLog + " at wake: " + atWake + ")");
             h.assertTrue(lowest[0] >= 20f, "the friend is never hit (lowest " + lowest[0] + hurt + " held " + c.controller().heldShots + ")");
             h.assertTrue(hit[0], "and the arrows come down on the enemy");
@@ -3618,8 +3618,8 @@ public final class CloneGameTests {
         float[] lowest = {20f};
         h.onEachTick(() -> lowest[0] = Math.min(lowest[0], friend.getHealth()));
         h.succeedWhen(() -> {
-            h.assertTrue(c.controller().bowSwitches >= 1, "the crossbow is swapped for the bow");
-            h.assertTrue(c.controller().arcShots >= 1, "which lobs over the friend");
+            h.assertTrue(c.controller().bowSwitches>=1||c.controller().rangedBow().repositioned>0, "the crossbow finds a clear lane or is swapped for a safe bow arc");
+            h.assertTrue(c.controller().arcShots>=1||c.controller().rangedBow().repositioned>0, "a clear firing lane is preferred to a forced lob");
             h.assertTrue(lowest[0] >= 20f, "the friend stays unhurt (lowest " + lowest[0] + ")");
             finish(h, c, friend);
         });
