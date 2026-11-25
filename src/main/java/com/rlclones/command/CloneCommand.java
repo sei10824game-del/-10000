@@ -181,7 +181,12 @@ public final class CloneCommand {
                 .then(Commands.literal("item")
                         .executes(ctx -> showItems(ctx, 1))
                         .then(Commands.argument("page", IntegerArgumentType.integer(1)).executes(ctx -> showItems(ctx, IntegerArgumentType.getInteger(ctx, "page")))))
-                .then(Commands.literal("deaths").executes(CloneCommand::deaths))
+                .then(Commands.literal("deaths").executes(ctx -> deaths(ctx,com.rlclones.command.util.DeathReport.View.SUMMARY,1))
+                        .then(Commands.argument("page",IntegerArgumentType.integer(1)).executes(ctx -> deaths(ctx,com.rlclones.command.util.DeathReport.View.DETAILS,IntegerArgumentType.getInteger(ctx,"page"))))
+                        .then(deathView("summary",com.rlclones.command.util.DeathReport.View.SUMMARY))
+                        .then(deathView("mobs",com.rlclones.command.util.DeathReport.View.MOBS))
+                        .then(deathView("actions",com.rlclones.command.util.DeathReport.View.ACTIONS))
+                        .then(deathView("details",com.rlclones.command.util.DeathReport.View.DETAILS)))
                 .then(Commands.literal("remove").requires(CloneCommand::mayControl)
                         .then(Commands.literal("all").executes(ctx -> {
                             int n = manager(ctx).removeAll();
@@ -512,16 +517,27 @@ public final class CloneCommand {
         return total;
     }
 
-    private static int deaths(CommandContext<CommandSourceStack> ctx) {
-        CommandSourceStack src = ctx.getSource();
-        java.util.List<java.util.Map.Entry<String, Integer>> rows = new java.util.ArrayList<>(com.rlclones.ai.CloneController.DEATHS.entrySet());
-        rows.sort((a, b) -> b.getValue() - a.getValue());
-        int total = rows.stream().mapToInt(java.util.Map.Entry::getValue).sum();
-        src.sendSuccess(() -> Component.literal("Deaths: " + total + " (cause, by whom, during which action)").withStyle(ChatFormatting.AQUA), false);
-        for (var e : rows) {
-            src.sendSuccess(() -> Component.literal(" " + e.getValue() + " x " + e.getKey()), false);
-        }
-        return rows.size();
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> deathView(String name,com.rlclones.command.util.DeathReport.View view) {
+        return Commands.literal(name).executes(ctx -> deaths(ctx,view,1))
+                .then(Commands.argument("page",IntegerArgumentType.integer(1)).executes(ctx -> deaths(ctx,view,IntegerArgumentType.getInteger(ctx,"page"))));
+    }
+    private static net.minecraft.network.chat.MutableComponent deathLink(String label,String command) {
+        return Component.literal(label).withStyle(style -> style.withColor(ChatFormatting.AQUA).withUnderlined(true)
+                .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND,command)));
+    }
+    private static int deaths(CommandContext<CommandSourceStack> ctx,com.rlclones.command.util.DeathReport.View view,int requested) {
+        var page=com.rlclones.command.util.DeathReport.page(com.rlclones.ai.CloneController.DEATHS,view,requested);
+        String title=switch(view){case SUMMARY->"死因別";case MOBS->"相手別";case ACTIONS->"行動別";case DETAILS->"詳細組合せ";};
+        ctx.getSource().sendSuccess(()->Component.literal("死亡総数: "+page.total()+" / "+title+" "+page.number()+"/"+page.pages()+"（"+page.groups()+"項目）").withStyle(ChatFormatting.AQUA),false);
+        for(var row:page.rows())ctx.getSource().sendSuccess(()->Component.literal(String.format(Locale.ROOT," %d件 (%.1f%%) %s",row.count(),page.total()==0?0:row.count()*100.0/page.total(),row.label())),false);
+        String root="/rlclone deaths "+view.name().toLowerCase(Locale.ROOT)+" ";
+        var navigation=Component.literal("");
+        if(page.number()>1)navigation.append(deathLink("[前へ] ",root+(page.number()-1)));
+        if(page.number()<page.pages())navigation.append(deathLink("[次へ] ",root+(page.number()+1)));
+        navigation.append(deathLink("[死因] ","/rlclone deaths summary")).append(deathLink("[相手] ","/rlclone deaths mobs"))
+                .append(deathLink("[行動] ","/rlclone deaths actions")).append(deathLink("[詳細]","/rlclone deaths details"));
+        ctx.getSource().sendSuccess(()->navigation,false);
+        return page.rows().size();
     }
 
     private static int list(CommandContext<CommandSourceStack> ctx) {

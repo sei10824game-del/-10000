@@ -45,6 +45,14 @@ public final class ShaftMining {
     private boolean repairingReturn;
     private int returnBottom, lastRoutePlacement = -1;
     public int supportsPlaced;
+    public int oresMined;
+    @Nullable private BlockPos oreTarget, oreWallCell;
+    private boolean oreHadRung;
+    private int oreTicks;
+    @Nullable private BlockPos oreDrop;
+    private int oreCollectTicks;
+    @Nullable private BlockPos oreScanFeet;
+    private final java.util.LinkedHashMap<BlockPos,Long> oreRetry = new java.util.LinkedHashMap<>();
     private static final int[] REPAIR_OFFSETS = {0, 1, 2, -1};
 
     /** Dig down to here at most; unset (MIN_VALUE) = what the next step needs (iron: 16, diamonds: -58), see {@link Progression}. */
@@ -120,6 +128,8 @@ public final class ShaftMining {
     }
 
     public void begin() {
+        if (oreTarget != null) BlockClaims.release(oreTarget,self.getUUID());
+        oreTarget = oreWallCell = oreScanFeet = oreDrop = null; oreTicks = oreCollectTicks = 0;
         shaft = bases().nearestShaft(self.level().dimension(), self.position(), 64, me(), self.level().getGameTime());
         if (shaft != null) {
             shaft.digger = me();
@@ -210,6 +220,7 @@ public final class ShaftMining {
         for (int offset : REPAIR_OFFSETS) {
             BlockPos cell = feet.offset(0, offset, 0);
             if (cell.getY() < lowest || cell.getY() >= shaft.top.getY() || ladderAt(cell)) continue;
+            if ((oreTarget != null || oreDrop != null) && cell.equals(oreWallCell)) continue; // this rung is temporarily detached for a reserved, safe wall harvest
             if (offset < 0 && (stage == 4 || !self.level().getBlockState(cell).canBeReplaced())) continue;
             if (!inReach(cell.relative(shaft.wall))) continue;
             Repair result = rung(cell);
@@ -224,6 +235,118 @@ public final class ShaftMining {
     private boolean returnPathIntact(int bottom) {
         for (int y = bottom; y < shaft.top.getY(); y++)
             if (!ladderAt(new BlockPos(shaft.top.getX(), y, shaft.top.getZ()))) return false;
+        return true;
+    }
+
+    private boolean oreSafe(BlockPos p) {
+        if (!diggable(p) || !Equipment.canHarvest(self,self.level().getBlockState(p)) || Motor.leftAlone(p,self.level().getGameTime())) return false;
+        if (self.level().getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) return false;
+        for(Direction d:Direction.values()) if(!self.level().getFluidState(p.relative(d)).isEmpty()) return false;
+        return true;
+    }
+
+    @Nullable
+    private BlockPos backingCell(BlockPos ore) {
+        if(ore.getY()<Math.min(shaft.end.getY(),self.getBlockY())||ore.getY()>=shaft.top.getY())return null;
+        BlockPos cell=new BlockPos(shaft.top.getX(),ore.getY(),shaft.top.getZ());
+        return cell.relative(shaft.wall).equals(ore)?cell:null;
+    }
+
+    private boolean oreCandidate(BlockPos ore,BlockPos feet) {
+        if(ore.getX()==shaft.top.getX()&&ore.getZ()==shaft.top.getZ())return false; // floors belong to digTick's rung reservation
+        if(Perception.classify(self.level().getBlockState(ore))!=Perception.BlockKind.ORE
+                || Vec3.atCenterOf(ore).distanceTo(self.getEyePosition())>Motor.BLOCK_REACH-0.3
+                || oreRetry.getOrDefault(ore,Long.MIN_VALUE)>self.level().getGameTime()
+                || BlockClaims.takenByOther(ore,self.getUUID(),self.level().getGameTime())||!oreSafe(ore))return false;
+        BlockPos backing=backingCell(ore);
+        if(backing!=null){
+            boolean floor=solid(feet.below())&&self.getY()-feet.getY()<0.15;
+            if(ladders()<1||Equipment.pillarBlockSlot(self)<0||!Config.get(Config.ALLOW_BLOCK_PLACING,true)
+                    || !floor && !(ladderAt(feet)&&backing.getY()!=feet.getY()))return false;
+        }
+        BlockPos obstacle=motor.obstruction(ore);
+        // A ladder outline higher on the same wall can intercept the centre ray.
+        // Once the target's own rung is detached, mine() selects an actually visible face point.
+        return obstacle==null||backing!=null&&obstacle.getX()==shaft.top.getX()&&obstacle.getZ()==shaft.top.getZ()
+                &&Math.abs(obstacle.getY()-backing.getY())<=2&&ladderAt(obstacle);
+    }
+
+    private void stopOre(boolean retry) {
+        if(oreTarget!=null){
+            BlockClaims.release(oreTarget,self.getUUID());
+            if(retry){if(oreRetry.size()>=16)oreRetry.remove(oreRetry.keySet().iterator().next());oreRetry.put(oreTarget,self.level().getGameTime()+300);}
+        }
+        oreTarget=null;oreTicks=0;oreScanFeet=null;
+    }
+
+    /** Interruption releases the ore claim; a missing rung remains eligible for ordinary route repair. */
+    public void pause() { stopOre(false); oreDrop=null; oreCollectTicks=0; }
+
+    private boolean restoreOreWall() {
+        if(oreWallCell==null)return false;
+        Vec3 centre=new Vec3(shaft.top.getX()+0.5,self.getY(),shaft.top.getZ()+0.5);
+        if(Motor.horizontalDistance(self.position(),centre)>0.05){motor.stop();motor.sneak(true);motor.movePrecisely(centre);return true;}
+        Repair result=oreHadRung?rung(oreWallCell):support(oreWallCell);
+        if(result==Repair.READY){oreWallCell=null;return false;}
+        debug="restore ore backing "+oreWallCell.toShortString()+" "+result;
+        if(result==Repair.BLOCKED){oreWallCell=null;stage=4;}
+        return true;
+    }
+
+    /** Harvest exposed shaft walls without leaving the ladder column to chase drops. */
+    private boolean oreTick(BlockPos feet) {
+        if(oreTarget==null&&oreWallCell!=null&&oreDrop==null)return restoreOreWall();
+        if(!Config.get(Config.ALLOW_BLOCK_BREAKING,true)||!inColumn(feet)||self.isInWater()){
+            stopOre(false);return restoreOreWall();
+        }
+        if(oreTarget==null&&oreDrop!=null){
+            var drops=self.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new net.minecraft.world.phys.AABB(oreDrop).inflate(1.5));
+            if(--oreCollectTicks>0&&!drops.isEmpty()){
+                motor.stop();motor.sneak(true);
+                double margin=0.05; // the centre stays in the shaft; ordinary collision still limits leaning into the exposed alcove
+                Vec3 item=drops.get(0).position();
+                double x=net.minecraft.util.Mth.clamp(item.x,shaft.top.getX()+margin,shaft.top.getX()+1-margin);
+                double z=net.minecraft.util.Mth.clamp(item.z,shaft.top.getZ()+margin,shaft.top.getZ()+1-margin);
+                motor.movePrecisely(new Vec3(x,self.getY(),z));
+                if(oreDrop.getY()>feet.getY()&&ladderAt(feet)&&ladderAt(feet.above()))motor.jump();
+                return true;
+            }
+            oreDrop=null;oreScanFeet=null;
+            if(oreWallCell!=null)return restoreOreWall();
+        }
+        if(oreTarget==null){
+            if(!self.onGround()&&!(self.onClimbable()&&ladderAt(feet)))return false;
+            if(feet.equals(oreScanFeet)&&(self.level().getGameTime()+self.getId())%8!=0)return false;
+            oreScanFeet=feet.immutable();
+            BlockPos best=null;double distance=Double.MAX_VALUE;
+            // A short inspection of the four exposed walls works even while the digger is looking down.
+            for(Direction d:Direction.Plane.HORIZONTAL)for(int dy=0;dy<=2;dy++){
+                BlockPos p=feet.above(dy).relative(d);double gap=p.distToCenterSqr(self.getEyePosition());
+                if(gap<distance&&oreCandidate(p,feet)){best=p;distance=gap;}
+            }
+            for(var e:self.controller().perception().blocks().entrySet()){
+                if(e.getValue()!=Perception.BlockKind.ORE)continue;
+                double gap=e.getKey().distToCenterSqr(self.getEyePosition());
+                if(gap<distance&&oreCandidate(e.getKey(),feet)){best=e.getKey();distance=gap;}
+            }
+            if(best==null||!BlockClaims.claim(best,self.getUUID(),self.level().getGameTime()))return false;
+            oreTarget=best.immutable();oreWallCell=backingCell(best);oreHadRung=oreWallCell!=null&&ladderAt(oreWallCell);oreTicks=0;
+        }
+        motor.stop();motor.sneak(true);
+        if(++oreTicks>160||!BlockClaims.claim(oreTarget,self.getUUID(),self.level().getGameTime())||!oreSafe(oreTarget)){
+            stopOre(true);return restoreOreWall();
+        }
+        if(Perception.classify(self.level().getBlockState(oreTarget))!=Perception.BlockKind.ORE){stopOre(false);return restoreOreWall();}
+        if(oreHadRung&&ladderAt(oreWallCell)){
+            Equipment.select(self,Equipment.bestToolSlot(self,self.level().getBlockState(oreWallCell)));
+            motor.mine(oreWallCell);return true;
+        }
+        Equipment.select(self,Equipment.bestToolSlot(self,self.level().getBlockState(oreTarget)));
+        if(motor.mine(oreTarget)){
+            oresMined++; stuck=0;
+            oreDrop=oreTarget;oreCollectTicks=40;
+            stopOre(false);
+        }
         return true;
     }
 
@@ -270,6 +393,7 @@ public final class ShaftMining {
         if (ticks % 100 == 1) {
             trace("s" + stage + "@" + feet.toShortString() + " l" + ladders());
         }
+        if(oreTarget==null&&oreDrop==null&&oreWallCell!=null&&restoreOreWall())return Status.WORKING;
         return switch (stage) {
             case 0 -> craftTick();
             case 1 -> toRimTick(feet);
@@ -355,6 +479,7 @@ public final class ShaftMining {
             if (repair == Repair.BLOCKED) stage = 4;
             return Status.WORKING;
         }
+        if(oreTick(feet))return Status.WORKING;
         motor.stop();
         motor.dare(); // the checked ladder column is an intentional descent, not an accidental edge
         Vec3 c = new Vec3(s.top.getX() + 0.5, self.getY(), s.top.getZ() + 0.5);
@@ -412,6 +537,7 @@ public final class ShaftMining {
             if (repair == Repair.BLOCKED) stage = 4;
             return Status.WORKING;
         }
+        if(oreTick(feet))return Status.WORKING;
         BlockPos existingBelow = feet.below();
         if (feet.getY() > target() && (ladderAt(existingBelow) || self.level().getBlockState(existingBelow).isAir())) {
             Repair next = rung(existingBelow);
@@ -543,6 +669,8 @@ public final class ShaftMining {
             int beforeLadders = laddersPlaced, beforeSupports = supportsPlaced;
             try {
                 shaft = known; stage = 2;
+                if(oreTarget==null&&oreDrop==null&&oreWallCell!=null&&oreWallCell.getX()==known.top.getX()&&oreWallCell.getZ()==known.top.getZ()
+                        &&restoreOreWall())return true;
                 Repair result = repairNearby(feet);
                 return result == Repair.WORKING || beforeLadders != laddersPlaced || beforeSupports != supportsPlaced;
             } finally { shaft = saved; stage = savedStage; }

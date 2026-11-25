@@ -2931,6 +2931,7 @@ public final class CloneController {
             return;
         }
         development.finish(died,completed);
+        if(option==Option.SHAFT)shafts.pause();
         if (died) oreWorkLearning.failed(); else oreWorkLearning.cancel();
         if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
         endedOption = option.name();
@@ -5040,7 +5041,7 @@ public final class CloneController {
     private int reflexTicks;
     @Nullable
     private Perception.BlockKind harvestKind;
-    private static final java.util.Set<Option> ORE_REFLEX = java.util.EnumSet.of(Option.STAIRS, Option.SHAFT, Option.QUARRY, Option.EXPLORE,
+    private static final java.util.Set<Option> ORE_REFLEX = java.util.EnumSet.of(Option.STAIRS, Option.QUARRY, Option.EXPLORE,
             Option.GATHER_WOOD, Option.SALVAGE, Option.ACHIEVE, Option.DISCOVER);
     private static final net.minecraft.world.item.Item[] PICK_ORDER = {Items.WOODEN_PICKAXE, Items.STONE_PICKAXE, Items.IRON_PICKAXE, Items.DIAMOND_PICKAXE};
 

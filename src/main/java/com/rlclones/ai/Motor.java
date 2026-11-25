@@ -1565,7 +1565,7 @@ public final class Motor {
             self.setShiftKeyDown(sneak);
         }
         boolean moving = Math.abs(zza) > 0.05f || Math.abs(xxa) > 0.05f;
-        if (moving && self.horizontalCollision && self.onGround()) {
+        if (moving && self.horizontalCollision && self.onGround() && !noHop) {
             openDoorAhead();
             jump = true;
         }

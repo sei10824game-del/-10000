@@ -1,0 +1,9 @@
+package com.rlclones.command.util;
+import org.junit.jupiter.api.Test;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+class DeathReportTest {
+    @Test void threeHundredCombinationsFitPagesWithoutLosingTotals(){Map<String,Integer> source=new HashMap<>();for(int i=0;i<300;i++)source.put("infected_damage2 by mod:mob"+i+" during STAIRS",1);source.put("fall during SHAFT",50);var summary=DeathReport.page(source,DeathReport.View.SUMMARY,1);assertEquals(350,summary.total());assertEquals("infected_damage2",summary.rows().get(0).label());assertEquals(300,summary.rows().get(0).count());Set<String> all=new HashSet<>();for(int p=1;p<=38;p++){var page=DeathReport.page(source,DeathReport.View.DETAILS,p);assertTrue(page.rows().size()<=8);page.rows().forEach(row->assertTrue(all.add(row.label())));}assertEquals(301,all.size());assertEquals(301,source.size());}
+    @Test void groupsMobAndActionIndependentlyAndOrdersTiesStably(){var source=Map.of("mob by mod:zombie during FIGHT",10,"infected_damage2 by mod:zombie during STAIRS",4,"fall during SHAFT",2,"fall during null",2);var mobs=DeathReport.page(source,DeathReport.View.MOBS,1);assertEquals(new DeathReport.Row("mod:zombie",14),mobs.rows().get(0));var actions=DeathReport.page(source,DeathReport.View.ACTIONS,1);assertEquals(18,actions.total());assertTrue(actions.rows().contains(new DeathReport.Row("行動なし",2)));var ties=DeathReport.page(Map.of("z during REST",1,"a during REST",1),DeathReport.View.SUMMARY,1);assertEquals("a",ties.rows().get(0).label());}
+    @Test void emptyOutOfRangeAndLargeCountsAreSafe(){var empty=DeathReport.page(Map.of(),DeathReport.View.DETAILS,Integer.MAX_VALUE);assertEquals(1,empty.number());assertTrue(empty.rows().isEmpty());var page=DeathReport.page(Map.of("fall during MINE",Integer.MAX_VALUE,"fall during STAIRS",Integer.MAX_VALUE),DeathReport.View.SUMMARY,0);assertEquals(4294967294L,page.total());assertEquals(4294967294L,page.rows().get(0).count());}
+}

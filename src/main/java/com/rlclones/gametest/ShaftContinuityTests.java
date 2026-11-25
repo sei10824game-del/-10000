@@ -90,11 +90,58 @@ public final class ShaftContinuityTests {
         h.assertTrue(f.record.digger.equals(f.actor.getGameProfile().getName()),"reservation starts before crafting/descent");
         h.assertTrue(other.controller().shafts().shaft()!=f.record,"second worker cannot take the same shaft while it is being resumed");h.succeed();
     }
+    @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=240)
+    public static void minesExposedWallOreWhileHoldingTheLadder(GameTestHelper h){
+        var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();
+        var ore=h.absolutePos(new BlockPos(6,5,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
+        h.onEachTick(()->{tick(f);f.actor.setOnGround(false);});
+        h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).isAir(),"ore visible beside the ladder is harvested: "+f.mining.debug+" "+f.actor.controller().motor().mineDebug);h.assertTrue(ladder(h,4)&&ladder(h,5),"ore harvest keeps the ladder column intact");h.assertTrue(f.actor.getInventory().countItem(Items.RAW_IRON)>0,"real raw iron is picked up without leaving the shaft; pos="+f.actor.position()+" drops="+h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,f.actor.getBoundingBox().inflate(4)).stream().map(e->e.getItem()+"@"+e.position()).toList());});
+    }
+    @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=320)
+    public static void restoresOreBearingLadderWallAndRungBeforeDiggingDeeper(GameTestHelper h){
+        var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();
+        var ore=h.absolutePos(new BlockPos(8,4,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
+        h.onEachTick(()->tick(f));
+        h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).is(Blocks.COBBLESTONE)&&ladder(h,4),"real ore was mined and the backing/rung restored: pos="+f.actor.position()+" wall="+h.getLevel().getBlockState(ore)+" cell="+h.getBlockState(new BlockPos(7,4,7))+" inventory="+f.actor.getInventory().items+" "+f.mining.debug+" "+f.actor.controller().motor().mineDebug);h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).is(Blocks.STONE),"floor was not opened during ladder-wall extraction");});
+    }
+    @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=100)
+    public static void ladderWallOreIsKeptWhenRepairMaterialIsMissing(GameTestHelper h){
+        var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();f.actor.getInventory().setItem(2,ItemStack.EMPTY);
+        var ore=h.absolutePos(new BlockPos(8,4,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
+        h.onEachTick(()->tick(f));h.runAtTickTime(40,()->{h.assertTrue(h.getLevel().getBlockState(ore).is(Blocks.IRON_ORE)&&ladder(h,4),"no repair materials means no broken ladder wall");h.succeed();});
+    }
+    @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=100)
+    public static void inaccessibleToolTierDoesNotWasteShaftOre(GameTestHelper h){
+        var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();f.actor.getInventory().setItem(0,new ItemStack(Items.WOODEN_PICKAXE));
+        var ore=h.absolutePos(new BlockPos(6,4,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
+        h.onEachTick(()->tick(f));h.runAtTickTime(40,()->{h.assertTrue(h.getLevel().getBlockState(ore).is(Blocks.IRON_ORE)&&f.mining.oresMined==0,"iron is left intact without a suitable pickaxe");h.succeed();});
+    }
+    @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=100)
+    public static void oreWithLavaBehindItIsNotOpened(GameTestHelper h){
+        var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();
+        var ore=h.absolutePos(new BlockPos(6,4,7));var lava=ore.west();h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);h.getLevel().setBlock(lava,Blocks.LAVA.defaultBlockState(),3);
+        h.onEachTick(()->tick(f));h.runAtTickTime(40,()->{h.assertTrue(h.getLevel().getBlockState(ore).is(Blocks.IRON_ORE)&&f.mining.oresMined==0,"shaft ore collection must not expose lava");h.getLevel().setBlock(lava,Blocks.AIR.defaultBlockState(),3);h.succeed();});
+    }
+    @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=240)
+    public static void interruptedWallHarvestStillAllowsRungRepair(GameTestHelper h){
+        var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();var ore=h.absolutePos(new BlockPos(8,4,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
+        boolean[] paused={false};
+        h.onEachTick(()->{if(!paused[0]){tick(f);if(!ladder(h,4)&&h.getLevel().getBlockState(ore).is(Blocks.IRON_ORE)){f.mining.pause();paused[0]=true;}}
+            else {f.mining.repairKnownRoute();f.actor.controller().motor().tick();}});
+        h.succeedWhen(()->{h.assertTrue(paused[0]&&ladder(h,4),"interrupted ore harvest no longer excludes its detached rung from repair");h.assertTrue(h.getLevel().getBlockState(ore).is(Blocks.IRON_ORE)&&h.getBlockState(new BlockPos(7,3,7)).is(Blocks.STONE),"interruption restores the route without inventing an ore success");});
+    }
     @GameTest(template="arena",batch="shaft-permission",timeoutTicks=40)
     public static void disabledPlacementKeepsFloorIntact(GameTestHelper h){
-        var f=fixture(h,8,8,8,3);boolean old=Config.get(Config.ALLOW_BLOCK_PLACING,true);
-        try{Config.ALLOW_BLOCK_PLACING.set(false);f.actor.setOnGround(true);f.mining.tick();h.assertTrue(h.getBlockState(new BlockPos(7,7,7)).is(Blocks.STONE),"cannot start a rung-less hole when placing is disabled");}
-        finally{Config.ALLOW_BLOCK_PLACING.set(old);}h.succeed();
+        var f=fixture(h,8,8,8,3);
+        // ConfigValue.set writes a watched file; an asynchronous reload can leak the test setting to later batches.
+        // Override only Forge's in-memory cache for this synchronous test, then restore it without file I/O.
+        Config.get(Config.ALLOW_BLOCK_PLACING,true);
+        try {
+            var cache=net.minecraftforge.common.ForgeConfigSpec.ConfigValue.class.getDeclaredField("cachedValue");cache.setAccessible(true);
+            Object old=cache.get(Config.ALLOW_BLOCK_PLACING);
+            try{cache.set(Config.ALLOW_BLOCK_PLACING,false);h.assertTrue(!Config.get(Config.ALLOW_BLOCK_PLACING,true),"placement is actually disabled in this test");f.actor.setOnGround(true);f.mining.tick();h.assertTrue(h.getBlockState(new BlockPos(7,7,7)).is(Blocks.STONE),"cannot start a rung-less hole when placing is disabled");}
+            finally{cache.set(Config.ALLOW_BLOCK_PLACING,old);}
+        }catch(ReflectiveOperationException e){throw new RuntimeException(e);}h.succeed();
     }
     @GameTest(template="arena",batch="shaft-legacy-new",timeoutTicks=3000)
     public static void originalNewShaftStillCraftsAndDigs(GameTestHelper h){CloneGameTests.digsAShaftStraightDownWithLadders(h);}
