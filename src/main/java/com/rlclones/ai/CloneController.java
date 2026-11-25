@@ -185,6 +185,13 @@ public final class CloneController {
 
     private final OreWorkLearning oreWorkLearning;
     private final DevelopmentLearning development;
+    private final Survival survival;
+    public Survival survival(){return survival;}
+    public void prepareMiningReturn(String reason){
+        if(reason.contains("lighting")){itemAid.need(Items.TORCH,8);if(Crafting.torchMakeable(self)){crafting.forcedTarget=Items.TORCH;nextOption=Option.CRAFT;}}
+        if(reason.contains("material"))itemAid.need(Items.COBBLESTONE,8);
+        if(reason.contains("food"))itemAid.need(Items.BREAD,4);
+    }
     private final SafeItemTrials safeTrials;
 
     // reward tracking
@@ -255,6 +262,7 @@ public final class CloneController {
             return b != null && b.isHarmful(id);
         });
         safeTrials = new SafeItemTrials(self,perception);
+        survival = new Survival(self);
         development = new DevelopmentLearning(self,perception,crafting,storage,lighting,civicWork);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
@@ -653,6 +661,7 @@ public final class CloneController {
             foodAid.tick(now);
         }
         boolean threatened = !Senses.threats(perception, self, now, 12).isEmpty();
+        if(survival.active())survival.tick(now,threatened||!Senses.threats(perception,self,now,24).isEmpty());
         if (threatened) {
             lastThreatSeen = now;
         }
@@ -1868,6 +1877,7 @@ public final class CloneController {
 
     /** Only perceive and learn from others (used when the clone's own AI is switched off). */
     public void passiveTick() {
+        survival.cancel();
         safeTrials.stop();
         long now = now();
         if (option != null) {
@@ -2060,6 +2070,7 @@ public final class CloneController {
     // ------------------------------------------------------------------ own reward signals
 
     public void onDealtDamage(LivingEntity victim, float amount) {
+        if(Senses.isHostileTo(victim,self))survival.dealt(amount,now());
         attacks.onDealt(victim, amount);
         if (victim != self && !Senses.isHostileTo(victim, self) && !Senses.isFoodAnimal(victim) && victim instanceof Player) {
             stepReward -= amount; // an explosion / fireball / arrow into a friend or a player
@@ -2432,6 +2443,7 @@ public final class CloneController {
     }
 
     public void onDeath(DamageSource source) {
+        survival.died();
         if (source.getEntity() != null && (openAlarm != null || answering != null || now() - lastAlarm < 1200)) {
             helpBonus(+1); // died in a fight it had called for help in (or came to help in): the call asked for too few
         }
@@ -2802,7 +2814,9 @@ public final class CloneController {
         Option planned = nextOption;
         nextOption = null;
         huntFish = false;
-        if (planned != null && (mask & planned.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
+        if ((mask & Option.FLEE.bit())!=0 && now>=forceFightUntil && survival.retreat(now,Senses.threats(perception,self,now,24).size(),Senses.threatLevel(perception,self,brain(),now)==2)) {
+            o=Option.FLEE.ordinal();
+        } else if (planned != null && (mask & planned.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
             o = planned.ordinal(); // our own plan: the tool before the job
         } else if (forcedOption != null && (mask & forcedOption.bit()) != 0) {
             o = forcedOption.ordinal();
@@ -2932,6 +2946,7 @@ public final class CloneController {
         }
         development.finish(died,completed);
         if(option==Option.SHAFT)shafts.pause();
+        if(option==Option.FLEE)survival.cancel();
         if (died) oreWorkLearning.failed(); else oreWorkLearning.cancel();
         if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
         endedOption = option.name();
@@ -3107,7 +3122,7 @@ public final class CloneController {
             return true; // a long dig / trip does not go on at food 0 with a meal in the bag
         }
         if (option == Option.FIGHT) {
-            return optionTicks > 60 && self.getHealth() <= self.getMaxHealth() * 0.35f && (action == null || actionDone);
+            return com.rlclones.clone.CloneManager.fleeAllowed() && now>=forceFightUntil && survival.retreat(now,Senses.threats(perception,self,now,24).size(),Senses.threatLevel(perception,self,brain(),now)==2);
         }
         if (option == Option.FLEE) {
             return false;
@@ -4341,6 +4356,20 @@ public final class CloneController {
         return true;
     }
 
+    /** Endpoint and complete path must be safe; the ordinary motor still checks every movement. */
+    private boolean retreatGoalSafe(Vec3 spot,List<Perception.Seen> threats) {
+        return spot!=null&&spot.distanceToSqr(self.position())>=4&&retreatEndpointSafe(spot,threats)&&motor.pathTo(spot)!=null;
+    }
+    private boolean retreatEndpointSafe(Vec3 spot,List<Perception.Seen> threats) {
+        if(spot==null)return false;
+        BlockPos p=BlockPos.containing(spot);ServerLevel level=self.serverLevel();
+        if(!level.hasChunkAt(p)||!level.getFluidState(p).isEmpty()||!level.getFluidState(p.below()).isEmpty()
+                ||!level.getBlockState(p).getCollisionShape(level,p).isEmpty()||!level.getBlockState(p.above()).getCollisionShape(level,p.above()).isEmpty()
+                ||level.getBlockState(p.below()).getCollisionShape(level,p.below()).isEmpty()||hazardBlock(level.getBlockState(p))||hazardBlock(level.getBlockState(p.below())))return false;
+        for(var t:threats)if(t.pos.distanceTo(spot)<Math.min(6,t.pos.distanceTo(self.position())-0.5))return false;
+        return true;
+    }
+
     private boolean runFlee(long now) {
         List<Perception.Seen> threats = Senses.threats(perception, self, now, 24);
         if (threats.isEmpty()) {
@@ -4351,7 +4380,13 @@ public final class CloneController {
             calmTicks = 0;
         }
         if (!threats.isEmpty() && portals.escape()) {
+            survival.cancel();
             return false; // a portal close by: through it, away from all of them
+        }
+        Vec3 currentRetreat=survival.currentGoal(now);
+        if(currentRetreat!=null) {
+            if(motor.stuckCount()>0||!retreatEndpointSafe(currentRetreat,threats)){survival.blocked();goalTimer=0;}
+            else {goal=currentRetreat;goalTimer=20;}
         }
         if (goal == null || --goalTimer <= 0) {
             Vec3 away = Vec3.ZERO;
@@ -4395,15 +4430,31 @@ public final class CloneController {
                 coverGoal = null;
                 goalTimer = 20;
             }
+            if(!threats.isEmpty()) {
+                Vec3 direct=self.position().add(away.scale(10));
+                Vec3 friend=ally==null?null:ally.pos;
+                Vec3 high=null;
+                for(int rise=1;rise<=2&&high==null;rise++) {
+                    Vec3 spot=self.position().add(away.scale(5)).add(0,rise,0);
+                    if(retreatGoalSafe(spot,threats))high=spot;
+                }
+                Vec3[] candidates={direct,cover,friend,high};
+                for(int i=0;i<candidates.length;i++)if(!retreatGoalSafe(candidates[i],threats))candidates[i]=null;
+                int context=(self.getHealth()<self.getMaxHealth()*.6f?1:0)|(threats.size()>=3?2:0)
+                        |(threats.stream().anyMatch(t->{var k=brain().knowledgeIfPresent(t.typeId);return k!=null&&k.isRanged();})?4:0);
+                Vec3 learned=survival.choose(candidates,context,now);
+                if(learned!=null){goal=learned;coverGoal=learned.equals(cover)?learned:null;goalTimer=20;}
+            }
             boolean cornered = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
             if (cornered && self.getHealth() <= self.getMaxHealth() * 0.6f) {
-                consumables.pearlAway(away); // only if the 5 damage of the pearl leaves us alive
+                if(consumables.pearlAway(away))survival.cancel(); // emergency transport is not this route's outcome
             }
         }
         // (running away we look ahead, not back: what was right behind us a few seconds ago still is)
         boolean close = perception.remembered().stream().anyMatch(t -> now - t.lastSeen < 200 && t.alive() && Senses.isHostileTo(t.entity, self)
                 && Senses.gap(self, t.entity) < 4);
         if (close && perch.canStart(now) && (fleeStuck > 0 || self.getHealth() < self.getMaxHealth() * 0.5f || self.getRandom().nextInt(40) == 0)) {
+            survival.cancel();
             perch.start(); // two blocks up, out of reach
             return true;
         }
@@ -4415,6 +4466,7 @@ public final class CloneController {
             }
         }
         if (nearest != null && plugCorridor(nearest, now)) {
+            survival.cancel();
             return false; // laying blocks across the passage between us and it
         }
         if (nearest != null && (now % 20) == 0) {
@@ -5580,6 +5632,7 @@ public final class CloneController {
         out.add(oreWorkLearning.report());
         out.add(development.report());
         out.add(safeTrials.report());
+        out.add(survival.report());
         out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));
         StringBuilder around = new StringBuilder("blocks: below ").append(level.getBlockState(p.below()).getBlock().getDescriptionId().replace("block.minecraft.", ""));

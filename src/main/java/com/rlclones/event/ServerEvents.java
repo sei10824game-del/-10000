@@ -278,6 +278,7 @@ public final class ServerEvents {
         if (Senses.isAgent(victim)) {
             AgentEvents.record(victim.getUUID(), now, AgentEvents.Kind.HURT, amount, attacker == null ? -1 : attacker.getId(), 0);
         }
+        if (victim instanceof ClonePlayer cp) cp.controller().survival().damage(attacker instanceof LivingEntity living?living:null,amount,now);
         if (victim instanceof ClonePlayer cp && attacker == null && event.getSource().getDirectEntity() == null) {
             cp.controller().onEnvironmentDamage(event.getSource());
         }
@@ -396,8 +397,10 @@ public final class ServerEvents {
         if (key == null) {
             return;
         }
+        // The victim experiences the effect even if it cannot see itself/the attacker.
+        if(event.getEntity() instanceof ClonePlayer victim)victim.controller().observeEffect(source,key.toString());
         for (ClonePlayer o : witnesses(source.getServer(), event.getEntity())) {
-            o.controller().observeEffect(source, key.toString());
+            if(o!=event.getEntity())o.controller().observeEffect(source, key.toString());
         }
     }
 

@@ -33,6 +33,7 @@ public final class Brain {
     private final ReplayBuffer replay = new ReplayBuffer(4096);
     private final Random random = new Random();
 
+    public final RecoveryLearning retreat = new RecoveryLearning();
     public final RecoveryLearning recovery = new RecoveryLearning();
     public final RecoveryLearning oreWork = new RecoveryLearning();
     public final RecoveryLearning workflow = new RecoveryLearning(), roles = new RecoveryLearning();
@@ -544,6 +545,7 @@ public final class Brain {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("version", 1);
+        tag.putByteArray("retreat", retreat.save());
         tag.putByteArray("recovery", recovery.save());
         tag.putByteArray("oreWork", oreWork.save());
         tag.putByteArray("workflow", workflow.save());tag.putByteArray("roles", roles.save());tag.putByteArray("learningEvidence",evidence.save());tag.put("itemTrials",itemTrials.save());
@@ -626,6 +628,7 @@ public final class Brain {
 
     public static Brain load(CompoundTag tag) {
         Brain b = new Brain();
+        b.retreat.merge(RecoveryLearning.load(tag.getByteArray("retreat")));
         b.recovery.merge(RecoveryLearning.load(tag.getByteArray("recovery")));
         b.oreWork.merge(RecoveryLearning.load(tag.getByteArray("oreWork")));
         b.workflow.merge(RecoveryLearning.load(tag.getByteArray("workflow")));b.roles.merge(RecoveryLearning.load(tag.getByteArray("roles")));
@@ -745,6 +748,7 @@ public final class Brain {
         if (b == this) {
             return;
         }
+        retreat.merge(b.retreat);
         recovery.merge(b.recovery);
         oreWork.merge(b.oreWork);
         workflow.merge(b.workflow);roles.merge(b.roles);evidence.mergeHints(b.evidence);itemTrials.merge(b.itemTrials);
@@ -821,6 +825,7 @@ public final class Brain {
     public List<String> summary() {
         List<String> lines = new ArrayList<>();
         lines.add(itemTrials.report());
+        lines.add(retreat.report("撤退の生還学習",new String[]{"離脱","遮蔽","合流","高所"}));
         lines.add(recovery.report()+" "+evidence.report(0));
         lines.add(workflow.report("採掘前の手順",new String[]{"直接","照明","倉庫整理","道具準備"})+" "+evidence.report(2));
         lines.add(roles.report("集落の役割",new String[]{"食料","資源","製作","配送"})+" "+evidence.report(3));

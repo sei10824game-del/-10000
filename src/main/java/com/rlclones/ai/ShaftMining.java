@@ -393,6 +393,10 @@ public final class ShaftMining {
         if (ticks % 100 == 1) {
             trace("s" + stage + "@" + feet.toShortString() + " l" + ladders());
         }
+        if(shaft!=null&&(stage==2||stage==3)) {
+            String reason=MiningSafety.returnReason(self,shaft.top.getY()-feet.getY());
+            if(!reason.isEmpty()){self.controller().prepareMiningReturn(reason);pause();stage=4;debug="return supplies: "+reason;}
+        }
         if(oreTarget==null&&oreDrop==null&&oreWallCell!=null&&restoreOreWall())return Status.WORKING;
         return switch (stage) {
             case 0 -> craftTick();
@@ -537,6 +541,7 @@ public final class ShaftMining {
             if (repair == Repair.BLOCKED) stage = 4;
             return Status.WORKING;
         }
+        if(oreTarget==null&&oreDrop==null&&oreWallCell==null&&ticks%20==0&&!returnPathIntact(Math.min(feet.getY(),shaft.end.getY()))){repairingReturn=true;stage=4;debug="repair changed return route before digging";return Status.WORKING;}
         if(oreTick(feet))return Status.WORKING;
         BlockPos existingBelow = feet.below();
         if (feet.getY() > target() && (ladderAt(existingBelow) || self.level().getBlockState(existingBelow).isAir())) {
@@ -579,7 +584,7 @@ public final class ShaftMining {
         int drop = self.level().getBlockState(below.below()).isAir() ? 2 : 1;
         int needed = 0;
         for (int i = 0; i < drop; i++) if (!ladderAt(below.below(i))) needed++;
-        if (ladders() < needed) {
+        if (ladders() < needed + (shaft.top.getY()-feet.getY()>=12?2:0)) {
             debug = "need " + needed + " ladders before opening " + below.toShortString();
             stage = 4;
             return Status.WORKING;

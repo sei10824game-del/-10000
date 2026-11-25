@@ -768,6 +768,12 @@ public final class StairMining {
             return stage < 2 && stairs != null ? failStairs("timed out in stage " + stage) : Status.DONE;
         }
         BlockPos feet = self.blockPosition();
+        if(stairs!=null&&!ascending) {
+            String reason=MiningSafety.returnReason(self,stairs.top.getY()-feet.getY());
+            if(!reason.isEmpty()){self.controller().prepareMiningReturn(reason);ascending=true;toStage(0);debug="return supplies: "+reason;}
+            if(stairs.top.getY()-feet.getY()>=12&&ticks%20==0)self.controller().scanTreads();
+            if(!motor.repairs.isEmpty()&&self.controller().repairTreads(self.level().getGameTime()))return Status.WORKING;
+        }
         if (feet.equals(lastFeet)) {
             stuck++;
         } else {

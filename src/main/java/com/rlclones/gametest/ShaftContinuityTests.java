@@ -30,7 +30,7 @@ public final class ShaftContinuityTests {
         for(int y=bottom;y<top;y++)h.getLevel().setBlock(h.absolutePos(new BlockPos(7,y,7)),state,3);
         var c=GearRecipeTests.clone(h);var feet=h.absolutePos(new BlockPos(7,bottom,7));
         c.teleportTo(h.getLevel(),feet.getX()+0.5,feet.getY(),feet.getZ()+0.5,0,0);c.getInventory().setItem(0,new ItemStack(Items.IRON_PICKAXE));
-        if(ladders>0)c.getInventory().setItem(1,new ItemStack(Items.LADDER,ladders));c.getInventory().setItem(2,new ItemStack(Items.COBBLESTONE,64));
+        if(ladders>0)c.getInventory().setItem(1,new ItemStack(Items.LADDER,ladders));c.getInventory().setItem(2,new ItemStack(Items.COBBLESTONE,64));c.getInventory().setItem(3,new ItemStack(Items.TORCH,32));c.getInventory().setItem(4,new ItemStack(Items.BREAD,8));
         var record=Bases.get(h.getLevel().getServer()).addShaft(h.getLevel().dimension(),h.absolutePos(new BlockPos(7,top,7)),Direction.EAST);record.end=feet;OWNED.add(record);
         var mining=c.controller().shafts();mining.assumeSurface=true;mining.targetY=h.absolutePos(new BlockPos(7,1,7)).getY();set(mining,"shaft",record);set(mining,"stage",stage);
         return new Fixture(c,mining,record,record.top);
@@ -94,12 +94,16 @@ public final class ShaftContinuityTests {
     public static void minesExposedWallOreWhileHoldingTheLadder(GameTestHelper h){
         var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();
         var ore=h.absolutePos(new BlockPos(6,5,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
+        // An embedded wall, not a one-block shelf opening onto the outside of the test arena:
+        // otherwise loot can randomly fly into the unreachable void behind the ore.
+        for(int y=4;y<=7;y++)for(int z=6;z<=8;z++)h.setBlock(new BlockPos(5,y,z),Blocks.STONE);
         h.onEachTick(()->{tick(f);f.actor.setOnGround(false);});
         h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).isAir(),"ore visible beside the ladder is harvested: "+f.mining.debug+" "+f.actor.controller().motor().mineDebug);h.assertTrue(ladder(h,4)&&ladder(h,5),"ore harvest keeps the ladder column intact");h.assertTrue(f.actor.getInventory().countItem(Items.RAW_IRON)>0,"real raw iron is picked up without leaving the shaft; pos="+f.actor.position()+" drops="+h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,f.actor.getBoundingBox().inflate(4)).stream().map(e->e.getItem()+"@"+e.position()).toList());});
     }
     @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=320)
     public static void restoresOreBearingLadderWallAndRungBeforeDiggingDeeper(GameTestHelper h){
         var f=fixture(h,12,4,8,3);f.mining.targetY=h.absolutePos(new BlockPos(7,4,7)).getY();
+        set(f.mining,"ticks",18); // cross the periodic return-route check while this rung is deliberately detached
         var ore=h.absolutePos(new BlockPos(8,4,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
         h.onEachTick(()->tick(f));
         h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).is(Blocks.COBBLESTONE)&&ladder(h,4),"real ore was mined and the backing/rung restored: pos="+f.actor.position()+" wall="+h.getLevel().getBlockState(ore)+" cell="+h.getBlockState(new BlockPos(7,4,7))+" inventory="+f.actor.getInventory().items+" "+f.mining.debug+" "+f.actor.controller().motor().mineDebug);h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).is(Blocks.STONE),"floor was not opened during ladder-wall extraction");});

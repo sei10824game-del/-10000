@@ -40,6 +40,8 @@ public final class EnemyKnowledge {
     public final Estimator explosionDamage = Estimator.mean(10);
     public final Estimator speed = Estimator.upper(0.1);
     public final Estimator aggroRange = Estimator.upper(16);
+    /** Actual post-mitigation hits received by clones, including mod damage sources. */
+    public final Estimator receivedDamage = Estimator.mean(0);
     public final Estimator health = Estimator.mean(20);
 
     public int sightings;
@@ -94,7 +96,9 @@ public final class EnemyKnowledge {
         double melee = meleeDamage.get() * 20.0 / Math.max(5.0, meleeCooldown.get());
         double ranged = has(RANGED) ? rangedDamage.get() * 20.0 / Math.max(10.0, rangedCooldown.get()) : 0;
         double boom = isExplosive() ? explosionDamage.get() / 2.0 : 0;
-        return Math.max(melee, Math.max(ranged, boom));
+        double experienced=receivedDamage.known()?receivedDamage.get()*20/Math.max(10,cooldown()):0;
+        boolean harmful=effects.keySet().stream().anyMatch(id->{var key=net.minecraft.resources.ResourceLocation.tryParse(id);var e=key==null?null:net.minecraftforge.registries.ForgeRegistries.MOB_EFFECTS.getValue(key);return e!=null&&e.getCategory()==net.minecraft.world.effect.MobEffectCategory.HARMFUL;});
+        return Math.max(experienced,Math.max(melee, Math.max(ranged, boom)))+(harmful?2:0);
     }
 
     public int observations() {
@@ -113,7 +117,7 @@ public final class EnemyKnowledge {
         explosionDamage.merge(o.explosionDamage);
         speed.merge(o.speed);
         aggroRange.merge(o.aggroRange);
-        health.merge(o.health);
+        health.merge(o.health);receivedDamage.merge(o.receivedDamage);
         sightings += o.sightings;
         encounters += o.encounters;
         killedByClones += o.killedByClones;
@@ -135,7 +139,7 @@ public final class EnemyKnowledge {
         tag.put("explosionDamage", explosionDamage.save());
         tag.put("speed", speed.save());
         tag.put("aggroRange", aggroRange.save());
-        tag.put("health", health.save());
+        tag.put("health", health.save());tag.put("receivedDamage",receivedDamage.save());
         tag.putInt("sightings", sightings);
         tag.putInt("encounters", encounters);
         tag.putInt("killedByClones", killedByClones);
@@ -162,7 +166,7 @@ public final class EnemyKnowledge {
         k.explosionDamage.load(tag.getCompound("explosionDamage"));
         k.speed.load(tag.getCompound("speed"));
         k.aggroRange.load(tag.getCompound("aggroRange"));
-        k.health.load(tag.getCompound("health"));
+        k.health.load(tag.getCompound("health"));k.receivedDamage.load(tag.getCompound("receivedDamage"));
         k.sightings = tag.getInt("sightings");
         k.encounters = tag.getInt("encounters");
         k.killedByClones = tag.getInt("killedByClones");
@@ -195,6 +199,7 @@ public final class EnemyKnowledge {
         if (!effects.isEmpty()) {
             lines.add("inflicts: " + effects);
         }
+        if(receivedDamage.known())lines.add(fmt("received after armor",receivedDamage,"hp")+" threat DPS="+String.format(Locale.ROOT,"%.2f",dps()));
         return lines;
     }
 
