@@ -78,6 +78,12 @@ public final class ClientKeys {
             throw new IllegalStateException("Synthetic profile skin guard was not applied");
         }
         RLClones.LOGGER.info("RLCLONES_SKIN_GUARD_READY");
+        verifyRenderHook(net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer.class,"rlclones$armorGlint");
+        verifyRenderHook(net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer.class,"rlclones$armorTrim");
+        verifyRenderHook(net.minecraft.client.renderer.entity.layers.CapeLayer.class,"rlclones$cape");
+        verifyRenderHook(net.minecraft.client.renderer.entity.EntityRenderDispatcher.class,"rlclones$shadow");
+        verifyRenderHook(net.minecraft.client.renderer.entity.player.PlayerRenderer.class,"rlclones$outerWear");
+        RLClones.LOGGER.info("RLCLONES_RENDER_DETAIL_READY");
         smokeReported = true;
         List<KeyMapping> all = Arrays.asList(mc.options.keyMappings);
         boolean registered = all.contains(ClientSetup.SUMMON) && all.contains(ClientSetup.LINK) && all.contains(ClientSetup.RESPAWN)
@@ -86,6 +92,11 @@ public final class ClientKeys {
                 ClientSetup.SUMMON.getKey().getName(), ClientSetup.LINK.getKey().getName(), ClientSetup.RESPAWN.getKey().getName(),
                 ClientSetup.TEACH.getKey().getName(), ClientSetup.BATTLE_ROYALE.getKey().getName(), ClientSetup.BREEDING.getKey().getName(), mc.screen.getClass().getSimpleName());
         mc.stop();
+    }
+
+    private static void verifyRenderHook(Class<?> type,String hook) {
+        if(Arrays.stream(type.getDeclaredMethods()).noneMatch(method->method.getName().contains(hook)))
+            throw new IllegalStateException("Missing clone rendering hook: "+hook);
     }
 
     /** P is the vanilla "social interactions" key: move that binding out of the way once so P toggles respawn. */

@@ -59,6 +59,8 @@ public final class Brain {
     public long ownUpdates;
     public long imitationUpdates;
     public long replayUpdates;
+    private long pendingReplay;
+    public long pendingReplay() { return pendingReplay; }
     public long decisions;
     public long kills;
     public long deaths;
@@ -493,19 +495,22 @@ public final class Brain {
         }
         replay.add(tableName, s, a, r, s2, terminal, gamma, nextMask, weight);
         int n = Config.get(Config.REPLAY_UPDATES, 4);
-        com.rlclones.clone.CloneManager cm = com.rlclones.clone.CloneManager.peek();
-        if (cm != null && cm.isLinked()) { // one brain for all: when the server is slow the repeats are cut (not for own-brain clones: their learning is all they have)
-            float ms = cm.tickMillis();
-            n = ms > 48f ? Math.min(n, 1) : ms > 40f ? Math.min(n, 2) : n;
-        }
-        for (int i = 0; i < n; i++) {
+        pendingReplay = Math.min(Long.MAX_VALUE - n, pendingReplay) + n;
+        var cm = com.rlclones.clone.CloneManager.peek();
+        if (cm == null) replaySome(n); // standalone callers retain immediate behavior
+        else cm.scheduleReplay(this);
+    }
+
+    /** Direct updates are never delayed. Only historical rehearsal uses the shared tick budget. */
+    public int replaySome(int budget) {
+        int done=0;
+        while (done < Math.max(0,budget) && pendingReplay > 0) {
             ReplayBuffer.Transition t = replay.sample(random);
-            if (t == null) {
-                break;
-            }
+            if (t == null) break;
             apply(t.table, t.s, t.a, t.r, t.s2, t.terminal, t.gamma, t.nextMask, t.weight * 0.5f, false);
-            replayUpdates++;
+            replayUpdates++; pendingReplay--; done++;
         }
+        return done;
     }
 
     /** Remember that a (successful) demonstrator chose action a in state s; biases exploration. */
@@ -564,6 +569,7 @@ public final class Brain {
         tag.putLong("ownUpdates", ownUpdates);
         tag.putLong("imitationUpdates", imitationUpdates);
         tag.putLong("replayUpdates", replayUpdates);
+        tag.putLong("pendingReplay", pendingReplay);
         tag.putLong("decisions", decisions);
         tag.putLong("kills", kills);
         tag.putLong("deaths", deaths);
@@ -652,6 +658,7 @@ public final class Brain {
         b.ownUpdates = tag.getLong("ownUpdates");
         b.imitationUpdates = tag.getLong("imitationUpdates");
         b.replayUpdates = tag.getLong("replayUpdates");
+        b.pendingReplay = Math.max(0, tag.getLong("pendingReplay"));
         b.decisions = tag.getLong("decisions");
         b.kills = tag.getLong("kills");
         b.deaths = tag.getLong("deaths");
@@ -767,6 +774,7 @@ public final class Brain {
         ownUpdates += b.ownUpdates;
         imitationUpdates += b.imitationUpdates;
         replayUpdates += b.replayUpdates;
+        pendingReplay = Math.min(Long.MAX_VALUE-b.pendingReplay,pendingReplay)+b.pendingReplay;
         decisions += b.decisions;
         kills += b.kills;
         deaths += b.deaths;

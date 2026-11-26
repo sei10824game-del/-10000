@@ -23,6 +23,7 @@ public class RLClones {
         modBus.addListener(ModEntities::onAttributes);
         modBus.addListener(ModItems::onCreativeTab);
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, com.rlclones.client.RenderDetailConfig.SPEC);
         ModNetwork.register();
     }
 }

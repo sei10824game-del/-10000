@@ -1150,3 +1150,13 @@ R-60(小さく独立)→ R-59(土台)→ R-54 → R-58(縦坑・松明)→ R-55 
 AC: 標準128ブロック、120ブロック先を認識、128超は除外、旋回時の遠距離再認識、近距離移動時の候補重複防止、遮蔽物/FOV/明るさと64件のLOS上限維持。範囲外の収集抑制と視野外の候補枠占有防止で最適化。既存設定は明示的に128へ変更。
 
 検証済み: 単体69件、ゲーム内36件すべて成功（8チャンク境界、密集、旋回、近遠距離重複、壁、共同作業・戦闘回帰）。ビルド成功。実機でのFPS/TPS改善率は未測定。
+
+## Population optimization 2/5/7/8
+AC: known resource index invalidates on discovery/removal/eviction without leaking personal knowledge; remembered chest registry cache invalidates on record; exclusive chest reservations isolate worlds, release/reset/expire and do not duplicate items; direct learning stays immediate, replay debt is conserved and survives save/load/merge with bounded fair draining; optional remote calm vision defaults OFF, never skips physics/work/survival, wakes on damage/alerts and documents outcome differences. Unit/native regressions and build required before push.
+
+ユーザー指定: 8は見送り。遠方クローンの索敵間隔・physics・作業更新には変更を入れない。2/5/7のみ実装。追加案は提示のみ。
+
+## Distant render cosmetics (explicit user request)
+AC: CLIENT-only configurable optimization defaults on beyond32 blocks; real player rendering, clone body/armor/held weapons, focused clone and near rendering preserved; only name/cape/armor glint/trim/shadows omitted at distance; no shared renderer mutation, no simulation/tick/range changes; policy boundary/disable/focus tests, dedicated server regressions, mixin transform client smoke and build before push.
+
+検証完了: 探索/予約/学習の単体70件・関連ネイティブ78件成功（population-257-final.log）。描画追加後は単体72件・専用サーバー13件成功（render-population-server-final.log）。Xorg dummy/ソフトウェアGLによる実クライアント起動で全5描画フックの変換を検査し RLCLONES_RENDER_DETAIL_READY と CLIENT_READY を確認。配布JARのrefmapに全描画ターゲットのSRGマッピングを確認。距離外スキン重ね着の省略も追加。実ワールドでのFPS/TPS改善率や最大追加人数は未測定。

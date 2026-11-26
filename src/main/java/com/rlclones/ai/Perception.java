@@ -92,7 +92,19 @@ public final class Perception {
     private final ServerPlayer self;
     private final Int2ObjectOpenHashMap<Seen> memory = new Int2ObjectOpenHashMap<>();
     private final List<Seen> visible = new ArrayList<>();
+    private long blockVersion, indexedVersion = -1;
+    private final java.util.EnumMap<BlockKind, List<BlockPos>> blockIndex = new java.util.EnumMap<>(BlockKind.class);
     private final Map<BlockPos, BlockKind> blocks = new LinkedHashMap<>(64, 0.75f, false) {
+        @Override public BlockKind put(BlockPos p, BlockKind k) {
+            BlockKind old = super.put(p, k);
+            if (old != k) blockVersion++;
+            return old;
+        }
+        @Override public BlockKind remove(Object p) {
+            BlockKind old = super.remove(p);
+            if (old != null) blockVersion++;
+            return old;
+        }
         @Override
         protected boolean removeEldestEntry(Map.Entry<BlockPos, BlockKind> eldest) {
             return size() > MAX_BLOCKS;
@@ -680,6 +692,17 @@ public final class Perception {
 
     public void forgetBlock(BlockPos pos) {
         blocks.remove(pos);
+    }
+
+    /** Reuse known search results; never share personal discoveries with other clones. */
+    public List<BlockPos> knownBlocks(BlockKind kind) {
+        if (indexedVersion != blockVersion) {
+            blockIndex.clear();
+            blocks.forEach((pos, k) -> blockIndex.computeIfAbsent(k, ignored -> new ArrayList<>()).add(pos));
+            blockIndex.replaceAll((k, positions) -> List.copyOf(positions));
+            indexedVersion = blockVersion;
+        }
+        return blockIndex.getOrDefault(kind, List.of());
     }
 
     public Map<BlockPos, BlockKind> blocks() {

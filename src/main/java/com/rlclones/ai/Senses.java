@@ -381,11 +381,7 @@ public final class Senses {
         if (!breaking && (kind == Perception.BlockKind.LOG || kind == Perception.BlockKind.ORE)) {
             return null;
         }
-        for (Map.Entry<BlockPos, Perception.BlockKind> e : observer.blocks().entrySet()) {
-            if (e.getValue() != kind) {
-                continue;
-            }
-            BlockPos p = e.getKey();
+        for (BlockPos p : observer.knownBlocks(kind)) {
             double d = p.distToCenterSqr(agent.position());
             if (kind == Perception.BlockKind.STONE && p.getY() < agent.getBlockY()) {
                 d += 64; // rock at eye level before digging into the ground under us

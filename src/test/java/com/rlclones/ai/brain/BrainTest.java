@@ -68,4 +68,20 @@ class BrainTest {
         assertEquals(0, brain.replayUpdates);
         assertEquals(0, brain.totalStates());
     }
+    @Test void replayBacklogSurvivesPersistenceMergeAndBudgetWithoutRepeatingOwnExperience() {
+        Brain original=new Brain();
+        var replay=new ReplayBuffer(4);replay.add("enemy",0,0,-5f,0,true,0f,0,1f);
+        var saved=original.save();saved.putByteArray("replay",replay.toBytes());saved.putLong("ownUpdates",1);saved.putLong("pendingReplay",13);
+        Brain queued=Brain.load(saved);
+        long own=queued.ownUpdates,replayed=queued.replayUpdates;
+        assertEquals(0,queued.replaySome(0));assertEquals(13,queued.pendingReplay());
+        assertEquals(4,queued.replaySome(4));assertEquals(9,queued.pendingReplay());
+        assertEquals(own,queued.ownUpdates);assertEquals(replayed+4,queued.replayUpdates);
+        Brain restored=queued.copy();assertEquals(9,restored.pendingReplay());
+        Brain merged=Brain.merge(List.of(queued,restored,queued));
+        assertEquals(18,merged.pendingReplay());assertEquals(18,merged.replaySome(100));
+        assertEquals(0,merged.pendingReplay());assertEquals(own*2,merged.ownUpdates);
+        assertEquals(0,Brain.load(new net.minecraft.nbt.CompoundTag()).pendingReplay());
+    }
+
 }

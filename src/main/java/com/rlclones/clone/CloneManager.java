@@ -952,8 +952,31 @@ public final class CloneManager {
         }
     }
 
+    private final java.util.ArrayDeque<Brain> replayQueue = new java.util.ArrayDeque<>();
+    private final java.util.Set<Brain> replayQueued = Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    public void scheduleReplay(Brain brain) {
+        if(brain.pendingReplay()>0 && replayQueued.add(brain))replayQueue.addLast(brain);
+    }
+    private final java.util.Set<Brain> activeReplayBrains = Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    private void replayTick() {
+        activeReplayBrains.clear();
+        for(var clone:clones.values())activeReplayBrains.add(clone.getCloneBrain());
+        replayQueue.removeIf(brain -> !activeReplayBrains.contains(brain));
+        replayQueued.retainAll(activeReplayBrains);
+        // Round robin: shared brains enter once, quiet brains still finish their backlog.
+        for(var clone:clones.values())scheduleReplay(clone.getCloneBrain());
+        int budget=256;
+        while(!replayQueue.isEmpty() && budget>0) {
+            Brain brain=replayQueue.removeFirst(); replayQueued.remove(brain);
+            int done=brain.replaySome(Math.min(8,budget));
+            budget-=done;
+            if(done>0)scheduleReplay(brain); // no spinning on an empty/corrupt replay buffer
+        }
+    }
+
     public void tick() {
         ticks++;
+        replayTick();
         topUpWildlife();
         raiseAnimalCap();
         if (ticks % 2400 == 0) {

@@ -536,12 +536,26 @@ public class Bases extends SavedData {
                 }
             }
         }
-        contents.put(key(dim, pos), items);
+        contents.put(key(dim, pos), Map.copyOf(items));
+        decodedContents.remove(key(dim, pos));
         setDirty();
     }
 
     public Map<String, Integer> contents(ResourceKey<Level> dim, BlockPos pos) {
         return contents.getOrDefault(key(dim, pos), Map.of());
+    }
+
+    private record Decoded(Map<String,Integer> source, Map<net.minecraft.world.item.Item,Integer> items) {}
+    private final Map<String,Decoded> decodedContents = new LinkedHashMap<>();
+    /** Registry resolution is shared, but wants/gear checks and actual inventory transfers stay live. */
+    public Map<net.minecraft.world.item.Item,Integer> itemContents(ResourceKey<Level> dim, BlockPos pos) {
+        String k=key(dim,pos); var source=contents(dim,pos); var cached=decodedContents.get(k);
+        if(cached!=null && cached.source()==source)return cached.items();
+        Map<net.minecraft.world.item.Item,Integer> resolved=new LinkedHashMap<>();
+        source.forEach((id,count)->{var location=ResourceLocation.tryParse(id);var item=location==null?null:ForgeRegistries.ITEMS.getValue(location);if(item!=null)resolved.put(item,count);});
+        var result=java.util.Collections.unmodifiableMap(resolved);
+        if(decodedContents.size()>=512)decodedContents.remove(decodedContents.keySet().iterator().next());
+        decodedContents.put(k,new Decoded(source,result));return result;
     }
 
     public static Bases load(CompoundTag tag) {

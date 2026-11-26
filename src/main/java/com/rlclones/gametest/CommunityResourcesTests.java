@@ -23,7 +23,7 @@ public final class CommunityResourcesTests {
     @AfterBatch(batch="classification")public static void classificationCleanup(ServerLevel l){cleanup(l);}
     @AfterBatch(batch="masonry-static")public static void masonryCleanup(ServerLevel l){cleanup(l);}
     @AfterBatch(batch="masonry-real")public static void realCleanup(ServerLevel l){cleanup(l);var b=Bases.get(l.getServer());if(oldPlans!=null){b.plans.clear();b.plans.addAll(oldPlans);b.bases.clear();b.bases.addAll(oldBases);b.projects.clear();b.projects.addAll(oldProjects);oldPlans=null;}}
-    private static void cleanup(ServerLevel l){ArmorCoop.clear();GearRecipeTests.cleanup(l);}
+    private static void cleanup(ServerLevel l){WorkReservations.clear();ArmorCoop.clear();GearRecipeTests.cleanup(l);}
     private static void arena(GameTestHelper h){for(var p:BlockPos.betweenClosed(new BlockPos(0,1,0),new BlockPos(18,11,18))){boolean shell=p.getY()==1||p.getY()==11||p.getX()==0||p.getX()==18||p.getZ()==0||p.getZ()==18;h.setBlock(p,shell?Blocks.STONE:Blocks.AIR);}}
     private static ClonePlayer actor(GameTestHelper h,int x,int z){var c=GearRecipeTests.clone(h);var p=h.absoluteVec(new Vec3(x+.5,2,z+.5));c.teleportTo(p.x,p.y,p.z);c.setYRot(-90);c.setYHeadRot(-90);c.setXRot(0);c.setOnGround(true);c.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.NIGHT_VISION,1000));return c;}
     private static List<ClonePlayer> group(GameTestHelper h,Item material,int...counts){var all=new ArrayList<ClonePlayer>();for(int i=0;i<counts.length;i++){var c=actor(h,5+i,7);c.getInventory().setItem(0,new ItemStack(material,counts[i]));c.getInventory().setItem(4,new ItemStack(Items.CRAFTING_TABLE));c.setAiEnabled(true);all.add(c);}return all;}
@@ -92,6 +92,70 @@ public final class CommunityResourcesTests {
             cleanup(h.getLevel());
         }
         h.succeed();
+    }
+
+    @AfterBatch(batch="population-cache") public static void cacheCleanup(ServerLevel l){cleanup(l);}
+    @AfterBatch(batch="population-reservations") public static void leaseCleanup(ServerLevel l){cleanup(l);}
+    @AfterBatch(batch="population-replay") public static void replayCleanup(ServerLevel l){cleanup(l);}
+    @GameTest(template="arena",batch="population-cache",timeoutTicks=40)
+    public static void knownResourceIndexesAndStockCacheRefreshWithoutSharingPersonalKnowledge(GameTestHelper h) {
+        arena(h);var a=actor(h,5,5);var b=actor(h,6,5);var vision=a.controller().perception();
+        var local=new BlockPos(7,3,7);var world=h.absolutePos(local);h.setBlock(local,Blocks.IRON_ORE);
+        vision.noteBlock(world);var list=vision.knownBlocks(Perception.BlockKind.ORE);
+        h.assertTrue(list.contains(world)&&list==vision.knownBlocks(Perception.BlockKind.ORE),"unchanged known search results reused");
+        h.assertTrue(!b.controller().perception().knownBlocks(Perception.BlockKind.ORE).contains(world),"no private discovery leak");
+        h.setBlock(local,Blocks.CRAFTING_TABLE);vision.noteBlock(world);
+        h.assertTrue(!vision.knownBlocks(Perception.BlockKind.ORE).contains(world)&&vision.knownBlocks(Perception.BlockKind.TABLE).contains(world),"changed discovery reindexed");
+        vision.forgetBlock(world);h.assertTrue(vision.knownBlocks(Perception.BlockKind.TABLE).isEmpty(),"forgotten station removed");
+        for(int i=0;i<140;i++){var p=new BlockPos(2+i%14,3+i/14,3);h.setBlock(p,Blocks.IRON_ORE);vision.noteBlock(h.absolutePos(p));}
+        h.assertTrue(vision.knownBlocks(Perception.BlockKind.ORE).size()==128&&!vision.knownBlocks(Perception.BlockKind.ORE).contains(h.absolutePos(new BlockPos(2,3,3))),"eviction reflected in bounded resource index");
+        var bases=Bases.get(h.getLevel().getServer());var chest=h.absolutePos(new BlockPos(15,2,15));var container=new net.minecraft.world.SimpleContainer(9);
+        container.setItem(0,new ItemStack(Items.IRON_INGOT,2));bases.record(h.getLevel().dimension(),chest,container);
+        var stock=bases.itemContents(h.getLevel().dimension(),chest);
+        h.assertTrue(stock.get(Items.IRON_INGOT)==2&&stock==bases.itemContents(h.getLevel().dimension(),chest),"remembered stock decoded once");
+        container.setItem(0,new ItemStack(Items.IRON_INGOT,5));bases.record(h.getLevel().dimension(),chest,container);
+        h.assertTrue(bases.itemContents(h.getLevel().dimension(),chest).get(Items.IRON_INGOT)==5&&stock.get(Items.IRON_INGOT)==2,"new stock refreshes without mutating cached snapshot");h.succeed();
+    }
+    @GameTest(template="arena",batch="population-reservations",timeoutTicks=40)
+    public static void chestLeasesReleaseExpireAndRespectDoubleChestAndWorlds(GameTestHelper h) {
+        arena(h);var level=h.getLevel();var a=UUID.randomUUID();var b=UUID.randomUUID();long now=level.getGameTime();
+        var p=h.absolutePos(new BlockPos(7,2,7));var q=p.east();
+        var state=Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING,Direction.NORTH);
+        level.setBlock(p,state.setValue(ChestBlock.TYPE,net.minecraft.world.level.block.state.properties.ChestType.LEFT),2);
+        level.setBlock(q,state.setValue(ChestBlock.TYPE,net.minecraft.world.level.block.state.properties.ChestType.RIGHT),2);
+        h.assertTrue(WorkReservations.claim(level,p,a,now),"first worker reserves chest");
+        h.assertTrue(!WorkReservations.claim(level,q,b,now),"other half of same chest unavailable");
+        WorkReservations.release(level,b);h.assertTrue(!WorkReservations.available(level,p,b,now),"nonowner cannot release");
+        h.assertTrue(WorkReservations.claim(level,p,a,now+50),"owner renews while walking");
+        h.assertTrue(!WorkReservations.available(level,p,b,now+70)&&WorkReservations.available(level,p,b,now+111),"renewed lease expires after abandoned work");
+        var nether=level.getServer().getLevel(net.minecraft.world.level.Level.NETHER);
+        h.assertTrue(WorkReservations.claim(nether,p,b,now),"same coordinate in other world independent");
+        WorkReservations.release(level,a);h.assertTrue(WorkReservations.claim(level,q,b,now+51),"reset frees chest");
+        WorkReservations.clear();h.succeed();
+    }
+    @GameTest(template="arena",batch="population-replay",timeoutTicks=160)
+    public static void replayBudgetConservesWorkAndDirectDangerLearningIsImmediate(GameTestHelper h) {
+        arena(h);var all=List.of(actor(h,5,5),actor(h,6,5));var manager=CloneManager.get(h.getLevel().getServer());
+        for(var c:all)for(int i=0;i<100;i++)c.getCloneBrain().learn("test:danger",0,0,-5,0,true,0,0,1,false);
+        long initial=all.stream().mapToLong(c->c.getCloneBrain().pendingReplay()).sum();
+        h.assertTrue(initial==800&&all.stream().allMatch(c->c.getCloneBrain().ownUpdates==100),"own danger update immediate; all four rehearsals retained");
+        h.onEachTick(()->{long before=all.stream().mapToLong(c->c.getCloneBrain().replayUpdates).sum();manager.tick();long after=all.stream().mapToLong(c->c.getCloneBrain().replayUpdates).sum();h.assertTrue(after-before<=256,"global rehearsal budget bounded");});
+        h.succeedWhen(()->{long debt=all.stream().mapToLong(c->c.getCloneBrain().pendingReplay()).sum();long done=all.stream().mapToLong(c->c.getCloneBrain().replayUpdates).sum();h.assertTrue(debt+done==initial,"no dropped replay work");h.assertTrue(debt==0,"both brains eventually drain fairly");h.assertTrue(all.stream().allMatch(c->c.getCloneBrain().ownUpdates==100),"rehearsal does not duplicate real experiences");});
+    }
+
+    private static Bases.Base transferBase;
+    @AfterBatch(batch="population-transfer") public static void transferCleanup(ServerLevel l){cleanup(l);Bases.get(l.getServer()).bases.remove(transferBase);transferBase=null;}
+    @GameTest(template="arena",batch="population-transfer",timeoutTicks=100)
+    public static void competingFetchesUseRealMenusAndConserveChestStock(GameTestHelper h) {
+        arena(h);var a=actor(h,6,7);var b=actor(h,6,8);var all=List.of(a,b);
+        var local=new BlockPos(8,2,7);h.setBlock(local,Blocks.CHEST);var pos=h.absolutePos(local);
+        var chest=(net.minecraft.world.level.block.entity.ChestBlockEntity)h.getLevel().getBlockEntity(pos);
+        chest.setItem(0,new ItemStack(Items.IRON_INGOT,4));
+        var bases=Bases.get(h.getLevel().getServer());var base=bases.add(h.getLevel().dimension(),pos,"reservation transfer test");
+        transferBase=base;bases.addChest(base,pos);bases.record(h.getLevel().dimension(),pos,chest);
+        for(var c:all)c.controller().storage().beginSupply(stack->stack.is(Items.IRON_INGOT),2);
+        h.onEachTick(()->{for(var c:all){var store=c.controller().storage();var status=store.tick();if(status!=Storage.Status.WORKING&&c.getInventory().countItem(Items.IRON_INGOT)<2)store.beginSupply(stack->stack.is(Items.IRON_INGOT),2);}});
+        h.succeedWhen(()->{h.assertTrue(chest.countItem(Items.IRON_INGOT)+total(all,Items.IRON_INGOT)==4,"real inventory stock conserved");h.assertTrue(all.stream().allMatch(c->c.getInventory().countItem(Items.IRON_INGOT)==2),"both workers fetch two real ingots");});
     }
 
 }

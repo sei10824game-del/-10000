@@ -337,11 +337,11 @@ public final class Storage {
             }
             for (BlockPos c : b.chests) {
                 double d = Vec3.atCenterOf(c).distanceTo(self.position());
-                if (d >= bestD || blocked(c)) {
+                if (d >= bestD || blocked(c) || !WorkReservations.available(self.serverLevel(), c, self.getUUID(), self.level().getGameTime())) {
                     continue;
                 }
-                for (var e : bases.contents(b.dimension, c).entrySet()) {
-                    Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(e.getKey()));
+                for (var e : bases.itemContents(b.dimension, c).entrySet()) {
+                    Item item = e.getKey();
                     if (item != null && want.test(new ItemStack(item))
                             && (supplyWanted == null || !FoodAid.goodFood(new ItemStack(item)) || e.getValue() > FoodAid.RESERVE)) {
                         bestD = d;
@@ -392,7 +392,7 @@ public final class Storage {
         BlockPos best = null;
         double bestD = 32 * 32;
         for (Map.Entry<BlockPos, Perception.BlockKind> e : perception.blocks().entrySet()) {
-            if (e.getValue() != Perception.BlockKind.CHEST || looted.contains(e.getKey()) || blocked(e.getKey())) {
+            if (e.getValue() != Perception.BlockKind.CHEST || looted.contains(e.getKey()) || blocked(e.getKey()) || !WorkReservations.available(self.serverLevel(), e.getKey(), self.getUUID(), self.level().getGameTime())) {
                 continue;
             }
             double d = e.getKey().distToCenterSqr(self.position());
@@ -457,6 +457,7 @@ public final class Storage {
     }
 
     public void begin(Mode mode) {
+        WorkReservations.release(self.serverLevel(), self.getUUID());
         if (self.containerMenu != self.inventoryMenu) {
             self.closeContainer();
         }
@@ -487,6 +488,7 @@ public final class Storage {
     }
 
     public void reset() {
+        WorkReservations.release(self.serverLevel(), self.getUUID());
         if (self.containerMenu != self.inventoryMenu) {
             self.closeContainer();
         }
@@ -753,12 +755,16 @@ public final class Storage {
                     return Status.DONE;
                 }
                 if (chest == null) {
+                    boolean busy = false;
                     for (BlockPos c : base.chests) {
                         if (!fullChests.contains(c) && self.level().getBlockState(c).getBlock() instanceof net.minecraft.world.level.block.ChestBlock) {
+                            if (!WorkReservations.available(self.serverLevel(), c, self.getUUID(), self.level().getGameTime())) { busy = true; continue; }
                             chest = c;
                             break;
                         }
                     }
+                    if (chest == null && busy) return Status.DONE; // another job, rather than an unnecessary chest
+
                     if (chest == null) {
                         // every chest full (or none yet): add one to the base
                         stage = 2;
@@ -1001,6 +1007,7 @@ public final class Storage {
     /** Walk to a chest, open it like a player (right click), run {@code work} on the open screen, close it. */
     private Status visit(BlockPos pos, java.util.function.Consumer<AbstractContainerMenu> work) {
         ServerLevel level = self.serverLevel();
+        if (!WorkReservations.claim(level, pos, self.getUUID(), level.getGameTime())) return Status.DONE;
         if (level.getBlockEntity(pos) == null) {
             perception.forgetBlock(pos);
             return Status.FAILED;
@@ -1013,6 +1020,7 @@ public final class Storage {
                 Bases.get(self.getServer()).record(level.dimension(), pos, container);
             }
             self.closeContainer();
+            WorkReservations.release(level, self.getUUID());
             return Status.DONE;
         }
         Vec3 center = Vec3.atCenterOf(pos);
