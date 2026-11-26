@@ -241,4 +241,48 @@ public final class CommunityResourcesTests {
         h.succeedWhen(()->{h.assertTrue(work.completed==1&&recipient.getInventory().countItem(Items.IRON_INGOT)==16,"existing partial stack filled without an empty slot");h.assertTrue(chest.countItem(Items.IRON_INGOT)==5&&courier.getInventory().countItem(Items.IRON_INGOT)==8,"exact deficit and courier reserve conserved");h.assertTrue(courier.getInventory().countItem(Items.COBBLESTONE)==35*64,"other full stacks retained");});
     }
 
+    @AfterBatch(batch="mining-exclusive") public static void miningCleanup(ServerLevel level){BlockClaims.forgetAll();cleanup(level);}
+    private static void miningLook(ClonePlayer c,BlockPos p){
+        var delta=Vec3.atCenterOf(p).subtract(c.getEyePosition());float yaw=(float)Math.toDegrees(Math.atan2(delta.z,delta.x))-90;float pitch=(float)-Math.toDegrees(Math.atan2(delta.y,Math.sqrt(delta.x*delta.x+delta.z*delta.z)));
+        c.setYRot(yaw);c.setYHeadRot(yaw);c.setXRot(pitch);c.getInventory().setItem(0,new ItemStack(Items.DIAMOND_PICKAXE));c.getInventory().selected=0;c.setOnGround(true);
+    }
+    @GameTest(template="arena",batch="mining-exclusive",timeoutTicks=60)
+    public static void allMotorMiningHonorsExclusiveOwnerAndAllowsOtherBlocks(GameTestHelper h){
+        arena(h);BlockClaims.forgetAll();var a=actor(h,6,7);var b=actor(h,6,8);var p=h.absolutePos(new BlockPos(8,3,7));var other=h.absolutePos(new BlockPos(8,3,8));h.setBlock(new BlockPos(8,3,7),Blocks.OBSIDIAN);h.setBlock(new BlockPos(8,3,8),Blocks.OBSIDIAN);
+        miningLook(a,p);a.controller().motor().mine(p);long now=h.getLevel().getGameTime();
+        h.assertTrue(BlockClaims.takenByOther(h.getLevel(),p,b.getUUID(),now),"first real Motor miner owns block");
+        miningLook(b,p);h.assertTrue(!b.controller().motor().mine(p)&&b.controller().motor().mineDebug.contains("occupied"),"second subsystem cannot start breaking same block");
+        h.assertTrue(!b.controller().safeToDig(p),"candidate selection ignores another miner");
+        miningLook(b,other);b.controller().motor().mine(other);h.assertTrue(BlockClaims.takenByOther(h.getLevel(),other,a.getUUID(),now),"another block remains available");
+        a.controller().motor().resetMining();miningLook(b,p);b.controller().motor().mine(p);h.assertTrue(BlockClaims.takenByOther(h.getLevel(),p,a.getUUID(),now),"interrupted block immediately inherited");h.succeed();
+    }
+    @GameTest(template="arena",batch="mining-exclusive",timeoutTicks=60)
+    public static void blockClaimsExpireReleaseOnDeathAndIsolateWorlds(GameTestHelper h){
+        arena(h);BlockClaims.forgetAll();var a=actor(h,6,7);var b=actor(h,6,8);var p=h.absolutePos(new BlockPos(8,3,7));h.setBlock(new BlockPos(8,3,7),Blocks.OBSIDIAN);long now=h.getLevel().getGameTime();
+        h.assertTrue(BlockClaims.claim(h.getLevel(),p,a.getUUID(),now),"planning claim");
+        h.assertTrue(!BlockClaims.takenByOther(h.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER),p,b.getUUID(),now),"same coordinates in another world independent");
+        h.assertTrue(!BlockClaims.takenByOther(h.getLevel(),p,b.getUUID(),now+61),"abandoned planning claim expires");
+        miningLook(a,p);a.controller().motor().mine(p);h.assertTrue(!BlockClaims.takenByOther(h.getLevel(),p,b.getUUID(),now+3),"abandoned active mining expires quickly");
+        a.controller().motor().mine(p);a.setHealth(0);h.assertTrue(!BlockClaims.takenByOther(h.getLevel(),p,b.getUUID(),now),"dead miner no longer owns block");h.succeed();
+    }
+    @GameTest(template="arena",batch="mining-exclusive",timeoutTicks=60)
+    public static void realHumanMiningPreemptsCloneAndAbortReleasesClaim(GameTestHelper h){
+        arena(h);BlockClaims.forgetAll();var clone=actor(h,6,7);var p=h.absolutePos(new BlockPos(8,3,7));h.setBlock(new BlockPos(8,3,7),Blocks.OBSIDIAN);miningLook(clone,p);clone.controller().motor().mine(p);
+        var server=h.getLevel().getServer();var profile=new com.mojang.authlib.GameProfile(UUID.randomUUID(),"MiningHuman");
+        var human=new net.minecraft.server.level.ServerPlayer(server,h.getLevel(),profile);
+        human.connection=new net.minecraft.server.network.ServerGamePacketListenerImpl(server,new CloneConnection(),human);
+        human.setPos(clone.getX(),clone.getY(),clone.getZ());human.gameMode.changeGameModeForPlayer(net.minecraft.world.level.GameType.SURVIVAL);human.getInventory().setItem(0,new ItemStack(Items.DIAMOND_PICKAXE));human.getInventory().selected=0;
+        server.getPlayerList().op(profile);
+        try {
+            human.gameMode.handleBlockBreakAction(p,net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,Direction.UP,h.getLevel().getMaxBuildHeight(),0);
+            long now=h.getLevel().getGameTime();h.assertTrue(BlockClaims.takenByOther(h.getLevel(),p,clone.getUUID(),now),"accepted vanilla human digging takes priority");
+            h.assertTrue(!clone.controller().motor().mine(p)&&clone.controller().motor().mineDebug.contains("occupied"),"clone yields without interfering with human");
+            human.gameMode.handleBlockBreakAction(p,net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK,Direction.UP,h.getLevel().getMaxBuildHeight(),1);
+            h.assertTrue(!BlockClaims.takenByOther(h.getLevel(),p,clone.getUUID(),now),"human abort immediately releases block");
+            clone.controller().motor().mine(p);h.assertTrue(BlockClaims.takenByOther(h.getLevel(),p,human.getUUID(),now),"clone can resume after human leaves");
+            human.gameMode.handleBlockBreakAction(p,net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,Direction.UP,h.getLevel().getMaxBuildHeight(),2);
+            human.setHealth(0);human.gameMode.tick();h.assertTrue(!BlockClaims.takenByOther(h.getLevel(),p,clone.getUUID(),now),"dead human releases mining state");
+        } finally {BlockClaims.humanStopped(human.getUUID());server.getPlayerList().deop(profile);human.discard();}h.succeed();
+    }
+
 }

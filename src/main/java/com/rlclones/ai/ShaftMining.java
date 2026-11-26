@@ -128,7 +128,7 @@ public final class ShaftMining {
     }
 
     public void begin() {
-        if (oreTarget != null) BlockClaims.release(oreTarget,self.getUUID());
+        if (oreTarget != null) BlockClaims.release(self.level(), oreTarget,self.getUUID());
         oreTarget = oreWallCell = oreScanFeet = oreDrop = null; oreTicks = oreCollectTicks = 0;
         shaft = bases().nearestShaft(self.level().dimension(), self.position(), 64, me(), self.level().getGameTime());
         if (shaft != null) {
@@ -257,7 +257,7 @@ public final class ShaftMining {
         if(Perception.classify(self.level().getBlockState(ore))!=Perception.BlockKind.ORE
                 || Vec3.atCenterOf(ore).distanceTo(self.getEyePosition())>Motor.BLOCK_REACH-0.3
                 || oreRetry.getOrDefault(ore,Long.MIN_VALUE)>self.level().getGameTime()
-                || BlockClaims.takenByOther(ore,self.getUUID(),self.level().getGameTime())||!oreSafe(ore))return false;
+                || BlockClaims.takenByOther(self.level(), ore,self.getUUID(),self.level().getGameTime())||!oreSafe(ore))return false;
         BlockPos backing=backingCell(ore);
         if(backing!=null){
             boolean floor=solid(feet.below())&&self.getY()-feet.getY()<0.15;
@@ -273,7 +273,7 @@ public final class ShaftMining {
 
     private void stopOre(boolean retry) {
         if(oreTarget!=null){
-            BlockClaims.release(oreTarget,self.getUUID());
+            BlockClaims.release(self.level(), oreTarget,self.getUUID());
             if(retry){if(oreRetry.size()>=16)oreRetry.remove(oreRetry.keySet().iterator().next());oreRetry.put(oreTarget,self.level().getGameTime()+300);}
         }
         oreTarget=null;oreTicks=0;oreScanFeet=null;
@@ -329,11 +329,11 @@ public final class ShaftMining {
                 double gap=e.getKey().distToCenterSqr(self.getEyePosition());
                 if(gap<distance&&oreCandidate(e.getKey(),feet)){best=e.getKey();distance=gap;}
             }
-            if(best==null||!BlockClaims.claim(best,self.getUUID(),self.level().getGameTime()))return false;
+            if(best==null||!BlockClaims.claim(self.level(), best,self.getUUID(),self.level().getGameTime()))return false;
             oreTarget=best.immutable();oreWallCell=backingCell(best);oreHadRung=oreWallCell!=null&&ladderAt(oreWallCell);oreTicks=0;
         }
         motor.stop();motor.sneak(true);
-        if(++oreTicks>160||!BlockClaims.claim(oreTarget,self.getUUID(),self.level().getGameTime())||!oreSafe(oreTarget)){
+        if(++oreTicks>160||!BlockClaims.claim(self.level(), oreTarget,self.getUUID(),self.level().getGameTime())||!oreSafe(oreTarget)){
             stopOre(true);return restoreOreWall();
         }
         if(Perception.classify(self.level().getBlockState(oreTarget))!=Perception.BlockKind.ORE){stopOre(false);return restoreOreWall();}

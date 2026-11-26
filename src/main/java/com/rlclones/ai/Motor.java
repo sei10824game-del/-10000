@@ -127,6 +127,8 @@ public final class Motor {
 
     // mining
     private BlockPos breakingPos;
+    private ServerLevel breakingLevel;
+    private long lastMineCall=Long.MIN_VALUE;
     private float breakProgress;
     private int breakStage = -1;
 
@@ -869,6 +871,10 @@ public final class Motor {
             mineDebug = "no hands";
             return false;
         }
+        lastMineCall=self.level().getGameTime();
+        if(BlockClaims.takenByOther(self.level(),pos,self.getUUID(),lastMineCall)) {
+            resetMining();mineDebug="occupied by another miner";return false;
+        }
         boolean repairingTread = !stairWork && self.getServer() != null
                 && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos);
         if (repairingTread && (!self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES)
@@ -893,9 +899,10 @@ public final class Motor {
             }
             Equipment.select(self, tool >= 0 ? tool : Equipment.bareSlot(self));
         }
-        if (!pos.equals(breakingPos)) {
+        if (!pos.equals(breakingPos) || breakingLevel!=level) {
             resetMining();
             breakingPos = pos.immutable();
+            breakingLevel = level;
         }
         if (self.isInWater() && !self.isPassenger() && !self.getAbilities().flying && dryFootingFor(pos)) {
             return false;
@@ -919,6 +926,7 @@ public final class Motor {
             mineDebug = "not allowed";
             return false;
         }
+        if(!BlockClaims.active(level,pos,self,lastMineCall)){resetMining();mineDebug="occupied by another miner";return false;}
         mineDebug = "progress " + String.format("%.2f", breakProgress);
         self.resetLastActionTime();
         breakProgress += state.getDestroyProgress(self, level, pos);
@@ -1030,9 +1038,11 @@ public final class Motor {
 
     public void resetMining() {
         dryTicks = 0;
-        if (breakingPos != null && breakStage >= 0) {
-            self.level().destroyBlockProgress(self.getId(), breakingPos, -1);
+        if (breakingPos != null && breakingLevel!=null) {
+            if(breakStage>=0)breakingLevel.destroyBlockProgress(self.getId(),breakingPos,-1);
+            BlockClaims.release(breakingLevel,breakingPos,self.getUUID());
         }
+        breakingLevel=null;
         breakingPos = null;
         breakProgress = 0;
         breakStage = -1;
@@ -1491,6 +1501,8 @@ public final class Motor {
     public int ridden;
 
     public void tick() {
+        if(breakingPos!=null && (lastMineCall!=self.level().getGameTime() || !self.isAlive() || breakingLevel!=self.level()
+                || BlockClaims.takenByOther(self.level(),breakingPos,self.getUUID(),self.level().getGameTime())))resetMining();
         ladderAssist();
         flight();
         waterEscape();

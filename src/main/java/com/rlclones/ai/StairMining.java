@@ -182,12 +182,12 @@ public final class StairMining {
 
     /** Break {@code p} unless another clone is already at it (then wait: the crowd rules branch us off a new staircase if it takes long). */
     private void mineClaimed(BlockPos p) {
-        if (!BlockClaims.claim(p, self.getUUID(), self.level().getGameTime())) {
+        if (!BlockClaims.claim(self.level(), p, self.getUUID(), self.level().getGameTime())) {
             debug = "waits: " + p.toShortString() + " is being broken by another";
             return;
         }
         if (motor.mine(p)) {
-            BlockClaims.release(p, self.getUUID());
+            BlockClaims.release(self.level(), p, self.getUUID());
         }
     }
 

@@ -463,7 +463,7 @@ public final class CloneMobs {
             var st = level.getBlockState(p);
             var shape = st.getCollisionShape(level, p);
             if (shape.isEmpty() || !shape.bounds().move(p).intersects(box) || st.getDestroySpeed(level, p) < 0 || st.getDestroySpeed(level, p) > 25
-                    || st.hasBlockEntity() || !soul.controller().safeToDig(p) || com.rlclones.ai.BlockClaims.takenByOther(p, soul.getUUID(), level.getGameTime())) {
+                    || st.hasBlockEntity() || !soul.controller().safeToDig(p) || com.rlclones.ai.BlockClaims.takenByOther(level, p, soul.getUUID(), level.getGameTime())) {
                 continue;
             }
             level.destroyBlock(p, true, soul);

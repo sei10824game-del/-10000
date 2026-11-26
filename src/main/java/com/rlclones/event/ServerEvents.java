@@ -117,7 +117,7 @@ public final class ServerEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
-        com.rlclones.ai.Motor.clearSharedPaths();com.rlclones.ai.util.TerrainSections.clear();CloneManager.shutdown();com.rlclones.ai.TeamDefense.clear();com.rlclones.ai.ArmorCoop.clear();com.rlclones.ai.WorkReservations.clear();
+        com.rlclones.ai.BlockClaims.forgetAll();com.rlclones.ai.Motor.clearSharedPaths();com.rlclones.ai.util.TerrainSections.clear();CloneManager.shutdown();com.rlclones.ai.TeamDefense.clear();com.rlclones.ai.ArmorCoop.clear();com.rlclones.ai.WorkReservations.clear();
         com.rlclones.ai.Crafting.invalidateRecipes();com.rlclones.ai.Perception.invalidateClassifications();
         DAMAGE_TAKEN.clear();
         SHIELD_CHECKS.clear();
@@ -183,6 +183,7 @@ public final class ServerEvents {
 
     @SubscribeEvent
     public static void onLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        com.rlclones.ai.BlockClaims.humanStopped(event.getEntity().getUUID());
         if (event.getEntity() instanceof ServerPlayer p && p.getServer() != null) {
             CloneManager m = CloneManager.peek();
             if (m != null) {

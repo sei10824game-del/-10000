@@ -895,7 +895,7 @@ public final class CloneController {
     }
     /** Not skipped for now, and - for planks / logs of buildings - not part of somebody's base. */
     private boolean harvestable(Perception.BlockKind kind, BlockPos p) {
-        return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && !BlockClaims.takenByOther(p, self.getUUID(), now())
+        return !skipBlocks.containsKey(p) && !persona.avoids(Vec3.atCenterOf(p)) && !BlockClaims.takenByOther(self.level(), p, self.getUUID(), now())
                 && (kind == Perception.BlockKind.ORE || !com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), p)) && (kind != Perception.BlockKind.WOOD
                 || com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(p), 12) == null);
     }
@@ -916,6 +916,7 @@ public final class CloneController {
      * deeper than one below the feet, and nothing touching lava (or opening into a drop).
      */
     public boolean safeToDig(BlockPos p) {
+        if(BlockClaims.takenByOther(self.level(),p,self.getUUID(),now()))return false;
         ServerLevel level = self.serverLevel();
         BlockPos feet = self.blockPosition();
         if (p.getY() < feet.getY() - 1) {
@@ -1523,6 +1524,7 @@ public final class CloneController {
     }
 
     private void cleanUp() {
+        if(BlockClaims.takenByOther(self.level(),cleanTarget,self.getUUID(),now())){cleanTarget=null;motor.resetMining();return;}
         ServerLevel level = self.serverLevel();
         BlockState st = level.getBlockState(cleanTarget);
         if (st.isAir() || !brain().isHarmful(Perception.blockId(st))) {
@@ -3045,6 +3047,7 @@ public final class CloneController {
         }
         motor.resetMining();
         motor.clearPath();
+        BlockClaims.releaseOwner(self.level(),self.getUUID());
         option = null;
     }
 
@@ -3318,9 +3321,9 @@ public final class CloneController {
                 // no headway (behind a wall, a window, a ceiling - seen or not): dig through what is between us, block after block (never the walls of a base) before giving up
                 BlockPos wall = motor.obstruction(target.blockPosition().above());
                 if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && (!self.serverLevel().getBlockState(wall).requiresCorrectToolForDrops()
-                        || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)) >= 0) && !BlockClaims.takenByOther(wall, self.getUUID(), now)
+                        || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)) >= 0) && !BlockClaims.takenByOther(self.level(), wall, self.getUUID(), now)
                         && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(wall), 12) == null) {
-                    BlockClaims.claim(wall, self.getUUID(), now);
+                    BlockClaims.claim(self.level(), wall, self.getUUID(), now);
                     if (self.getEyePosition().distanceTo(Vec3.atCenterOf(wall)) > Motor.BLOCK_REACH - 0.6) {
                         if (motor.stuckCount() <= 3 && ++fightWalk < 200) {
                             motor.navigate(motor.approachPoint(wall), 1.0, false); // the wall is further than an arm: up to it first
@@ -5212,6 +5215,7 @@ public final class CloneController {
             oreReflexes++;
             traceHarvest("reflex" + reflexOre.toShortString());
         }
+        if(BlockClaims.takenByOther(level,reflexOre,self.getUUID(),now)){reflexOre=null;motor.resetMining();return false;}
         BlockState st = level.getBlockState(reflexOre);
         if (Perception.classify(st) != Perception.BlockKind.ORE || ++reflexTicks > 160) {
             if (reflexTicks > 160) {
@@ -5321,6 +5325,7 @@ public final class CloneController {
         if (top == null) {
             return false;
         }
+        if(BlockClaims.takenByOther(level,top,self.getUUID(),now()))return false;
         if (level.getBlockState(top).isAir() || level.getBlockState(top).canBeReplaced()) {
             scaffold.pollLast();
             return !scaffold.isEmpty();
@@ -5346,6 +5351,7 @@ public final class CloneController {
         if (top == null) {
             return false;
         }
+        if(BlockClaims.takenByOther(level,top,self.getUUID(),now()))return false;
         if (level.getBlockState(top).isAir() || level.getBlockState(top).canBeReplaced()) {
             scaffold.pollLast();
             return false;
@@ -5412,7 +5418,7 @@ public final class CloneController {
             if (blockTarget == null) {
                 return true;
             }
-            BlockClaims.claim(blockTarget, self.getUUID(), now()); // mine, says the clone: the others take another
+            BlockClaims.claim(self.level(), blockTarget, self.getUUID(), now()); // mine, says the clone: the others take another
             if ((kind == Perception.BlockKind.ORE || kind == Perception.BlockKind.STONE) && !hasPickFor(level.getBlockState(blockTarget))) {
                 if (toolUp(level.getBlockState(blockTarget))) {
                     oreWorkLearning.cancel();
@@ -5453,7 +5459,8 @@ public final class CloneController {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget)));
         }
         blockTicks++;
-        if (!BlockClaims.claim(blockTarget, self.getUUID(), now())) {
+        if (!BlockClaims.claim(self.level(), blockTarget, self.getUUID(), now())) {
+            motor.resetMining();
             oreWorkLearning.cancel();
             blockTarget = null; // another clone got there first (the same moment): look for another block
             return false;
@@ -5524,7 +5531,7 @@ public final class CloneController {
             }
             BlockPos done = blockTarget;
             perception.forgetBlock(done);
-            BlockClaims.release(done, self.getUUID());
+            BlockClaims.release(self.level(), done, self.getUUID());
             oreWorkLearning.cancel();
             blockTarget = null;
             // (a trunk goes on down to the ground: its foot is known to be there even when the leaves hide it)
@@ -5559,7 +5566,7 @@ public final class CloneController {
             return false;
         }
         BlockPos wall = motor.obstruction(blockTarget);
-        if (wall == null || !safeToDig(wall) || !hasPickFor(self.serverLevel().getBlockState(wall)) || BlockClaims.takenByOther(wall, self.getUUID(), now())) {
+        if (wall == null || !safeToDig(wall) || !hasPickFor(self.serverLevel().getBlockState(wall)) || BlockClaims.takenByOther(self.level(), wall, self.getUUID(), now())) {
             return false;
         }
         Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)));
