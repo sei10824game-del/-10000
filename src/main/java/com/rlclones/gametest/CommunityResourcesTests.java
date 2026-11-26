@@ -158,4 +158,87 @@ public final class CommunityResourcesTests {
         h.succeedWhen(()->{h.assertTrue(chest.countItem(Items.IRON_INGOT)+total(all,Items.IRON_INGOT)==4,"real inventory stock conserved");h.assertTrue(all.stream().allMatch(c->c.getInventory().countItem(Items.IRON_INGOT)==2),"both workers fetch two real ingots");});
     }
 
+    private static final List<Bases.Base> haulBases=new ArrayList<>();
+    @AfterBatch(batch="haul-routes") public static void haulCleanup(ServerLevel level){cleanup(level);Bases.get(level.getServer()).bases.removeAll(haulBases);haulBases.clear();Motor.clearSharedPaths();}
+    @AfterBatch(batch="haul-load") public static void loadCleanup(ServerLevel level){haulCleanup(level);}
+    @AfterBatch(batch="haul-bundle") public static void bundleCleanup(ServerLevel level){haulCleanup(level);}
+    @AfterBatch(batch="haul-stale") public static void staleCleanup(ServerLevel level){haulCleanup(level);}
+    @AfterBatch(batch="haul-food") public static void emergencyCleanup(ServerLevel level){haulCleanup(level);}
+    private static net.minecraft.world.Container warehouse(GameTestHelper h,BlockPos local,Item item,int count){
+        h.setBlock(local,Blocks.CHEST);var world=h.absolutePos(local);var chest=(net.minecraft.world.Container)h.getLevel().getBlockEntity(world);
+        chest.setItem(0,new ItemStack(item,count));var bases=Bases.get(h.getLevel().getServer());var base=bases.add(h.getLevel().dimension(),world,"haul test");haulBases.add(base);bases.addChest(base,world);bases.record(h.getLevel().dimension(),world,chest);return chest;
+    }
+    @GameTest(template="arena",batch="haul-routes",timeoutTicks=80)
+    public static void failureMemoryTracksNearbyChangesMovementExpiryAndReload(GameTestHelper h){
+        arena(h);var level=h.getLevel();var from=h.absolutePos(new BlockPos(5,2,7));var target=from.east(6);var far=from.east(96);var oldFar=level.getBlockState(far);long now=level.getGameTime();
+        var memory=new com.rlclones.ai.util.UnreachableMemory();
+        try {
+            memory.remember(level,from,target,now,80);h.assertTrue(memory.blocked(level,from,target,now),"unchanged failed route remembered");
+            level.setBlock(far,oldFar.isAir()?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState(),2);
+            h.assertTrue(memory.blocked(level,from,target,now),"unrelated distant edits preserve failed route");
+            h.setBlock(new BlockPos(8,2,7),Blocks.WATER);h.assertTrue(!memory.blocked(level,from,target,now),"local fluid/geometry change unlocks same tick retry");
+            memory.remember(level,from,target,now,80);h.assertTrue(!memory.blocked(level,from.east(3),target,now),"different approach can retry");
+            memory.remember(level,from,target,now,10);h.assertTrue(memory.blocked(level,from,target,now+9)&&!memory.blocked(level,from,target,now+10),"dynamic obstacles retried after expiry");
+            memory.remember(level,from,target,now,80);Perception.invalidateClassifications();h.assertTrue(!memory.blocked(level,from,target,now),"tag reload invalidates failure knowledge");
+            for(int i=0;i<12;i++)memory.remember(level,from,target.east(i),now,80);h.assertTrue(memory.size()<=8,"bounded records");
+            memory.remember(level,from,target,now,80);h.assertTrue(!memory.blocked(level.getServer().getLevel(net.minecraft.world.level.Level.NETHER),from,target,now),"worlds never share failure");
+        }finally{level.setBlock(far,oldFar,2);}h.succeed();
+    }
+    @GameTest(template="arena",batch="haul-routes",timeoutTicks=80)
+    public static void failedRealPathProbeIsReusedUntilDoorwayOpens(GameTestHelper h){
+        arena(h);Motor.clearSharedPaths();var c=actor(h,4,7);
+        for(var p:BlockPos.betweenClosed(new BlockPos(10,2,5),new BlockPos(14,5,9)))
+            h.setBlock(p,p.getX()==10||p.getX()==14||p.getZ()==5||p.getZ()==9||p.getY()==5?Blocks.STONE:Blocks.AIR);
+        var goal=h.absoluteVec(new Vec3(12.5,2,7.5));var motor=c.controller().motor();
+        h.assertTrue(motor.pathTo(goal)==null,"real closed room unreachable");int computed=Motor.pathsComputed;
+        h.assertTrue(motor.pathTo(goal)==null&&Motor.pathsComputed==computed&&motor.pathsSkipped>0,"repeat path failure avoids another A-star search");
+        h.setBlock(new BlockPos(10,2,7),Blocks.AIR);h.setBlock(new BlockPos(10,3,7),Blocks.AIR);
+        h.assertTrue(motor.pathTo(goal)!=null&&Motor.pathsComputed>computed,"new doorway is usable immediately");h.succeed();
+    }
+    @GameTest(template="arena",batch="haul-load",timeoutTicks=300)
+    public static void partialResourceLoadIsFilledFromTwoChestsBeforeOneDelivery(GameTestHelper h){
+        arena(h);var recipient=actor(h,8,7);var courier=actor(h,6,7);courier.getInventory().setItem(0,new ItemStack(Items.IRON_INGOT,9));
+        var first=warehouse(h,new BlockPos(6,2,10),Items.IRON_INGOT,5);first.setItem(1,new ItemStack(Items.DIAMOND,3));
+        var second=warehouse(h,new BlockPos(9,2,10),Items.IRON_INGOT,20);
+        com.rlclones.ai.civilization.CivicWork.post(recipient,"minecraft:iron_ingot",16);var work=courier.controller().civicWork();h.assertTrue(work.begin(),"partial load courier accepts full order");
+        h.onEachTick(()->{work.tick();courier.controller().motor().tick();});
+        h.succeedWhen(()->{h.assertTrue(work.completed==1,"single full delivery completes");h.assertTrue(work.toppedUpTrips==1&&recipient.getInventory().countItem(Items.IRON_INGOT)==16,"one surplus ingot topped up to sixteen");h.assertTrue(first.countItem(Items.IRON_INGOT)==0&&second.countItem(Items.IRON_INGOT)==10,"exact deficit fetched from both chests");h.assertTrue(courier.getInventory().countItem(Items.IRON_INGOT)==8&&first.countItem(Items.DIAMOND)==3,"own reserve and unrelated materials untouched");});
+    }
+    @GameTest(template="arena",batch="haul-bundle",timeoutTicks=240)
+    public static void sameRecipientCarriedMaterialsShareOneTripAndCancelReleasesAllLeases(GameTestHelper h){
+        arena(h);var recipient=actor(h,8,7);var courier=actor(h,6,7);courier.getInventory().setItem(0,new ItemStack(Items.IRON_INGOT,12));courier.getInventory().setItem(1,new ItemStack(Items.COAL,12));
+        var manager=CloneManager.get(h.getLevel().getServer());
+        com.rlclones.ai.civilization.CivicWork.post(recipient,"minecraft:iron_ingot",2);com.rlclones.ai.civilization.CivicWork.post(recipient,"minecraft:coal",3);
+        var work=courier.controller().civicWork();h.assertTrue(work.begin(),"combined courier starts");
+        var coalKey=com.rlclones.ai.civilization.CivicWork.key(recipient,"minecraft:coal");
+        h.assertTrue(courier.getUUID().equals(manager.workBoard().find(coalKey,h.getLevel().getGameTime()).worker(h.getLevel().getGameTime())),"second compatible job reserved");
+        work.cancel();h.assertTrue(manager.workBoard().find(coalKey,h.getLevel().getGameTime()).worker(h.getLevel().getGameTime())==null,"interruption releases bundled reservation");h.assertTrue(work.begin(),"combined work can restart");
+        h.onEachTick(()->{work.tick();courier.controller().motor().tick();});
+        h.succeedWhen(()->{h.assertTrue(work.completed==2&&work.bundledDeliveries==1,"both already-carried materials delivered in one trip");h.assertTrue(recipient.getInventory().countItem(Items.IRON_INGOT)==2&&recipient.getInventory().countItem(Items.COAL)==3,"requested quantities received");h.assertTrue(courier.getInventory().countItem(Items.IRON_INGOT)==10&&courier.getInventory().countItem(Items.COAL)==9,"exact conservation across actual pickups");});
+    }
+    @GameTest(template="arena",batch="haul-food",timeoutTicks=80)
+    public static void carriedEmergencyFoodIsDeliveredWithoutWaitingForWarehouse(GameTestHelper h){
+        arena(h);var recipient=actor(h,8,7);var courier=actor(h,6,7);courier.getInventory().setItem(0,new ItemStack(Items.BREAD,5));var chest=warehouse(h,new BlockPos(6,2,10),Items.BREAD,16);
+        com.rlclones.ai.civilization.CivicWork.post(recipient,com.rlclones.ai.civilization.WorkBoard.FOOD,4);var work=courier.controller().civicWork();h.assertTrue(work.begin(),"urgent food accepted");work.tick();
+        h.assertTrue(courier.getInventory().countItem(Items.BREAD)==4&&chest.countItem(Items.BREAD)==16,"available emergency food handed over before any warehouse trip");work.cancel();h.succeed();
+    }
+    @GameTest(template="arena",batch="haul-stale",timeoutTicks=160)
+    public static void staleWarehouseSnapshotsDoNotLoopOrCreateCargo(GameTestHelper h){
+        arena(h);var recipient=actor(h,8,7);var courier=actor(h,6,7);var first=warehouse(h,new BlockPos(6,2,10),Items.IRON_INGOT,4);var second=warehouse(h,new BlockPos(9,2,10),Items.IRON_INGOT,4);first.clearContent();second.clearContent();
+        com.rlclones.ai.civilization.CivicWork.post(recipient,"minecraft:iron_ingot",8);var work=courier.controller().civicWork();h.assertTrue(work.begin(),"courier initially knows stale stock");boolean[] ended={false};
+        h.onEachTick(()->{if(!ended[0])ended[0]=!work.tick();courier.controller().motor().tick();});
+        h.succeedWhen(()->{h.assertTrue(ended[0],"empty sources terminate the delivery attempt");h.assertTrue(work.completed==0&&total(List.of(recipient,courier),Items.IRON_INGOT)==0,"no cargo is fabricated from remembered stock");});
+    }
+
+    @AfterBatch(batch="haul-full") public static void fullHaulCleanup(ServerLevel level){haulCleanup(level);}
+    @GameTest(template="arena",batch="haul-full",timeoutTicks=240)
+    public static void fullBagCanTopUpItsExistingStackWithoutOverdrawing(GameTestHelper h){
+        arena(h);var recipient=actor(h,8,7);var courier=actor(h,6,7);
+        for(int i=0;i<courier.getInventory().items.size();i++)courier.getInventory().setItem(i,new ItemStack(Items.COBBLESTONE,64));
+        courier.getInventory().setItem(0,new ItemStack(Items.IRON_INGOT,9));var chest=warehouse(h,new BlockPos(6,2,10),Items.IRON_INGOT,20);
+        com.rlclones.ai.civilization.CivicWork.post(recipient,"minecraft:iron_ingot",16);var work=courier.controller().civicWork();h.assertTrue(work.begin(),"full bag accepts stack top-up");
+        h.onEachTick(()->{work.tick();courier.controller().motor().tick();});
+        h.succeedWhen(()->{h.assertTrue(work.completed==1&&recipient.getInventory().countItem(Items.IRON_INGOT)==16,"existing partial stack filled without an empty slot");h.assertTrue(chest.countItem(Items.IRON_INGOT)==5&&courier.getInventory().countItem(Items.IRON_INGOT)==8,"exact deficit and courier reserve conserved");h.assertTrue(courier.getInventory().countItem(Items.COBBLESTONE)==35*64,"other full stacks retained");});
+    }
+
 }

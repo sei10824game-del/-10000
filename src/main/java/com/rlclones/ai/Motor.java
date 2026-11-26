@@ -109,6 +109,10 @@ public final class Motor {
     private Path path;
     private Vec3 pathGoal;
     private int repathTimer;
+    private final com.rlclones.ai.util.UnreachableMemory failedRoutes = new com.rlclones.ai.util.UnreachableMemory();
+    public int pathsSkipped;
+    private int failedAccuracy=-1;
+    private final com.rlclones.ai.util.UnreachableMemory failedProbes = new com.rlclones.ai.util.UnreachableMemory();
     private int failedPaths;
     @Nullable
     private BlockPos failedFrom;
@@ -520,7 +524,9 @@ public final class Motor {
             return false; // a wall two blocks high in the way: a block is laid to make it two steps of one
         }
         if (repathTimer > 0) {
-            repathTimer--;
+            if(path==null && pathGoal!=null && failedFrom!=null && failedRoutes.contains(BlockPos.containing(pathGoal)) && ((self.tickCount+self.getId())&3)==0
+                    && !failedRoutes.blocked(self.level(),self.blockPosition(),BlockPos.containing(pathGoal),self.level().getGameTime()))repathTimer=0;
+            else repathTimer--;
         }
         boolean goalMoved = pathGoal == null || pathGoal.distanceToSqr(goal) > 4.0;
         if ((path == null || path.isDone() || goalMoved) && repathTimer <= 0 && (self.onGround() || self.isInWater())) {
@@ -655,21 +661,27 @@ public final class Motor {
     /** A walkable path to {@code goal} (null if there is none that gets there). */
     @javax.annotation.Nullable
     public Path pathTo(Vec3 goal) {
+        BlockPos target=BlockPos.containing(goal);
+        if(failedProbes.blocked(self.level(),self.blockPosition(),target,self.level().getGameTime())){pathsSkipped++;return null;}
         Path p = computePath(goal, 0.5);
-        return p != null && p.canReach() ? p : null;
+        if(p==null||!p.canReach()){failedProbes.remember(self.level(),self.blockPosition(),target,self.level().getGameTime(),40);return null;}
+        failedProbes.forget(target);return p;
     }
 
     private Path computePath(Vec3 goal, double arrive) {
         if (!(self.level() instanceof ServerLevel level)) {
             return null;
         }
+        BlockPos goalPos = BlockPos.containing(goal);
+        int accuracy = Math.max(0, (int) Math.floor(arrive));
+        if(accuracy!=failedAccuracy){failedRoutes.clear();failedAccuracy=accuracy;}
+        if(failedRoutes.blocked(level,self.blockPosition(),goalPos,level.getGameTime())){pathsSkipped++;return null;}
         if (proxy == null || proxy.level() != level) {
             proxy = ModEntities.PATH_PROXY.get().create(level);
             if (proxy == null) {
                 return null;
             }
         }
-        BlockPos goalPos = BlockPos.containing(goal);
         Path shared = reuse(level, goalPos);
         if (shared != null) {
             pathsReused++;
@@ -677,9 +689,10 @@ public final class Motor {
         }
         proxy.moveTo(self.getX(), self.getY(), self.getZ(), self.getYRot(), 0f);
         proxy.setOnGround(true);
-        int accuracy = Math.max(0, (int) Math.floor(arrive));
         Path made = proxy.getNavigation().createPath(goalPos, accuracy);
         pathsComputed++;
+        if(made==null)failedRoutes.remember(level,self.blockPosition(),goalPos,level.getGameTime(),80);
+        else failedRoutes.forget(goalPos);
         if (made != null && made.canReach() && made.getNodeCount() > 1) {
             java.util.List<Node> nodes = new java.util.ArrayList<>(made.getNodeCount());
             for (int i = 0; i < made.getNodeCount(); i++) {
@@ -710,6 +723,7 @@ public final class Motor {
 
     private static final java.util.ArrayDeque<SharedPath> RECENT = new java.util.ArrayDeque<>();
     /** Searches done / searches saved by a path already made (tests, soak). */
+    public static void clearSharedPaths(){RECENT.clear();}
     public static int pathsComputed;
     public static int pathsReused;
 

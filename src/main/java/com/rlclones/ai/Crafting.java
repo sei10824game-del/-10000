@@ -275,20 +275,14 @@ public final class Crafting {
     }
 
     /** Tables / furnaces a walk did not get to: left out until the time given. */
-    private final java.util.Map<BlockPos, Long> unreachable = new java.util.HashMap<>();
+    private final com.rlclones.ai.util.UnreachableMemory unreachable = new com.rlclones.ai.util.UnreachableMemory();
 
     private boolean reachable(@javax.annotation.Nullable BlockPos p) {
-        if (p == null || unreachable.isEmpty()) {
-            return p != null;
-        }
-        long now = self.level().getGameTime();
-        unreachable.values().removeIf(t -> t < now);
-        return !unreachable.containsKey(p);
+        return p != null && !unreachable.blocked(self.level(),self.blockPosition(),p,self.level().getGameTime());
     }
 
     private BlockPos nearest(Perception.BlockKind kind, double radius) {
-        BlockPos p = Senses.nearestBlock(perception, self, kind, radius);
-        return reachable(p) ? p : null;
+        return Senses.nearestBlock(perception, self, kind, radius, this::reachable);
     }
 
     private static int count(Player p, Item item) {
@@ -1330,7 +1324,7 @@ public final class Crafting {
             if (stage == 2 && station != null && timer > 400 && !crowded()) {
                 // walked the whole time and never got to the table / furnace (it is across a pit, on another level): not that one for a while, and this
                 // counts as a failure (it used to end quietly, and the same walk was chosen again for hours: soak, a clone with wood and stone and no pickaxe)
-                unreachable.put(station.immutable(), self.level().getGameTime() + 2400);
+                unreachable.remember(self.level(),self.blockPosition(),station,self.level().getGameTime(),240);
                 perception.forgetBlock(station);
                 return giveUp();
             }
@@ -1637,7 +1631,7 @@ public final class Crafting {
         BlockPos best = null;
         double bestD = Double.MAX_VALUE;
         for (BlockPos p : com.rlclones.ai.util.TerrainSections.positions(level, c.offset(-12, -3, -12), c.offset(12, 3, 12), item == Items.CRAFTING_TABLE ? com.rlclones.ai.util.TerrainSections.Target.TABLE : com.rlclones.ai.util.TerrainSections.Target.FURNACE)) {
-            if (level.getBlockState(p).is(want)) {
+            if (level.getBlockState(p).is(want) && reachable(p)) {
                 double d = p.distSqr(c);
                 if (d < bestD) {
                     bestD = d;

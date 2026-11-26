@@ -65,6 +65,7 @@ public final class Storage {
 
     private Predicate<ItemStack> supplyWanted;
     private int supplyRemaining;
+    private final Set<BlockPos> supplyVisited = new HashSet<>();
     private Mode mode;
     private int stage;
     private int ticks;
@@ -85,7 +86,7 @@ public final class Storage {
         return chestWoodShort && count(Items.CHEST) == 0 && !hasChestOrMaterial();
     }
     /** Chests that could not be reached / opened; not tried again for a while. */
-    private final Map<BlockPos, Long> unreachable = new HashMap<>();
+    private final com.rlclones.ai.util.UnreachableMemory unreachable = new com.rlclones.ai.util.UnreachableMemory();
 
     public int deposits;
     public int withdrawals;
@@ -337,7 +338,7 @@ public final class Storage {
             }
             for (BlockPos c : b.chests) {
                 double d = Vec3.atCenterOf(c).distanceTo(self.position());
-                if (d >= bestD || blocked(c) || !WorkReservations.available(self.serverLevel(), c, self.getUUID(), self.level().getGameTime())) {
+                if (d >= bestD || supplyWanted != null && supplyVisited.contains(c) || blocked(c) || !WorkReservations.available(self.serverLevel(), c, self.getUUID(), self.level().getGameTime())) {
                     continue;
                 }
                 for (var e : bases.itemContents(b.dimension, c).entrySet()) {
@@ -452,8 +453,7 @@ public final class Storage {
     // ================================================================== execution
 
     private boolean blocked(BlockPos pos) {
-        Long since = unreachable.get(pos);
-        return since != null && self.level().getGameTime() - since < 6000;
+        return unreachable.blocked(self.level(), self.blockPosition(), pos, self.level().getGameTime());
     }
 
     public void begin(Mode mode) {
@@ -463,6 +463,7 @@ public final class Storage {
         }
         supplyWanted = null;
         supplyRemaining = 0;
+        supplyVisited.clear();
         this.mode = mode;
         stage = 0;
         ticks = 0;
@@ -497,6 +498,7 @@ public final class Storage {
         mode = null;
         supplyWanted = null;
         supplyRemaining = 0;
+        supplyVisited.clear();
     }
 
     public Status tick() {
@@ -513,7 +515,7 @@ public final class Storage {
             case FETCH -> fetchTick();
         };
         if (s == Status.FAILED && chest != null) {
-            unreachable.put(chest.immutable(), self.level().getGameTime());
+            unreachable.remember(self.level(), self.blockPosition(), chest, self.level().getGameTime(), 240);
         }
         if (s != Status.WORKING) {
             reset();
@@ -543,6 +545,20 @@ public final class Storage {
         return s;
     }
 
+    private int roomFor(ItemStack incoming) {
+        int room=0,limit=Math.min(incoming.getMaxStackSize(),self.getInventory().getMaxStackSize());
+        for(var stack:self.getInventory().items) {
+            if(stack.isEmpty())room+=limit;
+            else if(ItemStack.isSameItemSameTags(stack,incoming))room+=Math.max(0,limit-stack.getCount());
+        }
+        return room;
+    }
+    private boolean supplyRoom() {
+        if(freeSlots(self)>0)return true;
+        for(var stack:self.getInventory().items)if(supplyWanted.test(stack)&&stack.getCount()<stack.getMaxStackSize())return true;
+        return false;
+    }
+
     private Status fetchTick() {
         if (chest == null) {
             chest = fetchableChest();
@@ -551,13 +567,13 @@ public final class Storage {
             }
         }
         BlockPos target = chest;
-        return visit(target, menu -> {
+        Status status = visit(target, menu -> {
             Map<Item, Integer> before = snapshot();
             for (Slot slot : containerSlots(menu)) {
                 if (supplyWanted != null) {
-                    if (supplyRemaining <= 0 || freeSlots(self) <= 0 || !supplyWanted.test(slot.getItem())) continue;
+                    if (supplyRemaining <= 0 || !supplyWanted.test(slot.getItem())) continue;
                     int reserve = FoodAid.goodFood(slot.getItem()) ? FoodAid.RESERVE : 0;
-                    int amount = Math.min(supplyRemaining, Math.max(0, slot.getItem().getCount() - reserve));
+                    int amount = Math.min(roomFor(slot.getItem()), Math.min(supplyRemaining, Math.max(0, slot.getItem().getCount() - reserve)));
                     if (amount == 0) continue;
                     ItemStack taken = slot.safeTake(amount, amount, self);
                     int extracted = taken.getCount();
@@ -576,6 +592,12 @@ public final class Storage {
             withdrawals++;
             report("WITHDRAW", "rlclones.chat.withdraw", target, diff(snapshot(), before));
         });
+        if(status==Status.DONE && supplyWanted!=null && supplyRemaining>0) {
+            supplyVisited.add(target.immutable());
+            chest=fetchableChest();
+            if(chest!=null && supplyRoom())return Status.WORKING;
+        }
+        return status;
     }
 
     /** Stage changes while storing (diagnostics). */

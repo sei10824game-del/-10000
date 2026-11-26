@@ -16,6 +16,8 @@ public final class CivicWork {
     private final Motor motor;
     private final Storage warehouse;
     private WorkBoard.Job active;
+    private final java.util.ArrayDeque<WorkBoard.Job> bundled = new java.util.ArrayDeque<>();
+    public int bundledDeliveries, toppedUpTrips;
     private boolean fetching, dropped;
     private int beforeFetch, cargo, ticks, deliveryTicks;
     private long retryAfter;
@@ -87,11 +89,16 @@ public final class CivicWork {
         active = pick();
         if (active == null || !board().claim(active.key, self.getUUID(), now())) { active = null; return false; }
         ticks = cargo = deliveryTicks = 0; dropped = false;
-        fetching = spare(active) == 0;
+        int shortage=active.count-count(requester(active),active);
+        int carried=spare(active);
+        // Food already in hand goes immediately. Materials can fill the requested load before leaving.
+        fetching = carried==0 || !WorkBoard.FOOD.equals(active.key.item()) && carried<shortage && warehouse.canSupply(wanted(active));
+        if(fetching && carried>0)toppedUpTrips++;
+        bundleCarried();
         if (fetching) {
             beforeFetch = count(self, active);
             int reserve = WorkBoard.FOOD.equals(active.key.item()) ? Math.max(0, FoodAid.RESERVE - beforeFetch) : 0;
-            warehouse.beginSupply(wanted(active), Math.min(64, active.count - count(requester(active), active) + reserve));
+            warehouse.beginSupply(wanted(active), Math.min(64, Math.max(0, active.count - count(requester(active), active) - carried) + reserve));
         }
         motor.resetStuck();
         String recipientName = requester(active).getGameProfile().getName();
@@ -102,14 +109,19 @@ public final class CivicWork {
     /** true until finished, failed or interrupted. */
     public boolean tick() {
         if (active == null) return false;
+        bundled.removeIf(job->board().find(job.key,now())!=job || !board().claim(job.key,self.getUUID(),now()));
         ServerPlayer recipient = requester(active);
-        if (recipient == null || self.getFoodData().getFoodLevel() <= 6 || ++ticks > 1800
+        if (board().find(active.key,now())!=active || recipient == null || self.getFoodData().getFoodLevel() <= 6 || ++ticks > 1800
                 || !board().claim(active.key, self.getUUID(), now())) { cancel(); retryAfter = now() + 200; return false; }
         if (count(recipient, active) >= active.count) {
             if (board().complete(active.key, self.getUUID(), now())) {
                 completed++;
                 Chat.say(self, Component.translatable("rlclones.civic.complete", recipient.getGameProfile().getName()), "CIVIC_DONE " + active.key.item());
                 if (recipient instanceof ClonePlayer clone) clone.controller().foodAid().thank(self.getUUID(), 2);
+            }
+            if(!bundled.isEmpty()) {
+                warehouse.reset();active=bundled.removeFirst();fetching=dropped=false;cargo=deliveryTicks=0;bundledDeliveries++;
+                return true;
             }
             cancel(); return false;
         }
@@ -118,7 +130,7 @@ public final class CivicWork {
             if (status == Storage.Status.WORKING) return true;
             cargo = Math.max(0, count(self, active) - beforeFetch);
             warehouse.reset(); fetching = false;
-            if (cargo == 0) { cancel(); retryAfter = now() + 200; return false; }
+            if (cargo == 0 && spare(active) == 0) { cancel(); retryAfter = now() + 200; return false; }
         }
         if (dropped) {
             if (++deliveryTicks > 100) { cancel(); retryAfter = now() + 200; return false; }
@@ -152,8 +164,29 @@ public final class CivicWork {
         dropped = true;
         return true;
     }
+    /** Combine only already-carried, disjoint materials for the same recipient, at most four jobs per trip. */
+    private void bundleCarried() {
+        bundled.clear();
+        if(WorkBoard.FOOD.equals(active.key.item()))return; // never delay an urgent food request
+        for(var job:board().jobs(now())) {
+            if(bundled.size()>=3)break;
+            if(job==active || !job.key.requester().equals(active.key.requester()) || !job.key.dimension().equals(active.key.dimension())
+                    || !job.key.team().equals(active.key.team()) || WorkBoard.FOOD.equals(job.key.item()))continue;
+            var recipient=requester(job);if(recipient==null)continue;
+            int needed=job.count-count(recipient,job);if(needed<=0||spare(job)<needed)continue;
+            boolean overlap=false;
+            for(var stack:self.getInventory().items)if(wanted(job).test(stack)) {
+                if(wanted(active).test(stack)){overlap=true;break;}
+                for(var existing:bundled)if(wanted(existing).test(stack)){overlap=true;break;}
+            }
+            if(!overlap && board().claim(job.key,self.getUUID(),now()))bundled.addLast(job);
+        }
+    }
+
     public void cancel() {
         if (active != null) board().release(active.key, self.getUUID());
+        for(var job:bundled)board().release(job.key,self.getUUID());
+        bundled.clear();
         if (fetching) warehouse.reset();
         active = null; fetching = false;
     }

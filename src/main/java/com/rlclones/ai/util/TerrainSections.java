@@ -44,6 +44,7 @@ public final class TerrainSections {
     private static long builds,hits,pointUpdates,stateReads;
     public record Stats(long builds,long hits,long pointUpdates,long stateReads,int sections) {}
     public static synchronized Stats stats(){return new Stats(builds,hits,pointUpdates,stateReads,CACHE.size());}
+    public static long generation(){return EPOCH.get();}
     public static void invalidate(){EPOCH.incrementAndGet();}
     public static synchronized void clear(){CACHE.clear();invalidate();builds=hits=pointUpdates=stateReads=0;}
 

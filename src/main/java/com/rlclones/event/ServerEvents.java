@@ -117,7 +117,7 @@ public final class ServerEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
-        com.rlclones.ai.util.TerrainSections.clear();CloneManager.shutdown();com.rlclones.ai.TeamDefense.clear();com.rlclones.ai.ArmorCoop.clear();com.rlclones.ai.WorkReservations.clear();
+        com.rlclones.ai.Motor.clearSharedPaths();com.rlclones.ai.util.TerrainSections.clear();CloneManager.shutdown();com.rlclones.ai.TeamDefense.clear();com.rlclones.ai.ArmorCoop.clear();com.rlclones.ai.WorkReservations.clear();
         com.rlclones.ai.Crafting.invalidateRecipes();com.rlclones.ai.Perception.invalidateClassifications();
         DAMAGE_TAKEN.clear();
         SHIELD_CHECKS.clear();
