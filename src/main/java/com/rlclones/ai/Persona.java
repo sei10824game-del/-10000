@@ -336,6 +336,7 @@ public final class Persona {
         if (repairTick(now)) {
             return true;
         }
+        if(now>=projectCooldown&&(now+self.getId())%100==0){var masonry=com.rlclones.ai.Masonry.propose(self);if(masonry!=null){plansStarted++;joinPlan(masonry);Chat.say(self,Component.literal("PLAN"),"PLAN "+masonry.id);return true;}}
         if (now >= projectCooldown && (proposeWall(now) || proposeTower(now))) {
             return true;
         }

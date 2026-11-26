@@ -188,6 +188,11 @@ public final class CloneController {
     private final Survival survival;
     private final RangedBow rangedBow;
     private final CombatGround ground;
+    private final TeamDefense defense;
+    private final ArmorCoop armorCoop;
+    public ArmorCoop armorCoop(){return armorCoop;}
+    public void queueArmorCraft(net.minecraft.world.item.Item result){if(option!=null&&option!=Option.FIGHT&&option!=Option.FLEE)finishOption(false);crafting.forcedTarget=result;armorCoop.commission(result);nextOption=Option.CRAFT;}
+    public TeamDefense defense(){return defense;}
     public CombatGround ground(){return ground;}
     public RangedBow rangedBow(){return rangedBow;}
     public Survival survival(){return survival;}
@@ -269,6 +274,8 @@ public final class CloneController {
         survival = new Survival(self);
         rangedBow = new RangedBow(self,motor);
         ground = new CombatGround(self,motor);
+        defense = new TeamDefense(self,perception,motor);
+        armorCoop = new ArmorCoop(self,motor);
         development = new DevelopmentLearning(self,perception,crafting,storage,lighting,civicWork);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
@@ -667,7 +674,9 @@ public final class CloneController {
         if (((now + self.getId()) % 20) == 7) {
             foodAid.tick(now);
         }
-        boolean threatened = !Senses.threats(perception, self, now, 12).isEmpty();
+        boolean threatened = defense.engage(now)||!Senses.threats(perception, self, now, 12).isEmpty();
+        if(defense.engage(now)&&option!=null&&option!=Option.FIGHT&&option!=Option.FLEE&&!escaping&&!self.isInLava()
+                &&!(self.isInWater()&&self.getAirSupply()<60)&&!(option==Option.EAT&&self.getHealth()<self.getMaxHealth()*.35f))finishOption(false);
         if(survival.active())survival.tick(now,threatened||!Senses.threats(perception,self,now,24).isEmpty());
         if (threatened) {
             lastThreatSeen = now;
@@ -707,6 +716,7 @@ public final class CloneController {
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = spawners.tick(now, threatened); // a spawner in a cave: torches on it, broken if it keeps on spawning
         }
+        if(!itemBusy&&!escaping&&!threatened&&option!=Option.FIGHT&&option!=Option.FLEE)itemBusy=armorCoop.tick(now);
         if (!itemBusy && !escaping && !threatened && (option == Option.REST || option == Option.EXPLORE || option == Option.GATHER_WOOD || option == Option.FOLLOW)) {
             itemBusy = strayBlockReflex(now); // a lone plank left standing on the ground (scaffold, a tower that was never used): taken up again
         }
@@ -2825,6 +2835,8 @@ public final class CloneController {
         huntFish = false;
         if ((mask & Option.FLEE.bit())!=0 && now>=forceFightUntil && survival.retreat(now,Senses.threats(perception,self,now,24).size(),Senses.threatLevel(perception,self,brain(),now)==2)) {
             o=Option.FLEE.ordinal();
+        } else if ((mask&Option.FIGHT.bit())!=0&&defense.engage(now)&&forcedOption!=Option.FLEE&&!com.rlclones.clone.CloneManager.coward()) {
+            o=Option.FIGHT.ordinal();defense.joined();
         } else if (planned != null && (mask & planned.bit()) != 0 && Senses.threats(perception, self, now, 16).isEmpty()) {
             o = planned.ordinal(); // our own plan: the tool before the job
         } else if (forcedOption != null && (mask & forcedOption.bit()) != 0) {
@@ -3387,6 +3399,7 @@ public final class CloneController {
                 brain().knowledge(targetType).encounters++;
             }
         }
+        if(!hunt&&target!=null&&defense.regroup(target,now)){if(action!=null)closeCombatStep(false,false);return false;}
         if(!hunt&&target!=null){
             boolean tactical=ground.tick(target,now);
             if(ground.cancelAction&&action!=null)closeCombatStep(false,false);
@@ -4219,7 +4232,12 @@ public final class CloneController {
         motor.lookAngles(yaw, (float) -Math.toDegrees(angle));
     }
 
+    private void failPillar(){actionDone=true;stepReward-=1.5f;perch.blockedHere(now(),"combat pillar blocked");motor.cancelJump();}
+
     private void pillar() {
+        if(!pillarPlaced&&(perch.blocked(now())||!Config.get(Config.ALLOW_BLOCK_PLACING,true)
+                ||!PillarSpace.clear(self,Math.max(0,pillarBase.getY()+1.25-self.getY())))) {failPillar();return;}
+        motor.stop();
         motor.lookAngles(self.getYRot(), 90f);
         if (!pillarPlaced) {
             if (actionTicks <= 1 && self.onGround()) {
@@ -4229,12 +4247,10 @@ public final class CloneController {
                 if (!Equipment.isPillarBlock(self.getMainHandItem())) {
                     Equipment.select(self, Equipment.pillarBlockSlot(self));
                 }
-                pillarPlaced = motor.useOnTopFace(pillarBase.below());
-                if (!pillarPlaced) {
-                    actionDone = true;
-                }
+                pillarPlaced = motor.useOnTopFace(pillarBase.below())&&!self.level().getBlockState(pillarBase).getCollisionShape(self.level(),pillarBase).isEmpty();
+                if (!pillarPlaced) {failPillar();}
             } else if (actionTicks > 10) {
-                actionDone = true;
+                failPillar();
             }
         } else if (self.onGround()) {
             actionDone = true;
@@ -4401,7 +4417,7 @@ public final class CloneController {
         // (running away we look ahead, not back: what was right behind us a few seconds ago still is)
         boolean close = perception.remembered().stream().anyMatch(t -> now - t.lastSeen < 200 && t.alive() && Senses.isHostileTo(t.entity, self)
                 && Senses.gap(self, t.entity) < 4);
-        if (close && perch.canStart(now) && (fleeStuck > 0 || self.getHealth() < self.getMaxHealth() * 0.5f || self.getRandom().nextInt(40) == 0)) {
+        if (close && (fleeStuck > 0 || self.getHealth() < self.getMaxHealth() * 0.5f || self.getRandom().nextInt(40) == 0) && perch.canStart(now)) {
             survival.cancel();
             perch.start(); // two blocks up, out of reach
             return true;
@@ -5582,6 +5598,8 @@ public final class CloneController {
         out.add(safeTrials.report());
         out.add(survival.report());
         out.add(ground.report());
+        out.add(defense.report());
+        out.add(armorCoop.report());
         out.add("遠距離の射線確保="+rangedBow.repositioned+" 軌道保留="+rangedBow.blocked);
         out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));

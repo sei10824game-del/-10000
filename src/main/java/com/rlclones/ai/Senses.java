@@ -77,6 +77,7 @@ public final class Senses {
         if (com.rlclones.clone.CloneMobs.playerSide(m)) {
             return false; // a clone mob (our own body, or another) is on our side
         }
+        if(agent instanceof com.rlclones.clone.ClonePlayer c&&c.controller().defense().marked(e,agent.level().getGameTime()))return true;
         if (m.getTarget() instanceof Player || com.rlclones.clone.CloneMobs.playerSide(m.getTarget())) {
             return true;
         }
@@ -187,8 +188,8 @@ public final class Senses {
                 && Equipment.bestWeaponSlot(agent) < 0) {
             mask &= ~(CombatAction.ATTACK.bit() | CombatAction.CRIT_ATTACK.bit() | CombatAction.SPRINT_ATTACK.bit()); // a bow and nothing else: no beating with it - shoot, or step back
         }
-        boolean headroom = agent.level().getBlockState(agent.blockPosition().above(2)).getCollisionShape(agent.level(), agent.blockPosition().above(2)).isEmpty();
-        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(agent) < 0 || !agent.onGround() || !headroom) {
+        boolean blocked=agent instanceof com.rlclones.clone.ClonePlayer c&&c.controller().perch().blocked(agent.level().getGameTime());
+        if (!Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(agent) < 0 || !agent.onGround() || blocked||!PillarSpace.clear(agent,1.25)) {
             mask &= ~CombatAction.PILLAR.bit();
         }
         return mask;

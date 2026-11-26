@@ -140,6 +140,8 @@ public final class Motor {
     /** No hopping at walls this tick (fleeing into a dead end: jumping at it again helps nothing). */
     private boolean noHop;
 
+    public void cancelJump(){jump=false;self.setJumping(false);noHop=true;}
+
     public void holdJumps() {
         noHop = true;
     }

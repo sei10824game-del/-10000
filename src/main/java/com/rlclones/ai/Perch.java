@@ -30,6 +30,11 @@ public final class Perch {
     private final List<BlockPos> placed = new ArrayList<>();
     private int ticks;
     private int calm;
+    private long blockedUntil;private BlockPos blockedAt;private int progressAt;private double progressY;private float startHealth;
+    public int aborted;
+    public boolean blocked(long now){return blockedAt!=null&&now<blockedUntil&&self.blockPosition().distSqr(blockedAt)<9;}
+    public void blockedHere(long now,String why){blockedAt=self.blockPosition().immutable();blockedUntil=now+120;debug=why;}
+    private void abort(String why){aborted++;blockedHere(self.level().getGameTime(),why);motor.stop();motor.cancelJump();stage=null;hopFrom=null;placed.clear();Equipment.manage(self,true);}
 
     public int perches;
     public int blocksRecovered;
@@ -68,24 +73,24 @@ public final class Perch {
 
     /** Worth climbing: melee chasers only, two blocks to spare and room above the head. */
     public boolean canStart(long now) {
-        if (busy() || !self.onGround() || self.isInWater() || self.isPassenger() || blocks() < 2 || !Config.get(Config.ALLOW_BLOCK_PLACING, true)) {
+        if (busy() || blocked(now) || !self.onGround() || self.isInWater() || self.isPassenger() || blocks() < 2 || !Config.get(Config.ALLOW_BLOCK_PLACING, true)) {
             return false;
         }
         List<Perception.Seen> threats = Senses.threats(perception, self, now, 8);
         if (threats.isEmpty() || threats.stream().anyMatch(t -> ranged(t.entity) || t.entity instanceof net.minecraft.world.entity.player.Player)) {
             return false; // archers and players would just shoot / climb after us
         }
-        BlockPos feet = self.blockPosition();
-        return free(feet.above(2)) && free(feet.above(3)) && free(feet.above(4));
+        return PillarSpace.clear(self,2.25);
     }
 
     public void start() {
+        if(!canStart(self.level().getGameTime()))return;
         stage = Stage.CLIMB;
         base = self.blockPosition();
         placed.clear();
         ticks = 0;
         calm = 0;
-        highest = self.getY();
+        highest = progressY = self.getY();progressAt=0;startHealth=self.getHealth();hopFrom=null;
         perches++;
         Equipment.select(self, Equipment.pillarBlockSlot(self));
     }
@@ -110,18 +115,21 @@ public final class Perch {
 
     private void climb() {
         double up = self.getY() - base.getY();
+        if(self.getY()>progressY+.15){progressY=self.getY();progressAt=ticks;}
+        if(!Config.get(Config.ALLOW_BLOCK_PLACING,true)||!PillarSpace.clear(self,Math.max(0,base.getY()+2.25-self.getY()))){abort("perch blocked overhead");return;}
+        if(ticks-progressAt>30||self.getHealth()<startHealth-Math.max(2,self.getMaxHealth()*.15f)){abort("perch stalled or hurt");return;}
         if (self.onGround() && up >= 1.95) {
             stage = Stage.TOP; // two blocks up
             ticks = 0;
             return;
         }
         if (ticks > 120 || blocks() == 0) {
-            stage = placed.isEmpty() ? null : Stage.DESCEND; // could not build: get down again
-            return;
+            abort("perch materials or time exhausted");return;
         }
         motor.lookAngles(self.getYRot(), 90f);
         motor.stop();
         if (self.onGround()) {
+            if(hopFrom!=null){abort("perch jump made no step");return;}
             motor.jump(); // hop...
             hopFrom = self.blockPosition();
             return;
@@ -131,9 +139,9 @@ public final class Perch {
             if (!Equipment.isPillarBlock(self.getMainHandItem())) {
                 Equipment.select(self, Equipment.pillarBlockSlot(self));
             }
-            if (motor.useOnTopFace(hopFrom.below())) {
-                placed.add(hopFrom.immutable());
-            }
+            if (motor.useOnTopFace(hopFrom.below())&&!free(hopFrom)&&self.level().getBlockState(hopFrom).isFaceSturdy(self.level(),hopFrom,net.minecraft.core.Direction.UP)) {
+                placed.add(hopFrom.immutable());progressAt=ticks;
+            }else{abort("perch placement rejected");return;}
             hopFrom = null;
         }
     }
@@ -191,6 +199,6 @@ public final class Perch {
 
     public void reset() {
         stage = null;
-        placed.clear();
+        placed.clear();hopFrom=null;
     }
 }

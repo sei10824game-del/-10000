@@ -94,10 +94,13 @@ public final class ServerEvents {
             @Override
             protected void apply(Object prepared, net.minecraft.server.packs.resources.ResourceManager resources,
                                  net.minecraft.util.profiling.ProfilerFiller profiler) {
-                com.rlclones.ai.Crafting.invalidateRecipes();
+                com.rlclones.ai.Crafting.invalidateRecipes();com.rlclones.ai.Perception.invalidateClassifications();
             }
         });
     }
+
+    @SubscribeEvent
+    public static void onTagsUpdated(net.minecraftforge.event.TagsUpdatedEvent event){Perception.invalidateClassifications();}
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
@@ -114,8 +117,8 @@ public final class ServerEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
-        CloneManager.shutdown();
-        com.rlclones.ai.Crafting.invalidateRecipes();
+        CloneManager.shutdown();com.rlclones.ai.TeamDefense.clear();com.rlclones.ai.ArmorCoop.clear();
+        com.rlclones.ai.Crafting.invalidateRecipes();com.rlclones.ai.Perception.invalidateClassifications();
         DAMAGE_TAKEN.clear();
         SHIELD_CHECKS.clear();
     }
@@ -278,6 +281,7 @@ public final class ServerEvents {
         if (Senses.isAgent(victim)) {
             AgentEvents.record(victim.getUUID(), now, AgentEvents.Kind.HURT, amount, attacker == null ? -1 : attacker.getId(), 0);
         }
+        if(victim instanceof ClonePlayer attacked)com.rlclones.ai.TeamDefense.attacked(attacked,attacker,now,amount);
         if (victim instanceof ClonePlayer cp) {cp.controller().survival().damage(attacker instanceof LivingEntity living?living:null,amount,now);cp.controller().ground().received(amount);}
         if (victim instanceof ClonePlayer cp && attacker == null && event.getSource().getDirectEntity() == null) {
             cp.controller().onEnvironmentDamage(event.getSource());

@@ -116,7 +116,7 @@ public final class PlanWork {
                 }
             }
         } else {
-            slot = Equipment.pillarBlockSlot(self);
+            slot = plan.kind.startsWith("STONE_")?Masonry.slot(self):Equipment.pillarBlockSlot(self);
         }
         if (slot < 0) {
             debug += " nomaterial";

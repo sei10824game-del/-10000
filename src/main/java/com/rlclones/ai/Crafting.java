@@ -729,6 +729,13 @@ public final class Crafting {
         return contents.canCraft(r, null);
     }
 
+    /** Real crafting recipes usable for cooperative armor production; no hard-coded material IDs. */
+    public static List<CraftingRecipe> armorRecipes(ServerPlayer receiver){
+        return index(receiver).stream().filter(e->e.result().getItem() instanceof ArmorItem&&(!(receiver instanceof com.rlclones.clone.ClonePlayer c)||!c.controller().crafting().blocked(e.recipe()))&&armorImproves(receiver,e.result())&&e.recipe().canCraftInDimensions(3,3))
+                .sorted(java.util.Comparator.<Entry>comparingInt(e->(int)e.recipe().getIngredients().stream().filter(g->!g.isEmpty()).count()).thenComparing(e->e.recipe().getId().toString())).map(Entry::recipe).toList();
+    }
+    public static boolean armorWorkshop(Player p){return count(p,Items.CRAFTING_TABLE)>0||tableNearby(p)||woodUnits(p)>=4;}
+
     private record Entry(CraftingRecipe recipe, ItemStack result) {
     }
 
@@ -839,7 +846,7 @@ public final class Crafting {
         if (satisfied(p, forced)) {
             forced = null;
         }
-        if (forced instanceof PickaxeItem) {
+        if (forced instanceof PickaxeItem || forced instanceof ArmorItem) {
             wanted = List.of(forced); // a pickaxe for the mining at hand: nothing else may eat up its materials
         } else if (furnaceWanted(p)) {
             // raw meat / ore in the bag and the stone for a furnace: the furnace comes before anything else made of stone
@@ -860,7 +867,7 @@ public final class Crafting {
                 }
             }
         }
-        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
+        if (!(forced instanceof ArmorItem) && p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
             // a boat first: keep the wood for it (5 planks + a table) instead of spending it on other things
             for (Item boat : BOATS) {
                 for (CraftingRecipe r : recipesFor(p, s -> s.is(boat))) {

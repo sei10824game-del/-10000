@@ -119,7 +119,8 @@ public final class Builder {
                 continue;
             }
             int score;
-            if (s.is(ItemTags.LOGS)) {
+            if(Masonry.material(s.getItem())){score=12;
+            } else if (s.is(ItemTags.LOGS)) {
                 score = cornerPost ? 10 : 2;
             } else if (s.is(ItemTags.PLANKS)) {
                 score = cornerPost ? 5 : 9;

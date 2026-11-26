@@ -6360,7 +6360,7 @@ public final class CloneGameTests {
             inv.add(new ItemStack(it, 3)); // fill the rest: few slots free
         }
         c.controller().stairs().dropJunk();
-        h.assertTrue(inv.countItem(Items.GRANITE) == 0 && inv.countItem(Items.TUFF) == 0 && inv.countItem(Items.DIRT) == 0, "granite, tuff and dirt thrown away");
+        h.assertTrue(inv.countItem(Items.GRANITE) == 40 && inv.countItem(Items.TUFF) == 40 && inv.countItem(Items.DIRT) == 0, "building stone is retained while surplus dirt is discarded");
         h.assertTrue(inv.countItem(Items.COBBLESTONE) == 128 && inv.countItem(Items.RAW_IRON) == 7 && inv.countItem(Items.STONE_PICKAXE) == 1,
                 "but the cobblestone is kept (two stacks) and the iron and the pickaxe (cobble " + inv.countItem(Items.COBBLESTONE) + ")");
         finish(h, c);

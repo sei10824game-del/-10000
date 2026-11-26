@@ -432,14 +432,15 @@ public final class Perception {
         return kind;
     }
 
-    private static long treeTick = Long.MIN_VALUE;
+    private static long treeTick = Long.MIN_VALUE,treeGeneration=Long.MIN_VALUE;
     private static Level treeLevel;
     private static final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap TREE_LOGS = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
 
     /** The same log is looked at by every clone in a grove, every time: worked out once a tick (it depends on the world only, not on who asks). */
     private static boolean isTreeLogOnce(Level level, BlockPos pos) {
         long gt = level.getGameTime();
-        if (gt != treeTick || level != treeLevel) {
+        if (gt != treeTick || level != treeLevel||treeGeneration!=CLASSIFICATION_GENERATION.get()) {
+            treeGeneration=CLASSIFICATION_GENERATION.get();
             TREE_LOGS.clear();
             treeTick = gt;
             treeLevel = level;
@@ -475,7 +476,19 @@ public final class Perception {
                 || b == net.minecraft.world.level.block.Blocks.MELON || b == net.minecraft.world.level.block.Blocks.HAY_BLOCK;
     }
 
-    public static BlockKind classify(BlockState state) {
+    private static final java.util.concurrent.atomic.AtomicLong CLASSIFICATION_GENERATION=new java.util.concurrent.atomic.AtomicLong();
+    private static final class KindCache {long generation=-1,hits,misses;final java.util.IdentityHashMap<BlockState,java.util.Optional<BlockKind>> values=new java.util.IdentityHashMap<>();}
+    private static final ThreadLocal<KindCache> KINDS=ThreadLocal.withInitial(KindCache::new);
+    public static void invalidateClassifications(){CLASSIFICATION_GENERATION.incrementAndGet();}
+    public static long classificationHits(){return KINDS.get().hits;}
+    public static long classificationMisses(){return KINDS.get().misses;}
+    /** Reuse immutable state classifications; position-dependent trees, hazards and discoveries remain live. */
+    public static BlockKind classify(BlockState state){
+        KindCache cache=KINDS.get();long generation=CLASSIFICATION_GENERATION.get();if(cache.generation!=generation){cache.values.clear();cache.generation=generation;}
+        var known=cache.values.get(state);if(known!=null){cache.hits++;return known.orElse(null);}
+        BlockKind result=classifyUncached(state);if(cache.values.size()>=512)cache.values.clear();cache.values.put(state,java.util.Optional.ofNullable(result));cache.misses++;return result;
+    }
+    public static BlockKind classifyUncached(BlockState state) {
         if (state.is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE)) {
             return BlockKind.TABLE;
         }
