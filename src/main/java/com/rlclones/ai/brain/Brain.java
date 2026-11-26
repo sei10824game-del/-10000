@@ -33,6 +33,7 @@ public final class Brain {
     private final ReplayBuffer replay = new ReplayBuffer(4096);
     private final Random random = new Random();
 
+    public final RecoveryLearning ground = new RecoveryLearning();
     public final RecoveryLearning bowAim = new RecoveryLearning();
     public final RecoveryLearning retreat = new RecoveryLearning();
     public final RecoveryLearning recovery = new RecoveryLearning();
@@ -546,6 +547,7 @@ public final class Brain {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("version", 1);
+        tag.putByteArray("ground",ground.save());
         tag.putByteArray("bowAim",bowAim.save());
         tag.putByteArray("retreat", retreat.save());
         tag.putByteArray("recovery", recovery.save());
@@ -630,6 +632,7 @@ public final class Brain {
 
     public static Brain load(CompoundTag tag) {
         Brain b = new Brain();
+        b.ground.merge(RecoveryLearning.load(tag.getByteArray("ground")));
         b.bowAim.merge(RecoveryLearning.load(tag.getByteArray("bowAim")));
         b.retreat.merge(RecoveryLearning.load(tag.getByteArray("retreat")));
         b.recovery.merge(RecoveryLearning.load(tag.getByteArray("recovery")));
@@ -751,6 +754,7 @@ public final class Brain {
         if (b == this) {
             return;
         }
+        ground.merge(b.ground);
         bowAim.merge(b.bowAim);
         retreat.merge(b.retreat);
         recovery.merge(b.recovery);
@@ -829,6 +833,7 @@ public final class Brain {
     public List<String> summary() {
         List<String> lines = new ArrayList<>();
         lines.add(itemTrials.report());
+        lines.add(ground.report("戦闘の地形",new String[]{"遮蔽","高所","狭所","開地"}));
         lines.add(bowAim.report("弓の偏差射撃",new String[]{"現在位置","控えめ","標準","大きめ"}));
         lines.add(retreat.report("撤退の生還学習",new String[]{"離脱","遮蔽","合流","高所"}));
         lines.add(recovery.report()+" "+evidence.report(0));

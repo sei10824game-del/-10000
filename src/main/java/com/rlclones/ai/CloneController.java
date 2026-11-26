@@ -187,6 +187,8 @@ public final class CloneController {
     private final DevelopmentLearning development;
     private final Survival survival;
     private final RangedBow rangedBow;
+    private final CombatGround ground;
+    public CombatGround ground(){return ground;}
     public RangedBow rangedBow(){return rangedBow;}
     public Survival survival(){return survival;}
     public void prepareMiningReturn(String reason){
@@ -266,6 +268,7 @@ public final class CloneController {
         safeTrials = new SafeItemTrials(self,perception);
         survival = new Survival(self);
         rangedBow = new RangedBow(self,motor);
+        ground = new CombatGround(self,motor);
         development = new DevelopmentLearning(self,perception,crafting,storage,lighting,civicWork);
         enemyLastAttack.defaultReturnValue(Long.MIN_VALUE);
         enemyLastShot.defaultReturnValue(Long.MIN_VALUE);
@@ -2074,6 +2077,7 @@ public final class CloneController {
     // ------------------------------------------------------------------ own reward signals
 
     public void onDealtDamage(LivingEntity victim, float amount) {
+        ground.dealt(victim,amount);
         if(Senses.isHostileTo(victim,self))survival.dealt(amount,now());
         attacks.onDealt(victim, amount);
         if (victim != self && !Senses.isHostileTo(victim, self) && !Senses.isFoodAnimal(victim) && victim instanceof Player) {
@@ -2447,6 +2451,7 @@ public final class CloneController {
     }
 
     public void onDeath(DamageSource source) {
+        ground.end(true);
         survival.died();
         if (source.getEntity() != null && (openAlarm != null || answering != null || now() - lastAlarm < 1200)) {
             helpBonus(+1); // died in a fight it had called for help in (or came to help in): the call asked for too few
@@ -2951,6 +2956,7 @@ public final class CloneController {
         development.finish(died,completed);
         if(option==Option.SHAFT)shafts.pause();
         if(option==Option.FLEE)survival.cancel();
+        if(option==Option.FIGHT)ground.end(died);
         if (died) oreWorkLearning.failed(); else oreWorkLearning.cancel();
         if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
         endedOption = option.name();
@@ -3171,7 +3177,7 @@ public final class CloneController {
             return false;
         }
         Perception.Seen s = perception.get(e);
-        if (s == null || now - s.lastSeen > (e == target && (vantage != null || vantageBase != null) ? 200 : 60)) {
+        if (s == null || now - s.lastSeen > (e == target && (vantage != null || vantageBase != null || ground.active()) ? 200 : 60)) {
             return false;
         }
         return hunt ? Senses.isFoodAnimal(e) : Senses.isHostileTo(e, self);
@@ -3272,6 +3278,7 @@ public final class CloneController {
             lastFightId = target.getId();
             lastFightAt = now;
             double d = self.distanceTo(target);
+            if(ground.active()){fightBestAt=now;fightBlocked=0;fightSecond=null;}
             if (d < fightBest - 1.0) {
                 fightBest = d;
                 fightBestAt = now;
@@ -3380,6 +3387,11 @@ public final class CloneController {
                 brain().knowledge(targetType).encounters++;
             }
         }
+        if(!hunt&&target!=null){
+            boolean tactical=ground.tick(target,now);
+            if(ground.cancelAction&&action!=null)closeCombatStep(false,false);
+            if(tactical)return false;
+        }
         combatTick();
         return false;
     }
@@ -3393,6 +3405,7 @@ public final class CloneController {
             EnemyKnowledge k = brain().knowledge(targetType);
             int s = Senses.combatState(self, target, k, sinceEnemyAttack(target), Senses.crowd(perception, self));
             int mask = Senses.combatMask(self) & ~uselessActions();
+            if(ground.active())mask&=~CombatAction.POSITION.bit();
             holdStreak = action == CombatAction.HOLD ? holdStreak + 1 : 0;
             if (holdStreak >= 2 && forcedAction != CombatAction.HOLD && (mask & ~CombatAction.HOLD.bit()) != 0) {
                 mask &= ~CombatAction.HOLD.bit(); // looked on long enough: do something (strike, step, shoot, back off)
@@ -3413,7 +3426,8 @@ public final class CloneController {
                     }
                 }
             }
-            CombatAction pick = free != null && (mask & free.bit()) != 0 ? free : forcedAction;
+            CombatAction pick = ground.exposed()&&forcedAction==null&&(mask&CombatAction.SHOOT.bit())!=0?CombatAction.SHOOT
+                    :free != null && (mask & free.bit()) != 0 ? free : forcedAction;
             int a = pick != null && (mask & pick.bit()) != 0 ? pick.ordinal() : brain().chooseCombat(targetType, s, mask);
             if (a < 0) {
                 return;
@@ -5567,6 +5581,7 @@ public final class CloneController {
         out.add(development.report());
         out.add(safeTrials.report());
         out.add(survival.report());
+        out.add(ground.report());
         out.add("遠距離の射線確保="+rangedBow.repositioned+" 軌道保留="+rangedBow.blocked);
         out.add("campfire: " + campfire.report() + "; stair repairs queued: " + motor.repairs.size());
         out.add("stairs: " + stairs.debug + (stairs.isAscending() ? " [ascending]" : "") + "; need " + Progression.describe(self));

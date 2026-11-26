@@ -278,7 +278,7 @@ public final class ServerEvents {
         if (Senses.isAgent(victim)) {
             AgentEvents.record(victim.getUUID(), now, AgentEvents.Kind.HURT, amount, attacker == null ? -1 : attacker.getId(), 0);
         }
-        if (victim instanceof ClonePlayer cp) cp.controller().survival().damage(attacker instanceof LivingEntity living?living:null,amount,now);
+        if (victim instanceof ClonePlayer cp) {cp.controller().survival().damage(attacker instanceof LivingEntity living?living:null,amount,now);cp.controller().ground().received(amount);}
         if (victim instanceof ClonePlayer cp && attacker == null && event.getSource().getDirectEntity() == null) {
             cp.controller().onEnvironmentDamage(event.getSource());
         }
@@ -373,6 +373,7 @@ public final class ServerEvents {
         }
         Entity owner = projectile.getOwner();
         if(owner instanceof ClonePlayer clone&&projectile instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow)clone.controller().rangedBow().launched(arrow,owner.level().getGameTime());
+        if(owner instanceof ClonePlayer clone)clone.controller().ground().fired(owner.level().getGameTime());
         if (owner instanceof LivingEntity) {
             com.rlclones.ai.AttackTells.attacked(owner, true); // a shot (a skeleton's arrow, a rival clone's bow)
         }
@@ -437,6 +438,7 @@ public final class ServerEvents {
         if (proj.level().isClientSide || event.isCanceled()) {
             return;
         }
+        if(proj.getOwner() instanceof ClonePlayer shooter&&event.getRayTraceResult() instanceof net.minecraft.world.phys.EntityHitResult contact&&Senses.isAllyOf(contact.getEntity(),shooter))shooter.controller().ground().friendly();
         if(proj.getOwner() instanceof ClonePlayer shooter&&proj instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow)shooter.controller().rangedBow().impact(arrow,proj.level().getGameTime(),event.getRayTraceResult());
         if (proj.getOwner() instanceof ClonePlayer cp && cp.controller() != null
                 && event.getRayTraceResult() instanceof net.minecraft.world.phys.EntityHitResult hit && hit.getEntity() instanceof LivingEntity victim) {

@@ -77,7 +77,7 @@ public final class Terrain {
             for (int dz = -RANGE; dz <= RANGE; dz++) {
                 for (int dy = -1; dy <= 1; dy++) {
                     BlockPos p = here.offset(dx, dy, dz);
-                    if (!solid(l, p.below()) || solid(l, p) || solid(l, p.above()) || l.getFluidState(p).is(FluidTags.WATER) || hazard(l, p)) {
+                    if (self instanceof com.rlclones.clone.ClonePlayer c && !c.controller().ground().safe(p) || !solid(l, p.below()) || solid(l, p) || solid(l, p.above()) || l.getFluidState(p).is(FluidTags.WATER) || hazard(l, p)) {
                         continue;
                     }
                     double s = score(l, p, enemy) - 0.2 * Math.sqrt(p.distSqr(here));
@@ -88,6 +88,7 @@ public final class Terrain {
                 }
             }
         }
+        if(best!=null&&self instanceof com.rlclones.clone.ClonePlayer c&&c.controller().motor().pathTo(net.minecraft.world.phys.Vec3.atBottomCenterOf(best))==null)return null;
         return best;
     }
 }
