@@ -4671,7 +4671,7 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 100, batch = "r9sight")
     public static void seesMuchFurtherThanBefore(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
-        h.assertTrue(c.controller().perception().maxRange() >= 96, "view distance raised: " + c.controller().perception().maxRange());
+        h.assertTrue(c.controller().perception().maxRange() >= 128, "view distance raised: " + c.controller().perception().maxRange());
         BlockPos base = h.absolutePos(new BlockPos(7, 2, 7));
         // a clear line straight up for one tick only (put back at once: no water or lava from above runs down it)
         net.minecraft.world.level.block.state.BlockState[] was = new net.minecraft.world.level.block.state.BlockState[76];

@@ -49,4 +49,49 @@ public final class CommunityResourcesTests {
     public static void buildingStonesAreNotDiscardedAndThreeBlueprintsAreDistinct(GameTestHelper h){arena(h);var c=actor(h,5,7);for(int i=0;i<36;i++)c.getInventory().setItem(i,new ItemStack(Items.GRAVEL,64));c.getInventory().setItem(0,new ItemStack(Items.ANDESITE,64));c.getInventory().setItem(1,new ItemStack(Items.GRANITE,64));c.getInventory().setItem(2,new ItemStack(Items.TUFF,64));c.controller().stairs().dropJunk();Storage.discardWorthless(c);h.assertTrue(c.getInventory().countItem(Items.ANDESITE)==64&&c.getInventory().countItem(Items.GRANITE)==64&&c.getInventory().countItem(Items.TUFF)==64,"architectural stone retained rather than deleted");h.assertTrue(Masonry.blueprint("STONE_PATH",BlockPos.ZERO).size()==14&&Masonry.blueprint("STONE_PLAZA",BlockPos.ZERO).size()==25&&Masonry.blueprint("STONE_SHELTER",BlockPos.ZERO).size()==17,"path, plaza and covered shelter are real distinct plans");h.succeed();}
     @GameTest(template="arena",batch="masonry-real",timeoutTicks=650)
     public static void surplusAndesiteBuildsARealSharedWalkway(GameTestHelper h){arena(h);var c=actor(h,5,5);c.getInventory().setItem(0,new ItemStack(Items.ANDESITE,64));var b=Bases.get(h.getLevel().getServer());oldPlans=new ArrayList<>(b.plans);oldBases=new ArrayList<>(b.bases);oldProjects=new HashSet<>(b.projects);b.plans.clear();b.bases.clear();b.projects.clear();b.add(h.getLevel().dimension(),c.blockPosition(),"masonry test");var plan=Masonry.propose(c);h.assertTrue(plan!=null&&plan.kind.equals("STONE_PATH"),"valid real shared plan created");var work=new PlanWork(c,c.controller().motor());work.begin(plan);h.onEachTick(()->{work.tick();c.controller().motor().tick();});h.succeedWhen(()->{h.assertTrue(plan.blocks.stream().allMatch(p->h.getLevel().getBlockState(p).is(Blocks.ANDESITE)),"all fourteen real andesite blocks placed: "+work.debug);h.assertTrue(c.getInventory().countItem(Items.ANDESITE)==50&&work.placed==14,"building consumes exactly fourteen actual blocks");});}
+    @GameTest(template="arena",batch="range-eight",timeoutTicks=40)
+    public static void eightChunkVisionRetainsTurningOcclusionAndUniqueCandidates(GameTestHelper h) {
+        arena(h);
+        var c=actor(h,7,7);
+        var perception=c.controller().perception();
+        h.assertTrue(perception.maxRange()==128.0,"default eight chunk radius");
+        var base=c.blockPosition();
+        var saved=new HashMap<BlockPos,BlockState>();
+        var entities=new ArrayList<net.minecraft.world.entity.Entity>();
+        try {
+            for(int y=2;y<=134;y++) {
+                var pos=base.above(y);saved.put(pos,h.getLevel().getBlockState(pos));
+                h.getLevel().setBlock(pos,Blocks.AIR.defaultBlockState(),2);
+            }
+            var far=new net.minecraft.world.entity.decoration.ArmorStand(h.getLevel(),c.getX(),c.getY()+120,c.getZ());
+            far.setNoGravity(true);h.getLevel().addFreshEntity(far);entities.add(far);
+            var beyond=new net.minecraft.world.entity.decoration.ArmorStand(h.getLevel(),c.getX(),c.getY()+130,c.getZ());
+            beyond.setNoGravity(true);h.getLevel().addFreshEntity(beyond);entities.add(beyond);
+            // More than the 64 LOS budget behind the observer must not hide the far target.
+            for(int i=0;i<70;i++) {
+                var item=new net.minecraft.world.entity.item.ItemEntity(h.getLevel(),c.getX(),c.getY()+.1,c.getZ(),new ItemStack(Items.STICK));
+                h.getLevel().addFreshEntity(item);entities.add(item);
+            }
+            c.setXRot(-90);long now=h.getLevel().getGameTime();
+            perception.update(now);
+            h.assertTrue(perception.canSee(far),"120 blocks visible");
+            h.assertTrue(!perception.canSee(beyond),"130 blocks out of range");
+            h.assertTrue(perception.visible().stream().anyMatch(v->v.entity==far),"off-screen crowd cannot consume LOS slots");
+            c.setXRot(90);perception.update(now+1);
+            h.assertTrue(perception.visible().stream().noneMatch(v->v.entity==far),"looking away hides distant target");
+            c.setXRot(-90);perception.update(now+2);perception.update(now+3);
+            h.assertTrue(perception.visible().stream().anyMatch(v->v.entity==far),"turning restores far candidate on cached scan");
+            far.setPos(c.getX(),c.getY()+10,c.getZ());perception.update(now+4);perception.update(now+5);
+            h.assertTrue(perception.visible().stream().filter(v->v.entity==far).count()==1,"near/far candidate remains unique");
+            var wall=base.above(5);h.getLevel().setBlock(wall,Blocks.STONE.defaultBlockState(),2);
+            c.setPos(c.getX()+0.01,c.getY(),c.getZ());
+            h.assertTrue(!perception.canSee(far),"new wall blocks visibility after observer movement");
+        } finally {
+            for(var e:entities)e.discard();
+            saved.forEach((pos,state)->h.getLevel().setBlock(pos,state,2));
+            cleanup(h.getLevel());
+        }
+        h.succeed();
+    }
+
 }

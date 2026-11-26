@@ -140,13 +140,14 @@ public final class Perception {
         double reach = full ? range : NEAR;
         java.util.function.Predicate<Entity> wanted = e -> e.isAlive() && !e.isSpectator()
                 && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
-                || isRetrievable(e));
+                || isRetrievable(e))
+                && e.getBoundingBox().getCenter().distanceToSqr(eye) <= reach * reach;
         candidates.clear();
         if (full) farSeen.clear();
         for (Entity e : level.getEntities(self, self.getBoundingBox().inflate(reach), wanted)) {
             double centerDistance = e.getBoundingBox().getCenter().distanceToSqr(eye);
             if (centerDistance <= reach * reach) {
-                candidates.offer(e, e.distanceToSqr(eye));
+                offerInView(e, eye);
                 if (full && centerDistance > NEAR * NEAR) {
                     farSeen.add(e);
                 }
@@ -154,8 +155,9 @@ public final class Perception {
         }
         if (!full) {
             for (Entity e : farSeen) {
-                if (e.isAlive() && e.getBoundingBox().getCenter().distanceToSqr(eye) <= range2) {
-                    candidates.offer(e, e.distanceToSqr(eye));
+                double distance2 = e.getBoundingBox().getCenter().distanceToSqr(eye);
+                if (e.isAlive() && e.level() == level && distance2 > NEAR * NEAR && distance2 <= range2) {
+                    offerInView(e, eye);
                 }
             }
         }
@@ -209,6 +211,17 @@ public final class Perception {
         Prof.add(Prof.P_BLOCKS, pb);
     }
 
+    /** Reject off-screen candidates before the bounded LOS budget; keep farSeen unfiltered
+     * so turning the head still finds distant entities between full queries. */
+    private void offerInView(Entity e, Vec3 eye) {
+        AABB box = e.getBoundingBox();
+        Vec3 center = box.getCenter();
+        double radius = Math.max(box.getXsize(), box.getYsize()) * 0.5;
+        if (inFov(eye, center, radius, eye.distanceTo(center))) {
+            candidates.offer(e, e.distanceToSqr(eye));
+        }
+    }
+
     private static final double NEAR = 24.0;
     private static final int FAR_EVERY = 2;
     private int updates;
@@ -232,7 +245,7 @@ public final class Perception {
         if (self.hasEffect(MobEffects.DARKNESS)) {
             return 10.0;
         }
-        return Config.get(Config.VIEW_DISTANCE, 96.0);
+        return Config.get(Config.VIEW_DISTANCE, 128.0);
     }
 
     /** Instant check: can this clone see the entity right now? */
