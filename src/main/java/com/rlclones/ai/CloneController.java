@@ -123,6 +123,10 @@ public final class CloneController {
     public Option forcedOption;
     /** Cornered while fleeing: fight it out until then. */
     private long forceFightUntil = Long.MIN_VALUE;
+    private final CorneredStand corneredStand=new CorneredStand();
+    private boolean reachableRetreat;
+    private long corneredRecheck;
+    private final com.rlclones.ai.util.UnreachableMemory corneredTerrain=new com.rlclones.ai.util.UnreachableMemory();
     public int corneredFights;
     /** Recent time spent swimming (decays); lots of it makes a boat worth crafting. */
     private int swimTicks;
@@ -2826,7 +2830,7 @@ public final class CloneController {
             mask &= ~idle; // those are for when there is nothing else to do
         }
         for (Option co : CHURN_OPTIONS) {
-            if (now < optionCooldown[co.ordinal()] && co != forcedOption) {
+            if (now < optionCooldown[co.ordinal()] && co != forcedOption && !(co==Option.FIGHT && now<forceFightUntil)) {
                 mask &= ~co.bit(); // it keeps ending at once: not now
             }
         }
@@ -2835,7 +2839,9 @@ public final class CloneController {
         Option planned = nextOption;
         nextOption = null;
         huntFish = false;
-        if ((mask & Option.FLEE.bit())!=0 && now>=forceFightUntil && survival.retreat(now,Senses.threats(perception,self,now,24).size(),Senses.threatLevel(perception,self,brain(),now)==2)) {
+        if(now<forceFightUntil && (mask&Option.FIGHT.bit())!=0) {
+            o=Option.FIGHT.ordinal();
+        } else if ((mask & Option.FLEE.bit())!=0 && now>=forceFightUntil && survival.retreat(now,Senses.threats(perception,self,now,24).size(),Senses.threatLevel(perception,self,brain(),now)==2)) {
             o=Option.FLEE.ordinal();
         } else if ((mask&Option.FIGHT.bit())!=0&&defense.engage(now)&&forcedOption!=Option.FLEE&&!com.rlclones.clone.CloneManager.coward()) {
             o=Option.FIGHT.ordinal();defense.joined();
@@ -2878,6 +2884,7 @@ public final class CloneController {
         optionReward = 0;
         goal = null;
         fleeStuck = 0;
+        if(option==Option.FLEE){corneredStand.reset();reachableRetreat=false;}
         lastFleeStuck = 0;
         fleeTurn = 0;
         lastFleeDist = -1;
@@ -3147,6 +3154,7 @@ public final class CloneController {
             return true; // a long dig / trip does not go on at food 0 with a meal in the bag
         }
         if (option == Option.FIGHT) {
+            recheckCorneredExit(now);
             return com.rlclones.clone.CloneManager.fleeAllowed() && now>=forceFightUntil && survival.retreat(now,Senses.threats(perception,self,now,24).size(),Senses.threatLevel(perception,self,brain(),now)==2);
         }
         if (option == Option.FLEE) {
@@ -3402,7 +3410,7 @@ public final class CloneController {
                 brain().knowledge(targetType).encounters++;
             }
         }
-        if(!hunt&&target!=null&&defense.regroup(target,now)){if(action!=null)closeCombatStep(false,false);return false;}
+        if(!hunt&&target!=null&&now>=forceFightUntil&&defense.regroup(target,now)){if(action!=null)closeCombatStep(false,false);return false;}
         if(!hunt&&target!=null){
             boolean tactical=ground.tick(target,now);
             if(ground.cancelAction&&action!=null)closeCombatStep(false,false);
@@ -4337,9 +4345,40 @@ public final class CloneController {
         return true;
     }
 
+    /** Bounded alternatives: a wall in the first direction is not proof of being trapped. */
+    private Vec3 alternateRetreat(List<Perception.Seen> threats) {
+        for(int i=0;i<8;i++) {
+            double angle=i*Math.PI/4;
+            Vec3 direction=new Vec3(Math.cos(angle),0,Math.sin(angle));
+            boolean towardThreat=false;
+            for(var threat:threats)if(Senses.gap(self,threat.entity)<6 && direction.dot(threat.entity.position().subtract(self.position()).multiply(1,0,1).normalize())>.25){towardThreat=true;break;}
+            if(towardThreat)continue;
+            Vec3 spot=self.position().add(direction.scale(6));
+            if(retreatGoalSafe(spot,threats))return spot;
+        }
+        return null;
+    }
+    private void standAndFight(long now,Entity enemy) {
+        corneredFights++;forceFightUntil=now+200;corneredRecheck=now+20;
+        corneredTerrain.remember(self.level(),self.blockPosition(),self.blockPosition(),now,200);
+        survival.cancel();motor.stop();motor.cancelJump();motor.lookAt(enemy);
+        fleeStuck=0;corneredStand.reset();
+    }
+    private void recheckCorneredExit(long now) {
+        if(now>=forceFightUntil||now<corneredRecheck)return;
+        corneredRecheck=now+20;
+        var threats=Senses.threats(perception,self,now,24);
+        if(threats.isEmpty()){forceFightUntil=now;return;}
+        if(!corneredTerrain.blocked(self.level(),self.blockPosition(),self.blockPosition(),now)) {
+            if(alternateRetreat(threats)!=null){forceFightUntil=now;return;}
+            corneredTerrain.remember(self.level(),self.blockPosition(),self.blockPosition(),now,Math.max(1,forceFightUntil-now));
+        }
+    }
+
     private boolean runFlee(long now) {
         List<Perception.Seen> threats = Senses.threats(perception, self, now, 24);
         if (threats.isEmpty()) {
+            corneredStand.reset();
             if (++calmTicks > 40) {
                 return true;
             }
@@ -4353,7 +4392,7 @@ public final class CloneController {
         Vec3 currentRetreat=survival.currentGoal(now);
         if(currentRetreat!=null) {
             if(motor.stuckCount()>0||!retreatEndpointSafe(currentRetreat,threats)){survival.blocked();goalTimer=0;}
-            else {goal=currentRetreat;goalTimer=20;}
+            else {goal=currentRetreat;goalTimer=20;reachableRetreat=true;}
         }
         if (goal == null || --goalTimer <= 0) {
             Vec3 away = Vec3.ZERO;
@@ -4410,11 +4449,13 @@ public final class CloneController {
                 int context=(self.getHealth()<self.getMaxHealth()*.6f?1:0)|(threats.size()>=3?2:0)
                         |(threats.stream().anyMatch(t->{var k=brain().knowledgeIfPresent(t.typeId);return k!=null&&k.isRanged();})?4:0);
                 Vec3 learned=survival.choose(candidates,context,now);
+                if(learned==null)learned=alternateRetreat(threats);
+                reachableRetreat=learned!=null;
                 if(learned!=null){goal=learned;coverGoal=learned.equals(cover)?learned:null;goalTimer=20;}
             }
             boolean cornered = threats.stream().anyMatch(t -> Senses.gap(self, t.entity) < 4);
             if (cornered && self.getHealth() <= self.getMaxHealth() * 0.6f) {
-                if(consumables.pearlAway(away))survival.cancel(); // emergency transport is not this route's outcome
+                if(consumables.pearlAway(away)){survival.cancel();corneredStand.reset();return false;} // allow emergency transport to finish
             }
         }
         // (running away we look ahead, not back: what was right behind us a few seconds ago still is)
@@ -4454,12 +4495,10 @@ public final class CloneController {
                 goalTimer = 0; // try another way first
             }
         }
-        if (fleeStuck >= 2 && close) {
-            // nowhere left to run: turn round and fight
-            corneredFights++;
-            forceFightUntil = now + 200;
-            fleeStuck = 0;
-            return true;
+        double gap=nearest==null?Double.POSITIVE_INFINITY:Senses.gap(self,nearest.entity);
+        if(nearest!=null && !threats.isEmpty() && !com.rlclones.clone.CloneManager.coward()
+                && (corneredStand.observe(now,gap,reachableRetreat,gap<6||self.hurtTime>0) || fleeStuck>=2&&close&&!reachableRetreat)) {
+            standAndFight(now,nearest.entity);return true;
         }
         if (coverGoal != null && goal == coverGoal) {
             if (Motor.horizontalDistance(self.position(), coverGoal) < 0.7 && Math.abs(self.getY() - coverGoal.y) < 1.2) {

@@ -136,4 +136,38 @@ public final class SurvivalTests {
         h.succeedWhen(()->{h.assertTrue(c.getCloneBrain().retreat.wins()>0,"normal FLEE and motor movement create real survival evidence: pos="+c.position()+" "+c.controller().survival().report());h.assertTrue(c.isAlive()&&c.position().distanceToSqr(start)>=1,"clone moved and survived rather than being frozen");});
     }
 
+    @AfterBatch(batch="cornered-stand") public static void corneredCleanup(ServerLevel level){cleanup(level);Motor.clearSharedPaths();}
+    private static ClonePlayer corneredActor(GameTestHelper h,boolean closed){
+        for(var p:BlockPos.betweenClosed(new BlockPos(0,1,0),new BlockPos(16,5,16)))h.setBlock(p,p.getY()==1?Blocks.BEDROCK:Blocks.AIR);
+        if(closed)for(var p:BlockPos.betweenClosed(new BlockPos(5,2,5),new BlockPos(10,4,9)))h.setBlock(p,p.getX()==5||p.getX()==10||p.getZ()==5||p.getZ()==9||p.getY()==4?Blocks.BEDROCK:Blocks.AIR);
+        var c=GearRecipeTests.clone(h);var pos=h.absoluteVec(new Vec3(7.5,2,7.5));c.teleportTo(pos.x,pos.y,pos.z);c.setYRot(-90);c.setYHeadRot(-90);c.setXRot(0);c.setOnGround(true);c.setHealth(6);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));c.controller().forcedOption=Option.FLEE;c.controller().forcedAction=com.rlclones.ai.combat.CombatAction.ATTACK;Motor.clearSharedPaths();return c;
+    }
+    @GameTest(template="arena",batch="cornered-stand",timeoutTicks=260)
+    public static void enclosedCloneOverridesFleeAndActuallyCounterattacks(GameTestHelper h){
+        var c=corneredActor(h,true);var z=zombie(h,new BlockPos(9,2,7));z.setNoAi(true);z.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(80);z.setHealth(80);
+        c.controller().perception().hear(z,z.position(),h.getLevel().getGameTime());
+        ((long[])field(c.controller(),"optionCooldown"))[Option.FIGHT.ordinal()]=h.getLevel().getGameTime()+1000;c.setAiEnabled(true);
+        h.succeedWhen(()->{h.assertTrue(c.controller().corneredFights>0,"repeated unavailable exits detected");h.assertTrue(c.controller().option()==Option.FIGHT,"cornered defense overrides forced flee and fight cooldown");h.assertTrue(z.getHealth()<80,"actual counterattack instead of regrouping away from oversized threat");h.assertTrue(c.isAlive(),"clone survives the test");});
+    }
+    @GameTest(template="arena",batch="cornered-stand",timeoutTicks=60)
+    public static void oneBlockedDirectionWithSideExitDoesNotForceCombat(GameTestHelper h){
+        var c=corneredActor(h,false);c.setHealth(20);var z=zombie(h,new BlockPos(10,2,7));z.setNoAi(true);z.setInvulnerable(true);
+        for(var p:BlockPos.betweenClosed(new BlockPos(3,2,4),new BlockPos(3,4,10)))h.setBlock(p,Blocks.BEDROCK);
+        long now=h.getLevel().getGameTime();c.controller().perception().hear(z,z.position(),now);
+        var threats=Senses.threats(c.controller().perception(),c,now,24);
+        h.assertTrue(call(c.controller(),"alternateRetreat",new Class[]{java.util.List.class},threats)!=null,"reachable alternative route found around first blocked direction");
+        for(int t=0;t<=40;t+=20)h.assertTrue(!(boolean)call(c.controller(),"runFlee",new Class[]{long.class},now+t),"one wall does not immediately force a last stand");
+        h.assertTrue(c.controller().corneredFights==0,"safe alternatives remain fleeing");h.succeed();
+    }
+    @GameTest(template="arena",batch="cornered-stand",timeoutTicks=60)
+    public static void openingExitReleasesCombatCommitmentBeforeTimeout(GameTestHelper h){
+        var c=corneredActor(h,true);var z=zombie(h,new BlockPos(9,2,7));z.setNoAi(true);long now=h.getLevel().getGameTime();c.controller().perception().hear(z,z.position(),now);
+        call(c.controller(),"standAndFight",new Class[]{long.class,Entity.class},now,z);set(c.controller(),"option",Option.FIGHT);set(c.controller(),"optionTicks",30);
+        h.assertTrue(!(boolean)call(c.controller(),"shouldInterrupt",new Class[]{long.class},now+20),"closed exit does not immediately oscillate back to flee");
+        h.setBlock(new BlockPos(5,2,7),Blocks.AIR);h.setBlock(new BlockPos(5,3,7),Blocks.AIR);
+        h.assertTrue((boolean)call(c.controller(),"shouldInterrupt",new Class[]{long.class},now+40),"new safe exit permits retreat before ten-second commitment ends");
+        call(c.controller(),"startOption",new Class[]{long.class},now+40);h.assertTrue(c.controller().option()==Option.FLEE,"escape is selected once a route opens");h.succeed();
+    }
+
 }

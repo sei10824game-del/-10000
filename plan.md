@@ -1175,3 +1175,8 @@ AC: civic resources top up an existing partial load before delivery when known s
 AC: all Motor.mine callers honor one active miner per block including logs/leaves/scaffolds/shafts; candidate reservations isolate level identity; real human digging takes precedence and abort/finish/disconnect/death releases or expires; target changes/interruption release actual claim/cracks, same-tick races cannot start duplicate breaking; other block stays available, no permanent reservation. Native actual mining and vanilla human start/abort lifecycle, dimension isolation and lease expiry; unit/build and mixin mapping checks before push.
 
 検証完了: 単体72件・ゲーム内85件、ビルド成功（mining-claims-tests.log）。実Motorの重複抑止/別ブロック採掘/即時引継ぎ、実ServerPlayerGameModeの人間START/ABORT/死亡、予約期限・死亡・世界分離、階段/縦坑/鉱石学習/地形戦闘/設備の回帰を確認。人間の処理には介入せず受理済みの採掘状態だけ観測。新Mixinの配布JAR refmapも確認。
+
+## Cornered counterattack
+AC: repeated lack of reachable safe retreat directions or sustained inability to gain distance under close pressure switches FLEE to FIGHT; one blocked direction must try alternatives; portal/pearl/perch/corridor safety stays available; cornered commitment overrides repeated forced fleeing and regroup retreat, does not oscillate immediately, allows later retreat/newly opened routes; no enemy means no cornered combat. Bounded probes/cadence, unit and native real route/option/attack regressions before push.
+
+検証完了: 単体75件・ゲーム内45件成功、ビルド成功（cornered-native.log）。実コントローラが閉室で強制FLEE/戦闘クールダウンからFIGHTへ移り、集団合流待ちをせずHP80の敵へ実ダメージを与えることを確認。横方向の逃走経路がある場合は反撃を強制せず、出口開放後は反撃保持時間内に退避へ戻れることを確認。純粋ロジックで距離改善/圧力消失/継続失敗も検証。臆病モードの戦闘禁止は維持。
