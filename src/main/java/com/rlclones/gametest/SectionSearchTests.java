@@ -2,6 +2,8 @@ package com.rlclones.gametest;
 
 import com.rlclones.ai.Campfire;
 import com.rlclones.ai.util.SectionPresence;
+import com.rlclones.ai.util.TerrainSections;
+import com.rlclones.ai.util.TerrainVersion;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.server.level.ServerLevel;
@@ -126,4 +128,94 @@ public final class SectionSearchTests {
         }
         return System.nanoTime()-start;
     }
+    @AfterBatch(batch="terrain-cache") public static void terrainCleanup(ServerLevel level){TerrainSections.clear();GearRecipeTests.cleanup(level);}
+    private static List<BlockPos> terrainReference(ServerLevel level,BlockPos min,BlockPos max,TerrainSections.Target target){
+        List<BlockPos> result=new ArrayList<>();
+        for(var p:BlockPos.betweenClosed(min,max))if(!level.isOutsideBuildHeight(p)&&target.matches(level.getBlockState(p)))result.add(p.immutable());
+        return result;
+    }
+    private static void terrainCompare(GameTestHelper h,BlockPos min,BlockPos max,TerrainSections.Target target){
+        var expected=terrainReference(h.getLevel(),min,max,target);
+        var actual=TerrainSections.positions(h.getLevel(),min,max,target);
+        h.assertTrue(expected.equals(actual),"exact positions and original traversal order for "+target+" expected="+expected+" actual="+actual);
+    }
+    @GameTest(template="arena",batch="terrain-cache",timeoutTicks=80)
+    public static void unchangedSectionsAreReusedAndSingleCellEditsDoNotRescan(GameTestHelper h){
+        TerrainSections.clear();var level=h.getLevel();var min=new BlockPos(-16,level.getMaxBuildHeight()-48,-16);var max=min.offset(31,15,31);
+        var p=min.offset(4,3,2);var q=min.offset(20,5,20);var saved=new HashMap<BlockPos,BlockState>();
+        saved.put(p,level.getBlockState(p));saved.put(q,level.getBlockState(q));
+        try {
+            level.setBlock(p,Blocks.IRON_ORE.defaultBlockState(),2);level.setBlock(q,Blocks.DIAMOND_ORE.defaultBlockState(),2);
+            terrainCompare(h,min,max,TerrainSections.Target.ORE);var before=TerrainSections.stats();
+            for(int i=0;i<100;i++)TerrainSections.positions(level,min,max,TerrainSections.Target.ORE);
+            var reused=TerrainSections.stats();h.assertTrue(reused.builds()==before.builds()&&reused.stateReads()==before.stateReads()&&reused.hits()>before.hits(),"unchanged scans do no candidate block reads or index builds");
+            level.setBlock(p,Blocks.AIR.defaultBlockState(),2);terrainCompare(h,min,max,TerrainSections.Target.ORE);
+            level.setBlock(p,Blocks.COPPER_ORE.defaultBlockState(),2);terrainCompare(h,min,max,TerrainSections.Target.ORE);
+            level.setBlock(q,Blocks.WATER.defaultBlockState(),2);terrainCompare(h,min,max,TerrainSections.Target.ORE);
+            level.setBlock(p,Blocks.IRON_ORE.defaultBlockState(),2);
+            level.explode(null,p.getX()+.5,p.getY()+.5,p.getZ()+.5,2.0F,net.minecraft.world.level.Level.ExplosionInteraction.BLOCK);
+            h.assertTrue(level.getBlockState(p).isAir(),"real explosion removed indexed ore");terrainCompare(h,min,max,TerrainSections.Target.ORE);
+            var after=TerrainSections.stats();h.assertTrue(after.builds()==before.builds()&&after.stateReads()==before.stateReads()&&after.pointUpdates()>=3,"place break and fluid replacement update only changed cells");
+        }finally{saved.forEach((pos,state)->level.setBlock(pos,state,2));}h.succeed();
+    }
+    @GameTest(template="arena",batch="terrain-cache",timeoutTicks=80)
+    public static void directPaletteWritesBulkReadAndReloadInvalidateImmediately(GameTestHelper h){
+        TerrainSections.clear();var level=h.getLevel();var min=new BlockPos(-32,level.getMaxBuildHeight()-48,-32);var max=min.offset(15,15,15);
+        var chunk=level.getChunk(min);var section=chunk.getSection(chunk.getSectionIndex(min.getY()));var palette=section.getStates();
+        h.assertTrue(palette instanceof TerrainVersion,"storage change mixin applied on dedicated server");
+        var saved=new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());palette.write(saved);
+        var p=min.offset(5,5,5);
+        try {
+            level.setBlock(min,Blocks.STONE.defaultBlockState(),2); // maintain vanilla section non-air bookkeeping
+            TerrainSections.positions(level,min,max,TerrainSections.Target.ORE);long builds=TerrainSections.stats().builds();
+            palette.set(5,5,5,Blocks.EMERALD_ORE.defaultBlockState());
+            h.assertTrue(TerrainSections.positions(level,min,max,TerrainSections.Target.ORE).contains(p),"direct palette.set tracked immediately");
+            palette.getAndSet(5,5,5,Blocks.AIR.defaultBlockState());
+            h.assertTrue(!TerrainSections.positions(level,min,max,TerrainSections.Target.ORE).contains(p),"direct getAndSet tracked immediately");
+            h.assertTrue(TerrainSections.stats().builds()==builds,"direct writes need no full rebuild");
+            var replacement=palette.copy();replacement.set(6,5,5,Blocks.REDSTONE_ORE.defaultBlockState());
+            var data=new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+            try{replacement.write(data);palette.read(data);}finally{data.release();}
+            h.assertTrue(TerrainSections.positions(level,min,max,TerrainSections.Target.ORE).contains(min.offset(6,5,5)),"bulk replacement invalidates cached section");
+            long before=TerrainSections.stats().builds();com.rlclones.ai.Perception.invalidateClassifications();
+            terrainCompare(h,min,max,TerrainSections.Target.ORE);h.assertTrue(TerrainSections.stats().builds()>before,"tag reload reindexes only on next request");
+        }finally{palette.read(saved);section.recalcBlockCounts();saved.release();}h.succeed();
+    }
+    @GameTest(template="arena",batch="terrain-cache",timeoutTicks=80)
+    public static void workstationAndFireStateChangesPreserveReferenceAndNearestTies(GameTestHelper h){
+        TerrainSections.clear();var level=h.getLevel();var center=new BlockPos(-1,level.getMaxBuildHeight()-40,-1);var min=center.offset(-16,-4,-16);var max=center.offset(16,4,16);
+        var p=center.west(4);var q=center.east(4);var oldP=level.getBlockState(p);var oldQ=level.getBlockState(q);
+        try {
+            level.setBlock(p,Blocks.CAMPFIRE.defaultBlockState(),2);level.setBlock(q,Blocks.SOUL_CAMPFIRE.defaultBlockState(),2);
+            terrainCompare(h,min,max,TerrainSections.Target.LIT_CAMPFIRE);h.assertTrue(Objects.equals(reference(level,center),Campfire.nearest(level,center)),"campfire nearest tie preserved");
+            level.setBlock(p,Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT,false),2);
+            h.assertTrue(q.equals(Campfire.nearest(level,center)),"extinguished fire removed in same tick");
+            level.setBlock(q,Blocks.CRAFTING_TABLE.defaultBlockState(),2);terrainCompare(h,min,max,TerrainSections.Target.TABLE);
+            level.setBlock(q,Blocks.FURNACE.defaultBlockState(),2);terrainCompare(h,min,max,TerrainSections.Target.FURNACE);terrainCompare(h,min,max,TerrainSections.Target.TABLE);
+            level.setBlock(q,Blocks.AIR.defaultBlockState(),2);terrainCompare(h,min,max,TerrainSections.Target.FURNACE);
+            for(int y:new int[]{level.getMinBuildHeight(),level.getMaxBuildHeight()-1}){
+                var c=center.atY(y);terrainCompare(h,c.offset(-1,-2,-1),c.offset(1,2,1),TerrainSections.Target.ORE);
+            }
+        }finally{level.setBlock(p,oldP,2);level.setBlock(q,oldQ,2);}h.succeed();
+    }
+    @GameTest(template="arena",batch="terrain-cache",timeoutTicks=80)
+    public static void unchangedOreIndexStillChecksNewlyOpenedSightLines(GameTestHelper h){
+        TerrainSections.clear();var level=h.getLevel();
+        for(var p:BlockPos.betweenClosed(new BlockPos(3,1,5),new BlockPos(12,5,9))){boolean roof=p.getY()==5||p.getY()==1||p.getZ()==5||p.getZ()==9||p.getX()==3||p.getX()==12;h.setBlock(p,roof?Blocks.STONE:Blocks.AIR);}
+        var clone=GearRecipeTests.clone(h);var pos=h.absoluteVec(new net.minecraft.world.phys.Vec3(5.5,2,7.5));clone.teleportTo(pos.x,pos.y,pos.z);clone.setYRot(-90);clone.setYHeadRot(-90);clone.setXRot(0);clone.setOnGround(true);
+        var ore=h.absolutePos(new BlockPos(9,2,7));h.setBlock(new BlockPos(9,2,7),Blocks.IRON_ORE);h.setBlock(new BlockPos(8,2,7),Blocks.STONE);h.setBlock(new BlockPos(8,3,7),Blocks.STONE);
+        TerrainSections.positions(level,clone.blockPosition().offset(-6,-4,-6),clone.blockPosition().offset(6,4,6),TerrainSections.Target.ORE);
+        var vision=clone.controller().perception();long now=level.getGameTime();vision.update(now);
+        h.assertTrue(!vision.blocks().containsKey(ore),"shared target index does not see through walls");
+        h.setBlock(new BlockPos(8,2,7),Blocks.AIR);h.setBlock(new BlockPos(8,3,7),Blocks.AIR);vision.update(now+8);
+        h.assertTrue(vision.blocks().get(ore)==com.rlclones.ai.Perception.BlockKind.ORE,"unchanged ore index reuses geometry but checks newly open live sight line");h.succeed();
+    }
+    @GameTest(template="arena",batch="terrain-cache",timeoutTicks=40)
+    public static void cacheQueriesDoNotLoadUnknownChunks(GameTestHelper h){
+        var level=h.getLevel();var p=new BlockPos(30000000,level.getMinBuildHeight()+32,30000000);int x=p.getX()>>4,z=p.getZ()>>4;
+        h.assertTrue(level.getChunk(x,z,net.minecraft.world.level.chunk.ChunkStatus.FULL,false)==null,"test chunk starts unloaded");
+        h.assertTrue(TerrainSections.positions(level,p,p.offset(3,3,3),TerrainSections.Target.ORE).isEmpty(),"unloaded terrain stays unknown");
+        h.assertTrue(level.getChunk(x,z,net.minecraft.world.level.chunk.ChunkStatus.FULL,false)==null,"query creates no chunk load");h.succeed();
+    }
+
 }

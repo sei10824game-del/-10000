@@ -362,12 +362,11 @@ public final class Perception {
         if (level.getBrightness(net.minecraft.world.level.LightLayer.SKY, c) >= 8) {
             return; // out in the open: the rays do well enough
         }
-        var oreSections = new com.rlclones.ai.util.SectionPresence(level, c.offset(-6, -4, -6), c.offset(6, 4, 6),
-                state -> state.is(Tags.Blocks.ORES));
+
         Vec3 eye = self.getEyePosition();
         Vec3 look = self.getViewVector(1.0F);
-        for (BlockPos p : BlockPos.betweenClosed(c.offset(-6, -4, -6), c.offset(6, 4, 6))) {
-            if (blocks.containsKey(p) || !oreSections.mayContain(p) || !level.getBlockState(p).is(Tags.Blocks.ORES)) {
+        for (BlockPos p : com.rlclones.ai.util.TerrainSections.positions(level, c.offset(-6, -4, -6), c.offset(6, 4, 6), com.rlclones.ai.util.TerrainSections.Target.ORE)) {
+            if (blocks.containsKey(p) || !level.getBlockState(p).is(Tags.Blocks.ORES)) {
                 continue;
             }
             Vec3 to = Vec3.atCenterOf(p).subtract(eye);
@@ -432,7 +431,7 @@ public final class Perception {
             return;
         }
         BlockPos c = self.blockPosition();
-        for (BlockPos p : BlockPos.betweenClosed(c.offset(-3, -1, -3), c.offset(3, 2, 3))) {
+        for (BlockPos p : com.rlclones.ai.util.TerrainSections.positions(level, c.offset(-3, -1, -3), c.offset(3, 2, 3), com.rlclones.ai.util.TerrainSections.Target.ORE)) {
             BlockState st = level.getBlockState(p);
             if (!st.is(Tags.Blocks.ORES) || blocks.containsKey(p)) {
                 continue;
@@ -504,7 +503,7 @@ public final class Perception {
     private static final java.util.concurrent.atomic.AtomicLong CLASSIFICATION_GENERATION=new java.util.concurrent.atomic.AtomicLong();
     private static final class KindCache {long generation=-1,hits,misses;final java.util.IdentityHashMap<BlockState,java.util.Optional<BlockKind>> values=new java.util.IdentityHashMap<>();}
     private static final ThreadLocal<KindCache> KINDS=ThreadLocal.withInitial(KindCache::new);
-    public static void invalidateClassifications(){CLASSIFICATION_GENERATION.incrementAndGet();}
+    public static void invalidateClassifications(){CLASSIFICATION_GENERATION.incrementAndGet();com.rlclones.ai.util.TerrainSections.invalidate();}
     public static long classificationHits(){return KINDS.get().hits;}
     public static long classificationMisses(){return KINDS.get().misses;}
     /** Reuse immutable state classifications; position-dependent trees, hazards and discoveries remain live. */

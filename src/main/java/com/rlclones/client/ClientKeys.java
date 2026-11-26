@@ -83,6 +83,13 @@ public final class ClientKeys {
         verifyRenderHook(net.minecraft.client.renderer.entity.layers.CapeLayer.class,"rlclones$cape");
         verifyRenderHook(net.minecraft.client.renderer.entity.EntityRenderDispatcher.class,"rlclones$shadow");
         verifyRenderHook(net.minecraft.client.renderer.entity.player.PlayerRenderer.class,"rlclones$outerWear");
+        var terrainPalette=new net.minecraft.world.level.chunk.PalettedContainer<>(net.minecraft.world.level.block.Block.BLOCK_STATE_REGISTRY,
+                net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),net.minecraft.world.level.chunk.PalettedContainer.Strategy.SECTION_STATES);
+        if(!(terrainPalette instanceof com.rlclones.ai.util.TerrainVersion terrainVersion))throw new IllegalStateException("Missing terrain palette tracking");
+        long version=terrainVersion.rlclones$terrainVersion();
+        terrainPalette.getAndSet(1,2,3,net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        if(terrainVersion.rlclones$terrainVersion()!=version+1)throw new IllegalStateException("Terrain palette edit not tracked");
+        RLClones.LOGGER.info("RLCLONES_TERRAIN_GUARD_READY");
         RLClones.LOGGER.info("RLCLONES_RENDER_DETAIL_READY");
         smokeReported = true;
         List<KeyMapping> all = Arrays.asList(mc.options.keyMappings);

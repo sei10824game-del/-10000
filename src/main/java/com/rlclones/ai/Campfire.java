@@ -84,22 +84,19 @@ public final class Campfire {
 
     @Nullable
     public static BlockPos nearest(ServerLevel level, BlockPos c) {
-        com.rlclones.ai.util.SectionPresence sections = null;
-        int checked = 0;
-        var cursor = new BlockPos.MutableBlockPos();
-        for (var offset : FIRE_OFFSETS) {
-            cursor.set(c.getX() + offset.x(), c.getY() + offset.y(), c.getZ() + offset.z());
-            // Nearby fires need no palette setup. The expensive absent/distant case benefits from filtering.
-            if (checked++ >= 32) {
-                if (sections == null) sections = new com.rlclones.ai.util.SectionPresence(level,
-                        c.offset(-16, -4, -16), c.offset(16, 4, 16),
-                        state -> state.getBlock() instanceof CampfireBlock && state.getValue(CampfireBlock.LIT));
-                if (!sections.mayContain(cursor)) continue;
-            }
-            var st = level.getBlockState(cursor);
-            if (st.getBlock() instanceof CampfireBlock && st.getValue(CampfireBlock.LIT)) return cursor.immutable();
+        // Preserve the cheap nearby-fire path; farther results are shared until storage changes.
+        var cursor=new BlockPos.MutableBlockPos();
+        for(int i=0;i<32;i++) {
+            var offset=FIRE_OFFSETS.get(i);cursor.set(c.getX()+offset.x(),c.getY()+offset.y(),c.getZ()+offset.z());
+            var state=level.getBlockState(cursor);
+            if(state.getBlock() instanceof CampfireBlock && state.getValue(CampfireBlock.LIT))return cursor.immutable();
         }
-        return null;
+        BlockPos best=null;double distance=Double.MAX_VALUE;
+        for(var p:com.rlclones.ai.util.TerrainSections.positions(level,c.offset(-16,-4,-16),c.offset(16,4,16),com.rlclones.ai.util.TerrainSections.Target.LIT_CAMPFIRE)) {
+            double d=p.distSqr(c);
+            if(d<distance){distance=d;best=p;}
+        }
+        return best;
     }
 
     private static final java.util.List<com.rlclones.ai.util.NearbyOffsets.Offset> FIRE_OFFSETS =

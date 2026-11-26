@@ -1636,7 +1636,7 @@ public final class Crafting {
         BlockPos c = self.blockPosition();
         BlockPos best = null;
         double bestD = Double.MAX_VALUE;
-        for (BlockPos p : BlockPos.betweenClosed(c.offset(-12, -3, -12), c.offset(12, 3, 12))) {
+        for (BlockPos p : com.rlclones.ai.util.TerrainSections.positions(level, c.offset(-12, -3, -12), c.offset(12, 3, 12), item == Items.CRAFTING_TABLE ? com.rlclones.ai.util.TerrainSections.Target.TABLE : com.rlclones.ai.util.TerrainSections.Target.FURNACE)) {
             if (level.getBlockState(p).is(want)) {
                 double d = p.distSqr(c);
                 if (d < bestD) {

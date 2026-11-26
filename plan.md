@@ -1160,3 +1160,8 @@ AC: known resource index invalidates on discovery/removal/eviction without leaki
 AC: CLIENT-only configurable optimization defaults on beyond32 blocks; real player rendering, clone body/armor/held weapons, focused clone and near rendering preserved; only name/cape/armor glint/trim/shadows omitted at distance; no shared renderer mutation, no simulation/tick/range changes; policy boundary/disable/focus tests, dedicated server regressions, mixin transform client smoke and build before push.
 
 検証完了: 探索/予約/学習の単体70件・関連ネイティブ78件成功（population-257-final.log）。描画追加後は単体72件・専用サーバー13件成功（render-population-server-final.log）。Xorg dummy/ソフトウェアGLによる実クライアント起動で全5描画フックの変換を検査し RLCLONES_RENDER_DETAIL_READY と CLIENT_READY を確認。配布JARのrefmapに全描画ターゲットのSRGマッピングを確認。距離外スキン重ね着の省略も追加。実ワールドでのFPS/TPS改善率や最大追加人数は未測定。
+
+## Changed-terrain search reuse
+AC: reuse exact section-local target positions across unchanged scans; point edits update only changed cell, including same-tick place/break/liquid/palette writes; bulk palette read/section replacement and tag reload invalidate safely; negative coords, world-height edges and original tie order preserved; no chunk loading or shared personal discoveries; live visibility/collision/hazard checks maintained; bounded weak cache, native reference-comparison/update tests, unit/build and client/server startup checks. Apply to near/peripheral ore, existing workstation and lit campfire searches.
+
+検証完了: 単体72件・ネイティブ63件成功（terrain-cache-verified.log）。変更なし100回の索引再構築・区画内再走査が0、単一変更の差分更新、実際の爆発、液体置換、直接palette.set/getAndSet、一括read、タグ再読込、負座標・高さ端・最近傍同距離順、壁開放後の鉱石視認、未読込チャンク非生成を確認。空気区画の非空カウントを尊重する修正も検証済み。XorgソフトウェアGL実クライアントで TERRAIN_GUARD_READY / RENDER_DETAIL_READY / CLIENT_READY を確認、ビルド成功。FPS/TPS改善率は未測定。
