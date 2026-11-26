@@ -2354,6 +2354,10 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "hoe")
     public static void craftsAHoeWhenItHasSeeds(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.NETHERITE_HELMET));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,new ItemStack(Items.NETHERITE_CHESTPLATE));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS,new ItemStack(Items.NETHERITE_LEGGINGS));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET,new ItemStack(Items.NETHERITE_BOOTS));
         c.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
         c.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 4));
         craftLoop(h, c);
@@ -4416,6 +4420,10 @@ public final class CloneGameTests {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
         h.setBlock(new BlockPos(7, 2, 10), Blocks.CRAFTING_TABLE);
         c.controller().perception().noteBlock(h.absolutePos(new BlockPos(7, 2, 10)));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.NETHERITE_HELMET));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,new ItemStack(Items.NETHERITE_CHESTPLATE));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS,new ItemStack(Items.NETHERITE_LEGGINGS));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET,new ItemStack(Items.NETHERITE_BOOTS));
         c.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         c.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
         c.getInventory().add(new ItemStack(Items.STICK, 2));

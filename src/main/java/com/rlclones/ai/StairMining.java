@@ -693,7 +693,7 @@ public final class StairMining {
         if (mending == null || !solid(mending)) {
             mending = null;
             for (BlockPos c : cells) {
-                if (solid(c) && diggable(c) && (!self.serverLevel().getBlockState(c).requiresCorrectToolForDrops() || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(c)) >= 0)) {
+                if ((down || !bases().isStairTread(self.level().dimension(),c)) && solid(c) && diggable(c) && (!self.serverLevel().getBlockState(c).requiresCorrectToolForDrops() || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(c)) >= 0)) {
                     mending = c.immutable();
                     break;
                 }
@@ -771,7 +771,9 @@ public final class StairMining {
         if(stairs!=null&&!ascending) {
             String reason=MiningSafety.returnReason(self,stairs.top.getY()-feet.getY());
             if(!reason.isEmpty()){self.controller().prepareMiningReturn(reason);ascending=true;toStage(0);debug="return supplies: "+reason;}
-            if(stairs.top.getY()-feet.getY()>=12&&ticks%20==0)self.controller().scanTreads();
+        }
+        if(stairs!=null) {
+            if(ticks%20==0 || motor.stuckCount()>0 && ticks%10==0)self.controller().scanTreads();
             if(!motor.repairs.isEmpty()&&self.controller().repairTreads(self.level().getGameTime()))return Status.WORKING;
         }
         if (feet.equals(lastFeet)) {

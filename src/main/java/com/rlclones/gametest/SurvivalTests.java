@@ -170,4 +170,38 @@ public final class SurvivalTests {
         call(c.controller(),"startOption",new Class[]{long.class},now+40);h.assertTrue(c.controller().option()==Option.FLEE,"escape is selected once a route opens");h.succeed();
     }
 
+    @AfterBatch(batch="practical-combat") public static void practicalCleanup(ServerLevel level){cleanup(level);}
+    @GameTest(template="arena",batch="practical-combat",timeoutTicks=60)
+    public static void closestPursuerReplacesCurrentAttackerBeforeTakingDamage(GameTestHelper h){
+        var c=corneredActor(h,false);c.setHealth(20);c.controller().forcedOption=Option.FIGHT;
+        var far=zombie(h,new BlockPos(12,2,7));var near=zombie(h,new BlockPos(9,2,7));far.setNoAi(true);near.setNoAi(true);far.setTarget(c);near.setTarget(c);long now=h.getLevel().getGameTime();
+        c.controller().perception().hear(far,far.position(),now);c.controller().perception().hear(near,near.position(),now);
+        set(c.controller(),"target",far);set(c.controller(),"targetType",Perception.typeId(far));set(c.controller(),"option",Option.FIGHT);
+        call(c.controller(),"runFight",new Class[]{long.class,boolean.class},now,false);
+        h.assertTrue(field(c.controller(),"target")==near&&c.getLastHurtByMob()==null,"near pursuer selected without waiting to be hit");
+        var closest=zombie(h,new BlockPos(8,2,7));closest.setNoAi(true);closest.setTarget(c);c.controller().perception().hear(closest,closest.position(),now+1);
+        call(c.controller(),"runFight",new Class[]{long.class,boolean.class},now+1,false);h.assertTrue(field(c.controller(),"target")==closest,"even current attacker in melee range yields to closer pursuer");h.succeed();
+    }
+    @GameTest(template="arena",batch="practical-combat",timeoutTicks=60)
+    public static void sealedSoundThreatIsIgnoredUntilItsWallOpens(GameTestHelper h){
+        var c=corneredActor(h,false);c.setHealth(20);
+        for(var p:BlockPos.betweenClosed(new BlockPos(8,1,5),new BlockPos(12,5,9)))h.setBlock(p,p.getX()==8||p.getX()==12||p.getZ()==5||p.getZ()==9||p.getY()==1||p.getY()==5?Blocks.BEDROCK:Blocks.AIR);
+        var z=zombie(h,new BlockPos(10,2,7));z.setNoAi(true);long now=h.getLevel().getGameTime();long probe=now+Math.floorMod(-(now+c.getId()),20);
+        var seen=c.controller().perception().hear(z,z.position(),now);
+        h.assertTrue(c.controller().ignoreBlockedSound(seen,probe),"sealed unreachable sound is deliberately ignored");
+        h.assertTrue(Senses.threats(c.controller().perception(),c,probe+1,24).isEmpty(),"repeated sound cannot keep interrupting work");
+        set(c.controller().defense(),"alerted",z);set(c.controller().defense(),"alertUntil",probe+100);h.assertTrue(!c.controller().defense().engage(probe+1),"ally alerts do not recreate the ignored threat loop");
+        h.setBlock(new BlockPos(8,2,7),Blocks.AIR);h.setBlock(new BlockPos(8,3,7),Blocks.AIR);
+        h.runAfterDelay(5,()->{h.assertTrue(!c.controller().unreachable(z,probe+6),"visible emerging enemy reactivates on the next normal sight refresh");h.succeed();});
+    }
+
+    @GameTest(template="arena",batch="practical-combat",timeoutTicks=300)
+    public static void heardEnemyBehindStoneIsReachedAndActuallyAttacked(GameTestHelper h){
+        var c=corneredActor(h,false);c.setHealth(20);c.getInventory().add(new ItemStack(Items.IRON_PICKAXE));c.controller().forcedOption=Option.FIGHT;
+        for(int x=4;x<=15;x++){h.setBlock(new BlockPos(x,4,7),Blocks.BEDROCK);for(int y=2;y<=4;y++){h.setBlock(new BlockPos(x,y,6),Blocks.BEDROCK);h.setBlock(new BlockPos(x,y,8),Blocks.BEDROCK);}}
+        h.setBlock(new BlockPos(9,2,7),Blocks.STONE);h.setBlock(new BlockPos(9,3,7),Blocks.STONE);var z=zombie(h,new BlockPos(13,2,7));z.setNoAi(true);z.setTarget(c);
+        c.controller().perception().hear(z,z.position(),h.getLevel().getGameTime());c.setAiEnabled(true);
+        h.succeedWhen(()->{h.assertTrue(h.getBlockState(new BlockPos(9,2,7)).isAir()&&h.getBlockState(new BlockPos(9,3,7)).isAir(),"real controller opens body-height route through obstruction: "+c.position()+" "+c.controller().fightDebug+" "+c.controller().motor().mineDebug);h.assertTrue(z.getHealth()<20,"heard target actually attacked after breaching");h.assertTrue(c.isAlive(),"no unsafe forced jump under roof");});
+    }
+
 }

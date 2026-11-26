@@ -214,7 +214,7 @@ public final class Senses {
                 continue;
             }
             if (isHostileTo(s.entity, agent) && s.pos.distanceTo(agent.position()) <= radius
-                    && !(agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().unreachable(s.entity, now))) {
+                    && !(agent instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && (c.controller().unreachable(s.entity, now)||c.controller().ignoreBlockedSound(s,now)))) {
                 out.add(s);
             }
         }

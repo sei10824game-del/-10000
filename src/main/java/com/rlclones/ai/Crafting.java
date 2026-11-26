@@ -510,6 +510,13 @@ public final class Crafting {
         }
     }
 
+    public static boolean deferEarlyTool(Player player,Item item) {
+        if(item!=Items.WOODEN_HOE&&item!=Items.STONE_HOE&&item!=Items.WOODEN_SHOVEL&&item!=Items.STONE_SHOVEL)return false;
+        for(var slot:new net.minecraft.world.entity.EquipmentSlot[]{net.minecraft.world.entity.EquipmentSlot.HEAD,net.minecraft.world.entity.EquipmentSlot.CHEST,net.minecraft.world.entity.EquipmentSlot.LEGS,net.minecraft.world.entity.EquipmentSlot.FEET})
+            if(!(player.getItemBySlot(slot).getItem() instanceof ArmorItem armor)||armor.getMaterial()!=net.minecraft.world.item.ArmorMaterials.NETHERITE)return true;
+        return false;
+    }
+
     private static List<Item> wanted(Player p) {
         List<Item> out = new ArrayList<>();
         if (!com.rlclones.clone.CloneMobs.canUseHands(p)) {
@@ -528,6 +535,7 @@ public final class Crafting {
         }
         if (tierOf(p, HoeItem.class) < 0 && (Farming.seedSlot(p) >= 0 || tierOf(p, PickaxeItem.class) >= 0)) {
             // a field feeds us for good: the hoe comes right after the first pickaxe, before weapons and other tools
+            if(tierOf(p,PickaxeItem.class)>=Tiers.IRON.getLevel())out.add(Items.IRON_HOE);
             out.add(Items.STONE_HOE);
             out.add(Items.WOODEN_HOE);
         }
@@ -625,6 +633,7 @@ public final class Crafting {
                     || it instanceof ArmorItem a && a.getMaterial() == net.minecraft.world.item.ArmorMaterials.IRON);
         }
         out.removeIf(it -> it instanceof TieredItem && !(it instanceof PickaxeItem) && countFresh(p, it) >= 1 || it instanceof PickaxeItem && countFresh(p, it) >= 2); // (one of a tool is enough: a bag full of wooden hoes is no help)
+        out.removeIf(item->deferEarlyTool(p,item));
         return out;
     }
 
@@ -640,7 +649,7 @@ public final class Crafting {
         long now = self.level().getGameTime();
         if (now - curiosityAt < 100) {
             return curiosityRecipe != null && canCraft(self, curiosityRecipe) && (tableAccess || curiosityRecipe.canCraftInDimensions(2, 2))
-                    && !knows(curiosityRecipe) ? curiosityRecipe : null;
+                    && !knows(curiosityRecipe) && !deferEarlyTool(self,curiosityRecipe.getResultItem(self.level().registryAccess()).getItem()) ? curiosityRecipe : null;
         }
         curiosityAt = now;
         curiosityRecipe = null;
@@ -661,7 +670,7 @@ public final class Crafting {
         self.getInventory().fillStackedContents(contents);
         for (Entry e : index(self)) {
             ItemStack r = e.result();
-            if (r.isEmpty() || r.is(Tags.Items.STORAGE_BLOCKS) || b.knowsItem(Discovery.keyOf(r))) {
+            if (deferEarlyTool(self,r.getItem()) || r.isEmpty() || r.is(Tags.Items.STORAGE_BLOCKS) || b.knowsItem(Discovery.keyOf(r))) {
                 continue;
             }
             if (!tableAccess && !e.recipe().canCraftInDimensions(2, 2)) {
@@ -784,7 +793,7 @@ public final class Crafting {
     public static List<CraftingRecipe> recipesFor(ServerPlayer p, java.util.function.Predicate<ItemStack> result) {
         List<CraftingRecipe> out = new ArrayList<>();
         for (Entry e : index(p)) {
-            if (result.test(e.result())) {
+            if (!deferEarlyTool(p,e.result().getItem()) && result.test(e.result())) {
                 out.add(e.recipe());
             }
         }
@@ -1036,10 +1045,10 @@ public final class Crafting {
         if (tierOf(p, AxeItem.class) < 1 && spare >= 3) {
             return Items.STONE_AXE;
         }
-        if (tierOf(p, net.minecraft.world.item.ShovelItem.class) == 0 && spare >= 1) {
+        if (!deferEarlyTool(p,Items.STONE_SHOVEL)&&tierOf(p, net.minecraft.world.item.ShovelItem.class) == 0 && spare >= 1) {
             return Items.STONE_SHOVEL;
         }
-        if (tierOf(p, HoeItem.class) == 0 && spare >= 2) {
+        if (!deferEarlyTool(p,Items.STONE_HOE)&&tierOf(p, HoeItem.class) == 0 && spare >= 2) {
             return Items.STONE_HOE;
         }
         return null;

@@ -175,4 +175,38 @@ public final class StairRepairTests {
         });
     }
 
+    @net.minecraft.gametest.framework.AfterBatch(batch="stair-lift") public static void liftCleanup(net.minecraft.server.level.ServerLevel level){cleanup(level);}
+    private static BlockPos narrowHole(GameTestHelper h,ClonePlayer c,Bases.Staircase stair,boolean breakable){
+        BlockPos hole=stair.top.relative(stair.dir,2).below(3);var level=h.getLevel();
+        for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++)for(int dy=0;dy<=3;dy++)if(dx!=0||dz!=0)level.setBlock(hole.offset(dx,dy,dz),Blocks.BEDROCK.defaultBlockState(),3);
+        level.setBlock(hole,Blocks.AIR.defaultBlockState(),3);level.setBlock(hole.below(),Blocks.STONE.defaultBlockState(),3);level.setBlock(hole.above(),Blocks.AIR.defaultBlockState(),3);
+        level.setBlock(hole.above(2),(breakable?Blocks.STONE:Blocks.BEDROCK).defaultBlockState(),3);level.setBlock(hole.above(3),Blocks.BEDROCK.defaultBlockState(),3);
+        var pos=Vec3.atBottomCenterOf(hole);c.teleportTo(level,pos.x,pos.y,pos.z,0,0);c.setOnGround(true);c.controller().motor().repairs.add(hole);return hole;
+    }
+    @GameTest(template="arena",batch="stair-lift",timeoutTicks=240)
+    public static void clearsKnownHeadroomThenLiftsOnceAndRepairsFromInsideGap(GameTestHelper h){
+        var c=clone(h);c.getInventory().add(new ItemStack(Items.COBBLESTONE,32));var stair=stair(h,3);var hole=narrowHole(h,c,stair,true);
+        h.onEachTick(()->{c.controller().repairTreads(h.getLevel().getGameTime());c.controller().motor().tick();});
+        h.succeedWhen(()->{h.assertTrue(h.getLevel().getBlockState(hole).is(Blocks.COBBLESTONE),"self-occupied gap restored after safe bounded lift");h.assertTrue(h.getLevel().getBlockState(hole.above(2)).isAir(),"only known blocked headroom mined");h.assertTrue(!c.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(hole)),"never places a block through its own body");h.assertTrue(c.getInventory().countItem(Items.COBBLESTONE)==31,"exactly one repair block consumed");finish(h,c,stair);});
+    }
+    @GameTest(template="arena",batch="stair-lift",timeoutTicks=100)
+    public static void protectedLowCeilingStopsJumpingWithoutDestroyingOrSpendingBlocks(GameTestHelper h){
+        var c=clone(h);c.getInventory().add(new ItemStack(Items.COBBLESTONE,32));var stair=stair(h,3);var hole=narrowHole(h,c,stair,false);double[] highest={c.getY()};
+        h.onEachTick(()->{c.controller().motor().jump();c.controller().repairTreads(h.getLevel().getGameTime());c.controller().motor().tick();highest[0]=Math.max(highest[0],c.getY());});
+        h.runAtTickTime(60,()->{h.assertTrue(highest[0]<hole.getY()+.2,"no futile jumps against unbreakable ceiling");h.assertTrue(h.getLevel().getBlockState(hole.above(2)).is(Blocks.BEDROCK)&&c.getInventory().countItem(Items.COBBLESTONE)==32,"protected blocks and materials preserved");finish(h,c,stair);h.succeed();});
+    }
+
+    @GameTest(template="arena",batch="stair-lift",timeoutTicks=300)
+    public static void actualAscentRepairsKnownGapBeforeTryingToJumpUp(GameTestHelper h){
+        var c=clone(h);c.getInventory().add(new ItemStack(Items.COBBLESTONE,32));var stair=stair(h,4);var hole=stair.top.relative(stair.dir,2).below(3);
+        h.getLevel().setBlock(hole,Blocks.AIR.defaultBlockState(),3);h.getLevel().setBlock(hole.below(),Blocks.STONE.defaultBlockState(),3);
+        var pos=Vec3.atBottomCenterOf(stair.top.relative(stair.dir,3).below(3));c.teleportTo(h.getLevel(),pos.x,pos.y,pos.z,0,0);c.setOnGround(true);c.controller().motor().repairs.add(hole);
+        com.rlclones.ai.Motor.clearSharedPaths();
+        h.assertTrue(c.controller().stairs().beginAscent(),"real ascent begins on lower stair");
+        try{var chosen=c.controller().stairs().getClass().getDeclaredField("stairs");chosen.setAccessible(true);chosen.set(c.controller().stairs(),stair);}catch(Exception error){throw new RuntimeException(error);}
+        boolean[] arrived={false};
+        h.onEachTick(()->{if(!arrived[0]){c.controller().stairs().tick();arrived[0]=c.blockPosition().distManhattan(stair.top)<=2&&c.getY()>=pos.y+1;}c.controller().motor().tick();});
+        h.succeedWhen(()->{h.assertTrue(h.getLevel().getBlockState(hole).is(Blocks.COBBLESTONE),"ascending work prioritizes missing tread repair");h.assertTrue(arrived[0]&&c.blockPosition().distManhattan(stair.top)<=2&&c.getY()>=pos.y+1,"clone reaches the ascent arrival area: "+c.blockPosition()+" "+c.controller().stairs().debug);h.assertTrue(h.getLevel().getBlockState(stair.top.relative(stair.dir).below(2)).is(Blocks.STONE),"upper intact tread was not mined away");finish(h,c,stair);});
+    }
+
 }

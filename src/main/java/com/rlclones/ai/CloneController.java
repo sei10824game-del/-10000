@@ -2380,6 +2380,7 @@ public final class CloneController {
         }
         Entity item = Senses.nearestItem(perception, self, now, 6);
         if (item == null || dropIgnored.get(item.getId()) > now) {
+            motor.finishWorkAccess();
             dropTarget = -1;
             dropWalkTicks = 0;
             return false;
@@ -2388,18 +2389,7 @@ public final class CloneController {
             dropTarget = item.getId();
             dropWalkTicks = 0;
         }
-        if (dropWalkTicks > 20 && motor.stuckCount() > 1 && Config.get(Config.ALLOW_BLOCK_BREAKING, true) && dropWalkTicks <= 160) {
-            // the item lies behind a block (one put in front by a clone's own stairs / bridge...): dig the block in the way, as a player would
-            net.minecraft.world.phys.Vec3 eye = self.getEyePosition();
-            net.minecraft.world.phys.BlockHitResult hit = self.serverLevel().clip(new net.minecraft.world.level.ClipContext(eye, item.position().add(0, 0.2, 0),
-                    net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, self));
-            if (hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK && !self.level().getBlockState(hit.getBlockPos()).is(net.minecraft.world.level.block.Blocks.BEDROCK)) {
-                dropWalkTicks++;
-                motor.mine(hit.getBlockPos());
-                dropPickups++;
-                return true;
-            }
-        }
+        if(dropWalkTicks>10 && motor.clearWorkObstruction(item.position().add(0,.2,0),null)) {dropWalkTicks++;return true;}
         if (++dropWalkTicks > 160 || motor.stuckCount() > 4) {
             dropIgnored.put(item.getId(), now + 200);
             dropTarget = -1;
@@ -3054,6 +3044,7 @@ public final class CloneController {
         }
         motor.resetMining();
         motor.clearPath();
+        motor.finishWorkAccess();
         BlockClaims.releaseOwner(self.level(),self.getUUID());
         option = null;
     }
@@ -3206,7 +3197,22 @@ public final class CloneController {
         return hunt ? Senses.isFoodAnimal(e) : Senses.isHostileTo(e, self);
     }
 
+    private Entity nearestPursuer(long now) {
+        Entity best=null;double distance=Double.MAX_VALUE;
+        for(var seen:Senses.threats(perception,self,now,24))if(seen.entity instanceof Mob mob && mob.getTarget()==self
+                && (perception.isVisible(mob)||perception.clearLine(self.getEyePosition(),mob.getEyePosition()))) {
+            double gap=Senses.gap(self,mob);if(gap<distance-.01 || Math.abs(gap-distance)<.01&&mob==target){distance=gap;best=mob;}
+        }
+        return best;
+    }
+    private void switchCombatTarget(Entity enemy,long now) {
+        closeCombatStep(false,false);motor.resetMining();motor.clearPath();dropVantage();
+        target=enemy;targetType=Perception.typeId(enemy);combatState=-1;action=null;fightBest=Double.MAX_VALUE;
+        fightBestAt=now;fightDigs=fightWalk=fightBlocked=0;fightSecond=null;retargets++;
+    }
+
     private Entity pickHostile(long now) {
+        Entity pursuer=nearestPursuer(now);if(pursuer!=null)return pursuer;
         Entity best = null;
         double bestScore = Double.MAX_VALUE;
         for (Perception.Seen s : perception.remembered()) {
@@ -3258,11 +3264,24 @@ public final class CloneController {
         if (t == null) {
             return false;
         }
-        if (now >= t) {
+        if (now >= t || perception.canSee(e) || self.hurtTime>0 && self.getLastHurtByMob()==e) {
             unreachableMobs.remove(e.getId());
             return false;
         }
         return true;
+    }
+
+    private final java.util.Map<Integer,Long> heardProbeAfter=new java.util.HashMap<>();
+    public boolean ignoreBlockedSound(Perception.Seen seen,long now) {
+        if(unreachable(seen.entity,now))return true;
+        if(seen.visible||seen.heardAt<0||self.hurtTime>0||((now+self.getId())%20)!=0||now<heardProbeAfter.getOrDefault(seen.id,0L))return false;
+        if(heardProbeAfter.size()>128)heardProbeAfter.clear();heardProbeAfter.put(seen.id,now+40);
+        if(perception.clearLine(self.getEyePosition(),seen.entity.getEyePosition()))return false;
+        var wall=motor.obstruction(seen.entity.blockPosition().above());
+        if(wall!=null&&!motor.canClearWorkBlock(wall)&&motor.pathTo(seen.pos)==null){
+            if(unreachableMobs.size()>256)unreachableMobs.clear();unreachableMobs.put(seen.id,now+600);unreachableGiveUps++;return true;
+        }
+        return false;
     }
 
     /** Kinds of animal that hurt us once (never walked up to with nothing but the weapon again): by type id. */
@@ -3278,6 +3297,8 @@ public final class CloneController {
     public int simpleHunts;
 
     private boolean runFight(long now, boolean hunt) {
+        if(!hunt&&target!=null){Entity pursuer=nearestPursuer(now);if(pursuer!=null&&pursuer!=target)switchCombatTarget(pursuer,now);}
+        if(!hunt&&target!=null&&unreachable(target,now)){closeCombatStep(false,false);target=null;dropVantage();}
         if (hunt && target instanceof net.minecraft.world.entity.animal.Animal prey && prey.isAlive() && simplePrey(prey)) {
             lastFightId = prey.getId();
             lastFightAt = now;
@@ -3301,7 +3322,7 @@ public final class CloneController {
             lastFightId = target.getId();
             lastFightAt = now;
             double d = self.distanceTo(target);
-            if(ground.active()){fightBestAt=now;fightBlocked=0;fightSecond=null;}
+            if(ground.active()&&fightSecond==null&&fightBlocked==0&&motor.stuckCount()==0&&!self.horizontalCollision)fightBestAt=now;
             if (d < fightBest - 1.0) {
                 fightBest = d;
                 fightBestAt = now;
@@ -3313,31 +3334,34 @@ public final class CloneController {
             }
             if (fightSecond != null) {
                 BlockState below = self.serverLevel().getBlockState(fightSecond);
-                if (below.isAir() || !below.getFluidState().isEmpty() || below.getDestroySpeed(self.serverLevel(), fightSecond) < 0
+                if (!motor.canClearWorkBlock(fightSecond) || below.isAir() || !below.getFluidState().isEmpty() || below.getDestroySpeed(self.serverLevel(), fightSecond) < 0
                         || below.requiresCorrectToolForDrops() && Equipment.bestToolSlot(self, below) < 0 || self.getEyePosition().distanceTo(Vec3.atCenterOf(fightSecond)) > Motor.BLOCK_REACH - 0.3) {
                     fightSecond = null;
                 } else {
+                    ground.end(false);motor.stop();motor.cancelJump();
                     Equipment.select(self, Equipment.bestToolSlot(self, below));
                     if (motor.mine(fightSecond)) {
                         fightSecond = null; // (the opening is two high now: a clone fits through)
                         fightBestAt = now;
                     }
-                    return true;
+                    return false;
                 }
             }
             if ((now - fightBestAt > 100 || fightBlocked >= 40) && d > 2.5 && d <= 24 && fightDigs < 60) {
                 // no headway (behind a wall, a window, a ceiling - seen or not): dig through what is between us, block after block (never the walls of a base) before giving up
                 BlockPos wall = motor.obstruction(target.blockPosition().above());
-                if (wall != null && !self.serverLevel().getBlockState(wall).isAir() && (!self.serverLevel().getBlockState(wall).requiresCorrectToolForDrops()
+                if (wall != null && motor.canClearWorkBlock(wall) && !self.serverLevel().getBlockState(wall).isAir() && (!self.serverLevel().getBlockState(wall).requiresCorrectToolForDrops()
                         || Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)) >= 0) && !BlockClaims.takenByOther(self.level(), wall, self.getUUID(), now)
                         && com.rlclones.clone.Bases.get(self.getServer()).nearest(self.level().dimension(), Vec3.atCenterOf(wall), 12) == null) {
+                    ground.end(false);
                     BlockClaims.claim(self.level(), wall, self.getUUID(), now);
                     if (self.getEyePosition().distanceTo(Vec3.atCenterOf(wall)) > Motor.BLOCK_REACH - 0.6) {
                         if (motor.stuckCount() <= 3 && ++fightWalk < 200) {
                             motor.navigate(motor.approachPoint(wall), 1.0, false); // the wall is further than an arm: up to it first
-                            return true;
+                            return false;
                         }
                     } else {
+                        motor.stop();motor.cancelJump();
                         Equipment.select(self, Equipment.bestToolSlot(self, self.serverLevel().getBlockState(wall)));
                         if (motor.mine(wall)) {
                             fightDigs++;
@@ -3345,11 +3369,16 @@ public final class CloneController {
                             fightBestAt = now;
                             fightSecond = wall.below(); // and the block under it: an opening two high to charge through
                         }
-                        return true;
+                        return false;
                     }
                 }
             }
-            if (now - fightBestAt > (perception.isVisible(target) ? 900 : 120) && d > 2.5) {
+            if(!hunt && (!perception.isVisible(target)||motor.stuckCount()>0) && now-fightBestAt>20) {
+                int before=motor.workBlocksCleared;
+                if(motor.clearWorkObstruction(target.getEyePosition(),target.blockPosition())){ground.end(false);if(motor.workBlocksCleared>before){fightDigs+=motor.workBlocksCleared-before;fightBestAt=now;
+                    if(motor.lastWorkBlockCleared!=null&&motor.lastWorkBlockCleared.getY()>self.getBlockY())fightSecond=motor.lastWorkBlockCleared.below();}return false;}
+            }
+            if (now - fightBestAt > (perception.isVisible(target) ? 900 : 60) && d > 2.5) {
                 // it is behind a wall (seen through a slit: much later) or a ceiling (heard, remembered): ramming the block between us gets nowhere - left alone for two minutes
                 unreachableMobs.put(target.getId(), now + 2400);
                 unreachableGiveUps++;
@@ -4527,6 +4556,9 @@ public final class CloneController {
     }
 
     private long repairSince;
+    private long lastRepairScan=Long.MIN_VALUE/2;
+    private BlockPos liftingRepair;
+    private long liftStarted;
 
     /**
      * Any clone near a recorded staircase looks now and then for treads that are missing (dug out by someone, fallen in) and puts them on its
@@ -4548,7 +4580,7 @@ public final class CloneController {
                 for (int lane : new int[]{0, 1, -1, 2}) {
                     BlockPos tread = s.top.relative(s.dir, i).below(i + 1).relative(s.dir.getClockWise(), lane);
                     if (self.getEyePosition().distanceToSqr(Vec3.atCenterOf(tread)) > 36
-                            || !level.isLoaded(tread) || motor.repairs.contains(tread)) continue;
+                            || !level.isLoaded(tread) || motor.repairs.contains(tread) || motor.deferredWorkRepairs.contains(tread)) continue;
                     var st = level.getBlockState(tread);
                     BlockPos before = tread.relative(s.dir.getOpposite()).above();
                     BlockPos after = tread.relative(s.dir).below();
@@ -4571,14 +4603,18 @@ public final class CloneController {
 
     /** The holes this clone dug in a staircase's treads are filled with whatever block of no worth it has (cobblestone, dirt...). True while at it. */
     public boolean repairTreads(long now) {
-        if (motor.repairs.isEmpty() && (now + self.getId()) % 100 == 0 && option != Option.FIGHT && option != Option.FLEE && !escaping) {
+        if (motor.repairs.isEmpty() && ((now + self.getId()) % 100 == 0 || motor.stuckCount()>0 && now-lastRepairScan>=10)
+                && option != Option.FIGHT && option != Option.FLEE && !escaping) {
+            lastRepairScan=now;
             scanTreads(); // (anyone mends the stairs, not only whoever dug the hole)
         }
         BlockPos hole = motor.repairs.peek();
         if (hole == null) {
             repairSince = 0;
+            liftingRepair=null;
             return false;
         }
+        motor.cancelJump();
         if (repairSince == 0) {
             repairSince = now;
         }
@@ -4603,13 +4639,33 @@ public final class CloneController {
                     AABB box = self.getBoundingBox().move(Vec3.atBottomCenterOf(stand).subtract(self.position()));
                     if (box.intersects(new AABB(hole)) || !level.getFluidState(stand).isEmpty()
                             || !level.getBlockState(stand.below()).isFaceSturdy(level, stand.below(), Direction.UP)
-                            || !level.noCollision(self, box)) continue;
+                            || !level.noCollision(self, box) || dy>0 && !PillarSpace.clear(self,1.05)) continue;
                     motor.moveToward(Vec3.atBottomCenterOf(stand));
                     if (dy > 0) motor.jump();
                     return true;
                 }
             }
-            return false; // Keep the repair pending; emergency escape still has priority.
+            // A one-wide stair may offer no side cell. Clear only the known stair head space,
+            // then lift once so the real block can be placed after our body vacates the hole.
+            var bases=com.rlclones.clone.Bases.get(self.getServer());
+            if(bases.isStairTread(level.dimension(),hole)) {
+                int ceiling=(int)Math.ceil(hole.getY()+1+self.getBbHeight())-1;
+                for(int y=hole.getY()+2;y<=ceiling;y++) {
+                    BlockPos head=new BlockPos(hole.getX(),y,hole.getZ());var state=level.getBlockState(head);
+                    if(state.getCollisionShape(level,head).isEmpty())continue;
+                    if(!bases.isStairSpace(level.dimension(),head)||bases.isStairTread(level.dimension(),head)
+                            ||!Config.get(Config.ALLOW_BLOCK_BREAKING,true)||state.hasBlockEntity()||state.getDestroySpeed(level,head)<0
+                            ||state.getDestroySpeed(level,head)>=50||Motor.leftAlone(head,now)||!safeToDig(head)) {motor.stop();return true;}
+                    boolean wet=false;for(Direction d:Direction.values())if(!level.getFluidState(head.relative(d)).isEmpty())wet=true;
+                    if(wet){motor.stop();return true;}
+                    motor.stop();Equipment.select(self,Equipment.bestToolSlot(self,state));motor.mine(head);return true;
+                }
+                if(!hole.equals(liftingRepair)&&self.onGround()&&PillarSpace.clear(self,1.05)) {
+                    liftingRepair=hole.immutable();liftStarted=now;motor.stop();motor.jump();return true;
+                }
+                if(hole.equals(liftingRepair)&&now-liftStarted<=30){motor.stop();return true;}
+            }
+            motor.stop();return true; // bounded by the repair timeout; never resume jumping under a blocked tread.
         }
         if (!self.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, new net.minecraft.world.phys.AABB(hole), e -> e != self && e.isAlive() && !e.isSpectator()).isEmpty()) {
             motor.repairs.add(motor.repairs.poll()); // somebody stands in the cell (a crowd on the stairs): no block can be laid there, next hole; the whole queue times out after 200 ticks
@@ -4618,7 +4674,7 @@ public final class CloneController {
                 repairSince = 0;
                 return false;
             }
-            return false;
+            motor.stop();return true;
         }
         Equipment.select(self, slot);
         motor.stop();
@@ -5517,6 +5573,7 @@ public final class CloneController {
             return false;
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
+        if(blockTicks>10 && motor.clearWorkObstruction(center,blockTarget))return false;
         // (a pillar jump under way is finished first: its peak brings the eye into reach, and switching to mining there lost every placement)
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3 || kind == Perception.BlockKind.LOG && scafBase != null) {
             // the logs below this one are gone: stand in the trunk's column (where they were) and look up - the rest is within reach from there

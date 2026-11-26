@@ -285,4 +285,35 @@ public final class CommunityResourcesTests {
         } finally {BlockClaims.humanStopped(human.getUUID());server.getPlayerList().deop(profile);human.discard();}h.succeed();
     }
 
+    @AfterBatch(batch="work-access") public static void accessCleanup(ServerLevel level){cleanup(level);}
+    @GameTest(template="arena",batch="work-access",timeoutTicks=200)
+    public static void opensLowObstructionAndActuallyCollectsTheItem(GameTestHelper h){
+        arena(h);var c=actor(h,6,7);c.getInventory().setItem(0,new ItemStack(Items.IRON_PICKAXE));c.getInventory().selected=0;h.setBlock(new BlockPos(8,2,7),Blocks.STONE);for(int x=4;x<=15;x++){h.setBlock(new BlockPos(x,4,7),Blocks.BEDROCK);for(int y=2;y<=4;y++){h.setBlock(new BlockPos(x,y,6),Blocks.BEDROCK);h.setBlock(new BlockPos(x,y,8),Blocks.BEDROCK);}}
+        var point=h.absoluteVec(new Vec3(12.5,2.2,7.5));var item=new net.minecraft.world.entity.item.ItemEntity(h.getLevel(),point.x,point.y,point.z,new ItemStack(Items.COAL,3));item.setNoPickUpDelay();h.getLevel().addFreshEntity(item);
+        h.onEachTick(()->{var motor=c.controller().motor();if(!motor.clearWorkObstruction(item.position().add(0,.2,0),null))motor.navigate(item.position(),.5,false);motor.tick();});
+        h.succeedWhen(()->{h.assertTrue(c.controller().motor().workBlocksCleared>0&&h.getBlockState(new BlockPos(8,2,7)).isAir(),"blocking step dug instead of jumping into low ceiling");h.assertTrue(c.getInventory().countItem(Items.COAL)==3,"actual item recovered through opened path");});
+    }
+    @GameTest(template="arena",batch="work-access",timeoutTicks=40)
+    public static void earlyUtilityToolsWaitForFullEquippedNetherite(GameTestHelper h){
+        arena(h);var c=actor(h,6,7);
+        for(var item:new Item[]{Items.WOODEN_HOE,Items.STONE_HOE,Items.WOODEN_SHOVEL,Items.STONE_SHOVEL})h.assertTrue(Crafting.deferEarlyTool(c,item)&&Crafting.recipesFor(c,s->s.is(item)).isEmpty(),"early utility tool blocked in recipe planner");
+        var protectedCell=new BlockPos(8,2,7);h.setBlock(protectedCell,Blocks.STONECUTTER);h.assertTrue(!c.controller().motor().canClearWorkBlock(h.absolutePos(protectedCell)),"functional equipment is never treated as a natural obstruction");
+        h.assertTrue(!Crafting.deferEarlyTool(c,Items.IRON_SHOVEL)&&!Crafting.deferEarlyTool(c,Items.STONE_PICKAXE),"better tools and essential pickaxes stay available");
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.NETHERITE_HELMET));c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,new ItemStack(Items.NETHERITE_CHESTPLATE));c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.LEGS,new ItemStack(Items.NETHERITE_LEGGINGS));c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET,new ItemStack(Items.NETHERITE_BOOTS));
+        h.assertTrue(!Crafting.deferEarlyTool(c,Items.STONE_HOE)&&!Crafting.recipesFor(c,s->s.is(Items.STONE_HOE)).isEmpty(),"full equipped netherite unlocks low utility recipes");h.succeed();
+    }
+
+    private static Bases.Staircase accessStair;
+    @AfterBatch(batch="access-repair") public static void accessRepairCleanup(ServerLevel level){cleanup(level);Bases.get(level.getServer()).staircases.remove(accessStair);accessStair=null;}
+    @GameTest(template="arena",batch="access-repair",timeoutTicks=220)
+    public static void temporaryTreadAccessStaysOpenUntilWorkCompletesThenRestores(GameTestHelper h){
+        arena(h);var c=actor(h,5,7);c.getInventory().setItem(0,new ItemStack(Items.IRON_PICKAXE));c.getInventory().selected=0;c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));var bases=Bases.get(h.getLevel().getServer());
+        var top=h.absolutePos(new BlockPos(7,4,7));accessStair=bases.addStaircase(h.getLevel().dimension(),top,Direction.EAST);accessStair.end=top.east(2).below(2);var tread=top.below();h.getLevel().setBlock(tread,Blocks.STONE.defaultBlockState(),3);h.getLevel().setBlock(tread.below(),Blocks.STONE.defaultBlockState(),3);
+        var destination=h.absoluteVec(new Vec3(9.5,3.5,7.5));boolean[] opened={false};
+        h.onEachTick(()->{var motor=c.controller().motor();if(!opened[0]){motor.clearWorkObstruction(destination,null);if(h.getLevel().getBlockState(tread).isAir()){
+            h.assertTrue(motor.deferredWorkRepairs.contains(tread)&&!motor.repairs.contains(tread),"cut step remains open during access task");c.controller().scanTreads();h.assertTrue(!motor.repairs.contains(tread),"periodic repair cannot reseal active access");motor.repairs.clear();motor.finishWorkAccess();opened[0]=true;}}
+            else c.controller().repairTreads(h.getLevel().getGameTime());motor.tick();});
+        h.succeedWhen(()->{h.assertTrue(opened[0]&&h.getLevel().getBlockState(tread).is(Blocks.COBBLESTONE),"actual temporary step opening restored after work");h.assertTrue(c.getInventory().countItem(Items.COBBLESTONE)==7,"one real block consumed in restoration");});
+    }
+
 }

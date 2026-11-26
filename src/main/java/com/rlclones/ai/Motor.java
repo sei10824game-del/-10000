@@ -522,7 +522,7 @@ public final class Motor {
             clearPath();
             return true;
         }
-        if ((stepFixCell != null || stuckCount >= 3) && mendHighStep(goal)) {
+        if ((stepFixCell != null || stuckCount >= 1) && mendHighStep(goal)) {
             return false; // a wall two blocks high in the way: a block is laid to make it two steps of one
         }
         if (repathTimer > 0) {
@@ -559,7 +559,7 @@ public final class Motor {
                 Node n = path.getNextNode();
                 steer = new Vec3(n.x + 0.5, n.y, n.z + 0.5);
                 if (n.y > Mth.floor(pos.y + 0.5) && self.onGround()) {
-                    jump();
+                    if(n.y<=Mth.floor(pos.y)+1)jump();else cancelJump();
                 }
             }
         }
@@ -613,13 +613,16 @@ public final class Motor {
             Direction toGoal = Direction.getNearest(goal.x - pos.x, 0, goal.z - pos.z);
             BlockPos feet = self.blockPosition();
             BlockPos ahead = feet.relative(toGoal);
-            if (!solidAt(ahead) || !solidAt(ahead.above()) || solidAt(ahead.above(2)) || solidAt(feet.above(2)) || Equipment.pillarBlockSlot(self) < 0) {
+            if (!solidAt(ahead) || !solidAt(ahead.above()))return false;
+            cancelJump();
+            if (solidAt(ahead.above(2)) || solidAt(feet.above(2)) || Equipment.pillarBlockSlot(self) < 0) {
                 return false; // not a two-high wall (or nothing to build with)
             }
             stepFixCell = feet.immutable();
             stepFixDir = toGoal;
             stepFixTicks = 0;
         }
+        cancelJump();
         if (++stepFixTicks > 120) {
             stepFixCell = null;
             return false;
@@ -862,6 +865,58 @@ public final class Motor {
 
     /** Treads of staircases this clone has dug a hole in (ore taken out of them) and must fill. */
     public final java.util.ArrayDeque<BlockPos> repairs = new java.util.ArrayDeque<>();
+    public final java.util.Set<BlockPos> deferredWorkRepairs=new java.util.LinkedHashSet<>();
+    private boolean clearingWork;
+    private BlockPos accessGoal,accessBlock;
+    private int accessTicks,accessBlocks;
+    public int workBlocksCleared;
+    public BlockPos lastWorkBlockCleared;
+    public void finishWorkAccess(){for(var p:deferredWorkRepairs)if(!repairs.contains(p))repairs.add(p);deferredWorkRepairs.clear();accessGoal=accessBlock=null;accessTicks=accessBlocks=0;}
+    public boolean canClearWorkBlock(BlockPos p) {
+        var level=self.serverLevel();var state=level.getBlockState(p);
+        boolean terrain=state.is(net.minecraft.tags.BlockTags.BASE_STONE_OVERWORLD)||state.is(net.minecraft.tags.BlockTags.BASE_STONE_NETHER)
+                ||state.is(net.minecraft.tags.BlockTags.DIRT)||state.is(net.minecraft.tags.BlockTags.SAND)||state.is(net.minecraft.tags.BlockTags.LOGS)||state.is(net.minecraft.tags.BlockTags.LEAVES)
+                ||state.is(net.minecraftforge.common.Tags.Blocks.ORES)||state.is(net.minecraft.world.level.block.Blocks.COBBLESTONE)||state.is(net.minecraft.world.level.block.Blocks.COBBLED_DEEPSLATE)
+                ||state.is(net.minecraft.world.level.block.Blocks.MOSSY_COBBLESTONE)||state.is(net.minecraft.world.level.block.Blocks.GRAVEL)||state.is(net.minecraft.world.level.block.Blocks.CALCITE);
+        if(!terrain||!com.rlclones.clone.CloneMobs.canUseHands(self)||!Config.get(Config.ALLOW_BLOCK_BREAKING,true)||state.isAir()||state.hasBlockEntity()||state.is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE)
+                ||state.is(net.minecraft.tags.BlockTags.DOORS)||state.is(net.minecraft.tags.BlockTags.BEDS)||state.is(net.minecraft.tags.BlockTags.FENCES)
+                ||state.is(net.minecraft.tags.BlockTags.PLANKS)||state.getDestroySpeed(level,p)<0||state.getDestroySpeed(level,p)>=50
+                ||!Equipment.canHarvest(self,state)||BlockClaims.takenByOther(level,p,self.getUUID(),level.getGameTime())||!state.getFluidState().isEmpty())return false;
+        if(p.getY()<self.getBlockY() || self.getEyePosition().distanceToSqr(Vec3.atCenterOf(p))>BLOCK_REACH*BLOCK_REACH)return false;
+        for(Direction d:Direction.values())if(!level.getFluidState(p.relative(d)).isEmpty())return false;
+        if(level.getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock)return false;
+        var bases=com.rlclones.clone.Bases.get(self.getServer());
+        if((bases.isStairTread(level.dimension(),p)||bases.nearest(level.dimension(),Vec3.atCenterOf(p),8)!=null)
+                &&(!Config.get(Config.ALLOW_BLOCK_PLACING,true)||Equipment.pillarBlockSlot(self)<0||deferredWorkRepairs.size()>=6))return false;
+        return level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,new net.minecraft.world.phys.AABB(p.above()).deflate(.02),e->e!=self&&e.isAlive()&&Math.abs(e.getY()-p.getY()-1)<.2).isEmpty();
+    }
+    /** Only a known work destination, never a general license to tunnel through the world. */
+    public boolean clearWorkObstruction(Vec3 destination,BlockPos protectedTarget) {
+        if(self.position().distanceToSqr(destination)>64)return false;
+        var key=BlockPos.containing(destination);
+        if(accessGoal!=null&&!key.equals(accessGoal))finishWorkAccess();
+        BlockPos p=accessBlock;
+        if(p==null||self.level().getBlockState(p).isAir()) {
+            var hit=self.level().clip(new ClipContext(self.getEyePosition(),destination,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,self));
+            if(hit.getType()!=HitResult.Type.BLOCK||hit.getBlockPos().equals(protectedTarget)) {
+                if(!self.horizontalCollision && stuckCount==0)return false;
+                Vec3 feet=self.position().add(0,.3,0);
+                hit=self.level().clip(new ClipContext(feet,new Vec3(destination.x,feet.y,destination.z),ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,self));
+                if(hit.getType()!=HitResult.Type.BLOCK||hit.getBlockPos().equals(protectedTarget))return false;
+            }
+            p=hit.getBlockPos().immutable();
+        }
+        if(!canClearWorkBlock(p)){accessBlock=null;return false;}
+        accessGoal=key;accessBlock=p;
+        if(++accessTicks>180||accessBlocks>=8)return false;
+        var bases=com.rlclones.clone.Bases.get(self.getServer());boolean restore=bases.isStairTread(self.level().dimension(),p)||bases.nearest(self.level().dimension(),Vec3.atCenterOf(p),8)!=null;
+        stop();cancelJump();Equipment.select(self,Equipment.bestToolSlot(self,self.level().getBlockState(p)));
+        clearingWork=true;
+        try{if(mine(p)){accessBlock=null;accessBlocks++;workBlocksCleared++;lastWorkBlockCleared=p.immutable();if(restore)deferredWorkRepairs.add(p.immutable());clearPath();resetStuck();}}
+        finally{clearingWork=false;}
+        return true;
+    }
+
 
     /** Set while the stair work runs (it digs the stairs; every other mining leaves their treads alone). */
     public boolean stairWork;
@@ -877,7 +932,7 @@ public final class Motor {
         }
         boolean repairingTread = !stairWork && self.getServer() != null
                 && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos);
-        if (repairingTread && (!self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES)
+        if (repairingTread && (!clearingWork && !self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES)
                 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(self) < 0
                 || !repairs.isEmpty())) {
             mineDebug = "stair tread: keep intact until it can be restored";
@@ -945,7 +1000,7 @@ public final class Motor {
             if (removed && self instanceof com.rlclones.clone.ClonePlayer clone && clone.controller() != null)
                 clone.controller().onConfirmedMining(state, pos);
             if (repairingTread && removed && !repairs.contains(pos)) {
-                repairs.add(pos.immutable()); // a hole in a staircase's tread: filled with a block of no worth, so the stairs keep their shape
+                if(clearingWork)deferredWorkRepairs.add(pos.immutable());else repairs.add(pos.immutable()); // a hole in a staircase's tread: filled with a block of no worth, so the stairs keep their shape
             }
             resetMining();
             if (state.is(net.minecraftforge.common.Tags.Blocks.ORES) && self instanceof com.rlclones.clone.ClonePlayer cp && cp.controller() != null) {
@@ -1645,6 +1700,7 @@ public final class Motor {
         }
         self.zza = zza;
         self.xxa = xxa;
+        if(jump && self.onGround() && !self.isInWater() && !self.isInLava() && !self.onClimbable() && !PillarSpace.clear(self,0.6))jump=false;
         self.setJumping(jump);
         if (self.isPassenger() && self.getVehicle() instanceof net.minecraft.world.entity.animal.horse.AbstractHorse steed && steed.isAlive() && steed.isSaddled()
                 && steed.getControllingPassenger() == self && !self.level().isClientSide) {

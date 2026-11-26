@@ -14,9 +14,9 @@ public final class TeamDefense {
     public int alerts,joins,regroups;public String debug="";
     public TeamDefense(ClonePlayer self,Perception perception,Motor motor){this.self=self;this.perception=perception;this.motor=motor;}
     public static void clear(){CALLS.clear();}
-    public boolean marked(Entity e,long now){return e!=null&&e==alerted&&now<alertUntil&&e.isAlive()&&e.level()==self.level();}
+    public boolean marked(Entity e,long now){return e!=null&&e==alerted&&now<alertUntil&&e.isAlive()&&e.level()==self.level()&&!self.controller().unreachable(e,now);}
     public Entity visible(long now){
-        if(intentAt==now)return intent;intentAt=now;
+        if(intentAt==now)return intent!=null&&self.controller().unreachable(intent,now)?null:intent;intentAt=now;
         Entity best=null;double distance=24*24;
         for(var seen:perception.visible())if(seen.alive()&&now-seen.lastSeen<=10&&Senses.isHostileTo(seen.entity,self)){
             double d=seen.entity.distanceToSqr(self);if(d<distance){distance=d;best=seen.entity;}}

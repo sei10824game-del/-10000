@@ -1180,3 +1180,10 @@ AC: all Motor.mine callers honor one active miner per block including logs/leave
 AC: repeated lack of reachable safe retreat directions or sustained inability to gain distance under close pressure switches FLEE to FIGHT; one blocked direction must try alternatives; portal/pearl/perch/corridor safety stays available; cornered commitment overrides repeated forced fleeing and regroup retreat, does not oscillate immediately, allows later retreat/newly opened routes; no enemy means no cornered combat. Bounded probes/cadence, unit and native real route/option/attack regressions before push.
 
 検証完了: 単体75件・ゲーム内45件成功、ビルド成功（cornered-native.log）。実コントローラが閉室で強制FLEE/戦闘クールダウンからFIGHTへ移り、集団合流待ちをせずHP80の敵へ実ダメージを与えることを確認。横方向の逃走経路がある場合は反撃を強制せず、出口開放後は反撃保持時間内に退避へ戻れることを確認。純粋ロジックで距離改善/圧力消失/継続失敗も検証。臆病モードの戦闘禁止は維持。
+
+## Broken stair ascent repair
+AC: interrupted ascent checks known missing treads promptly, repairs from below with actual materials, preserves intact treads; self-occupied gap can safely vacate or make one bounded lift-and-place attempt, permitted known headroom clearance only; crowd/no materials/protected ceiling causes bounded waiting or abort without endless hopping, no placement in bodies/liquids or item duplication; normal stair jumps/swimming and existing ore repair/shaft/combat regression checks remain.
+
+追加AC（ユーザー指定）: 回収/採掘の間の安全な障害物は有限範囲だけ除去し、既知階段や拠点の一時的損傷は作業後に実材料で補修。壁越しの音だけで到達不可な敵は無意味な警戒を繰り返さず、見える/被弾した際は再反応。自分を狙う認知済み敵を最短距離優先で切替（未被弾でも）。木/石のクワとシャベルはネザライト防具一式装備前には通常製作/更新/好奇心製作しない。
+
+検証完了: 単体75件成功。階段/共同資源/生存/地形戦闘/弓/装備/文明/地形差分/縦坑/鉱石学習のゲーム内122件成功（practical-fixes-complete.log）。追加の壁掘削→戦闘継続修正後、関連71件成功、ビルド成功（combat-access-final.log）。実コントローラで頭上障害物の除去→欠けた段の実材料補修→上昇、低い通路の障害物採掘→アイテム回収、一時的な段の作業後補修、壁越し敵への開通→実攻撃、未被弾の近い追跡敵への切替、木/石クワ・シャベルの装備段階制約を確認。途中の実戦試験で見つかった地形戦術による掘削進捗リセットと上半分だけの開口を修正済み。
