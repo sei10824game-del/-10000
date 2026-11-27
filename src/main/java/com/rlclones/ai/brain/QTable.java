@@ -3,10 +3,10 @@ package com.rlclones.ai.brain;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Random;
 
@@ -72,23 +72,36 @@ public final class QTable {
 
     public static float max(Entry e, int mask) {
         float best = Float.NEGATIVE_INFINITY;
-        for (int a = 0; a < e.q.length; a++) {
-            if ((mask & (1 << a)) != 0 && e.q[a] > best) {
+        int available = mask & actionMask(e.q.length);
+        if (available == actionMask(e.q.length)) {
+            // Dense masks are common in replay. A simple contiguous scan is faster here.
+            for (float q : e.q) if (q > best) best = q;
+            return best == Float.NEGATIVE_INFINITY ? 0f : best;
+        }
+        for (int bits = available; bits != 0; bits &= bits - 1) {
+            int a = Integer.numberOfTrailingZeros(bits);
+            if (e.q[a] > best) {
                 best = e.q[a];
             }
         }
         return best == Float.NEGATIVE_INFINITY ? 0f : best;
     }
 
+    public static int actionMask(int count) {
+        return count == 32 ? -1 : (1 << count) - 1;
+    }
+
     public static int argmax(Entry e, int mask, Random random) {
+        return argmax(e.q, mask, random);
+    }
+
+    static int argmax(float[] values, int mask, Random random) {
         int best = -1;
         float bestQ = Float.NEGATIVE_INFINITY;
         int ties = 0;
-        for (int a = 0; a < e.q.length; a++) {
-            if ((mask & (1 << a)) == 0) {
-                continue;
-            }
-            float q = e.q[a];
+        for (int bits = mask & actionMask(values.length); bits != 0; bits &= bits - 1) {
+            int a = Integer.numberOfTrailingZeros(bits);
+            float q = values[a];
             if (q > bestQ + 1e-6f) {
                 bestQ = q;
                 best = a;

@@ -410,8 +410,7 @@ public final class Brain {
         if (STRATEGY.equals(name)) {
             return StrategyState::prior;
         }
-        EnemyKnowledge k = knowledge(name);
-        return (s, q) -> CombatState.prior(s, k.isExplosive(), k.isRanged(), q);
+        return knowledge(name).combatPrior;
     }
 
     public int chooseCombat(String type, int state, int mask) {
@@ -434,28 +433,21 @@ public final class Brain {
         e.visits++;
         if (random.nextDouble() < eps) {
             int demoTotal = 0;
-            for (int a = 0; a < e.demo.length; a++) {
-                if ((mask & (1 << a)) != 0) {
-                    demoTotal += e.demo[a];
-                }
+            for (int bits = mask & QTable.actionMask(e.demo.length); bits != 0; bits &= bits - 1) {
+                demoTotal += e.demo[Integer.numberOfTrailingZeros(bits)];
             }
             if (demoTotal > 0 && random.nextDouble() < 0.6) {
                 int pick = random.nextInt(demoTotal);
-                for (int a = 0; a < e.demo.length; a++) {
-                    if ((mask & (1 << a)) != 0) {
-                        pick -= e.demo[a];
-                        if (pick < 0) {
-                            return a;
-                        }
-                    }
+                for (int bits = mask & QTable.actionMask(e.demo.length); bits != 0; bits &= bits - 1) {
+                    int a = Integer.numberOfTrailingZeros(bits);
+                    pick -= e.demo[a];
+                    if (pick < 0) return a;
                 }
             }
             int count = Integer.bitCount(mask);
             int pick = random.nextInt(count);
-            for (int a = 0; a < e.q.length; a++) {
-                if ((mask & (1 << a)) != 0 && pick-- == 0) {
-                    return a;
-                }
+            for (int bits = mask & QTable.actionMask(e.q.length); bits != 0; bits &= bits - 1) {
+                if (pick-- == 0) return Integer.numberOfTrailingZeros(bits);
             }
         }
         return QTable.argmax(e, mask, random);
@@ -463,12 +455,12 @@ public final class Brain {
 
     /** Greedy action without exploration or bookkeeping (used for display). */
     public int greedy(String tableName, int state, int mask) {
-        QTable.Entry e = table(tableName).peek(state);
+        QTable table = table(tableName);
+        QTable.Entry e = table.peek(state);
         if (e == null) {
-            float[] q = new float[table(tableName).actions()];
+            float[] q = new float[table.actions()];
             prior(tableName).fill(state, q);
-            QTable.Entry tmp = new QTable(q.length).get(state, (s, out) -> System.arraycopy(q, 0, out, 0, q.length));
-            return QTable.argmax(tmp, mask, random);
+            return QTable.argmax(q, mask, random);
         }
         return QTable.argmax(e, mask, random);
     }
@@ -537,7 +529,7 @@ public final class Brain {
         float target = r;
         if (!terminal) {
             int mask = nextMask == 0 ? (1 << table.actions()) - 1 : nextMask;
-            target += gamma * QTable.max(table.get(s2, prior), mask);
+            target += gamma * QTable.max(s2 == s ? e : table.get(s2, prior), mask);
         }
         double base = Config.get(Config.LEARNING_RATE, 0.25);
         float alpha = (float) Math.max(0.02, base / Math.sqrt(1.0 + e.n[a] * 0.05)) * weight;
