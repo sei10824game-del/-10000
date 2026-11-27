@@ -335,6 +335,27 @@ public final class Crafting {
         return armorImproves(p, new ItemStack(target));
     }
 
+    /** One inventory pass for the eight standard armor candidates. Rebuilt on every call. */
+    public static void addArmorUpgrades(Player p, List<Item> out) {
+        var best = new java.util.EnumMap<net.minecraft.world.entity.EquipmentSlot, Double>(
+                net.minecraft.world.entity.EquipmentSlot.class);
+        for (Item it : ARMOR) {
+            var slot = ((ArmorItem) it).getEquipmentSlot();
+            best.computeIfAbsent(slot, k -> Equipment.armorScore(p.getItemBySlot(k)));
+        }
+        for (ItemStack stack : p.getInventory().items) {
+            if (stack.getItem() instanceof ArmorItem armor && best.containsKey(armor.getEquipmentSlot())) {
+                var slot = armor.getEquipmentSlot();
+                best.put(slot, Math.max(best.get(slot), Equipment.armorScore(stack)));
+            }
+        }
+        for (Item it : ARMOR) {
+            if (Equipment.armorScore(new ItemStack(it)) > best.get(((ArmorItem) it).getEquipmentSlot()) + 0.01) {
+                out.add(it);
+            }
+        }
+    }
+
     public static boolean armorImproves(Player p, ItemStack target) {
         if (!(target.getItem() instanceof ArmorItem armor)) return false;
         var slot = armor.getEquipmentSlot();
@@ -567,11 +588,7 @@ public final class Crafting {
                 out.add(it); // dirt, sand and gravel go fast with it (stairs and shafts dig a lot of them); never a better one than the pickaxe
             }
         }
-        for (Item it : ARMOR) {
-            if (armorUpgrade(p, (ArmorItem) it)) {
-                out.add(it);
-            }
-        }
+        addArmorUpgrades(p, out);
 
         if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BREWING_STAND) && !brewingStandNearby(p)) {
             out.add(Items.BREWING_STAND);
