@@ -265,4 +265,25 @@ public final class SectionSearchTests {
         h.succeed();
     }
 
+
+    @GameTest(template="arena",batch="geometry-sharing",timeoutTicks=40)
+    public static void sharedGeometryRefreshesWithinSameTick(GameTestHelper h){
+        var entity=h.spawn(net.minecraft.world.entity.EntityType.PIG,new net.minecraft.world.phys.Vec3(7.5,2,7.5));
+        try{
+            var original=entity.getBoundingBox();
+            var first=com.rlclones.ai.util.EntityGeometry.sample(entity);
+            var second=com.rlclones.ai.util.EntityGeometry.sample(entity);
+            h.assertTrue(first==second,"two observers share raw geometry for the identical bounding box");
+            h.assertTrue(first.center().equals(original.getCenter()),"center matches original calculation");
+            h.assertTrue(first.radius()==Math.max(original.getXsize(),original.getYsize())*.5,"radius matches original calculation");
+            var moved=original.move(1.25,.5,-2.0);
+            entity.setBoundingBox(moved);
+            var third=com.rlclones.ai.util.EntityGeometry.sample(entity);
+            h.assertTrue(third!=first&&third.center().equals(moved.getCenter()),"same-tick bounding box edits refresh immediately");
+            entity.setBoundingBox(original);
+            h.assertTrue(com.rlclones.ai.util.EntityGeometry.sample(entity).center().equals(original.getCenter()),"restoring box also refreshes geometry");
+        }finally{entity.discard();}
+        h.succeed();
+    }
+
 }
