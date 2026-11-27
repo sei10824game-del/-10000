@@ -1,0 +1,105 @@
+name: Profile original clone AI hotspots (JFR)
+
+on:
+  push:
+    branches: [validation/jfr-hotspots-20261127]
+    paths:
+      - .github/workflows/jfr-hotspots.yml
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        count: [100, 300]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare original code in detached worktree
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/profile-src" 23b71eaee9077217cf4db888692db52b11288275
+          python3 - <<'PY'
+          import runpy, os
+          from pathlib import Path
+          work=Path(os.environ["RUNNER_TEMP"])/"profile-src"
+          tool=runpy.run_path("scripts/compare-population.py")
+          tool["instrument"](work)
+          run=work/"run"
+          run.mkdir(exist_ok=True)
+          (run/"soak.flag").write_text("2400\nclones ${{ matrix.count }}\n")
+          (run/"server.properties").write_text("level-seed=rlclones\n")
+          # Attach Java Flight Recorder to the actual Forge game server JVM only.
+          p=work/"build.gradle"
+          s=p.read_text()
+          anchor="        gameTestServer {"
+          assert s.count(anchor)==1
+          s=s.replace(anchor,anchor+"\n            jvmArgs '-XX:StartFlightRecording=filename=clone-profile.jfr,settings=profile,dumponexit=true,maxsize=256m'")
+          p.write_text(s)
+          PY
+      - name: Run real game server with JFR
+        run: |
+          cd "$RUNNER_TEMP/profile-src"
+          set -o pipefail
+          bash ./gradlew --no-daemon -Drlclones.gameTestNamespaces=rlclones_population_probe runGameTestServer 2>&1 | tee "$RUNNER_TEMP/profile-console.log"
+      - name: Analyze recorded samples
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/profile-report"
+          src="$RUNNER_TEMP/profile-src"
+          if test -f "$RUNNER_TEMP/profile-console.log"; then
+            cp "$RUNNER_TEMP/profile-console.log" "$RUNNER_TEMP/profile-report/"
+          fi
+          if test -f "$src/run/logs/latest.log"; then
+            cp "$src/run/logs/latest.log" "$RUNNER_TEMP/profile-report/"
+          fi
+          f=$(find "$src" -name clone-profile.jfr -type f -print -quit)
+          if test -z "$f"; then echo "No JFR recording produced"; exit 1; fi
+          cp "$f" "$RUNNER_TEMP/profile-report/clone-profile.jfr"
+          jfr summary "$f" | tee "$RUNNER_TEMP/profile-report/summary.txt"
+          jfr print --json --events jdk.ExecutionSample,jdk.ObjectAllocationSample --stack-depth 64 "$f" > "$RUNNER_TEMP/profile-events.json"
+          python3 - <<'PY' | tee "$RUNNER_TEMP/profile-report/hotspots.txt"
+          import json, os, collections
+          from pathlib import Path
+          e=json.loads((Path(os.environ["RUNNER_TEMP"])/"profile-events.json").read_text())
+          counts=collections.Counter()
+          stacks=collections.Counter()
+          alloc=collections.Counter()
+          for item in e["recording"]["events"]:
+              v=item["values"]
+              frames=(v.get("stackTrace") or {}).get("frames",[])
+              methods=[]
+              for fr in frames:
+                  m=fr.get("method") or {}
+                  t=(m.get("type") or {}).get("name","").replace("/",".")
+                  methods.append(t+"."+m.get("name",""))
+              if not methods: continue
+              ai=[m for m in methods if m.startswith("com.rlclones.")]
+              if item["type"]=="jdk.ExecutionSample":
+                  if (v.get("sampledThread") or {}).get("javaName")!="Server thread": continue
+                  counts[methods[0]]+=1
+                  if ai: stacks[ai[0]]+=1
+              elif ai:
+                  alloc[ai[0]]+=v.get("weight",0)
+          for name,c in [("Server leaf samples",counts),("Closest mod frame",stacks),("Mod allocation sampled weight (bytes)",alloc)]:
+              print(name)
+              for k,v in c.most_common(40): print(v,k)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jfr-profile-${{ matrix.count }}
+          path: ${{ runner.temp }}/profile-report/
+          if-no-files-found: warn
