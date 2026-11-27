@@ -738,12 +738,27 @@ public final class Motor {
         final BlockPos goal;
         final java.util.List<Node> nodes;
         final long tick;
+        final int minX,maxX,minY,maxY,minZ,maxZ;
 
         SharedPath(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, BlockPos goal, java.util.List<Node> nodes, long tick) {
             this.dim = dim;
             this.goal = goal;
             this.nodes = nodes;
             this.tick = tick;
+            int lx=Integer.MAX_VALUE,ly=Integer.MAX_VALUE,lz=Integer.MAX_VALUE;
+            int hx=Integer.MIN_VALUE,hy=Integer.MIN_VALUE,hz=Integer.MIN_VALUE;
+            for(int i=0;i<nodes.size()-1;i++){
+                Node n=nodes.get(i);
+                lx=Math.min(lx,n.x);hx=Math.max(hx,n.x);
+                ly=Math.min(ly,n.y);hy=Math.max(hy,n.y);
+                lz=Math.min(lz,n.z);hz=Math.max(hz,n.z);
+            }
+            minX=lx;maxX=hx;minY=ly;maxY=hy;minZ=lz;maxZ=hz;
+        }
+        boolean mayContain(Vec3 pos){
+            return !(minX+.5-pos.x>=1||maxX+.5-pos.x<=-1
+                    ||minY-pos.y>1||maxY-pos.y< -1
+                    ||minZ+.5-pos.z>=1||maxZ+.5-pos.z<=-1);
         }
     }
 
@@ -766,10 +781,13 @@ public final class Motor {
             if (sp.dim != level.dimension() || sp.goal.distManhattan(goal) > 3) {
                 continue;
             }
+            if(!sp.mayContain(pos))continue;
             for (int i = 0; i < sp.nodes.size() - 1; i++) {
                 Node n = sp.nodes.get(i);
                 if (Math.abs(n.x + 0.5 - pos.x) < 1.0 && Math.abs(n.z + 0.5 - pos.z) < 1.0 && Math.abs(n.y - pos.y) <= 1.0) {
-                    return new Path(new java.util.ArrayList<>(sp.nodes.subList(i, sp.nodes.size())), sp.goal, true);
+                    java.util.List<Node> suffix=new java.util.ArrayList<>(sp.nodes.size()-i);
+                    for(int j=i;j<sp.nodes.size();j++)suffix.add(sp.nodes.get(j));
+                    return new Path(suffix,sp.goal,true);
                 }
             }
         }
