@@ -695,6 +695,7 @@ public final class CloneController {
             else if (blastReflex(now)) idleWhy = "blast";
             else if (scatterReflex(now)) idleWhy = "scatter";
             else {
+                watchTells(now);
                 idleWhy = "mining-commit";
                 runStrategy(now);
             }
@@ -3240,7 +3241,7 @@ public final class CloneController {
     private void switchCombatTarget(Entity enemy,long now) {
         closeCombatStep(false,false);motor.resetMining();motor.clearPath();dropVantage();
         target=enemy;targetType=Perception.typeId(enemy);combatState=-1;action=null;fightBest=Double.MAX_VALUE;
-        fightBestAt=now;fightDigs=fightWalk=fightBlocked=0;fightSecond=null;retargets++;
+        fightBestAt=now;fightDigs=fightWalk=fightBlocked=0;fightSecond=null;glassBreach=null;glassEnemy=null;retargets++;
     }
 
     private Entity pickHostile(long now) {
@@ -3369,10 +3370,10 @@ public final class CloneController {
             }
             // Attack through a glass opening only for a currently known hostile. The regular
             // base-protection rule remains intact for walls, storage and other blocks.
-            if (!hunt && target.isAlive() && target.level() == self.level() && Senses.isHostileTo(target,self)
+            if (!hunt && validTarget(target,false,now) && Senses.isHostileTo(target,self)
                     && d <= 12 && (perception.isVisible(target) || glassEnemy == target)) {
                 if (glassEnemy != target || !motor.canBreachGlass(glassBreach)) glassBreach = null;
-                if (glassBreach == null && now % 10 == 0 && (fightBlocked >= 20 || now - fightBestAt > 20 || motor.stuckCount() > 0)) {
+                if (glassBreach == null && perception.isVisible(target) && now % 10 == 0 && (fightBlocked >= 20 || now - fightBestAt > 20 || motor.stuckCount() > 0)) {
                     BlockPos glass = motor.combatGlassBetween(target);
                     if (glass != null && (motor.pathTo(target.position()) == null || motor.stuckCount() >= 2 || now - fightBestAt > 60)) {
                         // Keep the existing team readiness check for dangerous opponents.
