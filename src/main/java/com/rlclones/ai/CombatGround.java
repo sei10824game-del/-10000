@@ -108,13 +108,30 @@ public final class CombatGround {
         finally { scanMemo = previous; }
     }
 
+    // Immutable relative offsets, shared by every clone. Keep the legacy loop order
+    // and repeated coordinates (ties must retain their original order).
+    private static final List<BlockPos> CANDIDATE_OFFSETS = candidateOffsets();
+
+    private static List<BlockPos> candidateOffsets() {
+        List<BlockPos> offsets = new ArrayList<>();
+        for (int ring : new int[]{0,2,3,5}) {
+            for (int direction=0; direction<8; direction++) {
+                if (ring==0 && direction>0) continue;
+                double angle=direction*Math.PI/4;
+                int dx=(int)Math.round(Math.cos(angle)*ring);
+                int dz=(int)Math.round(Math.sin(angle)*ring);
+                for (int dy : new int[]{0,1,-1,2}) offsets.add(new BlockPos(dx,dy,dz));
+            }
+        }
+        return List.copyOf(offsets);
+    }
+
     private List<Site> collectCandidates(Entity e){
         allies();boolean range=armedRanged(),aoe=nearbyArea(e),rangedThreat=nearbyRanged(e);
         boolean high=highUseful(e)&&!rangedThreat&&!aoe&&Senses.threats(self.controller().perception(),self,self.level().getGameTime(),16).stream().allMatch(t->highUseful(t.entity));int threats=Senses.threats(self.controller().perception(),self,self.level().getGameTime(),16).size();
         var best=new ArrayList<Site>();Vec3 towards=e.position().subtract(self.position()).multiply(1,0,1).normalize();
-        for(int ring:new int[]{0,2,3,5})for(int direction=0;direction<8;direction++)for(int dy:new int[]{0,1,-1,2}){
-            if(ring==0&&direction>0)continue;
-            double angle=direction*Math.PI/4;BlockPos p=self.blockPosition().offset((int)Math.round(Math.cos(angle)*ring),dy,(int)Math.round(Math.sin(angle)*ring));
+        for(BlockPos offset : CANDIDATE_OFFSETS){
+            BlockPos p=self.blockPosition().offset(offset.getX(),offset.getY(),offset.getZ());
             if(!safe(p)||occupied(p))continue;double distance=point(p).distanceTo(e.position());if(distance<Math.min(3,self.distanceTo(e))||distance>24)continue;
             BlockPos retreat=escape(p,e);if(retreat==null)continue;
             double moved=point(p).distanceTo(self.position()),space=spacing(point(p));if(aoe&&space<4)continue;
