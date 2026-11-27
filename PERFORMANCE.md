@@ -154,3 +154,24 @@ Initial allocation per 64-slot workspace: approximately 2356 -> 1652 bytes
 These are component measurements on Java 21, not Minecraft FPS/MSPT or Java 17
 runtime measurements. Forge build and full GameTest results are not established
 by this standalone check.
+
+## Standalone regression validation (2026-11-27)
+
+Compiled exact GitHub source blobs with `javac --release 17` and ran an
+independent Java harness on OpenJDK 21.0.12.1. Local `git hash-object` results
+matched each blob:
+
+- ReplayBuffer: `37a501216515537c99ec28a7f14fac42e468ffcc`
+- StairFootprint: `055fa65d7b6a689e3ffacbfe6fb5b7c81cf804d5`
+- RevisionList: `82d23e956f7e01dd64b6d21c74af49a94f524934`
+
+All checks passed:
+- 34,436 replay samples compared against fixed-capacity ring reference with equal RNG seeds.
+- 283 byte comparisons against original-format reference writer or save/load round trips.
+- 280,000 stair/shaft proximity comparisons against the original per-step formula, covering four directions and seven lengths.
+- 10,000 randomized list edits compared with ArrayList, including revision increments.
+
+These checks do not compile or exercise Minecraft-dependent integration code,
+and they do not establish Forge build success or population MSPT. Draft PR #3
+is for CI validation only; do not merge on the strength of standalone checks.
+Direct GitHub git access from the validation container failed DNS resolution.
