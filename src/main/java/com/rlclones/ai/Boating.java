@@ -94,10 +94,12 @@ public final class Boating {
         }
         // A long swim or a broad ice route ahead; use the actual held boat.
         double distance=Motor.horizontalDistance(self.position(),goal);
-        if (cooldown <= 0 && distance > 6 && boatSlot(self) >= 0 && !self.isPassenger()
-                && com.rlclones.clone.CloneMobs.canUseHands(self)) {
-            iceTrip=self.onGround()&&distance>12&&Math.abs(goal.y-self.getY())<2&&onIce(self)&&iceRoute(self.position(),goal,5);
-            if(!(self.isInWater()&&!self.isUnderWater())&&!iceTrip)return false;
+        boolean swimming=self.isInWater()&&!self.isUnderWater();
+        boolean iceCandidate=self.onGround()&&distance>12&&Math.abs(goal.y-self.getY())<2&&onIce(self);
+        if (cooldown <= 0 && distance > 6 && (swimming||iceCandidate) && !self.isPassenger()
+                && com.rlclones.clone.CloneMobs.canUseHands(self) && boatSlot(self) >= 0) {
+            iceTrip=iceCandidate&&iceRoute(self.position(),goal,5);
+            if(!swimming&&!iceTrip)return false;
             state = State.DEPLOY;
             stateTicks = 0;
             return deploy(goal);
@@ -119,8 +121,8 @@ public final class Boating {
             Vec3 p=at.add(dir.scale(d));
             var box=new net.minecraft.world.phys.AABB(p.x-.7,p.y+.05,p.z-.7,p.x+.7,p.y+1.9,p.z+.7);
             if(level.getBlockCollisions(self,box).iterator().hasNext())return false;
-            for(double x:new double[]{-.6,.6})for(double z:new double[]{-.6,.6}){
-                var support=net.minecraft.core.BlockPos.containing(p.x+x,p.y-.2,p.z+z);
+            for(int x=-1;x<=1;x+=2)for(int z=-1;z<=1;z+=2){
+                var support=net.minecraft.core.BlockPos.containing(p.x+x*.6,p.y-.2,p.z+z*.6);
                 if(!level.hasChunkAt(support)||!level.getBlockState(support).is(net.minecraft.tags.BlockTags.ICE))return false;
             }
         }
@@ -131,6 +133,7 @@ public final class Boating {
         if (++stateTicks > 30 || boatSlot(self) < 0) {
             state = State.NONE;
             cooldown = 200;
+            iceTrip=false;
             return false;
         }
         Equipment.select(self, boatSlot(self));
