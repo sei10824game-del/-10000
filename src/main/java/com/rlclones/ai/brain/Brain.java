@@ -380,19 +380,19 @@ public final class Brain {
     }
 
     /** "ranged" / "boom" / "melee", and big or small: which enemies are alike for the purpose of fighting them. */
-    private String archetype(String type) {
+    private int archetype(String type) {
         EnemyKnowledge k = knowledge(type);
-        return (k.isExplosive() ? "boom" : k.isRanged() ? "ranged" : "melee") + (k.health.get() >= 60 ? "-big" : "-small");
+        return (k.isExplosive() ? 4 : k.isRanged() ? 2 : 0) | (k.health.get() >= 60 ? 1 : 0);
     }
 
     /** The best-practised combat table of a type of the same archetype (or null). */
     @javax.annotation.Nullable
     private QTable donorFor(String type) {
-        String want = archetype(type);
+        int want = archetype(type);
         QTable best = null;
         for (Map.Entry<String, QTable> e : combat.entrySet()) {
             if (!e.getKey().equals(type) && e.getValue().size() >= 20 && (best == null || e.getValue().size() > best.size())
-                    && archetype(e.getKey()).equals(want)) {
+                    && archetype(e.getKey()) == want) {
                 best = e.getValue();
             }
         }
@@ -809,11 +809,12 @@ public final class Brain {
         b.useQ.forEach((k, bq) -> {
             float[] q = useQ.computeIfAbsent(k, x -> new float[USE_MODES]);
             int[] n = useN.computeIfAbsent(k, x -> new int[USE_MODES]);
-            int[] bn = b.useN.getOrDefault(k, new int[USE_MODES]);
+            int[] bn = b.useN.get(k);
             for (int m = 0; m < USE_MODES; m++) {
-                int t = n[m] + bn[m];
+                int theirs = bn == null ? 0 : bn[m];
+                int t = n[m] + theirs;
                 if (t > 0) {
-                    q[m] = (q[m] * n[m] + bq[m] * bn[m]) / t;
+                    q[m] = (q[m] * n[m] + bq[m] * theirs) / t;
                 }
                 n[m] = t;
             }
