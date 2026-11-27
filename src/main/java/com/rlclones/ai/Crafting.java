@@ -648,6 +648,16 @@ public final class Crafting {
                 out.add(Items.BUCKET);
             }
         }
+        // Advanced progression: use the ordinary recipe book and ingredients, not item spawning.
+        if (pick >= Tiers.DIAMOND.getLevel() && count(p, Items.ENCHANTING_TABLE) == 0
+                && count(p, Items.DIAMOND) >= 2 && count(p, Items.OBSIDIAN) >= 4 && hasItem(p, Items.BOOK)) {
+            out.add(Items.ENCHANTING_TABLE);
+        }
+        if (count(p, Items.ENDER_EYE) < 12 && hasItem(p, Items.ENDER_PEARL) && hasItem(p, Items.BLAZE_POWDER)) {
+            out.add(Items.ENDER_EYE);
+        }
+        if (count(p, Items.ENDER_EYE) < 12 && hasItem(p, Items.ENDER_PEARL) && !hasItem(p, Items.BLAZE_POWDER)
+                && hasItem(p, Items.BLAZE_ROD)) out.add(Items.BLAZE_POWDER);
         addWornReplacements(p, out);
         addModGear(p, out);
         if (pick < Tiers.IRON.getLevel()) {
