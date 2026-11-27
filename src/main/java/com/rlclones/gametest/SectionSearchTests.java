@@ -218,4 +218,51 @@ public final class SectionSearchTests {
         h.assertTrue(level.getChunk(x,z,net.minecraft.world.level.chunk.ChunkStatus.FULL,false)==null,"query creates no chunk load");h.succeed();
     }
 
+
+    private static BlockPos cakeReference(ServerLevel level, BlockPos center, int radius) {
+        for (BlockPos p : BlockPos.betweenClosed(center.offset(-radius,-1,-radius), center.offset(radius,1,radius))) {
+            if (level.getBlockState(p).getBlock() instanceof CakeBlock) return p.immutable();
+        }
+        return null;
+    }
+
+    @GameTest(template="arena",batch="cake-scan",timeoutTicks=100)
+    public static void cakeScanPreservesTraversalAndLiveChanges(GameTestHelper h) {
+        var level=h.getLevel();
+        var center=new BlockPos(-1,level.getMaxBuildHeight()-40,-1);
+        var a=center.offset(-5,-1,-5); var b=center.offset(5,1,5);
+        var savedA=level.getBlockState(a); var savedB=level.getBlockState(b);
+        try {
+            level.setBlock(a,Blocks.AIR.defaultBlockState(),2);
+            level.setBlock(b,Blocks.AIR.defaultBlockState(),2);
+            for(int phase=0;phase<4;phase++) {
+                if(phase==1) level.setBlock(b,Blocks.CAKE.defaultBlockState(),2);
+                if(phase==2) level.setBlock(a,Blocks.CAKE.defaultBlockState().setValue(CakeBlock.BITES,3),2);
+                if(phase==3) level.setBlock(a,Blocks.AIR.defaultBlockState(),2);
+                for(int radius:new int[]{0,2,3,5,16}) {
+                    h.assertTrue(Objects.equals(cakeReference(level,center,radius),
+                        com.rlclones.ai.Senses.cakeNearby(level,center,radius)),
+                        "cake lookup matches original order after live edit, phase="+phase+" radius="+radius);
+                }
+            }
+            level.setBlock(b,Blocks.AIR.defaultBlockState(),2);
+            for(int i=0;i<100;i++) {cakeReference(level,center,5);com.rlclones.ai.Senses.cakeNearby(level,center,5);}
+            long[] old=new long[5],fresh=new long[5];
+            for(int round=0;round<5;round++) {
+                for(int pass=0;pass<2;pass++) {
+                    boolean candidate=(round+pass)%2!=0;
+                    long start=System.nanoTime();
+                    for(int i=0;i<300;i++) {
+                        BlockPos result=candidate?com.rlclones.ai.Senses.cakeNearby(level,center,5):cakeReference(level,center,5);
+                        h.assertTrue(result==null,"high-altitude empty cake scan");
+                    }
+                    (candidate?fresh:old)[round]=System.nanoTime()-start;
+                }
+            }
+            Arrays.sort(old);Arrays.sort(fresh);
+            System.out.printf(java.util.Locale.ROOT,"CAKE-BENCH scans=300 old=%.3fms new=%.3fms%n",old[2]/1e6,fresh[2]/1e6);
+        } finally {level.setBlock(a,savedA,2);level.setBlock(b,savedB,2);}
+        h.succeed();
+    }
+
 }
