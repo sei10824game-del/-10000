@@ -63,16 +63,37 @@ public final class Chat {
         deliver(sender, plain);
     }
 
+    /** Shared parsed message for one synchronous delivery. Parsing is lazy so existing handlers retain precedence. */
+    static final class Delivery {
+        final String text;
+        private Boolean resolved;
+        private boolean parsed;
+        private long tick;
+        private Vec3 senderPos;
+        private ResourceKey<Level> dimension;
+        private Request request;
+        Delivery(String raw){text=raw.trim();}
+        boolean resolved(){if(resolved==null)resolved=isResolved(text);return resolved;}
+        Request request(ServerPlayer sender,long now){
+            if(!parsed||tick!=now||dimension!=sender.level().dimension()||!sender.position().equals(senderPos)){
+                request=parse(sender,text,now);
+                parsed=true;tick=now;dimension=sender.level().dimension();senderPos=sender.position();
+            }
+            return request;
+        }
+    }
+
     /** Let every clone (except the speaker) read a chat line. Also called for real players' chat. */
     public static void deliver(ServerPlayer sender, String text) {
         CloneManager m = CloneManager.peek();
         if (m == null) {
             return;
         }
+        Delivery delivery = new Delivery(text);
         for (ClonePlayer c : new ArrayList<>(m.clones())) {
             if (c != sender && c.isAlive()) {
                 try {
-                    c.controller().onChat(sender, text);
+                    c.controller().onChat(sender, delivery);
                 } catch (RuntimeException e) {
                     RLClones.LOGGER.warn("Clone {} failed to read chat", c.getGameProfile().getName(), e);
                 }
