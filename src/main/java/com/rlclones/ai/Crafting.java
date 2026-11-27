@@ -331,8 +331,25 @@ public final class Crafting {
         return best;
     }
 
-    private static boolean armorUpgrade(Player p, ArmorItem target) {
-        return armorImproves(p, new ItemStack(target));
+    /** One inventory pass for the eight standard armor candidates. Rebuilt on every call. */
+    public static void addArmorUpgrades(Player p, List<Item> out) {
+        var best = new java.util.EnumMap<net.minecraft.world.entity.EquipmentSlot, Double>(
+                net.minecraft.world.entity.EquipmentSlot.class);
+        for (Item it : ARMOR) {
+            var slot = ((ArmorItem) it).getEquipmentSlot();
+            best.computeIfAbsent(slot, k -> Equipment.armorScore(p.getItemBySlot(k)));
+        }
+        for (ItemStack stack : p.getInventory().items) {
+            if (stack.getItem() instanceof ArmorItem armor && best.containsKey(armor.getEquipmentSlot())) {
+                var slot = armor.getEquipmentSlot();
+                best.put(slot, Math.max(best.get(slot), Equipment.armorScore(stack)));
+            }
+        }
+        for (Item it : ARMOR) {
+            if (Equipment.armorScore(new ItemStack(it)) > best.get(((ArmorItem) it).getEquipmentSlot()) + 0.01) {
+                out.add(it);
+            }
+        }
     }
 
     public static boolean armorImproves(Player p, ItemStack target) {
@@ -365,22 +382,36 @@ public final class Crafting {
     }
 
     /** The best pickaxe / axe / sword in the bag is worn out (a sixth left): one of the same material is wanted again (the worn one stays as the spare). */
-    private static void addWornReplacements(Player p, List<Item> out) {
-        for (Item[] kind : new Item[][]{PICKAXES, AXES, SWORDS}) {
-            for (Item it : kind) {
-                boolean has = false;
-                boolean sound = false;
-                for (ItemStack st : p.getInventory().items) {
-                    if (st.is(it)) {
-                        has = true;
-                        sound |= !Equipment.worn(st);
-                    }
-                }
-                if (has) {
-                    if (!sound) {
-                        out.add(0, it); // the best one we have is worn out
-                    }
-                    break; // (kinds are listed best first: only the best one we hold counts)
+    private static final Item[][] REPLACEMENT_KINDS = {PICKAXES, AXES, SWORDS};
+    private static final Map<Item, Integer> REPLACEMENT_BITS = replacementBits();
+
+    private static Map<Item, Integer> replacementBits() {
+        Map<Item, Integer> bits = new java.util.IdentityHashMap<>();
+        int bit = 1;
+        for (Item[] kind : REPLACEMENT_KINDS) {
+            for (Item item : kind) {
+                bits.put(item, bit);
+                bit <<= 1;
+            }
+        }
+        return bits;
+    }
+
+    public static void addWornReplacements(Player p, List<Item> out) {
+        int present = 0, sound = 0;
+        for (ItemStack stack : p.getInventory().items) {
+            Integer bit = REPLACEMENT_BITS.get(stack.getItem());
+            if (bit != null) {
+                present |= bit;
+                if (!Equipment.worn(stack)) sound |= bit;
+            }
+        }
+        for (Item[] kind : REPLACEMENT_KINDS) {
+            for (Item item : kind) {
+                int bit = REPLACEMENT_BITS.get(item);
+                if ((present & bit) != 0) {
+                    if ((sound & bit) == 0) out.add(0, item);
+                    break;
                 }
             }
         }
@@ -567,11 +598,7 @@ public final class Crafting {
                 out.add(it); // dirt, sand and gravel go fast with it (stairs and shafts dig a lot of them); never a better one than the pickaxe
             }
         }
-        for (Item it : ARMOR) {
-            if (armorUpgrade(p, (ArmorItem) it)) {
-                out.add(it);
-            }
-        }
+        addArmorUpgrades(p, out);
 
         if (hasItem(p, Items.BLAZE_ROD) && !hasItem(p, Items.BREWING_STAND) && !brewingStandNearby(p)) {
             out.add(Items.BREWING_STAND);
