@@ -1,4 +1,4 @@
-name: Mining continuity and glass combat verification
+name: Mining continuity, glass combat and vertical rescue verification
 on:
   push:
     branches: [fix/mining-continuity-20261127]
