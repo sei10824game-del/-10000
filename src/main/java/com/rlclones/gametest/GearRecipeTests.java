@@ -148,4 +148,39 @@ public final class GearRecipeTests {
         } finally { manager.replaceRecipes(before); Crafting.invalidateRecipes(); }
         h.succeed();
     }
+
+    @GameTest(template="arena",batch="gear-reload",timeoutTicks=60)
+    public static void exactRecipeIndexMatchesLiveScanAndReload(GameTestHelper h) {
+        var manager=h.getLevel().getRecipeManager();
+        var before=new ArrayList<Recipe<?>>(manager.getRecipes());
+        var c=clone(h);
+        try {
+            for(int pass=0;pass<3;pass++){
+                if(pass==1){
+                    var mixed=new ArrayList<Recipe<?>>(before);
+                    mixed.addAll(fixtures());manager.replaceRecipes(mixed);Crafting.invalidateRecipes();
+                }
+                if(pass==2){
+                    manager.replaceRecipes(before);Crafting.invalidateRecipes();
+                    for(var slot:List.of(EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET)){
+                        Item item=switch(slot){
+                            case HEAD -> Items.NETHERITE_HELMET;
+                            case CHEST -> Items.NETHERITE_CHESTPLATE;
+                            case LEGS -> Items.NETHERITE_LEGGINGS;
+                            case FEET -> Items.NETHERITE_BOOTS;
+                            default -> Items.AIR;
+                        };
+                        c.setItemSlot(slot,new ItemStack(item));
+                    }
+                }
+                for(Item item:List.of(Items.CHAINMAIL_CHESTPLATE,Items.CRAFTING_TABLE,Items.STICK,
+                        Items.STONE_SHOVEL,Items.WOODEN_HOE,Items.IRON_PICKAXE,Items.FURNACE,Items.AIR)){
+                    h.assertTrue(Crafting.recipesFor(c,s->s.is(item)).equals(Crafting.recipesForItem(c,item)),
+                            "indexed recipes preserve live restrictions and exact recipe order for "+item+" pass "+pass);
+                }
+            }
+        } finally {manager.replaceRecipes(before);Crafting.invalidateRecipes();}
+        h.succeed();
+    }
+
 }
