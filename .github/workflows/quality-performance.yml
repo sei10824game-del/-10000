@@ -41,7 +41,7 @@ jobs:
         run: |
           python3 scripts/compare-population.py \
             --baseline 9e65a251d22b0abb3ff96207e8271bf8b4081cbb \
-            --candidate 2897d8a22c5aac74f94ee283ab04306510849193 \
+            --candidate 4dc5d7aab05edd8e53f1c64c192adc97c83df7a4 \
             --counts ${{ matrix.count }} --ticks ${{ matrix.ticks }} \
             --repeats ${{ matrix.repeats }} --timeout ${{ matrix.timeout }} \
             --seed rlclones --output "$RUNNER_TEMP/population-results"
