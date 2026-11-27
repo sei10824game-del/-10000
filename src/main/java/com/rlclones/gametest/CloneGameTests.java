@@ -940,9 +940,10 @@ public final class CloneGameTests {
         BlockPos abs = h.absolutePos(log);
         h.onEachTick(() -> {
             if (!h.getBlockState(log).isAir()) {
+                // Production order: the mining action refreshes the lease before Motor.tick.
                 c.controller().motor().lookAt(Vec3.atCenterOf(abs));
-                c.controller().motor().tick();
                 c.controller().motor().mine(abs);
+                c.controller().motor().tick();
             } else {
                 // walk onto the drop, as the COLLECT behaviour does
                 for (net.minecraft.world.entity.item.ItemEntity item : h.getLevel().getEntitiesOfClass(
