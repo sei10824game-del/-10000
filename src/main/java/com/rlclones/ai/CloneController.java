@@ -195,7 +195,7 @@ public final class CloneController {
     private final TeamDefense defense;
     private final ArmorCoop armorCoop;
     public ArmorCoop armorCoop(){return armorCoop;}
-    public void queueArmorCraft(net.minecraft.world.item.Item result){if(option!=null&&option!=Option.FIGHT&&option!=Option.FLEE)finishOption(false);crafting.forcedTarget=result;armorCoop.commission(result);nextOption=Option.CRAFT;}
+    public void queueArmorCraft(net.minecraft.world.item.Item result){if(option!=null&&option!=Option.FIGHT&&option!=Option.FLEE&&!motor.miningCommitted())finishOption(false);crafting.forcedTarget=result;armorCoop.commission(result);nextOption=Option.CRAFT;}
     public TeamDefense defense(){return defense;}
     public CombatGround ground(){return ground;}
     public RangedBow rangedBow(){return rangedBow;}
@@ -684,6 +684,25 @@ public final class CloneController {
         if(survival.active())survival.tick(now,threatened||!Senses.threats(perception,self,now,24).isEmpty());
         if (threatened) {
             lastThreatSeen = now;
+        }
+        // Once a strategy has really started breaking a block, ordinary chores must wait.
+        // Retain all emergency escape paths and the normal strategy bookkeeping.
+        if (option != null && ("strategy".equals(idleWhy) || "mining-commit".equals(idleWhy))
+                && motor.miningCommitted() && !miningEmergency(now)) {
+            long ps = Prof.t();
+            idleWhyTick = now;
+            if (fireStepReflex()) idleWhy = "fire-step";
+            else if (blastReflex(now)) idleWhy = "blast";
+            else if (scatterReflex(now)) idleWhy = "scatter";
+            else {
+                idleWhy = "mining-commit";
+                runStrategy(now);
+            }
+            Prof.add(Prof.STRATEGY, ps);
+            long pm = Prof.t();
+            motor.tick();
+            Prof.add(Prof.MOTOR, pm);
+            return;
         }
         long pr = Prof.t();
         watchTells(now);
@@ -2516,9 +2535,10 @@ public final class CloneController {
             itemAid.announceDigging(); // R-27
             persona.announceDig(); // R-44
         }
-        if(option==Option.MINE&&development.interruptPreparation(now)){finishOption(false);return;}
-        if(option==Option.MINE&&development.prepareTick()){optionTicks++;return;}
-        if (ORE_REFLEX.contains(option) && oreReflex(now)) {
+        boolean committed = motor.miningCommitted();
+        if (!committed && option==Option.MINE&&development.interruptPreparation(now)){finishOption(false);return;}
+        if (!committed && option==Option.MINE&&development.prepareTick()){optionTicks++;return;}
+        if (ORE_REFLEX.contains(option) && (!committed || motor.miningCommitted(reflexOre)) && oreReflex(now)) {
             optionTicks++;
             return; // an ore right in front of us comes first
         }
@@ -2557,7 +2577,8 @@ public final class CloneController {
         Prof.addOption(timed.ordinal(), popt);
         optionTicks++;
         optionReward -= 0.005f;
-        if (option != null && (done || optionTicks >= option.maxTicks || shouldInterrupt(now))) {
+        if (option != null && (!motor.miningCommitted() || miningEmergency(now))
+                && (done || optionTicks >= option.maxTicks || shouldInterrupt(now))) {
             finishOption(false,done||optionTicks>=option.maxTicks);
         }
     }
@@ -3042,6 +3063,8 @@ public final class CloneController {
         if (self.isUsingItem() && !died) {
             self.stopUsingItem();
         }
+        glassBreach = null;
+        glassEnemy = null;
         motor.resetMining();
         motor.clearPath();
         motor.finishWorkAccess();
@@ -3134,6 +3157,15 @@ public final class CloneController {
     private boolean hungerReflex() {
         return !self.isCreative() && self.getFoodData().getFoodLevel() <= 6 && !self.isUsingItem()
                 && (Equipment.bestFoodSlot(self) >= 0 || FoodAid.goodFood(self.getOffhandItem()) && !Equipment.keepForFurnace(self, self.getOffhandItem())); // (the off hand is where the food at the ready is kept)
+    }
+
+    private boolean miningEmergency(long now) {
+        return escaping || self.isInWall() || self.isInLava() || self.isOnFire()
+                || self.fallDistance > 3f || self.isInWater() && self.getAirSupply() < 60
+                || self.getHealth() < self.getMaxHealth() * .35f
+                || self.getFoodData().getFoodLevel() <= 2 || self.hurtTime > 0
+                || Shade.exposed(self) || hostileWithin(3.5, now)
+                || (option != Option.FIGHT && option != Option.FLEE && defense.engage(now));
     }
 
     private boolean shouldInterrupt(long now) {
@@ -3249,6 +3281,9 @@ public final class CloneController {
     private int fightDigs;
     private int fightWalk;
     private int fightBlocked;
+    private BlockPos glassBreach;
+    private Entity glassEnemy;
+    public int glassBreaches;
     @Nullable
     private BlockPos fightSecond;
     public String fightDebug = "";
@@ -3332,6 +3367,46 @@ public final class CloneController {
                 // seen, but no way to it on foot (behind a wall, through a window): after 2 seconds of that the wall is dug, instead of building towers to look over it
                 fightBlocked = motor.obstruction(target.blockPosition().above()) != null && motor.pathTo(target.position()) == null ? fightBlocked + 10 : 0;
             }
+            // Attack through a glass opening only for a currently known hostile. The regular
+            // base-protection rule remains intact for walls, storage and other blocks.
+            if (!hunt && target.isAlive() && target.level() == self.level() && Senses.isHostileTo(target,self)
+                    && d <= 12 && (perception.isVisible(target) || glassEnemy == target)) {
+                if (glassEnemy != target || !motor.canBreachGlass(glassBreach)) glassBreach = null;
+                if (glassBreach == null && now % 10 == 0 && (fightBlocked >= 20 || now - fightBestAt > 20 || motor.stuckCount() > 0)) {
+                    BlockPos glass = motor.combatGlassBetween(target);
+                    if (glass != null && (motor.pathTo(target.position()) == null || motor.stuckCount() >= 2 || now - fightBestAt > 60)) {
+                        // Keep the existing team readiness check for dangerous opponents.
+                        if (now < forceFightUntil || !defense.regroup(target, now)) {
+                            glassBreach = glass;
+                            glassEnemy = target;
+                        }
+                    }
+                }
+                if (glassBreach != null) {
+                    ground.end(false);
+                    if (action != null) closeCombatStep(false,false);
+                    BlockPos opening = glassBreach;
+                    if (self.getEyePosition().distanceTo(Vec3.atCenterOf(opening)) > Motor.BLOCK_REACH - .3) {
+                        if (motor.stuckCount() <= 3 && ++fightWalk < 200) {
+                            motor.navigate(motor.approachPoint(opening),1,false);
+                            return false;
+                        }
+                        glassBreach = null;
+                    } else {
+                        motor.stop(); motor.cancelJump();
+                        Equipment.select(self, Equipment.bestToolSlot(self,self.level().getBlockState(opening)));
+                        if (motor.mine(opening)) {
+                            glassBreaches++; fightDigs++; fightWalk = 0; fightBestAt = now;
+                            fightBlocked = 0; motor.clearPath(); motor.resetStuck();
+                            // A high window alone is not a walkable opening. Only remove the
+                            // lower glass pane as well, never the solid foundation.
+                            glassBreach = opening.getY() > self.getBlockY() && motor.canBreachGlass(opening.below())
+                                    ? opening.below() : null;
+                        }
+                        return false;
+                    }
+                }
+            } else { glassBreach = null; glassEnemy = null; }
             if (fightSecond != null) {
                 BlockState below = self.serverLevel().getBlockState(fightSecond);
                 if (!motor.canClearWorkBlock(fightSecond) || below.isAir() || !below.getFluidState().isEmpty() || below.getDestroySpeed(self.serverLevel(), fightSecond) < 0
@@ -5312,7 +5387,7 @@ public final class CloneController {
         }
         if(BlockClaims.takenByOther(level,reflexOre,self.getUUID(),now)){reflexOre=null;motor.resetMining();return false;}
         BlockState st = level.getBlockState(reflexOre);
-        if (Perception.classify(st) != Perception.BlockKind.ORE || ++reflexTicks > 160) {
+        if (Perception.classify(st) != Perception.BlockKind.ORE || (++reflexTicks > 160 && !motor.miningCommitted(reflexOre))) {
             if (reflexTicks > 160) {
                 skipBlocks.put(reflexOre.immutable(), now);
             }
@@ -5563,7 +5638,7 @@ public final class CloneController {
         if ((blockTicks & 7) == 1) {
             Equipment.select(self, Equipment.bestToolSlot(self, level.getBlockState(blockTarget))); // the right tool for the job
         }
-        if (blockTicks > 240) {
+        if (blockTicks > 240 && !motor.miningCommitted()) {
             oreWorkLearning.failed();
             traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)) + " " + motor.mineDebug);
             skipBlocks.put(blockTarget.immutable(), now());
@@ -5573,7 +5648,8 @@ public final class CloneController {
             return false;
         }
         Vec3 center = Vec3.atCenterOf(blockTarget);
-        if(blockTicks>10 && motor.clearWorkObstruction(center,blockTarget))return false;
+        if (!motor.miningCommitted(blockTarget) && (blockTicks > 10 || motor.committedWorkObstruction(blockTarget))
+                && motor.clearWorkObstruction(center,blockTarget)) return false;
         // (a pillar jump under way is finished first: its peak brings the eye into reach, and switching to mining there lost every placement)
         if (self.getEyePosition().distanceTo(center) > Motor.BLOCK_REACH - 0.3 || kind == Perception.BlockKind.LOG && scafBase != null) {
             // the logs below this one are gone: stand in the trunk's column (where they were) and look up - the rest is within reach from there
