@@ -51,7 +51,7 @@ public final class ReplayBuffer {
         t.gamma = gamma;
         t.nextMask = nextMask;
         t.weight = weight;
-        next = (next + 1) % items.length;
+        if (++next == items.length) next = 0;
         size = Math.min(size + 1, items.length);
     }
 
@@ -74,12 +74,16 @@ public final class ReplayBuffer {
 
     /** Iterate in insertion order, including after the ring wraps. */
     private Transition oldest(int offset) {
-        return items[(next - size + items.length + offset) % items.length];
+        int start = next - size;
+        if (start < 0) start += items.length;
+        int index = start + offset;
+        if (index >= items.length) index -= items.length;
+        return items[index];
     }
 
     public byte[] toBytes() {
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream((int) Math.min(1048576L, 4L + 28L * size));
             DataOutputStream out = new DataOutputStream(bytes);
             out.writeInt(size);
             for (int i = 0; i < size; i++) {
