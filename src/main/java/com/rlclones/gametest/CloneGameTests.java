@@ -58,6 +58,41 @@ public final class CloneGameTests {
         com.rlclones.clone.CloneMobs.clearAll(level.getServer());
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void tallEnemyMakesCloneUseLowRoof(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        for(int x=6;x<=8;x++)for(int z=6;z<=8;z++)h.setBlock(new BlockPos(x,4,z),Blocks.STONE);
+        var e=h.spawn(EntityType.ENDERMAN,new BlockPos(7,2,10));
+        e.setNoAi(true);
+        e.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().sizeTactics().tick(e,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().sizeTactics().shelters>0,"clone should choose a low roof against a tall pursuer");
+            e.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void enchantedBookUsesRealAnvil(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        h.setBlock(new BlockPos(8,2,7),Blocks.ANVIL);
+        c.giveExperienceLevels(20);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(net.minecraft.world.item.EnchantedBookItem.createForEnchantment(
+                new net.minecraft.world.item.enchantment.EnchantmentInstance(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,2)));
+        h.onEachTick(()->c.controller().anvilWork().tick(h.getLevel().getGameTime()));
+        h.succeedWhen(()->{
+            boolean enchanted=false;
+            for(ItemStack s:c.getInventory().items)if(s.is(Items.IRON_SWORD)&&net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,s)>=2)enchanted=true;
+            h.assertTrue(enchanted,"the sword should receive Sharpness II via the anvil");
+            h.assertTrue(c.experienceLevel<20,"vanilla anvil should consume experience");
+            finish(h,c);
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
