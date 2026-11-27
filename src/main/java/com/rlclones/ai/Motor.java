@@ -871,7 +871,13 @@ public final class Motor {
      * @return true when the block is gone
      */
     /** Why the last mining tick did not get on (for diagnostics). */
+    /** Plain reason kept for compatibility; numeric details are formatted on demand. */
     public String mineDebug = "";
+    private double mineDebugNumber;
+    public String mineDebug(){
+        return ("far".equals(mineDebug)||"progress".equals(mineDebug))
+                ? mineDebug+" "+String.format("%.2f",mineDebugNumber) : mineDebug;
+    }
 
     /** A block standing between our eyes and {@code pos} (gravel that fell in the way...), or null if the view is clear. */
     @javax.annotation.Nullable
@@ -1040,7 +1046,7 @@ public final class Motor {
         double distance = eye.distanceTo(blockCenter);
         if (distance > BLOCK_REACH) {
             lookAt(blockCenter);
-            mineDebug = "far " + String.format("%.2f", distance);
+            mineDebug = "far";mineDebugNumber=distance;
             return false;
         }
         // aim at a part of the block we can actually see (a floor block seen at a flat angle shows only its top)
@@ -1057,7 +1063,7 @@ public final class Motor {
             return false;
         }
         if(!BlockClaims.active(level,pos,self,lastMineCall)){resetMining();mineDebug="occupied by another miner";return false;}
-        mineDebug = "progress " + String.format("%.2f", breakProgress);
+        mineDebug = "progress";mineDebugNumber=breakProgress;
         self.resetLastActionTime();
         float progress = state.getDestroyProgress(self, level, pos);
         if (progress > 0 && Float.isFinite(progress)) {
