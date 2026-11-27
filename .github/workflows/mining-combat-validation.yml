@@ -1,0 +1,36 @@
+name: Mining continuity and glass combat verification
+on:
+  push:
+    branches: [fix/mining-continuity-20261127]
+    paths:
+      - .github/workflows/mining-combat-validation.yml
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        namespace: [rlclones_ore_learning, rlclones_ground]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run actual Forge server tests
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon -Drlclones.gameTestNamespaces=${{ matrix.namespace }} runGameTestServer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mining-combat-${{ matrix.namespace }}
+          path: run/logs/
+          if-no-files-found: warn
