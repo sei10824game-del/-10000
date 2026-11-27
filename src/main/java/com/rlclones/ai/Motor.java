@@ -984,16 +984,16 @@ public final class Motor {
         if(BlockClaims.takenByOther(self.level(),pos,self.getUUID(),lastMineCall)) {
             resetMining();mineDebug="occupied by another miner";return false;
         }
+        ServerLevel level = self.serverLevel();
+        BlockState state = level.getBlockState(pos);
         boolean repairingTread = !stairWork && self.getServer() != null
                 && com.rlclones.clone.Bases.get(self.getServer()).isStairTread(self.level().dimension(), pos);
-        if (repairingTread && (!clearingWork && !self.level().getBlockState(pos).is(net.minecraftforge.common.Tags.Blocks.ORES)
+        if (repairingTread && (!clearingWork && !state.is(net.minecraftforge.common.Tags.Blocks.ORES)
                 || !Config.get(Config.ALLOW_BLOCK_PLACING, true) || Equipment.pillarBlockSlot(self) < 0
                 || !repairs.isEmpty())) {
             mineDebug = "stair tread: keep intact until it can be restored";
             return false;
         }
-        ServerLevel level = self.serverLevel();
-        BlockState state = level.getBlockState(pos);
         if (state.isAir()) {
             resetMining();
             return true;
@@ -1018,9 +1018,11 @@ public final class Motor {
             return false;
         }
         Vec3 eye = self.getEyePosition();
-        if (eye.distanceTo(Vec3.atCenterOf(pos)) > BLOCK_REACH) {
-            lookAt(Vec3.atCenterOf(pos));
-            mineDebug = "far " + String.format("%.2f", eye.distanceTo(Vec3.atCenterOf(pos)));
+        Vec3 blockCenter = Vec3.atCenterOf(pos);
+        double distance = eye.distanceTo(blockCenter);
+        if (distance > BLOCK_REACH) {
+            lookAt(blockCenter);
+            mineDebug = "far " + String.format("%.2f", distance);
             return false;
         }
         // aim at a part of the block we can actually see (a floor block seen at a flat angle shows only its top)
