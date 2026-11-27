@@ -39,6 +39,8 @@ import java.util.Map;
  * Seen things are remembered for a while so the clone has object permanence.
  */
 public final class Perception {
+    private static final Direction[] ALL_DIRECTIONS = Direction.values();
+    private static final EquipmentSlot[] EQUIPMENT_SLOTS = EquipmentSlot.values();
     public enum BlockKind {LOG, ORE, TABLE, FURNACE, CHEST, HARMFUL, STONE, BREWING, UNKNOWN, WOOD, FOOD}
 
     public static final class Seen {
@@ -157,9 +159,10 @@ public final class Perception {
         candidates.clear();
         if (full) farSeen.clear();
         for (Entity e : level.getEntities(self, self.getBoundingBox().inflate(reach), wanted)) {
-            double centerDistance = EntityGeometry.sample(e).center().distanceToSqr(eye);
+            var geometry = EntityGeometry.sample(e);
+            double centerDistance = geometry.center().distanceToSqr(eye);
             if (centerDistance <= reach * reach) {
-                offerInView(e, eye);
+                offerInView(e, eye, geometry);
                 if (full && centerDistance > NEAR * NEAR) {
                     farSeen.add(e);
                 }
@@ -167,9 +170,10 @@ public final class Perception {
         }
         if (!full) {
             for (Entity e : farSeen) {
-                double distance2 = EntityGeometry.sample(e).center().distanceToSqr(eye);
+                var geometry = EntityGeometry.sample(e);
+                double distance2 = geometry.center().distanceToSqr(eye);
                 if (e.isAlive() && e.level() == level && distance2 > NEAR * NEAR && distance2 <= range2) {
-                    offerInView(e, eye);
+                    offerInView(e, eye, geometry);
                 }
             }
         }
@@ -228,8 +232,7 @@ public final class Perception {
 
     /** Reject off-screen candidates before the bounded LOS budget; keep farSeen unfiltered
      * so turning the head still finds distant entities between full queries. */
-    private void offerInView(Entity e, Vec3 eye) {
-        var geometry = EntityGeometry.sample(e);
+    private void offerInView(Entity e, Vec3 eye, EntityGeometry.Sample geometry) {
         Vec3 center = geometry.center();
         double radius = geometry.radius();
         if (inFov(eye, center, radius, eye.distanceTo(center))) {
@@ -317,7 +320,7 @@ public final class Perception {
     }
 
     private static boolean wearsSomething(LivingEntity le) {
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
+        for (EquipmentSlot slot : EQUIPMENT_SLOTS) {
             if (!le.getItemBySlot(slot).isEmpty()) {
                 return true;
             }
@@ -378,7 +381,7 @@ public final class Perception {
                 continue; // behind or beside us
             }
             boolean open = false;
-            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+            for (net.minecraft.core.Direction d : ALL_DIRECTIONS) {
                 open |= !level.getBlockState(p.relative(d)).canOcclude();
             }
             if (!open) {
@@ -440,7 +443,7 @@ public final class Perception {
             if (!st.is(Tags.Blocks.ORES) || blocks.containsKey(p)) {
                 continue;
             }
-            for (Direction d : Direction.values()) {
+            for (Direction d : ALL_DIRECTIONS) {
                 if (level.getBlockState(p.relative(d)).isAir()) {
                     if (blocks.put(p.immutable(), BlockKind.ORE) == null) {
                         discoveries++;
