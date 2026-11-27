@@ -109,4 +109,25 @@ public final class CombatGroundTests {
         });
     }
 
+
+    @AfterBatch(batch="glass-breach") public static void cleanGlass(ServerLevel level){cleanup(level);}
+    @GameTest(template="arena",batch="glass-breach",timeoutTicks=500)
+    public static void alliesOpenBlockedGlassAndActuallyFight(GameTestHelper h) {
+        arena(h);
+        for(int y=2;y<=10;y++)for(int z=1;z<=17;z++)h.setBlock(new BlockPos(9,y,z),Blocks.GLASS);
+        var a=actor(h,7,7,false);var b=actor(h,7,8,false);
+        var foe=h.spawn(EntityType.HUSK,new Vec3(11.5,2,7.5));foe.setNoAi(true);MOBS.add(foe.getUUID());
+        for(var c:List.of(a,b)){
+            c.getInventory().setItem(0,new ItemStack(Items.IRON_SWORD));c.getInventory().selected=0;
+            c.setYRot(-90);c.setYHeadRot(-90);c.setXRot(0);c.setOnGround(true);
+            c.controller().perception().update(h.getLevel().getGameTime());
+            c.controller().forcedOption=com.rlclones.ai.strategy.Option.FIGHT;c.setAiEnabled(true);
+        }
+        h.succeedWhen(()->{
+            h.assertTrue(a.controller().glassBreaches+b.controller().glassBreaches>0,"actual hostile-facing glass was broken: "+a.controller().fightDebug+" / "+b.controller().fightDebug);
+            h.assertTrue(!foe.isAlive()||foe.getHealth()<foe.getMaxHealth(),"opening allowed real combat damage");
+            h.assertTrue(h.getBlockState(new BlockPos(9,1,7)).is(Blocks.STONE),"solid foundation left intact");
+        });
+    }
+
 }
