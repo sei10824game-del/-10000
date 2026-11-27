@@ -954,7 +954,7 @@ public final class CloneGameTests {
             }
         });
         h.succeedWhen(() -> {
-            h.assertTrue(h.getBlockState(log).isAir(), "log should be mined (" + c.controller().motor().mineDebug + " pos="
+            h.assertTrue(h.getBlockState(log).isAir(), "log should be mined (" + c.controller().motor().mineDebug() + " pos="
                     + c.position().subtract(h.absoluteVec(Vec3.ZERO)) + " alive=" + c.isAlive() + ")");
             h.assertTrue(c.getInventory().countItem(Items.OAK_LOG) >= 1, "clone should pick up the dropped log");
             finish(h, c);
@@ -2095,7 +2095,7 @@ public final class CloneGameTests {
                     + c.controller().quarried + " stoneNeeded=" + com.rlclones.ai.Crafting.stoneNeeded(c) + " options=" + c.controller().optionLog
                     + " stoneSeen=" + c.controller().perception().blocks().values().stream().filter(k -> k == com.rlclones.ai.Perception.BlockKind.STONE).count()
                     + " " + c.controller().crafting().debug() + " alive=" + c.isAlive() + " death=" + c.controller().lastDeath
-                    + " harvest=" + c.controller().harvestDebug + " mine=" + c.controller().motor().mineDebug + " pos="
+                    + " harvest=" + c.controller().harvestDebug + " mine=" + c.controller().motor().mineDebug() + " pos="
                     + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             h.assertTrue(furnace, "and craft a furnace and put it down (cobble " + c.getInventory().countItem(Items.COBBLESTONE)
                     + ", option " + c.controller().option() + ") quarried=" + c.controller().quarried + " placed=" + c.controller().escape().blocksPlaced + " place=[" + c.controller().crafting().placeDebug + "] onGround=" + c.onGround()
@@ -3945,7 +3945,7 @@ public final class CloneGameTests {
                 drops.append(' ').append(it.getItem()).append('@').append(it.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString());
             }
             h.assertTrue(c.getInventory().countItem(Items.OBSIDIAN) >= 1, "water on the lava source makes obsidian, mined with the diamond pickaxe ("
-                    + c.controller().portals().debug + " mine=" + c.controller().motor().mineDebug + " made " + c.controller().portals().obsidianMade
+                    + c.controller().portals().debug + " mine=" + c.controller().motor().mineDebug() + " made " + c.controller().portals().obsidianMade
                     + " block " + h.getBlockState(new BlockPos(7, 1, 10)) + " below " + h.getBlockState(new BlockPos(7, 0, 10)) + " drops" + drops
                     + " clone@" + c.blockPosition().subtract(h.absolutePos(BlockPos.ZERO)).toShortString() + ")");
             h.assertTrue(c.getInventory().countItem(Items.WATER_BUCKET) >= 1, "and the water is scooped back up");
