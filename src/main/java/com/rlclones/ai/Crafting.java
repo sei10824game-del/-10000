@@ -1200,16 +1200,56 @@ public final class Crafting {
         return out.isEdible() || out.is(Tags.Items.INGOTS);
     }
 
+    // Only exact, simple vanilla smelting recipes can be classified by input Item.
+    // Custom Forge recipes/ingredients and ambiguous matches keep vanilla lookup semantics.
+    private static Object smeltingOwner;
+    private static long smeltingGeneration = Long.MIN_VALUE;
+    private static java.util.Map<Item, List<SmeltingRecipe>> smeltingIndex;
+    private static java.util.Map<Item,List<SmeltingRecipe>> smeltingIndex(ServerLevel level) {
+        var manager=level.getRecipeManager();
+        if(smeltingOwner==manager&&smeltingGeneration==recipeGeneration)return smeltingIndex;
+        java.util.Map<Item,List<SmeltingRecipe>> next=new java.util.IdentityHashMap<>();
+        for(SmeltingRecipe recipe:manager.getAllRecipesFor(RecipeType.SMELTING)){
+            var ingredients=recipe.getIngredients();
+            if(recipe.getClass()!=SmeltingRecipe.class||ingredients.size()!=1
+                    ||ingredients.get(0).getClass()!=net.minecraft.world.item.crafting.Ingredient.class
+                    ||!ingredients.get(0).isSimple()){
+                next=null;break;
+            }
+            for(ItemStack input:ingredients.get(0).getItems()){
+                var entries=next.computeIfAbsent(input.getItem(),k->new java.util.ArrayList<>());
+                if(!entries.contains(recipe))entries.add(recipe);
+            }
+        }
+        smeltingOwner=manager;smeltingGeneration=recipeGeneration;smeltingIndex=next;
+        return next;
+    }
+    private static boolean usefulSmeltInput(ServerLevel level,ItemStack stack,java.util.Map<Item,List<SmeltingRecipe>> index){
+        if(index!=null){
+            var candidates=index.get(stack.getItem());
+            if(candidates==null)return false;
+            if(candidates.size()==1){
+                var recipe=candidates.get(0);
+                if(recipe.getIngredients().get(0).test(stack))return usefulSmeltResult(recipe.getResultItem(level.registryAccess()));
+            }
+        }
+        var recipe=level.getRecipeManager().getRecipeFor(RecipeType.SMELTING,new SimpleContainer(stack.copy()),level);
+        return recipe.isPresent()&&usefulSmeltResult(recipe.get().getResultItem(level.registryAccess()));
+    }
+
     /** Inventory slots holding something worth smelting (raw ores, raw meat). */
     private static List<Integer> smeltables(Player p) {
         List<Integer> out = new ArrayList<>();
         ServerLevel level = (ServerLevel) p.level();
         Inventory inv = p.getInventory();
         int logAt = -1;
+        Integer spare = null;
+        var recipes=smeltingIndex(level);
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
             if (s.is(ItemTags.LOGS)) {
-                if (spareLogs(p) > 0 && logAt < 0) {
+                if(spare==null)spare=spareLogs(p);
+                if (spare > 0 && logAt < 0) {
                     logAt = i; // R-21: charcoal from spare logs (nothing else to burn): after everything else
                 }
                 continue;
@@ -1217,8 +1257,7 @@ public final class Crafting {
             if (s.isEmpty()) {
                 continue;
             }
-            Optional<SmeltingRecipe> r = level.getRecipeManager().getRecipeFor(RecipeType.SMELTING, new SimpleContainer(s.copy()), level);
-            if (r.isPresent() && usefulSmeltResult(r.get().getResultItem(level.registryAccess()))) {
+            if (usefulSmeltInput(level,s,recipes)) {
                 out.add(i);
             }
         }
