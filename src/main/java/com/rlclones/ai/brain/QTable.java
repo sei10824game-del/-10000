@@ -72,23 +72,30 @@ public final class QTable {
 
     public static float max(Entry e, int mask) {
         float best = Float.NEGATIVE_INFINITY;
-        for (int a = 0; a < e.q.length; a++) {
-            if ((mask & (1 << a)) != 0 && e.q[a] > best) {
+        for (int bits = mask & actionMask(e.q.length); bits != 0; bits &= bits - 1) {
+            int a = Integer.numberOfTrailingZeros(bits);
+            if (e.q[a] > best) {
                 best = e.q[a];
             }
         }
         return best == Float.NEGATIVE_INFINITY ? 0f : best;
     }
 
+    public static int actionMask(int count) {
+        return count == 32 ? -1 : (1 << count) - 1;
+    }
+
     public static int argmax(Entry e, int mask, Random random) {
+        return argmax(e.q, mask, random);
+    }
+
+    static int argmax(float[] values, int mask, Random random) {
         int best = -1;
         float bestQ = Float.NEGATIVE_INFINITY;
         int ties = 0;
-        for (int a = 0; a < e.q.length; a++) {
-            if ((mask & (1 << a)) == 0) {
-                continue;
-            }
-            float q = e.q[a];
+        for (int bits = mask & actionMask(values.length); bits != 0; bits &= bits - 1) {
+            int a = Integer.numberOfTrailingZeros(bits);
+            float q = values[a];
             if (q > bestQ + 1e-6f) {
                 bestQ = q;
                 best = a;
@@ -111,7 +118,8 @@ public final class QTable {
         if (other == this) {
             return;
         }
-        for (Int2ObjectMap.Entry<Entry> oe : other.map.int2ObjectEntrySet()) {
+        for (var it = other.map.int2ObjectEntrySet().fastIterator(); it.hasNext();) {
+            Int2ObjectMap.Entry<Entry> oe = it.next();
             Entry src = oe.getValue();
             Entry dst = map.get(oe.getIntKey());
             if (dst == null) {
@@ -146,11 +154,13 @@ public final class QTable {
 
     public byte[] toBytes() {
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            int length = Math.toIntExact(8L + map.size() * (8L + 12L * actions));
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(length);
             DataOutputStream out = new DataOutputStream(bytes);
             out.writeInt(actions);
             out.writeInt(map.size());
-            for (Int2ObjectMap.Entry<Entry> e : map.int2ObjectEntrySet()) {
+            for (var it = map.int2ObjectEntrySet().fastIterator(); it.hasNext();) {
+                Int2ObjectMap.Entry<Entry> e = it.next();
                 Entry v = e.getValue();
                 out.writeInt(e.getIntKey());
                 out.writeInt(v.visits);
