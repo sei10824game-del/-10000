@@ -1,0 +1,61 @@
+name: Matched baseline regression audit
+on:
+  push:
+    branches: [validation/v5-integrated-20261127]
+    paths: [.github/workflows/matched-regression-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ref: 9e65a251d22b0abb3ff96207e8271bf8b4081cbb
+            name: feature-baseline
+          - ref: 38c98ddd0dba8d217c78fea85e493d7b79209cf2
+            name: integrated-candidate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Use identical mining fixture ordering on baseline
+        if: matrix.name == 'feature-baseline'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src/main/java/com/rlclones/gametest/CloneGameTests.java")
+          s = p.read_text()
+          old = "                c.controller().motor().lookAt(Vec3.atCenterOf(abs));\n                c.controller().motor().tick();\n                c.controller().motor().mine(abs);"
+          new = "                c.controller().motor().lookAt(Vec3.atCenterOf(abs));\n                c.controller().motor().mine(abs);\n                c.controller().motor().tick();"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new))
+          PY
+      - name: Execute full regression suite
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon test runGameTestServer
+      - name: Report actual failures
+        if: always()
+        run: |
+          if test -f run/logs/latest.log; then
+            grep -E 'GAME TESTS COMPLETE|required tests failed|All [0-9]+ required tests passed|LogTestReporter.* failed!' run/logs/latest.log | tee -a "$GITHUB_STEP_SUMMARY" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-${{ matrix.name }}
+          path: |
+            run/logs/
+            build/test-results/
+          if-no-files-found: warn
