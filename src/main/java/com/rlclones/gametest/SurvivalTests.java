@@ -201,7 +201,7 @@ public final class SurvivalTests {
         for(int x=4;x<=15;x++){h.setBlock(new BlockPos(x,4,7),Blocks.BEDROCK);for(int y=2;y<=4;y++){h.setBlock(new BlockPos(x,y,6),Blocks.BEDROCK);h.setBlock(new BlockPos(x,y,8),Blocks.BEDROCK);}}
         h.setBlock(new BlockPos(9,2,7),Blocks.STONE);h.setBlock(new BlockPos(9,3,7),Blocks.STONE);var z=zombie(h,new BlockPos(13,2,7));z.setNoAi(true);z.setTarget(c);
         c.controller().perception().hear(z,z.position(),h.getLevel().getGameTime());c.setAiEnabled(true);
-        h.succeedWhen(()->{h.assertTrue(h.getBlockState(new BlockPos(9,2,7)).isAir()&&h.getBlockState(new BlockPos(9,3,7)).isAir(),"real controller opens body-height route through obstruction: "+c.position()+" "+c.controller().fightDebug+" "+c.controller().motor().mineDebug);h.assertTrue(z.getHealth()<20,"heard target actually attacked after breaching");h.assertTrue(c.isAlive(),"no unsafe forced jump under roof");});
+        h.succeedWhen(()->{h.assertTrue(h.getBlockState(new BlockPos(9,2,7)).isAir()&&h.getBlockState(new BlockPos(9,3,7)).isAir(),"real controller opens body-height route through obstruction: "+c.position()+" "+c.controller().fightDebug()+" "+c.controller().motor().mineDebug());h.assertTrue(z.getHealth()<20,"heard target actually attacked after breaching");h.assertTrue(c.isAlive(),"no unsafe forced jump under roof");});
     }
 
 }
