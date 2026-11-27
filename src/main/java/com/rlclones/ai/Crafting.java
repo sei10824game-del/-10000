@@ -747,6 +747,7 @@ public final class Crafting {
         cacheOwner = null;
         modOwner = null;
         cache = List.of();
+        recipesByOutput = java.util.Map.of();
         modGear = List.of();
         freeGear = List.of();
         modGearByIngredient = java.util.Map.of();
@@ -755,6 +756,7 @@ public final class Crafting {
 
     private static Object cacheOwner;
     private static List<Entry> cache = List.of();
+    private static java.util.Map<Item, List<Entry>> recipesByOutput = java.util.Map.of();
 
     private static List<Entry> index(ServerPlayer p) {
         var manager = p.serverLevel().getRecipeManager();
@@ -765,6 +767,11 @@ public final class Crafting {
                     list.add(new Entry(r, r.getResultItem(p.serverLevel().registryAccess())));
                 }
             }
+            java.util.Map<Item, List<Entry>> byOutput = new java.util.HashMap<>();
+            for (Entry e : list) {
+                byOutput.computeIfAbsent(e.result().getItem(), key -> new ArrayList<>()).add(e);
+            }
+            recipesByOutput = byOutput;
             cache = list;
             cacheOwner = manager;
         }
@@ -800,10 +807,32 @@ public final class Crafting {
         return out;
     }
 
+    /** Exact-item lookup, keeping recipe-manager order and evaluating equipment restrictions live. */
+    public static List<CraftingRecipe> recipesForItem(ServerPlayer p, Item item) {
+        if (item == Items.AIR) return recipesFor(p, stack -> stack.is(item));
+        index(p);
+        List<CraftingRecipe> out = new ArrayList<>();
+        if (deferEarlyTool(p, item)) return out;
+        for (Entry e : recipesByOutput.getOrDefault(item, List.of())) {
+            if (e.result().is(item)) out.add(e.recipe());
+        }
+        return out;
+    }
+
+    @Nullable
+    private static CraftingRecipe craftableItem(ServerPlayer p, Item item) {
+        return firstCraftable(p, recipesForItem(p, item));
+    }
+
     @Nullable
     private static CraftingRecipe craftable(ServerPlayer p, java.util.function.Predicate<ItemStack> result) {
+        return firstCraftable(p, recipesFor(p, result));
+    }
+
+    @Nullable
+    private static CraftingRecipe firstCraftable(ServerPlayer p, List<CraftingRecipe> recipes) {
         CraftingRecipe first = null;
-        for (CraftingRecipe r : recipesFor(p, result)) {
+        for (CraftingRecipe r : recipes) {
             if (canCraft(p, r)) {
                 return r;
             }
@@ -854,12 +883,12 @@ public final class Crafting {
         } else if (furnaceWanted(p)) {
             // raw meat / ore in the bag and the stone for a furnace: the furnace comes before anything else made of stone
             if (tableAccess) {
-                CraftingRecipe r = craftable(p, s -> s.is(Items.FURNACE));
+                CraftingRecipe r = craftableItem(p, Items.FURNACE);
                 if (r != null) {
                     return r;
                 }
             } else if (countTag(p, ItemTags.PLANKS) >= 4) {
-                CraftingRecipe r = craftable(p, s -> s.is(Items.CRAFTING_TABLE));
+                CraftingRecipe r = craftableItem(p, Items.CRAFTING_TABLE);
                 if (r != null) {
                     return r;
                 }
@@ -873,7 +902,7 @@ public final class Crafting {
         if (!(forced instanceof ArmorItem) && p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
             // a boat first: keep the wood for it (5 planks + a table) instead of spending it on other things
             for (Item boat : BOATS) {
-                for (CraftingRecipe r : recipesFor(p, s -> s.is(boat))) {
+                for (CraftingRecipe r : recipesForItem(p, boat)) {
                     if (tableAccess && canCraft(p, r)) {
                         return r;
                     }
@@ -882,7 +911,7 @@ public final class Crafting {
             int planks = countTag(p, ItemTags.PLANKS);
             int logs = countTag(p, ItemTags.LOGS);
             if (!tableAccess && planks >= 4 && planks + logs * 4 >= 9) {
-                CraftingRecipe r = craftable(p, s -> s.is(Items.CRAFTING_TABLE));
+                CraftingRecipe r = craftableItem(p, Items.CRAFTING_TABLE);
                 if (r != null) {
                     return r;
                 }
@@ -895,7 +924,7 @@ public final class Crafting {
             }
         }
         for (Item item : wanted) {
-            for (CraftingRecipe r : recipesFor(p, s -> s.is(item))) {
+            for (CraftingRecipe r : recipesForItem(p, item)) {
                 if ((tableAccess || r.canCraftInDimensions(2, 2)) && canCraft(p, r)) {
                     return r;
                 }
@@ -913,13 +942,13 @@ public final class Crafting {
         int logs = countTag(p, ItemTags.LOGS);
         int sticks = count(p, Items.STICK);
         if (wantsTools && !haveTable && planks >= 4 && !tableNearby(p)) {
-            CraftingRecipe r = craftable(p, s -> s.is(Items.CRAFTING_TABLE));
+            CraftingRecipe r = craftableItem(p, Items.CRAFTING_TABLE);
             if (r != null) {
                 return r;
             }
         }
         if (wantsTools && sticks < 2 && planks >= 2) {
-            CraftingRecipe r = craftable(p, s -> s.is(Items.STICK));
+            CraftingRecipe r = craftableItem(p, Items.STICK);
             if (r != null) {
                 return r;
             }
@@ -931,7 +960,7 @@ public final class Crafting {
             }
         }
         if (count(p, Items.FURNACE) == 0 && cobble(p) >= 8 && !furnaceNearby(p)) {
-            CraftingRecipe r = craftable(p, s -> s.is(Items.FURNACE));
+            CraftingRecipe r = craftableItem(p, Items.FURNACE);
             if (r != null) {
                 return r;
             }
@@ -944,7 +973,7 @@ public final class Crafting {
                     return r;
                 }
                 if (count(p, Items.STICK) < 2) {
-                    r = craftable(p, s -> s.is(Items.STICK));
+                    r = craftableItem(p, Items.STICK);
                     if (r != null) {
                         return r;
                     }
@@ -956,7 +985,7 @@ public final class Crafting {
                     return r;
                 }
                 if (count(p, Items.STICK) < 4) {
-                    r = craftable(p, s -> s.is(Items.STICK));
+                    r = craftableItem(p, Items.STICK);
                     if (r != null) {
                         return r;
                     }
