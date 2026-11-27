@@ -434,6 +434,12 @@ public final class CommunityResourcesTests {
         h.assertTrue(bases.nearest(dim,tie,2)==first,"direct add is indexed");
         bases.bases.clear();
         h.assertTrue(bases.nearest(dim,tie,128)==null,"clear never returns deleted base");
+        // Shrink below the indexed threshold, grow again, and exercise wide-query fallback.
+        for(int i=0;i<8;i++) bases.add(dim,new BlockPos(200+i,200,0),"small");
+        h.assertTrue(bases.nearest(dim,tie,128)==null,"small list cannot return stale indexed entries");
+        for(int i=0;i<16;i++) bases.add(dim,new BlockPos(-31-i,200,0),"regrown");
+        h.assertTrue(bases.nearest(dim,tie,128)==bases.nearestUnindexed(dim,tie,128),"wide scan preserves nearest and tie order");
+        h.assertTrue(bases.nearest(dim,tie,2)==bases.nearestUnindexed(dim,tie,2),"index rebuilt after shrink and growth");
         h.succeed();
     }
 }
