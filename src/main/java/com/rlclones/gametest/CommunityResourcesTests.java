@@ -351,4 +351,58 @@ public final class CommunityResourcesTests {
         }
         h.succeed();
     }
+
+    @GameTest(template="arena",batch="inventory-scan-equivalence",timeoutTicks=40)
+    public static void consolidatedGearScansMatchLegacyAndSeeLiveChanges(GameTestHelper h) {
+        arena(h);
+        var c=actor(h,5,7);
+        var inv=c.getInventory();
+        Item[][] kinds={{Items.DIAMOND_PICKAXE,Items.IRON_PICKAXE,Items.STONE_PICKAXE,Items.WOODEN_PICKAXE},
+                {Items.DIAMOND_AXE,Items.IRON_AXE,Items.STONE_AXE,Items.WOODEN_AXE},
+                {Items.DIAMOND_SWORD,Items.IRON_SWORD,Items.STONE_SWORD,Items.WOODEN_SWORD}};
+        Item[] armor={Items.DIAMOND_HELMET,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_LEGGINGS,Items.DIAMOND_BOOTS,
+                Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS};
+        var pool=new ArrayList<Item>();
+        for(Item[] kind:kinds)Collections.addAll(pool,kind);
+        Collections.addAll(pool,armor);
+        Collections.addAll(pool,Items.LEATHER_BOOTS,Items.CHAINMAIL_HELMET,Items.NETHERITE_CHESTPLATE,Items.STICK);
+        var random=new Random(10824);
+        try {
+            for(int trial=0;trial<100;trial++){
+                inv.clearContent();
+                for(int i=0;i<inv.items.size();i++){
+                    if(random.nextBoolean())continue;
+                    ItemStack stack=new ItemStack(pool.get(random.nextInt(pool.size())));
+                    if(stack.isDamageableItem()&&random.nextBoolean())stack.setDamageValue(stack.getMaxDamage()-1);
+                    inv.items.set(i,stack);
+                }
+                if(trial%3==0)c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.DIAMOND_HELMET));
+                if(trial%5==0)c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,new ItemStack(Items.NETHERITE_CHESTPLATE));
+                var expectedArmor=new ArrayList<Item>();
+                for(Item item:armor)if(Crafting.armorImproves(c,new ItemStack(item)))expectedArmor.add(item);
+                var actualArmor=new ArrayList<Item>();
+                Crafting.addArmorUpgrades(c,actualArmor);
+                h.assertTrue(expectedArmor.equals(actualArmor),"armor order and scores agree at trial "+trial);
+                var expected=new ArrayList<Item>(List.of(Items.STICK));
+                for(Item[] kind:kinds)for(Item item:kind){
+                    boolean has=false,sound=false;
+                    for(ItemStack stack:inv.items)if(stack.is(item)){has=true;sound|=!Equipment.worn(stack);}
+                    if(has){if(!sound)expected.add(0,item);break;}
+                }
+                var actual=new ArrayList<Item>(List.of(Items.STICK));
+                Crafting.addWornReplacements(c,actual);
+                h.assertTrue(expected.equals(actual),"worn gear order agrees at trial "+trial);
+            }
+            inv.clearContent();
+            var pick=new ItemStack(Items.DIAMOND_PICKAXE);
+            inv.items.set(0,pick);
+            var replacements=new ArrayList<Item>();
+            Crafting.addWornReplacements(c,replacements);
+            h.assertTrue(replacements.isEmpty(),"sound tool is not replaced");
+            pick.setDamageValue(pick.getMaxDamage()-1);
+            Crafting.addWornReplacements(c,replacements);
+            h.assertTrue(replacements.equals(List.of(Items.DIAMOND_PICKAXE)),"direct mutation of existing stack is visible immediately");
+        } finally {cleanup(h.getLevel());}
+        h.succeed();
+    }
 }
