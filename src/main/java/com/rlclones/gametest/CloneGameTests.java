@@ -139,6 +139,31 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "advancedtactics")
+    public static void fleeingCloneWallsOffNarrowBridge(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        // Raised, one-block-wide deck; the ground below cannot be used to step around the wall.
+        for(int z=2;z<=12;z++)h.setBlock(new BlockPos(7,4,z),Blocks.STONE);
+        Vec3 start=h.absoluteVec(new Vec3(7.5,5,7.5));
+        c.teleportTo(h.getLevel(),start.x,start.y,start.z,0f,0f);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,5,11));
+        enemy.setNoAi(true);
+        enemy.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().bridgeRetreat().tick(enemy,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().bridgeRetreat().wallsBuilt>0,"two-high bridge wall should be built");
+            h.assertTrue(h.getBlockState(new BlockPos(7,5,8)).is(Blocks.COBBLESTONE),"lower wall");
+            h.assertTrue(h.getBlockState(new BlockPos(7,6,8)).is(Blocks.COBBLESTONE),"upper wall");
+            h.assertTrue(c.position().distanceTo(start)>1.5,"clone should continue away after building");
+            h.assertTrue(c.getY()>=start.y-.1,"clone must not fall off the bridge");
+            enemy.discard();finish(h,c);
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
