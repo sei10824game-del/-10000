@@ -79,6 +79,7 @@ public final class CloneController {
     private final Explosives explosives;
     private final SizeTactics sizeTactics;
     private final TunnelBarricade tunnelBarricade;
+    private final BridgeRetreat bridgeRetreat;
     private final AnchorAttack anchorAttack;
     private final AnvilWork anvilWork;
     private final EndEyeSearch endEyeSearch;
@@ -238,6 +239,7 @@ public final class CloneController {
         this.explosives = new Explosives(self, motor, perception);
         this.sizeTactics = new SizeTactics(self, motor);
         this.tunnelBarricade = new TunnelBarricade(self, motor);
+        this.bridgeRetreat = new BridgeRetreat(self, motor);
         this.anchorAttack = new AnchorAttack(self, motor, explosives);
         this.anvilWork = new AnvilWork(self, motor);
         this.endEyeSearch = new EndEyeSearch(self, motor, perception);
@@ -467,12 +469,13 @@ public final class CloneController {
         target = null;
         motor.resetStuck();
         motor.clearPath();
-        sizeTactics.reset(); tunnelBarricade.reset(); anchorAttack.reset(); endEyeSearch.reset();
+        sizeTactics.reset(); tunnelBarricade.reset(); bridgeRetreat.reset(); anchorAttack.reset(); endEyeSearch.reset();
         portals.onArrived(from, now());
     }
 
     public SizeTactics sizeTactics(){return sizeTactics;}
     public TunnelBarricade tunnelBarricade(){return tunnelBarricade;}
+    public BridgeRetreat bridgeRetreat(){return bridgeRetreat;}
     public AnchorAttack anchorAttack(){return anchorAttack;}
     public AnvilWork anvilWork(){return anvilWork;}
     public EndEyeSearch endEyeSearch(){return endEyeSearch;}
@@ -2527,7 +2530,7 @@ public final class CloneController {
         expedition.abandon();
         storage.reset();
         perch.reset();
-        sizeTactics.reset(); tunnelBarricade.reset(); anchorAttack.reset(); endEyeSearch.reset();
+        sizeTactics.reset(); tunnelBarricade.reset(); bridgeRetreat.reset(); anchorAttack.reset(); endEyeSearch.reset();
         boatTrap.reset();
         portals.reset();
         cleanTarget = null;
@@ -3020,7 +3023,7 @@ public final class CloneController {
         }
         development.finish(died,completed);
         if(option==Option.SHAFT)shafts.pause();
-        if(option==Option.FLEE)survival.cancel();
+        if(option==Option.FLEE){survival.cancel();bridgeRetreat.reset();}
         if(option==Option.FIGHT)ground.end(died);
         if (died) oreWorkLearning.failed(); else oreWorkLearning.cancel();
         if (option == Option.FEED && feedingCivic) { civicWork.cancel(); feedingCivic = false; }
@@ -4550,6 +4553,12 @@ public final class CloneController {
         if (!threats.isEmpty() && portals.escape()) {
             survival.cancel();
             return false; // a portal close by: through it, away from all of them
+        }
+        Entity bridgePursuer=null;
+        for(var threat:threats)if(bridgePursuer==null||threat.entity.distanceToSqr(self)<bridgePursuer.distanceToSqr(self))bridgePursuer=threat.entity;
+        if(bridgeRetreat.tick(bridgePursuer,now)){
+            survival.cancel();goalTimer=0;corneredStand.reset();
+            return false;
         }
         Vec3 currentRetreat=survival.currentGoal(now);
         if(currentRetreat!=null) {
