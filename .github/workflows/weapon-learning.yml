@@ -3,6 +3,8 @@ on:
   push:
     branches: [fix/weapon-learning-20261128]
     paths: [.github/workflows/weapon-learning.yml]
+  pull_request:
+    branches: [validation/weapon-learning-base-20261128]
   workflow_dispatch:
 permissions:
   contents: read
