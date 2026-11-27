@@ -1,0 +1,101 @@
+name: V6 full regression and independent performance verification
+on:
+  push:
+    branches: [optimization/v6-allocation-20261128]
+    paths: [.github/workflows/v6-allocation.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ref: 49f5f2bf4340c462c0705007da75925dd8024700
+            label: baseline
+          - ref: 9ba482ff6516e91b5e3df58e84af936f24eee2d3
+            label: candidate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run unit tests and all configured GameTest namespaces
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon test runGameTestServer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-regression-${{ matrix.label }}
+          path: |
+            run/logs/
+            build/test-results/
+          if-no-files-found: warn
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [rlclones, rlclones-v6-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Repeat 300-clone comparison with matching world seed
+        run: |
+          python3 scripts/compare-population.py \
+            --baseline 49f5f2bf4340c462c0705007da75925dd8024700 \
+            --candidate 9ba482ff6516e91b5e3df58e84af936f24eee2d3 \
+            --counts 300 --ticks 2400 --repeats 3 --timeout 4500 \
+            --seed "${{ matrix.seed }}" --output "$RUNNER_TEMP/v6-confirmation"
+      - name: Report measurements
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/v6-confirmation/comparison.csv"
+          if test -f "$report"; then cat "$report" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v6-confirmation-${{ matrix.seed }}
+          path: ${{ runner.temp }}/v6-confirmation/
+          if-no-files-found: warn
+  candidate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9ba482ff6516e91b5e3df58e84af936f24eee2d3
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build reobfuscated candidate JAR for testing only
+        run: |
+          bash ./gradlew --no-daemon build
+          ls -l build/libs/
+          sha256sum build/libs/*.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rlclones-v6-CANDIDATE-not-final
+          path: build/libs/*.jar
+          if-no-files-found: error
