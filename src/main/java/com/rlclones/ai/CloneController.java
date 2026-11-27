@@ -3373,7 +3373,7 @@ public final class CloneController {
             if (!hunt && validTarget(target,false,now) && Senses.isHostileTo(target,self)
                     && d <= 12 && (perception.isVisible(target) || glassEnemy == target)) {
                 if (glassEnemy != target || !motor.canBreachGlass(glassBreach)) glassBreach = null;
-                if (glassBreach == null && perception.isVisible(target) && now % 10 == 0 && (fightBlocked >= 20 || now - fightBestAt > 20 || motor.stuckCount() > 0)) {
+                if (glassBreach == null && perception.isVisible(target) && (now + self.getId()) % 10 == 0) {
                     BlockPos glass = motor.combatGlassBetween(target);
                     if (glass != null && (motor.pathTo(target.position()) == null || motor.stuckCount() >= 2 || now - fightBestAt > 60)) {
                         // Keep the existing team readiness check for dangerous opponents.
