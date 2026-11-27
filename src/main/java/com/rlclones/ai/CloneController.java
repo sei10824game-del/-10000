@@ -1161,11 +1161,15 @@ public final class CloneController {
 
     /** Read a chat line (from a clone or a real player). */
     public void onChat(net.minecraft.server.level.ServerPlayer sender, String text) {
+        onChat(sender,new Chat.Delivery(text));
+    }
+
+    void onChat(net.minecraft.server.level.ServerPlayer sender, Chat.Delivery delivery) {
         if (sender.getUUID().equals(self.getUUID()) || Senses.rivals(sender, self)) {
             return; // the other side's calls and news are not for us
         }
         long now = now();
-        String t = text.trim();
+        String t = delivery.text;
         String name = sender.getGameProfile().getName();
         if (t.startsWith("OMW ")) {
             responders.computeIfAbsent(t.substring(4).trim(), k -> new java.util.HashSet<>()).add(sender.getUUID());
@@ -1204,7 +1208,7 @@ public final class CloneController {
         if (t.startsWith("DEPOSIT ") || t.startsWith("WITHDRAW ") || t.startsWith("LOOT ") || t.startsWith("BASE ") || t.startsWith("HAZARD_LEARNED")) {
             return; // bases and their contents are shared knowledge already
         }
-        if (Chat.isResolved(t)) {
+        if (delivery.resolved()) {
             requests.removeIf(q -> q.from().equals(sender.getUUID()));
             responders.remove(name);
             if (answering != null && answering.from().equals(sender.getUUID())) {
@@ -1213,7 +1217,7 @@ public final class CloneController {
             }
             return;
         }
-        Chat.Request r = Chat.parse(sender, t, now);
+        Chat.Request r = delivery.request(sender, now);
         if (r == null) {
             return;
         }
