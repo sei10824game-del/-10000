@@ -40,7 +40,7 @@ class QTableTest {
         var random=new java.util.Random(173);
         for(int i=0;i<2048;i++){
             var e=table.get(random.nextInt(),QTable.Prior.ZERO);e.visits=i;
-            for(int a=0;a<15;a++){e.q[a]=random.nextFloat();e.n[a]=i+a;e.demo[a]=a;}
+            for(int a=0;a<15;a++){e.q[a]=a==0?Float.intBitsToFloat(0x7fa12345):a==1?-0.0f:a==2?Float.POSITIVE_INFINITY:random.nextFloat();e.n[a]=i+a;e.demo[a]=a;}
         }
         var buffer=new java.io.ByteArrayOutputStream();
         var out=new java.io.DataOutputStream(buffer);
