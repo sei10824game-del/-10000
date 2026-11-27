@@ -18,13 +18,14 @@ import net.minecraft.world.phys.Vec3;
 public final class SizeTactics {
     private final ClonePlayer self;
     private final Motor motor;
+    private final TacticTrial trial;
     private BlockPos shelter, origin, hop;
     private Entity enemy;
     private long until, retryAt;
     private boolean leaving;
     public int shelters, pits, hits;
 
-    public SizeTactics(ClonePlayer self, Motor motor) { this.self=self; this.motor=motor; }
+    public SizeTactics(ClonePlayer self, Motor motor) { this.self=self; this.motor=motor; this.trial=new TacticTrial(self); }
     private ServerLevel level(){return self.serverLevel();}
     private boolean fits(BlockPos p,double w,double h){
         double r=w*.5;
@@ -82,7 +83,7 @@ public final class SizeTactics {
     public boolean tick(Entity e,long now){
         if(self.isPassenger()||self.isInWater()||self.phasing||self.isCreative()){reset();return false;}
         if(origin!=null){
-            if(leaving||e!=enemy||!e.isAlive()||now>=until||!chased(e)||self.getHealth()<self.getMaxHealth()*.45f){leaving=true;return exit(now);}
+            if(leaving||e==null||e!=enemy||!e.isAlive()||now>=until||!chased(e)||self.getHealth()<self.getMaxHealth()*.45f){trial.finish(now,true);leaving=true;return exit(now);}
             if(!self.onGround()){motor.stop();return true;}
             int depth=origin.getY()-self.blockPosition().getY();
             if(depth<0||self.blockPosition().getX()!=origin.getX()||self.blockPosition().getZ()!=origin.getZ()){reset();return false;}
@@ -94,7 +95,7 @@ public final class SizeTactics {
             motor.mine(p);return true;
         }
         if(shelter!=null){
-            if(e!=enemy||!e.isAlive()||!chased(e)||now>=until||!roof(shelter,e)||unsuitable(e)){reset();retryAt=now+60;return false;}
+            if(e==null||e!=enemy||!e.isAlive()||!chased(e)||now>=until||!roof(shelter,e)||unsuitable(e)){trial.finish(now,true);reset();retryAt=now+60;return false;}
             Vec3 goal=Vec3.atBottomCenterOf(shelter);
             if(self.position().distanceToSqr(goal)>.16){motor.navigate(goal,.25,false);return true;}
             hit(e);return true;
@@ -102,19 +103,20 @@ public final class SizeTactics {
         if(e==null||now<retryAt||!self.onGround()||!chased(e)||unsuitable(e)||e.distanceTo(self)>7
                 ||self.getHealth()<self.getMaxHealth()*.65f)return false;
         retryAt=now+60;
-        if(e.getBbHeight()>2.1&&self.getBbHeight()<2){
+        if(e.getBbHeight()>2.1&&self.getBbHeight()<2&&trial.allowed(e,"low_roof",now)){
             BlockPos p=findRoof(e);
-            if(p!=null){shelter=p;enemy=e;until=now+200;shelters++;return true;}
+            if(p!=null){shelter=p;enemy=e;until=now+200;shelters++;trial.begin(e,"low_roof",now);return true;}
         }
-        if(canDig(e)){
-            origin=self.blockPosition().immutable();enemy=e;until=now+180;pits++;return true;
+        if(trial.allowed(e,"fighting_pit",now)&&canDig(e)){
+            origin=self.blockPosition().immutable();enemy=e;until=now+180;pits++;trial.begin(e,"fighting_pit",now);return true;
         }
         return false;
     }
     /** Finish climbing out even when the target dies or the combat option changes. */
     public boolean recover(long now){
+        if(shelter!=null){trial.finish(now,true);reset();return false;}
         if(origin==null)return false;
-        leaving=true;return exit(now);
+        trial.finish(now,true);leaving=true;return exit(now);
     }
     private boolean exit(long now){
         if(self.getY()>=origin.getY()-.05&&self.onGround()){reset();retryAt=now+80;return false;}
@@ -126,5 +128,5 @@ public final class SizeTactics {
         }
         return true;
     }
-    public void reset(){origin=shelter=hop=null;enemy=null;leaving=false;motor.resetMining();}
+    public void reset(){trial.cancel();origin=shelter=hop=null;enemy=null;leaving=false;motor.resetMining();}
 }
