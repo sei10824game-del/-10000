@@ -490,11 +490,7 @@ public final class CloneManager {
                     try {
                         // Copy all nested NBT data, including arrays, before any worker can see it.
                         var snapshot=c.getCloneBrain().save().copy();
-                        tasks.add(pool.submit(()->{
-                            var out=new java.io.ByteArrayOutputStream();
-                            NbtIo.writeCompressed(snapshot,out);
-                            return out.toByteArray();
-                        }));
+                        tasks.add(pool.submit(()->com.rlclones.ai.brain.BrainCompression.encode(snapshot)));
                     } catch(RuntimeException e){tasks.add(null);}
                 }
                 for(int i=0;i<batch.size();i++){
