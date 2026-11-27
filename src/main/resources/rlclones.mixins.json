@@ -17,6 +17,7 @@
   "mixins": [
     "TerrainPaletteMixin",
     "HumanMiningClaimMixin",
-    "EntityGeometryMixin"
+    "EntityGeometryMixin",
+    "TrackedEntityPassengersMixin"
   ]
 }
