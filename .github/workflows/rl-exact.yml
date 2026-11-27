@@ -18,7 +18,7 @@ jobs:
         include:
           - ref: 7387f71923d14bc2d7d04943dcd740968b315b0c
             label: baseline
-          - ref: 3a15bc05149b040eae2601e6312b3ba4c3100ea4
+          - ref: cb3949a2e804a5a22993213316582636aa339f27
             label: candidate
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,7 @@ jobs:
         run: |
           python3 scripts/compare-population.py \
             --baseline 7387f71923d14bc2d7d04943dcd740968b315b0c \
-            --candidate 3a15bc05149b040eae2601e6312b3ba4c3100ea4 \
+            --candidate cb3949a2e804a5a22993213316582636aa339f27 \
             --counts 100 300 --ticks 2400 --repeats 2 --timeout 4500 \
             --seed "${{ matrix.seed }}" --output "$RUNNER_TEMP/rl-exact-confirmation"
       - name: Report measurements
@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 3a15bc05149b040eae2601e6312b3ba4c3100ea4
+          ref: cb3949a2e804a5a22993213316582636aa339f27
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
