@@ -55,7 +55,9 @@ public final class AnvilWork {
                 ||self.containerMenu!=self.inventoryMenu||!com.rlclones.clone.CloneMobs.canUseHands(self))return false;
         retryAt=now+80;
         int g=-1,b=-1;var inv=self.getInventory();
-        outer:for(int i=0;i<inv.items.size();i++)if(gear(inv.items.get(i)))
+        // The anvil's player slots expose the main inventory only; equipped gear is not moved automatically.
+        if(slot(Items.ENCHANTED_BOOK)<0)return false;
+        outer:for(int i=0;i<inv.items.size();i++)if(!inv.items.get(i).isEmpty()&&gear(inv.items.get(i)))
             for(int j=0;j<inv.items.size();j++)if(inv.items.get(j).is(Items.ENCHANTED_BOOK)&&improves(inv.items.get(i),inv.items.get(j))){g=i;b=j;break outer;}
         if(g<0)return false;
         BlockPos pos=station();
@@ -72,6 +74,9 @@ public final class AnvilWork {
             return false;
         }
         if(!self.mayInteract(self.serverLevel(),pos))return false;
+        Vec3 eye=self.getEyePosition(),top=Vec3.atCenterOf(pos).add(0,.49,0);
+        var ray=self.level().clip(new net.minecraft.world.level.ClipContext(eye,top,net.minecraft.world.level.ClipContext.Block.OUTLINE,net.minecraft.world.level.ClipContext.Fluid.NONE,self));
+        if(ray.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK&&!ray.getBlockPos().equals(pos))return false;
         motor.stop();self.setShiftKeyDown(false);motor.sneak(false);
         motor.useOnFace(pos,Direction.UP);
         if(!(self.containerMenu instanceof AnvilMenu menu))return false;
@@ -80,6 +85,7 @@ public final class AnvilWork {
             if(gs<0||bs<0||!menu.getCarried().isEmpty())return false;
             ItemStack before=inv.items.get(g).copy();
             move(menu,gs,0);move(menu,bs,1);
+            if(!menu.getCarried().isEmpty()||!menu.getSlot(0).getItem().is(before.getItem())||!menu.getSlot(1).getItem().is(Items.ENCHANTED_BOOK))return false;
             ItemStack result=menu.getSlot(2).getItem();
             var old=EnchantmentHelper.getEnchantments(before);
             boolean better=EnchantmentHelper.getEnchantments(result).entrySet().stream()
