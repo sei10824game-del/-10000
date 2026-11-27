@@ -49,15 +49,21 @@ public final class TunnelBarricade {
         return !self.controller().ground().area(e)&&(k==null||!k.isRanged()&&!k.has(com.rlclones.ai.brain.EnemyKnowledge.CLIMBS)
                 &&!k.has(com.rlclones.ai.brain.EnemyKnowledge.FLIES)&&!k.has(com.rlclones.ai.brain.EnemyKnowledge.TELEPORTS));
     }
+    private boolean friendlyBehind(){
+        for(var p:level().players())if(p!=self&&p.isAlive()&&Senses.isAllyOf(p,self)&&p.distanceToSqr(self)<100
+                &&(p.getX()-block.getX()-.5)*facing.getStepX()+(p.getZ()-block.getZ()-.5)*facing.getStepZ()>-.5)return true;
+        return false;
+    }
     private boolean owned(){return block!=null&&placedState!=null&&level().getBlockState(block)==placedState;}
     private void abandon(long now){enemy=null;retryAt=now+100;quietSince=now;cleanupUntil=now+600;}
     public boolean tick(Entity e,long now){
-        if(self.isPassenger()||self.isInWater()||self.phasing||self.isCreative()||self.getBbWidth()>=1||self.getBbHeight()>2)return false;
+        if(self.isPassenger()||self.isInWater()||self.phasing||self.isCreative()||self.getBbWidth()>=1||self.getBbHeight()>2
+                ||!com.rlclones.clone.CloneMobs.canUseHands(self))return false;
         if(block!=null&&enemy==null)return false;
         if(block!=null){
             if(e!=enemy||!appropriate(e)||now-started>240||self.getHealth()<initialHealth-3
                     ||!corridor(stand,facing,false)||!corridor(stand.relative(facing),facing,false)
-                    ||!corridor(block,facing,placedState!=null)
+                    ||!corridor(block,facing,placedState!=null)||friendlyBehind()
                     ||!Config.get(Config.ALLOW_BLOCK_PLACING,true)){
                 abandon(now);return false;
             }
@@ -77,10 +83,13 @@ public final class TunnelBarricade {
             double across=Math.abs((e.getX()-b.getX()-.5)*d.getStepZ()-(e.getZ()-b.getZ()-.5)*d.getStepX());
             if(along<.65||across>.6||!level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,new AABB(b).inflate(.02),x->x.isAlive()).isEmpty())return false;
             block=b;stand=p;facing=d;enemy=e;started=now;initialHealth=self.getHealth();placedState=null;
+            if(friendlyBehind()){reset();return false;}
         }
         motor.stop();motor.cancelJump();
-        if(self.position().distanceToSqr(Vec3.atBottomCenterOf(stand))>.12){
-            motor.movePrecisely(Vec3.atBottomCenterOf(stand));return true;
+        // Build from the original cell, then move one cell closer to hit through the gap.
+        BlockPos fightingCell=placedState==null?stand:stand.relative(facing);
+        if(self.position().distanceToSqr(Vec3.atBottomCenterOf(fightingCell))>.12){
+            motor.movePrecisely(Vec3.atBottomCenterOf(fightingCell));return true;
         }
         if(placedState==null){
             int slot=Equipment.pillarBlockSlot(self);
