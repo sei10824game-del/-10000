@@ -47,7 +47,7 @@ public class Bases extends SavedData {
     public final List<Base> bases = baseList;
 
     private record IndexedBase(Base base, int order) {}
-    private final Map<Long, List<IndexedBase>> baseCells = new HashMap<>();
+    private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<List<IndexedBase>> baseCells = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
     private long indexedBaseRevision = -1;
 
     private static long cellKey(int x, int z) {
@@ -515,18 +515,34 @@ public class Bases extends SavedData {
     public Base nearest(ResourceKey<Level> dim, Vec3 pos, double radius) {
         // For small lists or very wide/unusual queries, a scan is cheaper and preserves
         // the original behavior. The index covers only immutable base centers.
-        if (bases.size() < 16 || !(radius > 0 && radius <= 128)
+        if (bases.size() < 16) {
+            // A previously large colony can shrink. Do not keep removed bases
+            // (and their chest lists) alive just because the scan is now cheaper.
+            if (!baseCells.isEmpty()) baseCells.clear();
+            indexedBaseRevision = -1;
+            return nearestUnindexed(dim, pos, radius);
+        }
+        if (!(radius > 0 && radius <= 128)
                 || !Double.isFinite(pos.x) || !Double.isFinite(pos.z)
                 || Math.abs(pos.x) > 30_000_128 || Math.abs(pos.z) > 30_000_128) {
             return nearestUnindexed(dim, pos, radius);
         }
-        ensureBaseIndex();
         // Centers are at integer coordinates + 0.5. Include an extra block
         // conservatively at each edge; the exact original distance test follows.
         int minX = (int) Math.floor((pos.x - radius - 1) / 32);
         int maxX = (int) Math.floor((pos.x + radius + 1) / 32);
         int minZ = (int) Math.floor((pos.z - radius - 1) / 32);
         int maxZ = (int) Math.floor((pos.z + radius + 1) / 32);
+        // Avoid a grid of mostly empty lookups for a broad search over a small list.
+        long cellCount = (long) (maxX - minX + 1) * (maxZ - minZ + 1);
+        if (cellCount >= bases.size()) {
+            if (indexedBaseRevision != baseList.revision()) {
+                baseCells.clear();
+                indexedBaseRevision = -1;
+            }
+            return nearestUnindexed(dim, pos, radius);
+        }
+        ensureBaseIndex();
         Base best = null;
         double bestD = radius;
         int bestOrder = Integer.MAX_VALUE;
