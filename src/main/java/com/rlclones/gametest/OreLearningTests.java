@@ -39,7 +39,7 @@ public final class OreLearningTests {
         var c=setup(h);var low=h.absolutePos(new BlockPos(10,2,7));
         c.setAiEnabled(true);
         h.succeedWhen(()->{
-            h.assertTrue(c.getCloneBrain().oreWork.wins()==1,"real confirmed destruction records an ore success: "+((OreWorkLearning)field(c.controller(),"oreWorkLearning")).report()+" target="+c.controller().harvestTarget()+" trace="+c.controller().harvestTrace+" mining="+c.controller().motor().mineDebug);
+            h.assertTrue(c.getCloneBrain().oreWork.wins()==1,"real confirmed destruction records an ore success: "+((OreWorkLearning)field(c.controller(),"oreWorkLearning")).report()+" target="+c.controller().harvestTarget()+" trace="+c.controller().harvestTrace+" mining="+c.controller().motor().mineDebug());
             h.assertTrue(h.getLevel().getBlockState(low).isAir(),"learned low-height method chose and mined the lower ore");
             h.assertTrue(c.getCloneBrain().copy().oreWork.wins()==1,"result survives save/copy");
         });
