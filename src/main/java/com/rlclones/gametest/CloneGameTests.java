@@ -206,6 +206,24 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void usesEnchantingTableWithRealCosts(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        h.setBlock(new BlockPos(8,2,7),Blocks.ENCHANTING_TABLE);
+        c.giveExperienceLevels(30);
+        c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
+        c.getInventory().add(new ItemStack(Items.LAPIS_LAZULI,8));
+        h.onEachTick(()->c.controller().enchantingWork().tick(h.getLevel().getGameTime()));
+        h.succeedWhen(()->{
+            boolean enchanted=false;
+            for(ItemStack s:c.getInventory().items)if(s.is(Items.DIAMOND_SWORD)&&s.isEnchanted())enchanted=true;
+            h.assertTrue(enchanted,"sword should receive vanilla enchantments");
+            h.assertTrue(c.experienceLevel<30,"experience must be consumed");
+            h.assertTrue(c.getInventory().countItem(Items.LAPIS_LAZULI)<8,"lapis must be consumed");
+            finish(h,c);
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
