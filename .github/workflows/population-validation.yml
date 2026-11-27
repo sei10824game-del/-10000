@@ -1,0 +1,69 @@
+name: Population comparison (isolated validation)
+
+on:
+  push:
+    branches:
+      - validation/population-20261127
+    paths:
+      - .github/workflows/population-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - count: 100
+            ticks: 2400
+            repeats: 2
+            timeout: 4500
+          - count: 200
+            ticks: 2400
+            repeats: 2
+            timeout: 4500
+          - count: 300
+            ticks: 2400
+            repeats: 2
+            timeout: 4500
+          - count: 12
+            ticks: 72000
+            repeats: 1
+            timeout: 9000
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare unchanged baseline and candidate
+        run: |
+          python3 scripts/compare-population.py \
+            --baseline 23b71eaee9077217cf4db888692db52b11288275 \
+            --candidate bc7d8bcf87c94999c3291631fdc2f4e23dd1351d \
+            --counts ${{ matrix.count }} --ticks ${{ matrix.ticks }} \
+            --repeats ${{ matrix.repeats }} --timeout ${{ matrix.timeout }} \
+            --seed rlclones --output "$RUNNER_TEMP/population-results"
+      - name: Publish comparison
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/population-results/comparison.csv"; then
+            printf '### Population comparison (sampled MSPT, not raw tick latency)\n\n\x60\x60\x60\n' >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/population-results/comparison.csv" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n\x60\x60\x60\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: population-${{ matrix.count }}-ticks-${{ matrix.ticks }}
+          path: ${{ runner.temp }}/population-results/
+          if-no-files-found: warn
