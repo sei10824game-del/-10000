@@ -21,7 +21,9 @@ public final class BridgeRetreat {
     private final ClonePlayer self;
     private final Motor motor;
     private BlockPos wall,stand,exit;
-    private BlockState lowerPlaced;
+    private final java.util.List<BlockPos> plan=new java.util.ArrayList<>(6);
+    private final java.util.Map<BlockPos,BlockState> placed=new java.util.HashMap<>();
+    private int next;
     private Direction toward;
     private Entity enemy;
     private long deadline,retryAt;
@@ -45,9 +47,11 @@ public final class BridgeRetreat {
     private boolean gap(BlockPos p){
         return open(p)&&open(p.above())&&!solid(p.below())&&!solid(p.below(2));
     }
-    private boolean narrow(BlockPos p,Direction d){
+    /** Cross-section of a straight bridge, at most three cells wide, with real drops on both sides. */
+    private boolean crossSection(BlockPos p,Direction d,int left,int right){
         Direction side=d.getClockWise();
-        return gap(p.relative(side))&&gap(p.relative(side.getOpposite()));
+        for(int n=-left;n<=right;n++)if(!deck(p.relative(side,n)))return false;
+        return gap(p.relative(side,-left-1))&&gap(p.relative(side,right+1));
     }
     private double along(Vec3 p,BlockPos base,Direction d){
         return (p.x-base.getX()-.5)*d.getStepX()+(p.z-base.getZ()-.5)*d.getStepZ();
@@ -82,7 +86,7 @@ public final class BridgeRetreat {
         return true;
     }
     private void finish(long now){
-        wall=stand=exit=null;enemy=null;toward=null;lowerPlaced=null;retreating=false;retryAt=now+160;
+        wall=stand=exit=null;enemy=null;toward=null;plan.clear();placed.clear();next=0;retreating=false;retryAt=now+160;
     }
     public void reset(){finish(self.level().getGameTime());}
     private boolean start(Entity e,long now){
@@ -94,13 +98,30 @@ public final class BridgeRetreat {
         BlockPos p=self.blockPosition();
         Direction dir=Direction.getNearest(e.getX()-self.getX(),0,e.getZ()-self.getZ());
         BlockPos w=p.relative(dir);
-        if(!deck(w)||!deck(w.relative(dir))||!narrow(w,dir)||!narrow(p,dir)||!narrow(w.relative(dir),dir)
-                ||along(e.position(),w,dir)<1||Math.abs(along(e.position(),w,dir.getClockWise()))>.8)return false;
+        Direction side=dir.getClockWise();
+        if(!deck(w)||along(e.position(),w,dir)<1)return false;
+        int left=0,right=0;
+        while(left<3&&deck(w.relative(side,-left-1)))left++;
+        while(right<3&&deck(w.relative(side,right+1)))right++;
+        if(left+right+1>3||!crossSection(w,dir,left,right)||!crossSection(p,dir,left,right)
+                ||!crossSection(w.relative(dir),dir,left,right))return false;
+        double offset=along(e.position(),w,side);
+        if(offset< -left-.8||offset>right+.8)return false;
         for(int i=0;i<=3;i++)if(!deck(p.relative(dir.getOpposite(),i)))return false;
-        if(materials()<2||occupied(w)||occupied(w.above()))return false;
+        if(materials()<2*(left+right+1))return false;
+        plan.clear();placed.clear();next=0;
+        // Build the central column first, then the adjacent lanes. Every cell must be in real reach.
+        for(int radius=0;radius<=2;radius++)for(int n=-left;n<=right;n++)if(Math.abs(n)==radius){
+            BlockPos cell=w.relative(side,n);
+            if(occupied(cell)||occupied(cell.above())||!level().getBlockState(cell).canBeReplaced()
+                    ||!level().getBlockState(cell.above()).canBeReplaced()
+                    ||self.getEyePosition().distanceTo(Vec3.atCenterOf(cell))>Motor.BLOCK_REACH-.25
+                    ||self.getEyePosition().distanceTo(Vec3.atCenterOf(cell.above()))>Motor.BLOCK_REACH-.25){plan.clear();return false;}
+            plan.add(cell);plan.add(cell.above());
+        }
         stand=p;wall=w;exit=p.relative(dir.getOpposite(),3);toward=dir;enemy=e;health=self.getHealth();
         if(alliesBehind()){finish(now);return false;}
-        deadline=now+16;return true;
+        deadline=now+Math.min(28,12+plan.size()*2);return true;
     }
     /** True only while placing a wall or taking the verified first steps away from it. */
     public boolean tick(Entity e,long now){
@@ -118,17 +139,17 @@ public final class BridgeRetreat {
             aborted++;finish(now);return false;
         }
         motor.stop();motor.cancelJump();motor.sneak(true);
-        BlockPos cell=lowerPlaced==null?wall:wall.above();
-        if(lowerPlaced!=null&&level().getBlockState(wall)!=lowerPlaced){aborted++;finish(now);return false;}
+        BlockPos cell=plan.get(next);
+        for(var entry:placed.entrySet())if(level().getBlockState(entry.getKey())!=entry.getValue()){aborted++;finish(now);return false;}
         if(!level().getBlockState(cell).canBeReplaced()||occupied(cell)){aborted++;finish(now);return false;}
         int slot=Equipment.pillarBlockSlot(self);
         if(slot<0){aborted++;finish(now);return false;}
         Equipment.select(self,slot);
         if(motor.placeBlockAt(cell)&&level().getBlockState(cell).isCollisionShapeFullBlock(level(),cell)){
             blocksPlaced++;
+            placed.put(cell.immutable(),level().getBlockState(cell));
             Motor.PLUGS.put(cell.immutable(),now);
-            if(lowerPlaced==null)lowerPlaced=level().getBlockState(wall);
-            else{
+            if(++next==plan.size()){
                 wallsBuilt++;retreats++;retreating=true;deadline=now+50;
                 motor.sneak(false);motor.movePrecisely(Vec3.atBottomCenterOf(exit));
             }
