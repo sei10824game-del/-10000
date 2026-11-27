@@ -84,4 +84,25 @@ class BrainTest {
         assertEquals(0,Brain.load(new net.minecraft.nbt.CompoundTag()).pendingReplay());
     }
 
+
+    @Test void parallelCompressionPreservesIndependentDetachedSnapshots() throws Exception {
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(4);
+        try{
+            var tags=new java.util.ArrayList<net.minecraft.nbt.CompoundTag>();
+            var futures=new java.util.ArrayList<java.util.concurrent.Future<byte[]>>();
+            for(int i=0;i<8;i++){
+                Brain b=new Brain();b.ownUpdates=17+i;b.oreWork.record(2,3,i,true);
+                var snapshot=b.save().copy();tags.add(snapshot);
+                futures.add(pool.submit(()->BrainCompression.encode(snapshot)));
+                b.ownUpdates+=100;b.oreWork.record(2,3,-1,false);
+            }
+            for(int i=0;i<tags.size();i++){
+                var encoded=futures.get(i).get(30,java.util.concurrent.TimeUnit.SECONDS);
+                var decoded=net.minecraft.nbt.NbtIo.readCompressed(new java.io.ByteArrayInputStream(encoded));
+                assertEquals(tags.get(i),decoded);
+                assertEquals(17+i,Brain.load(decoded).ownUpdates);
+            }
+        }finally{pool.shutdownNow();}
+    }
+
 }
