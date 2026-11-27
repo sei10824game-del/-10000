@@ -102,6 +102,12 @@ public class ClonePlayer extends ServerPlayer {
         this.doTick();
     }
 
+    /** The synthetic client discards system chat packets. AI chat is delivered separately by Chat.deliver. */
+    @Override
+    public void sendSystemMessage(Component message, boolean bypassHiddenChat) {
+        // Do not construct a packet which CloneConnection would immediately discard.
+    }
+
     /** Called for every sound packet a human client at this position would have received. */
     public void hear(SoundEvent sound, double x, double y, double z, int entityId) {
         if (!this.isAlive() || this.isRemoved()) {
