@@ -93,6 +93,51 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void barricadesLowTunnelAgainstHusk(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,5.5,0f,false);
+        for(int z=3;z<=12;z++){
+            h.setBlock(new BlockPos(7,4,z),Blocks.STONE);
+            for(int y=2;y<=3;y++){
+                h.setBlock(new BlockPos(6,y,z),Blocks.STONE);
+                h.setBlock(new BlockPos(8,y,z),Blocks.STONE);
+            }
+        }
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,16));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,2,9));
+        enemy.setNoAi(true);
+        enemy.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().tunnelBarricade().tick(enemy,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().tunnelBarricade().placed>0,"lower tunnel gap should be barricaded");
+            h.assertTrue(h.getBlockState(new BlockPos(7,2,7)).is(Blocks.COBBLESTONE),"barrier should be on the floor");
+            h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).isAir(),"upper gap must stay open");
+            enemy.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void deploysBoatOnBroadIce(GameTestHelper h) {
+        ClonePlayer c=clone(h,3.5,7.5,-90f,false);
+        for(int x=1;x<=13;x++)for(int z=4;z<=10;z++)h.setBlock(new BlockPos(x,1,z),Blocks.PACKED_ICE);
+        c.getInventory().add(new ItemStack(Items.OAK_BOAT));
+        Vec3 goal=h.absoluteVec(new Vec3(17.5,2,7.5));
+        h.onEachTick(()->{
+            c.controller().motor().navigate(goal,1,false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().motor().boating().iceTrips>0,"clone should board a boat on broad ice");
+            h.assertTrue(c.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat,"clone should ride an actual boat");
+            if(c.getVehicle()!=null){var b=c.getVehicle();c.stopRiding();b.discard();}
+            finish(h,c);
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
