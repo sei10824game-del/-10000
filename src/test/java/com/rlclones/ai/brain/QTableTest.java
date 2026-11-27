@@ -5,6 +5,53 @@ import java.nio.ByteBuffer;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QTableTest {
+    private static int oldArgmax(QTable.Entry e,int mask,java.util.Random random){
+        int best=-1,ties=0;float bestQ=Float.NEGATIVE_INFINITY;
+        for(int a=0;a<e.q.length;a++){
+            if((mask&(1<<a))==0)continue;
+            float q=e.q[a];
+            if(q>bestQ+1e-6f){bestQ=q;best=a;ties=1;}
+            else if(Math.abs(q-bestQ)<=1e-6f){ties++;if(random.nextInt(ties)==0)best=a;}
+        }
+        return best;
+    }
+    @Test void maskedScanPreservesEveryDecisionAndRandomDraw(){
+        var data=new java.util.Random(54029);
+        var oldRandom=new java.util.Random(8142);
+        var newRandom=new java.util.Random(8142);
+        for(int count=1;count<=32;count++){
+            var e=new QTable(count).get(1,QTable.Prior.ZERO);
+            for(int i=0;i<4096;i++){
+                for(int a=0;a<count;a++)e.q[a]=switch(data.nextInt(9)){
+                    case 0->Float.NaN;case 1->Float.NEGATIVE_INFINITY;case 2->Float.POSITIVE_INFINITY;
+                    default->data.nextInt(5)*.0000005f;
+                };
+                int mask=data.nextInt();
+                float best=Float.NEGATIVE_INFINITY;
+                for(int a=0;a<count;a++)if((mask&(1<<a))!=0&&e.q[a]>best)best=e.q[a];
+                assertEquals(Float.floatToIntBits(best==Float.NEGATIVE_INFINITY?0:best),Float.floatToIntBits(QTable.max(e,mask)));
+                assertEquals(oldArgmax(e,mask,oldRandom),QTable.argmax(e,mask,newRandom));
+                assertEquals(oldRandom.nextLong(),newRandom.nextLong());
+            }
+        }
+    }
+    @Test void serializationMatchesOriginalByteFormatAndIterationOrder() throws Exception {
+        QTable table=new QTable(15);
+        var random=new java.util.Random(173);
+        for(int i=0;i<2048;i++){
+            var e=table.get(random.nextInt(),QTable.Prior.ZERO);e.visits=i;
+            for(int a=0;a<15;a++){e.q[a]=random.nextFloat();e.n[a]=i+a;e.demo[a]=a;}
+        }
+        var buffer=new java.io.ByteArrayOutputStream();
+        var out=new java.io.DataOutputStream(buffer);
+        out.writeInt(table.actions());out.writeInt(table.size());
+        for(var entry:table.entries()){
+            var e=entry.getValue();out.writeInt(entry.getIntKey());out.writeInt(e.visits);
+            for(int a=0;a<15;a++){out.writeFloat(e.q[a]);out.writeInt(e.n[a]);out.writeInt(e.demo[a]);}
+        }
+        out.flush();assertArrayEquals(buffer.toByteArray(),table.toBytes());
+    }
+
     @Test
     void mergeKeepsWeightedValuesWhenCountsOverflow() {
         QTable a = new QTable(2);
