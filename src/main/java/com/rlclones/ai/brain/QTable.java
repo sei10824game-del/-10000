@@ -72,7 +72,13 @@ public final class QTable {
 
     public static float max(Entry e, int mask) {
         float best = Float.NEGATIVE_INFINITY;
-        for (int bits = mask & actionMask(e.q.length); bits != 0; bits &= bits - 1) {
+        int available = mask & actionMask(e.q.length);
+        if (available == actionMask(e.q.length)) {
+            // Dense masks are common in replay. A simple contiguous scan is faster here.
+            for (float q : e.q) if (q > best) best = q;
+            return best == Float.NEGATIVE_INFINITY ? 0f : best;
+        }
+        for (int bits = available; bits != 0; bits &= bits - 1) {
             int a = Integer.numberOfTrailingZeros(bits);
             if (e.q[a] > best) {
                 best = e.q[a];
