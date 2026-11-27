@@ -338,15 +338,17 @@ public final class Perception {
         double dx = point.x - eye.x;
         double dy = point.y - eye.y;
         double dz = point.z - eye.z;
-        double horiz = Math.sqrt(dx * dx + dz * dz);
         float yawTo = (float) Math.toDegrees(Mth.atan2(dz, dx)) - 90.0F;
-        float pitchTo = (float) -Math.toDegrees(Mth.atan2(dy, horiz));
         double slack = Math.toDegrees(Math.atan2(radius, Math.max(0.2, dist)));
         float yawDiff = Mth.degreesDifferenceAbs(self.getYHeadRot(), yawTo);
-        float pitchDiff = Math.abs(pitchTo - self.getXRot());
         double hf = Config.get(Config.FOV_HORIZONTAL, 102.0) * 0.5;
+        // Same horizontal predicate, including NaN handling. A rejected target cannot pass the vertical test.
+        if (!(yawDiff <= hf + slack)) return false;
+        double horiz = Math.sqrt(dx * dx + dz * dz);
+        float pitchTo = (float) -Math.toDegrees(Mth.atan2(dy, horiz));
+        float pitchDiff = Math.abs(pitchTo - self.getXRot());
         double vf = Config.get(Config.FOV_VERTICAL, 70.0) * 0.5;
-        return yawDiff <= hf + slack && pitchDiff <= vf + slack;
+        return pitchDiff <= vf + slack;
     }
 
     public boolean clearLine(Vec3 from, Vec3 to) {
