@@ -6,6 +6,27 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BrainTest {
+    @Test void sharedSnapshotCanReconstructIndependentCopiesWithoutChangingSavedState() {
+        Brain shared=new Brain();shared.members=30;shared.ownUpdates=19;
+        shared.oreWork.record(2,3,1,true);
+        shared.knowledge("minecraft:zombie").trait("melee");
+        shared.strategyTable().get(7,QTable.Prior.ZERO).q[0]=2.25f;
+        shared.learnItemUse("minecraft:iron_sword",0,3);
+        var snapshot=shared.save();var original=snapshot.copy();
+        var expected=shared.copy().save();
+        var copies=new java.util.ArrayList<Brain>();
+        for(int i=0;i<30;i++){
+            Brain b=Brain.load(snapshot);b.members=1;
+            assertEquals(expected,b.save());copies.add(b);
+        }
+        copies.get(0).strategyTable().peek(7).q[0]=-9;
+        copies.get(0).knowledge("minecraft:zombie").trait("ranged");
+        copies.get(0).oreWork.record(2,3,-1,false);
+        assertEquals(expected,copies.get(1).save());
+        assertEquals(original,snapshot);
+        assertEquals(original,shared.save());
+    }
+
     @Test void oreMethodsAreSavedAndSharedIndependentlyOfRecovery() {
         Brain a=new Brain();a.oreWork.record(2,3,1,true);a.recovery.record(0,1,-1,false);
         Brain copy=a.copy();copy.oreWork.record(2,3,0,false);

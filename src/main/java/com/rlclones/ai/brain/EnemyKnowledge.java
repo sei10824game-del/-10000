@@ -29,6 +29,9 @@ public final class EnemyKnowledge {
 
     public final String typeId;
 
+    /** Reused initializer; evaluates the current enemy traits only when a state is first created. */
+    final QTable.Prior combatPrior = (state, q) -> com.rlclones.ai.combat.CombatState.prior(state, isExplosive(), isRanged(), q);
+
     public final Estimator meleeRange = Estimator.upper(1.0);
     public final Estimator meleeCooldown = Estimator.lower(20);
     public final Estimator meleeDamage = Estimator.mean(3.0);

@@ -158,20 +158,21 @@ public final class Brain {
 
     public int itemUseTries(String item) {
         int[] n = useN.get(item);
-        return n == null ? 0 : java.util.Arrays.stream(n).sum();
+        if (n == null) return 0;
+        int total = 0;
+        for (int count : n) total += count;
+        return total;
     }
 
     /** Untried ways first, then mostly the best one so far (one time in six another, to keep learning). */
     public int chooseItemUse(String item, net.minecraft.util.RandomSource rnd) {
         int[] n = useN.computeIfAbsent(item, k -> new int[USE_MODES]);
-        List<Integer> untried = new java.util.ArrayList<>();
-        for (int m = 0; m < USE_MODES; m++) {
-            if (n[m] == 0) {
-                untried.add(m);
-            }
-        }
-        if (!untried.isEmpty()) {
-            return untried.get(rnd.nextInt(untried.size()));
+        int untried = 0;
+        for (int m = 0; m < USE_MODES; m++) if (n[m] == 0) untried |= 1 << m;
+        if (untried != 0) {
+            int pick = rnd.nextInt(Integer.bitCount(untried));
+            while (pick-- > 0) untried &= untried - 1;
+            return Integer.numberOfTrailingZeros(untried);
         }
         if (rnd.nextInt(6) == 0) {
             return rnd.nextInt(USE_MODES);
@@ -379,19 +380,19 @@ public final class Brain {
     }
 
     /** "ranged" / "boom" / "melee", and big or small: which enemies are alike for the purpose of fighting them. */
-    private String archetype(String type) {
+    private int archetype(String type) {
         EnemyKnowledge k = knowledge(type);
-        return (k.isExplosive() ? "boom" : k.isRanged() ? "ranged" : "melee") + (k.health.get() >= 60 ? "-big" : "-small");
+        return (k.isExplosive() ? 4 : k.isRanged() ? 2 : 0) | (k.health.get() >= 60 ? 1 : 0);
     }
 
     /** The best-practised combat table of a type of the same archetype (or null). */
     @javax.annotation.Nullable
     private QTable donorFor(String type) {
-        String want = archetype(type);
+        int want = archetype(type);
         QTable best = null;
         for (Map.Entry<String, QTable> e : combat.entrySet()) {
             if (!e.getKey().equals(type) && e.getValue().size() >= 20 && (best == null || e.getValue().size() > best.size())
-                    && archetype(e.getKey()).equals(want)) {
+                    && archetype(e.getKey()) == want) {
                 best = e.getValue();
             }
         }
@@ -410,8 +411,7 @@ public final class Brain {
         if (STRATEGY.equals(name)) {
             return StrategyState::prior;
         }
-        EnemyKnowledge k = knowledge(name);
-        return (s, q) -> CombatState.prior(s, k.isExplosive(), k.isRanged(), q);
+        return knowledge(name).combatPrior;
     }
 
     public int chooseCombat(String type, int state, int mask) {
@@ -434,28 +434,21 @@ public final class Brain {
         e.visits++;
         if (random.nextDouble() < eps) {
             int demoTotal = 0;
-            for (int a = 0; a < e.demo.length; a++) {
-                if ((mask & (1 << a)) != 0) {
-                    demoTotal += e.demo[a];
-                }
+            for (int bits = mask & QTable.actionMask(e.demo.length); bits != 0; bits &= bits - 1) {
+                demoTotal += e.demo[Integer.numberOfTrailingZeros(bits)];
             }
             if (demoTotal > 0 && random.nextDouble() < 0.6) {
                 int pick = random.nextInt(demoTotal);
-                for (int a = 0; a < e.demo.length; a++) {
-                    if ((mask & (1 << a)) != 0) {
-                        pick -= e.demo[a];
-                        if (pick < 0) {
-                            return a;
-                        }
-                    }
+                for (int bits = mask & QTable.actionMask(e.demo.length); bits != 0; bits &= bits - 1) {
+                    int a = Integer.numberOfTrailingZeros(bits);
+                    pick -= e.demo[a];
+                    if (pick < 0) return a;
                 }
             }
             int count = Integer.bitCount(mask);
             int pick = random.nextInt(count);
-            for (int a = 0; a < e.q.length; a++) {
-                if ((mask & (1 << a)) != 0 && pick-- == 0) {
-                    return a;
-                }
+            for (int bits = mask & QTable.actionMask(e.q.length); bits != 0; bits &= bits - 1) {
+                if (pick-- == 0) return Integer.numberOfTrailingZeros(bits);
             }
         }
         return QTable.argmax(e, mask, random);
@@ -463,12 +456,12 @@ public final class Brain {
 
     /** Greedy action without exploration or bookkeeping (used for display). */
     public int greedy(String tableName, int state, int mask) {
-        QTable.Entry e = table(tableName).peek(state);
+        QTable table = table(tableName);
+        QTable.Entry e = table.peek(state);
         if (e == null) {
-            float[] q = new float[table(tableName).actions()];
+            float[] q = new float[table.actions()];
             prior(tableName).fill(state, q);
-            QTable.Entry tmp = new QTable(q.length).get(state, (s, out) -> System.arraycopy(q, 0, out, 0, q.length));
-            return QTable.argmax(tmp, mask, random);
+            return QTable.argmax(q, mask, random);
         }
         return QTable.argmax(e, mask, random);
     }
@@ -537,7 +530,7 @@ public final class Brain {
         float target = r;
         if (!terminal) {
             int mask = nextMask == 0 ? (1 << table.actions()) - 1 : nextMask;
-            target += gamma * QTable.max(table.get(s2, prior), mask);
+            target += gamma * QTable.max(s2 == s ? e : table.get(s2, prior), mask);
         }
         double base = Config.get(Config.LEARNING_RATE, 0.25);
         float alpha = (float) Math.max(0.02, base / Math.sqrt(1.0 + e.n[a] * 0.05)) * weight;
@@ -621,11 +614,11 @@ public final class Brain {
         tag.putLong("lookUpdates", lookUpdates);
         CompoundTag iu = new CompoundTag();
         useQ.forEach((k, q) -> {
-            int[] n = useN.getOrDefault(k, new int[USE_MODES]);
+            int[] n = useN.get(k);
             int[] packed = new int[USE_MODES * 2];
             for (int m = 0; m < USE_MODES; m++) {
                 packed[m] = Float.floatToIntBits(q[m]);
-                packed[USE_MODES + m] = n[m];
+                packed[USE_MODES + m] = n == null ? 0 : n[m];
             }
             iu.putIntArray(k, packed);
         });
@@ -816,11 +809,12 @@ public final class Brain {
         b.useQ.forEach((k, bq) -> {
             float[] q = useQ.computeIfAbsent(k, x -> new float[USE_MODES]);
             int[] n = useN.computeIfAbsent(k, x -> new int[USE_MODES]);
-            int[] bn = b.useN.getOrDefault(k, new int[USE_MODES]);
+            int[] bn = b.useN.get(k);
             for (int m = 0; m < USE_MODES; m++) {
-                int t = n[m] + bn[m];
+                int theirs = bn == null ? 0 : bn[m];
+                int t = n[m] + theirs;
                 if (t > 0) {
-                    q[m] = (q[m] * n[m] + bq[m] * bn[m]) / t;
+                    q[m] = (q[m] * n[m] + bq[m] * theirs) / t;
                 }
                 n[m] = t;
             }
