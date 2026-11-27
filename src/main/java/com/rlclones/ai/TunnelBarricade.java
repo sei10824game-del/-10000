@@ -18,6 +18,7 @@ import net.minecraft.world.phys.HitResult;
 public final class TunnelBarricade {
     private final ClonePlayer self;
     private final Motor motor;
+    private final TacticTrial trial;
     private BlockPos block, stand;
     private Direction facing;
     private BlockState placedState;
@@ -25,7 +26,7 @@ public final class TunnelBarricade {
     private long started, retryAt, quietSince, cleanupUntil;
     private float initialHealth;
     public int placed, hits, removed;
-    public TunnelBarricade(ClonePlayer self, Motor motor){this.self=self;this.motor=motor;}
+    public TunnelBarricade(ClonePlayer self, Motor motor){this.self=self;this.motor=motor;this.trial=new TacticTrial(self);}
     private ServerLevel level(){return self.serverLevel();}
     private boolean solid(BlockPos p){
         return level().hasChunkAt(p)&&level().getFluidState(p).isEmpty()
@@ -55,7 +56,7 @@ public final class TunnelBarricade {
         return false;
     }
     private boolean owned(){return block!=null&&placedState!=null&&level().getBlockState(block)==placedState;}
-    private void abandon(long now){enemy=null;retryAt=now+100;quietSince=now;cleanupUntil=now+600;}
+    private void abandon(long now){trial.finish(now,placedState!=null);enemy=null;retryAt=now+100;quietSince=now;cleanupUntil=now+600;}
     public boolean tick(Entity e,long now){
         if(self.isPassenger()||self.isInWater()||self.phasing||self.isCreative()||self.getBbWidth()>=1||self.getBbHeight()>2
                 ||!com.rlclones.clone.CloneMobs.canUseHands(self))return false;
@@ -69,7 +70,7 @@ public final class TunnelBarricade {
             }
             if(placedState!=null&&!owned()){reset();retryAt=now+100;return false;}
         }else{
-            if(now<retryAt||!self.onGround()||!appropriate(e)||Math.abs(e.getY()-self.getY())>.45
+            if(now<retryAt||!self.onGround()||!appropriate(e)||!trial.allowed(e,"tunnel_barricade",now)||Math.abs(e.getY()-self.getY())>.45
                     ||e.distanceTo(self)>6||e.distanceTo(self)<2.8||self.getHealth()<self.getMaxHealth()*.6
                     ||!Config.get(Config.ALLOW_BLOCK_PLACING,true)||!Config.get(Config.ALLOW_BLOCK_BREAKING,true)
                     ||Equipment.pillarBlockSlot(self)<0)return false;
@@ -98,7 +99,7 @@ public final class TunnelBarricade {
                 reset();retryAt=now+100;return false;
             }
             Equipment.select(self,slot);
-            if(motor.placeBlockAt(block)&&solid(block)){placedState=level().getBlockState(block);placed++;}
+            if(motor.placeBlockAt(block)&&solid(block)){placedState=level().getBlockState(block);placed++;trial.begin(e,"tunnel_barricade",now);}
             return true;
         }
         // Aim through the upper gap; still require the normal crosshair ray and attack cooldown.
@@ -122,5 +123,5 @@ public final class TunnelBarricade {
         if(motor.mine(block)){removed++;reset();}
         return true;
     }
-    public void reset(){block=stand=null;facing=null;enemy=null;placedState=null;}
+    public void reset(){trial.cancel();block=stand=null;facing=null;enemy=null;placedState=null;}
 }
