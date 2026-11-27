@@ -5,6 +5,20 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentEventsTest {
+    @Test void emptyWindowsAndOutOfOrderRecordsPreserveContract() {
+        UUID id=UUID.randomUUID();
+        record(id,20);record(id,19);record(id,20);record(id,21);
+        assertEquals(List.of(20L,19L,20L),AgentEvents.sharedBetween(id,18,20).stream().map(AgentEvents.Event::tick).toList());
+        var empty=AgentEvents.sharedBetween(id,21,30);
+        assertTrue(empty.isEmpty());
+        assertSame(empty,AgentEvents.sharedBetween(id,21,30));
+        var mutable=AgentEvents.between(id,21,30);
+        mutable.add(new AgentEvents.Event(22,AgentEvents.Kind.EAT,1,0,0));
+        assertTrue(AgentEvents.sharedBetween(id,21,30).isEmpty());
+        record(id,22);
+        assertEquals(1,AgentEvents.sharedBetween(id,21,30).size());
+    }
+
     @BeforeEach void clear() { AgentEvents.clear(); }
     private void record(UUID id, long tick) { AgentEvents.record(id, tick, AgentEvents.Kind.ATTACK, 1, 9, 0); }
     @Test void sharesExactReadOnlySnapshots() {
