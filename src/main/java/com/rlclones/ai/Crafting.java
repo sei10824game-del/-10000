@@ -386,24 +386,30 @@ public final class Crafting {
     }
 
     /** The best pickaxe / axe / sword in the bag is worn out (a sixth left): one of the same material is wanted again (the worn one stays as the spare). */
-    private static void addWornReplacements(Player p, List<Item> out) {
-        for (Item[] kind : new Item[][]{PICKAXES, AXES, SWORDS}) {
-            for (Item it : kind) {
-                boolean has = false;
-                boolean sound = false;
-                for (ItemStack st : p.getInventory().items) {
-                    if (st.is(it)) {
-                        has = true;
-                        sound |= !Equipment.worn(st);
-                    }
-                }
-                if (has) {
-                    if (!sound) {
-                        out.add(0, it); // the best one we have is worn out
-                    }
-                    break; // (kinds are listed best first: only the best one we hold counts)
-                }
-            }
+    private static final Item[][] REPLACEMENT_KINDS={PICKAXES,AXES,SWORDS};
+    private static final Map<Item,Integer> REPLACEMENT_BITS=makeReplacementBits();
+    private static Map<Item,Integer> makeReplacementBits(){
+        Map<Item,Integer> bits=new java.util.IdentityHashMap<>();
+        int index=0;
+        for(Item[] kind:REPLACEMENT_KINDS)for(Item item:kind)bits.put(item,1<<index++);
+        return java.util.Collections.unmodifiableMap(bits);
+    }
+
+    /** One live inventory scan. No tick cache, so direct ItemStack damage changes are seen immediately. */
+    public static void addWornReplacements(Player p,List<Item> out){
+        int have=0,sound=0;
+        for(ItemStack stack:p.getInventory().items){
+            Integer bit=REPLACEMENT_BITS.get(stack.getItem());
+            if(bit==null||!stack.is(stack.getItem()))continue;
+            have|=bit;
+            if(!Equipment.worn(stack))sound|=bit;
+        }
+        int index=0;
+        for(Item[] kind:REPLACEMENT_KINDS){
+            int mask=((1<<kind.length)-1)<<index;
+            int best=Integer.lowestOneBit(have&mask);
+            if(best!=0&&(sound&best)==0)out.add(0,kind[Integer.numberOfTrailingZeros(best)-index]);
+            index+=kind.length;
         }
     }
 
