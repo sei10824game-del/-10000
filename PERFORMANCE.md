@@ -122,3 +122,35 @@ Java 17.0.21 / Gradle 8.8 / 共有Linux環境で計測。ウォームアップ�
 300回の該当処理で約66%短縮。2ブロック先の焚き火ありでも比較し、両実装とも300回合計1ms未満だった（サブミリ秒測定は揺らぎが大きいため高速化率を主張しない）。ゲーム全体のFPS、MSPT、動かせる人数の増加率を示す数値ではない。
 
 再現: `./gradlew runGameTestServer -Drlclones.gameTestNamespaces=rlclones_sections`。`SECTION-BENCH`行に比較結果が出る。対象なし・対象あり・負座標と区画境界・上下の高さ境界・同tick内の設置/破壊/消火を確認。今回の回帰検証はJUnit 40件と専用GameTest 34件成功。
+
+## Primitive-array nearest candidate workspace (2026-11-27)
+
+The bounded heap keeps exactly the same candidate limit, double ordering, tie
+order and reference lifecycle. The 64 separate Entry objects are replaced by
+arrays of values, distances, insertion sequences and heap slot indices.
+
+A standalone Java check compiled the exact new source with `javac --release 17`
+and ran on OpenJDK 21.0.12.1. Its Git blob was
+`c06bf76b61815aa7a90b2db5e47566fb505c6d61`.
+The fixed-seed test ran 12,000 batches and compared 409,373 retained references
+against stable full sorting, with no mismatch. The equivalent regression test
+is now in NearestCandidatesTest.
+
+A standalone microbenchmark compared the new source with a transcription of
+the previous Entry-object heap algorithm. Allocation was measured using
+ThreadMXBean over 10,000 constructions, including the outer result reference
+array (~4 bytes per instance); median timings were taken over five alternating
+20,000-scan runs after warmup, with 32 fixed-seed inputs.
+
+| Input candidates | Previous ns/scan | New ns/scan |
+|---:|---:|---:|
+| 16 | 249.8 | 243.2 |
+| 64 | 1528.7 | 1280.8 |
+| 256 | 5121.7 | 4816.8 |
+| 1024 | 23041.8 | 20218.8 |
+
+Initial allocation per 64-slot workspace: approximately 2356 -> 1652 bytes
+(29.9% reduction, including the outer reference array).
+These are component measurements on Java 21, not Minecraft FPS/MSPT or Java 17
+runtime measurements. Forge build and full GameTest results are not established
+by this standalone check.
