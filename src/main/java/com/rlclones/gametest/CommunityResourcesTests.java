@@ -316,4 +316,39 @@ public final class CommunityResourcesTests {
         h.succeedWhen(()->{h.assertTrue(opened[0]&&h.getLevel().getBlockState(tread).is(Blocks.COBBLESTONE),"actual temporary step opening restored after work");h.assertTrue(c.getInventory().countItem(Items.COBBLESTONE)==7,"one real block consumed in restoration");});
     }
 
+
+    @GameTest(template="arena",batch="indexed-recipes",timeoutTicks=40)
+    public static void exactRecipeIndexPreservesOrderAndReload(GameTestHelper h) {
+        arena(h);
+        var c = actor(h,5,7);
+        var manager = h.getLevel().getRecipeManager();
+        var original = new ArrayList<Recipe<?>>(manager.getRecipes());
+        var sample = List.of(Items.STICK, Items.FURNACE, Items.CRAFTING_TABLE, Items.OAK_BOAT,
+                Items.WOODEN_HOE, Items.STONE_SHOVEL, Items.IRON_PICKAXE, Items.CHAINMAIL_BOOTS, Items.AIR);
+        try {
+            Crafting.invalidateRecipes();
+            for (Item item : sample) {
+                h.assertTrue(Crafting.recipesFor(c, s -> s.is(item)).equals(Crafting.recipesForItem(c,item)),
+                        "exact index matches full scan: " + item);
+            }
+            var custom = new ResourceLocation("coop_test","indexed_copper_boots");
+            var ingredients = NonNullList.withSize(1,Ingredient.of(Items.COPPER_INGOT));
+            var mixed = new ArrayList<>(original);
+            mixed.add(new ShapedRecipe(custom,"",CraftingBookCategory.EQUIPMENT,1,1,ingredients,new ItemStack(Items.CHAINMAIL_BOOTS)));
+            manager.replaceRecipes(mixed);
+            Crafting.invalidateRecipes();
+            var indexed = Crafting.recipesForItem(c,Items.CHAINMAIL_BOOTS);
+            h.assertTrue(indexed.equals(Crafting.recipesFor(c,s -> s.is(Items.CHAINMAIL_BOOTS)))
+                    && indexed.stream().anyMatch(recipe -> recipe.getId().equals(custom)), "reload keeps custom recipes and order");
+            manager.replaceRecipes(original);
+            Crafting.invalidateRecipes();
+            h.assertTrue(Crafting.recipesForItem(c,Items.CHAINMAIL_BOOTS).stream().noneMatch(recipe -> recipe.getId().equals(custom)),
+                    "removed recipe is no longer indexed");
+        } finally {
+            manager.replaceRecipes(original);
+            Crafting.invalidateRecipes();
+            cleanup(h.getLevel());
+        }
+        h.succeed();
+    }
 }
