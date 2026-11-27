@@ -2,6 +2,7 @@ package com.rlclones.ai;
 
 import com.rlclones.Config;
 import com.rlclones.ai.util.NearestCandidates;
+import com.rlclones.ai.util.EntityGeometry;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -156,7 +157,7 @@ public final class Perception {
         candidates.clear();
         if (full) farSeen.clear();
         for (Entity e : level.getEntities(self, self.getBoundingBox().inflate(reach), wanted)) {
-            double centerDistance = e.getBoundingBox().getCenter().distanceToSqr(eye);
+            double centerDistance = EntityGeometry.sample(e).center().distanceToSqr(eye);
             if (centerDistance <= reach * reach) {
                 offerInView(e, eye);
                 if (full && centerDistance > NEAR * NEAR) {
@@ -166,7 +167,7 @@ public final class Perception {
         }
         if (!full) {
             for (Entity e : farSeen) {
-                double distance2 = e.getBoundingBox().getCenter().distanceToSqr(eye);
+                double distance2 = EntityGeometry.sample(e).center().distanceToSqr(eye);
                 if (e.isAlive() && e.level() == level && distance2 > NEAR * NEAR && distance2 <= range2) {
                     offerInView(e, eye);
                 }
@@ -228,9 +229,9 @@ public final class Perception {
     /** Reject off-screen candidates before the bounded LOS budget; keep farSeen unfiltered
      * so turning the head still finds distant entities between full queries. */
     private void offerInView(Entity e, Vec3 eye) {
-        AABB box = e.getBoundingBox();
-        Vec3 center = box.getCenter();
-        double radius = Math.max(box.getXsize(), box.getYsize()) * 0.5;
+        var geometry = EntityGeometry.sample(e);
+        Vec3 center = geometry.center();
+        double radius = geometry.radius();
         if (inFov(eye, center, radius, eye.distanceTo(center))) {
             candidates.offer(e, e.distanceToSqr(eye));
         }
@@ -272,8 +273,9 @@ public final class Perception {
             return false;
         }
         Vec3 eye = self.getEyePosition();
-        AABB bb = e.getBoundingBox();
-        Vec3 center = bb.getCenter();
+        var geometry = EntityGeometry.sample(e);
+        AABB bb = geometry.box();
+        Vec3 center = geometry.center();
         double dist = eye.distanceTo(center);
         if (dist > range * lightFactor(e)) {
             return false;
@@ -281,7 +283,7 @@ public final class Perception {
         if (e.isInvisibleTo(self) && !(e instanceof LivingEntity le && wearsSomething(le))) {
             return false;
         }
-        double radius = Math.max(bb.getXsize(), bb.getYsize()) * 0.5;
+        double radius = geometry.radius();
         if (!inFov(eye, center, radius, dist)) {
             return false;
         }
