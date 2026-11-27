@@ -3580,7 +3580,7 @@ public final class CloneController {
             if(action!=null)closeCombatStep(false,false);
             return false;
         }
-        if(!hunt&&target!=null){
+        if(!hunt&&target!=null&&forcedAction==null){
             boolean tactical=ground.tick(target,now);
             if(ground.cancelAction&&action!=null)closeCombatStep(false,false);
             if(tactical)return false;
@@ -3619,8 +3619,9 @@ public final class CloneController {
                     }
                 }
             }
-            CombatAction pick = ground.exposed()&&forcedAction==null&&(mask&CombatAction.SHOOT.bit())!=0?CombatAction.SHOOT
-                    :free != null && (mask & free.bit()) != 0 ? free : forcedAction;
+            CombatAction pick = forcedAction != null ? forcedAction
+                    : ground.exposed()&&(mask&CombatAction.SHOOT.bit())!=0?CombatAction.SHOOT
+                    : free != null && (mask & free.bit()) != 0 ? free : null;
             int a = pick != null && (mask & pick.bit()) != 0 ? pick.ordinal() : brain().chooseCombat(targetType, s, mask);
             if (a < 0) {
                 return;
