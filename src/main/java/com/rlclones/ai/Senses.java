@@ -271,9 +271,21 @@ public final class Senses {
 
     /** A cake standing within {@code r} blocks. */
     public static net.minecraft.core.BlockPos cakeNearby(Player agent, int r) {
-        net.minecraft.core.BlockPos feet = agent.blockPosition();
-        for (net.minecraft.core.BlockPos p : net.minecraft.core.BlockPos.betweenClosed(feet.offset(-r, -1, -r), feet.offset(r, 1, r))) {
-            if (agent.level().getBlockState(p).getBlock() instanceof net.minecraft.world.level.block.CakeBlock) {
+        return cakeNearby(agent.level(), agent.blockPosition(), r);
+    }
+
+    private static final java.util.function.Predicate<net.minecraft.world.level.block.state.BlockState> CAKE =
+            state -> state.getBlock() instanceof net.minecraft.world.level.block.CakeBlock;
+
+    /** Keep the original traversal and live block checks; only skip sections whose palette excludes cakes. */
+    public static BlockPos cakeNearby(net.minecraft.world.level.Level level, BlockPos feet, int r) {
+        BlockPos min = feet.offset(-r, -1, -r);
+        BlockPos max = feet.offset(r, 1, r);
+        // Limit the prefilter to normal server scans; preserve unusual callers and client behaviour.
+        var sections = level instanceof net.minecraft.server.level.ServerLevel && r >= 3 && r <= 16
+                ? new com.rlclones.ai.util.SectionPresence(level, min, max, CAKE) : null;
+        for (BlockPos p : BlockPos.betweenClosed(min, max)) {
+            if ((sections == null || sections.mayContain(p)) && CAKE.test(level.getBlockState(p))) {
                 return p.immutable();
             }
         }
