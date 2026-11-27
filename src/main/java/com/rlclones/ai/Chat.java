@@ -45,9 +45,14 @@ public final class Chat {
 
     /** Say something in public chat as {@code sender}; other clones read the plain (machine readable) form. */
     public static void say(ServerPlayer sender, Component content, String plain) {
+        if (publish(sender,content,plain)) deliver(sender,plain);
+    }
+
+    /** Display a structured notification whose exact recipient delivery is handled by its own subsystem. */
+    static boolean publish(ServerPlayer sender, Component content, String plain) {
         MinecraftServer server = sender.getServer();
         if (server == null) {
-            return;
+            return false;
         }
         if (CloneManager.chatShown() || !(sender instanceof ClonePlayer)) {
             server.getPlayerList().broadcastSystemMessage(Component.translatable("chat.type.text", sender.getDisplayName(), content), false);
@@ -60,7 +65,7 @@ public final class Chat {
                 RECENT.pollFirst();
             }
         }
-        deliver(sender, plain);
+        return true;
     }
 
     /** Shared parsed message for one synchronous delivery. Parsing is lazy so existing handlers retain precedence. */
