@@ -712,8 +712,12 @@ public final class CloneManager {
             r.linked = true;
         } else {
             Brain base = sharedBrain();
+            // The shared brain is not mutated during unlink. Serialize once, then reconstruct
+            // independent brains with the identical load path used by Brain.copy().
+            var snapshot = base.save();
             for (ClonePlayer c : clones.values()) {
-                Brain copy = base.copy();
+                Brain copy = Brain.load(snapshot);
+                copy.members = 1;
                 c.setCloneBrain(copy);
                 saveBrain(c.getUUID().toString(), copy);
             }
@@ -1005,11 +1009,14 @@ public final class CloneManager {
     private final java.util.Set<Brain> activeReplayBrains = Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     private void replayTick() {
         activeReplayBrains.clear();
-        for(var clone:clones.values())activeReplayBrains.add(clone.getCloneBrain());
+        // First occurrence order is the same as the old roster traversal. Queueing an active
+        // brain before pruning inactive brains leaves the remaining FIFO order unchanged.
+        for(var clone:clones.values()){
+            Brain brain=clone.getCloneBrain();
+            if(activeReplayBrains.add(brain))scheduleReplay(brain);
+        }
         replayQueue.removeIf(brain -> !activeReplayBrains.contains(brain));
         replayQueued.retainAll(activeReplayBrains);
-        // Round robin: shared brains enter once, quiet brains still finish their backlog.
-        for(var clone:clones.values())scheduleReplay(clone.getCloneBrain());
         int budget=256;
         while(!replayQueue.isEmpty() && budget>0) {
             Brain brain=replayQueue.removeFirst(); replayQueued.remove(brain);
