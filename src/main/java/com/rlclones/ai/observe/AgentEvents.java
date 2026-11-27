@@ -53,13 +53,20 @@ public final class AgentEvents {
         if (entry == null || entry.events.isEmpty()) {
             return List.of();
         }
-        List<Event> out = new ArrayList<>();
+        return collect(entry, from, to, false);
+    }
+
+    private static List<Event> collect(AgentLog entry,long from,long to,boolean immutable) {
+        ArrayList<Event> out = null;
         for (Event e : entry.events) {
             if (e.tick() > from && e.tick() <= to) {
+                if (out == null) out = new ArrayList<>();
                 out.add(e);
             }
         }
-        return out;
+        // Preserve the public mutable-result contract for nonempty logs.
+        if (!immutable) return out == null ? new ArrayList<>() : out;
+        return out == null ? List.of() : List.copyOf(out);
     }
 
     /** Immutable shared snapshot; recording or pruning invalidates every cached range for this agent. */
@@ -69,7 +76,7 @@ public final class AgentEvents {
         for (Range range : entry.ranges) {
             if (range != null && range.from == from && range.to == to) return range.events;
         }
-        List<Event> snapshot = List.copyOf(between(agent, from, to));
+        List<Event> snapshot = collect(entry, from, to, true);
         entry.ranges[entry.next] = new Range(from, to, snapshot);
         entry.next = (entry.next + 1) % entry.ranges.length;
         return snapshot;
