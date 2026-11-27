@@ -1,0 +1,82 @@
+name: V4 isolated cake scan validation
+
+on:
+  push:
+    branches:
+      - optimization/v4-cake-scan-20261127
+    paths:
+      - .github/workflows/cake-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and run focused section regression tests
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          ./gradlew build --no-daemon
+          ./gradlew runGameTestServer --no-daemon -Drlclones.gameTestNamespaces=rlclones_sections
+      - name: Report measured cake benchmark
+        if: always()
+        run: |
+          if test -f run/logs/latest.log; then
+            grep -E 'CAKE-BENCH|GAME TESTS COMPLETE|required tests failed' run/logs/latest.log || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: focused-cake-logs
+          path: run/logs/
+          if-no-files-found: warn
+  population:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        count: [100, 200, 300]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Isolated original versus V4 comparisons
+        run: |
+          python3 scripts/compare-population.py \
+            --baseline 23b71eaee9077217cf4db888692db52b11288275 \
+            --candidate 7370968d4ac51948172d8960595a7b5c143a5bae \
+            --counts ${{ matrix.count }} --ticks 2400 --repeats 3 --timeout 3000 \
+            --seed rlclones --output "$RUNNER_TEMP/population-results"
+      - name: Publish comparison
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/population-results/comparison.csv"
+          if test -f "$report"; then
+            cat "$report"
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cake-population-${{ matrix.count }}
+          path: ${{ runner.temp }}/population-results/
+          if-no-files-found: warn
