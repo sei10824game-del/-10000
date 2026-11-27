@@ -405,4 +405,35 @@ public final class CommunityResourcesTests {
         } finally {cleanup(h.getLevel());}
         h.succeed();
     }
+
+    @GameTest(template="arena",batch="base-spatial-index",timeoutTicks=40)
+    public static void baseSpatialIndexMatchesScanAndTracksPublicListEdits(GameTestHelper h) {
+        var bases=new Bases();
+        var dim=h.getLevel().dimension();
+        var random=new Random(10824);
+        for(int i=0;i<180;i++)bases.add(dim,new BlockPos(random.nextInt(400)-200,random.nextInt(100)-40,random.nextInt(400)-200),"fixture");
+        var first=bases.add(dim,new BlockPos(-33,200,0),"first");
+        var second=bases.add(dim,new BlockPos(-31,200,0),"second");
+        Vec3 tie=new Vec3(-31.5,200.5,.5);
+        // Equal distance to both centers, across the -32 cell boundary.
+        h.assertTrue(bases.nearest(dim,tie,2)==first,"first inserted base wins an equal-distance tie");
+        Collections.swap(bases.bases,bases.bases.indexOf(first),bases.bases.indexOf(second));
+        h.assertTrue(bases.nearest(dim,tie,2)==second,"direct reorder invalidates tie order");
+        bases.bases.remove(second);
+        h.assertTrue(bases.nearest(dim,tie,2)==first,"direct remove invalidates index");
+        for(int i=0;i<1000;i++){
+            Vec3 p=new Vec3(random.nextDouble()*440-220,random.nextDouble()*140-60,random.nextDouble()*440-220);
+            double radius=1+random.nextInt(128);
+            h.assertTrue(bases.nearest(dim,p,radius)==bases.nearestUnindexed(dim,p,radius),"same base as linear scan "+i);
+        }
+        var it=bases.bases.iterator();
+        while(it.hasNext())if(it.next()==first){it.remove();break;}
+        h.assertTrue(bases.nearest(dim,tie,2)==null,"iterator removal invalidates index");
+        bases.bases.subList(0,20).clear();
+        bases.bases.add(first);
+        h.assertTrue(bases.nearest(dim,tie,2)==first,"direct add is indexed");
+        bases.bases.clear();
+        h.assertTrue(bases.nearest(dim,tie,128)==null,"clear never returns deleted base");
+        h.succeed();
+    }
 }
