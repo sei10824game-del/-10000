@@ -98,7 +98,7 @@ public final class ShaftContinuityTests {
         // otherwise loot can randomly fly into the unreachable void behind the ore.
         for(int y=4;y<=7;y++)for(int z=6;z<=8;z++)h.setBlock(new BlockPos(5,y,z),Blocks.STONE);
         h.onEachTick(()->{tick(f);f.actor.setOnGround(false);});
-        h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).isAir(),"ore visible beside the ladder is harvested: "+f.mining.debug+" "+f.actor.controller().motor().mineDebug);h.assertTrue(ladder(h,4)&&ladder(h,5),"ore harvest keeps the ladder column intact");h.assertTrue(f.actor.getInventory().countItem(Items.RAW_IRON)>0,"real raw iron is picked up without leaving the shaft; pos="+f.actor.position()+" drops="+h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,f.actor.getBoundingBox().inflate(4)).stream().map(e->e.getItem()+"@"+e.position()).toList());});
+        h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).isAir(),"ore visible beside the ladder is harvested: "+f.mining.debug+" "+f.actor.controller().motor().mineDebug());h.assertTrue(ladder(h,4)&&ladder(h,5),"ore harvest keeps the ladder column intact");h.assertTrue(f.actor.getInventory().countItem(Items.RAW_IRON)>0,"real raw iron is picked up without leaving the shaft; pos="+f.actor.position()+" drops="+h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,f.actor.getBoundingBox().inflate(4)).stream().map(e->e.getItem()+"@"+e.position()).toList());});
     }
     @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=320)
     public static void restoresOreBearingLadderWallAndRungBeforeDiggingDeeper(GameTestHelper h){
@@ -106,7 +106,7 @@ public final class ShaftContinuityTests {
         set(f.mining,"ticks",18); // cross the periodic return-route check while this rung is deliberately detached
         var ore=h.absolutePos(new BlockPos(8,4,7));h.getLevel().setBlock(ore,Blocks.IRON_ORE.defaultBlockState(),3);
         h.onEachTick(()->tick(f));
-        h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).is(Blocks.COBBLESTONE)&&ladder(h,4),"real ore was mined and the backing/rung restored: pos="+f.actor.position()+" wall="+h.getLevel().getBlockState(ore)+" cell="+h.getBlockState(new BlockPos(7,4,7))+" inventory="+f.actor.getInventory().items+" "+f.mining.debug+" "+f.actor.controller().motor().mineDebug);h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).is(Blocks.STONE),"floor was not opened during ladder-wall extraction");});
+        h.succeedWhen(()->{h.assertTrue(f.mining.oresMined>=1&&h.getLevel().getBlockState(ore).is(Blocks.COBBLESTONE)&&ladder(h,4),"real ore was mined and the backing/rung restored: pos="+f.actor.position()+" wall="+h.getLevel().getBlockState(ore)+" cell="+h.getBlockState(new BlockPos(7,4,7))+" inventory="+f.actor.getInventory().items+" "+f.mining.debug+" "+f.actor.controller().motor().mineDebug());h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).is(Blocks.STONE),"floor was not opened during ladder-wall extraction");});
     }
     @GameTest(template="arena",batch="shaft-continuity",timeoutTicks=100)
     public static void ladderWallOreIsKeptWhenRepairMaterialIsMissing(GameTestHelper h){
