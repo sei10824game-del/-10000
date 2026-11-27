@@ -203,6 +203,7 @@ public final class CloneGameTests {
             h.assertTrue(c.controller().bridgeRetreat().blocksPlaced==0,"do not trap a friendly clone behind the wall");
             h.assertTrue(h.getBlockState(new BlockPos(7,5,8)).isAir(),"keep bridge open");
             enemy.discard();finish(h,c,ally);
+            h.succeed(); // delayed assertion does not automatically complete a GameTest
         });
     }
 
