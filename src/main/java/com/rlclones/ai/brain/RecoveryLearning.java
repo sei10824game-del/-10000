@@ -63,9 +63,10 @@ public final class RecoveryLearning {
         return out.toString();
     }
     public byte[] save() {
-        try {var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);out.writeInt(1);
-            for(int i=0;i<value.length;i++){out.writeInt(samples[i]);out.writeInt(successes[i]);out.writeFloat(value[i]);}return bytes.toByteArray();
-        } catch(IOException e){throw new UncheckedIOException(e);}
+        var out=java.nio.ByteBuffer.allocate(4+STATES*ACTIONS*12);
+        out.putInt(1);
+        for(int i=0;i<value.length;i++)out.putInt(samples[i]).putInt(successes[i]).putInt(Float.floatToIntBits(value[i]));
+        return out.array();
     }
     public static RecoveryLearning load(byte[] bytes) {
         var result=new RecoveryLearning();
