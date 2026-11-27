@@ -911,6 +911,39 @@ public final class Motor {
                 &&(!Config.get(Config.ALLOW_BLOCK_PLACING,true)||Equipment.pillarBlockSlot(self)<0||deferredWorkRepairs.size()>=6))return false;
         return level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,new net.minecraft.world.phys.AABB(p.above()).deflate(.02),e->e!=self&&e.isAlive()&&Math.abs(e.getY()-p.getY()-1)<.2).isEmpty();
     }
+    /** A visible enemy behind a window is a specific combat opening, not a general permission to demolish a base. */
+    public boolean canBreachGlass(BlockPos p) {
+        if (p == null || !com.rlclones.clone.CloneMobs.canUseHands(self)
+                || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) return false;
+        var level = self.serverLevel();
+        if (!level.hasChunkAt(p)) return false;
+        BlockState state = level.getBlockState(p);
+        boolean glass = state.getBlock() instanceof net.minecraft.world.level.block.AbstractGlassBlock
+                || state.is(net.minecraft.world.level.block.Blocks.GLASS_PANE)
+                || state.getBlock() instanceof net.minecraft.world.level.block.StainedGlassPaneBlock;
+        if (!glass || state.hasBlockEntity() || !state.getFluidState().isEmpty()
+                || state.getDestroySpeed(level, p) < 0 || p.getY() < self.getBlockY()
+                || !self.mayInteract(level, p) || self.blockActionRestricted(level, p, self.gameMode.getGameModeForPlayer())
+                || BlockClaims.takenByOther(level, p, self.getUUID(), level.getGameTime())) return false;
+        for (Direction d : Direction.values()) if (!level.getFluidState(p.relative(d)).isEmpty()) return false;
+        if (level.getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) return false;
+        return level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
+                new AABB(p.above()).deflate(.02), e -> e != self && e.isAlive() && Math.abs(e.getY()-p.getY()-1)<.2).isEmpty();
+    }
+
+    /** Collision ray, not the visual ray: transparent windows still block a melee attack. */
+    public BlockPos combatGlassBetween(Entity enemy) {
+        if (enemy == null || enemy.level() != self.level()) return null;
+        for (Vec3 end : new Vec3[]{enemy.getEyePosition(), enemy.getBoundingBox().getCenter(),
+                enemy.position().add(0,.3,0)}) {
+            var hit = self.level().clip(new ClipContext(self.getEyePosition(), end,
+                    ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
+            if (hit.getType() == HitResult.Type.BLOCK && canBreachGlass(hit.getBlockPos()))
+                return hit.getBlockPos().immutable();
+        }
+        return null;
+    }
+
     /** Only a known work destination, never a general license to tunnel through the world. */
     public boolean clearWorkObstruction(Vec3 destination,BlockPos protectedTarget) {
         if(self.position().distanceToSqr(destination)>64)return false;
