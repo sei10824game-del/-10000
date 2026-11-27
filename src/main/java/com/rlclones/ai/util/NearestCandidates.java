@@ -2,13 +2,10 @@ package com.rlclones.ai.util;
 
 /** Reusable, bounded nearest-first selection. Equal distances retain insertion order. Not thread-safe. */
 public final class NearestCandidates<T> {
-    private static final class Entry {
-        Object value;
-        double distance;
-        long sequence;
-    }
-
-    private final Entry[] heap;
+    private final Object[] values;
+    private final double[] distances;
+    private final long[] sequences;
+    private final int[] heap;
     private int size;
     private long sequence;
     private boolean sorted;
@@ -16,27 +13,27 @@ public final class NearestCandidates<T> {
 
     public NearestCandidates(int limit) {
         if (limit < 1) throw new IllegalArgumentException("limit must be positive");
-        heap = new Entry[limit];
-        for (int i = 0; i < limit; i++) heap[i] = new Entry();
+        values = new Object[limit];
+        distances = new double[limit];
+        sequences = new long[limit];
+        heap = new int[limit];
     }
 
-    public int size() {
-        return size;
-    }
+    public int size() { return size; }
 
     public void offer(T value, double distance) {
         if (sorted) throw new IllegalStateException("clear before offering another batch");
         long arrival = sequence++;
         if (size == heap.length) {
             heapify();
-            // Later equal-distance candidates cannot displace earlier ones.
-            if (Double.compare(distance, heap[0].distance) >= 0) return;
-            set(heap[0], value, distance, arrival);
+            int slot = heap[0];
+            if (Double.compare(distance, distances[slot]) >= 0) return;
+            set(slot, value, distance, arrival);
             siftDown(0, size);
             return;
         }
-        // Small scans only append; build a heap once if the scan exceeds the limit.
-        set(heap[size++], value, distance, arrival);
+        heap[size] = size;
+        set(size++, value, distance, arrival);
     }
 
     private void heapify() {
@@ -45,21 +42,21 @@ public final class NearestCandidates<T> {
         heapified = true;
     }
 
-    private static void set(Entry entry, Object value, double distance, long sequence) {
-        entry.value = value;
-        entry.distance = distance;
-        entry.sequence = sequence;
+    private void set(int slot, Object value, double distance, long arrival) {
+        values[slot] = value;
+        distances[slot] = distance;
+        sequences[slot] = arrival;
     }
 
-    private static int compare(Entry a, Entry b) {
-        int distance = Double.compare(a.distance, b.distance);
-        return distance != 0 ? distance : Long.compare(a.sequence, b.sequence);
+    private int compare(int a, int b) {
+        int distance = Double.compare(distances[a], distances[b]);
+        return distance != 0 ? distance : Long.compare(sequences[a], sequences[b]);
     }
 
     private void swap(int a, int b) {
-        Entry entry = heap[a];
+        int slot = heap[a];
         heap[a] = heap[b];
-        heap[b] = entry;
+        heap[b] = slot;
     }
 
     private void siftDown(int parent, int length) {
@@ -72,7 +69,6 @@ public final class NearestCandidates<T> {
         }
     }
 
-    /** Sort the retained candidates in place, without allocating temporary arrays. */
     public void sort() {
         if (sorted) return;
         heapify();
@@ -87,12 +83,11 @@ public final class NearestCandidates<T> {
     public T get(int index) {
         if (!sorted) throw new IllegalStateException("sort before reading candidates");
         if (index < 0 || index >= size) throw new IndexOutOfBoundsException(index);
-        return (T) heap[index].value;
+        return (T) values[heap[index]];
     }
 
-    /** Release entity references while retaining the fixed-size workspace for the next scan. */
     public void clear() {
-        for (int i = 0; i < size; i++) heap[i].value = null;
+        java.util.Arrays.fill(values, 0, size, null);
         size = 0;
         sequence = 0;
         sorted = false;
