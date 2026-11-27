@@ -34,6 +34,7 @@ import java.util.Optional;
  * left click (attack / mine) and right click (use item / place). Turning speed is limited like a real mouse.
  */
 public final class Motor {
+    private static final Direction[] ALL_DIRECTIONS = Direction.values();
     public static final double BLOCK_REACH = 4.5;
     private static final float MAX_YAW_STEP = 35f;
     private static final float MAX_PITCH_STEP = 25f;
@@ -932,7 +933,7 @@ public final class Motor {
                 ||state.is(net.minecraft.tags.BlockTags.PLANKS)||state.getDestroySpeed(level,p)<0||state.getDestroySpeed(level,p)>=50
                 ||!Equipment.canHarvest(self,state)||BlockClaims.takenByOther(level,p,self.getUUID(),level.getGameTime())||!state.getFluidState().isEmpty())return false;
         if(p.getY()<self.getBlockY() || self.getEyePosition().distanceToSqr(Vec3.atCenterOf(p))>BLOCK_REACH*BLOCK_REACH)return false;
-        for(Direction d:Direction.values())if(!level.getFluidState(p.relative(d)).isEmpty())return false;
+        for(Direction d:ALL_DIRECTIONS)if(!level.getFluidState(p.relative(d)).isEmpty())return false;
         if(level.getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock)return false;
         var bases=com.rlclones.clone.Bases.get(self.getServer());
         if((bases.isStairTread(level.dimension(),p)||bases.nearest(level.dimension(),Vec3.atCenterOf(p),8)!=null)
@@ -953,7 +954,7 @@ public final class Motor {
                 || state.getDestroySpeed(level, p) < 0 || p.getY() < self.getBlockY()
                 || !self.mayInteract(level, p) || self.blockActionRestricted(level, p, self.gameMode.getGameModeForPlayer())
                 || BlockClaims.takenByOther(level, p, self.getUUID(), level.getGameTime())) return false;
-        for (Direction d : Direction.values()) if (!level.getFluidState(p.relative(d)).isEmpty()) return false;
+        for (Direction d : ALL_DIRECTIONS) if (!level.getFluidState(p.relative(d)).isEmpty()) return false;
         if (level.getBlockState(p.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) return false;
         return level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
                 new AABB(p.above()).deflate(.02), e -> e != self && e.isAlive() && Math.abs(e.getY()-p.getY()-1)<.2).isEmpty();
@@ -1576,7 +1577,7 @@ public final class Motor {
         BlockPos found = null;
         while (!queue.isEmpty() && from.size() < 2500 && found == null) {
             BlockPos cur = queue.poll();
-            for (Direction d : Direction.values()) {
+            for (Direction d : ALL_DIRECTIONS) {
                 BlockPos n = cur.relative(d);
                 if (from.containsKey(n) || Math.abs(n.getX() - head.getX()) + Math.abs(n.getZ() - head.getZ()) > 16 || Math.abs(n.getY() - head.getY()) > 12) {
                     continue;
