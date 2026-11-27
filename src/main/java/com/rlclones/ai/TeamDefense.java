@@ -10,11 +10,18 @@ import java.util.*;
 public final class TeamDefense {
     private static final Map<UUID,Long> CALLS=new LinkedHashMap<>();
     private final ClonePlayer self;private final Perception perception;private final Motor motor;
+    private ClonePlayer rescueVictim;
+    private Vec3 rescuePosition;
+    private final RescueRoute rescueRoute;
     private Entity alerted,stageEnemy,intent;private long alertUntil,stageCheck,intentAt=Long.MIN_VALUE;private int ready,required;private Vec3 rallyGoal;
     public int alerts,joins,regroups;public String debug="";
-    public TeamDefense(ClonePlayer self,Perception perception,Motor motor){this.self=self;this.perception=perception;this.motor=motor;}
+    public TeamDefense(ClonePlayer self,Perception perception,Motor motor){this.self=self;this.perception=perception;this.motor=motor;this.rescueRoute=new RescueRoute(self,motor);}
     public static void clear(){CALLS.clear();}
-    public boolean marked(Entity e,long now){return e!=null&&e==alerted&&now<alertUntil&&e.isAlive()&&e.level()==self.level()&&!self.controller().unreachable(e,now);}
+    public boolean rescuePending(long now){return rescueVictim!=null&&rescueVictim!=self&&rescueVictim.isAlive()&&!rescueVictim.isRemoved()&&rescueVictim.level()==self.level()&&rescuePosition!=null&&now<alertUntil&&alerted!=null&&alerted.isAlive()&&alerted.level()==self.level()&&self.position().distanceToSqr(rescuePosition)<32*32&&rescuePosition.y-self.getY()>2.5;}
+    public boolean rescueFor(Entity e,long now){return e==alerted&&rescuePending(now);}
+    public boolean rescueTick(long now){if(!rescuePending(now)){rescueRoute.reset();return false;}return rescueRoute.tick(rescuePosition,now);}
+    public boolean navigateHelp(Vec3 position,long now){return rescueRoute.tick(position,now);}
+    public boolean marked(Entity e,long now){return e!=null&&e==alerted&&now<alertUntil&&e.isAlive()&&e.level()==self.level()&&(rescueFor(e,now)||!self.controller().unreachable(e,now));}
     public Entity visible(long now){
         if(intentAt==now)return intent!=null&&self.controller().unreachable(intent,now)?null:intent;intentAt=now;
         Entity best=null;double distance=24*24;
@@ -23,16 +30,16 @@ public final class TeamDefense {
         if(marked(alerted,now)&&alerted.distanceToSqr(self)<24*24&&perception.canSee(alerted))best=alerted;
         return intent=best;
     }
-    public boolean engage(long now){return visible(now)!=null||marked(alerted,now)&&alerted.distanceToSqr(self)<24*24;}
+    public boolean engage(long now){return rescuePending(now)||visible(now)!=null||marked(alerted,now)&&alerted.distanceToSqr(self)<24*24;}
     public static void attacked(ClonePlayer victim,Entity attacker,long now){attacked(victim,attacker,now,0);}
     public static void attacked(ClonePlayer victim,Entity attacker,long now,float amount){
         if(attacker==null||attacker==victim||!attacker.isAlive()||Senses.isAllyOf(attacker,victim)||com.rlclones.clone.CloneMobs.playerSide(attacker))return;
         if(CALLS.containsKey(attacker.getUUID())&&now-CALLS.get(attacker.getUUID())<10)return;
         if(CALLS.size()>=256)CALLS.remove(CALLS.keySet().iterator().next());CALLS.put(attacker.getUUID(),now);
         for(Player p:victim.level().players())if(p instanceof ClonePlayer c&&c.isAiEnabled()&&Senses.isAllyOf(c,victim)&&c.distanceToSqr(victim)<24*24){
-            if(c!=victim&&c.distanceToSqr(victim)>8*8&&!c.controller().perception().canSee(attacker)&&!(c.distanceToSqr(victim)<16*16&&c.controller().perception().canSee(victim)))continue;
+            if(c!=victim&&c.distanceToSqr(victim)>8*8&&!c.controller().perception().canSee(attacker)&&!(c.distanceToSqr(victim)<16*16&&c.controller().perception().canSee(victim))&&!(victim.getY()-c.getY()>2.5&&c.distanceToSqr(victim)<16*16))continue;
             if(c!=victim&&amount>0)c.getCloneBrain().knowledge(Perception.typeId(attacker)).receivedDamage.add(amount);
-            var defense=c.controller().defense();defense.intentAt=Long.MIN_VALUE;defense.alerted=attacker;defense.alertUntil=now+100;defense.alerts++;
+            var defense=c.controller().defense();defense.intentAt=Long.MIN_VALUE;defense.alerted=attacker;defense.alertUntil=now+(victim.getY()-c.getY()>2.5?400:100);defense.rescueVictim=victim;defense.rescuePosition=victim.position();defense.alerts++;
             c.controller().perception().hear(attacker,attacker.position(),now);
         }
     }
@@ -66,5 +73,5 @@ public final class TeamDefense {
         rallyGoal=goal;motor.navigate(goal,1,true);regroups++;debug="rally "+ready+"/"+required;return true;
     }
     public void joined(){joins++;}
-    public String report(){return "近隣防衛: 通知="+alerts+" 参戦="+joins+" 合流="+regroups+" "+debug;}
+    public String report(){return "近隣防衛: 通知="+alerts+" 参戦="+joins+" 合流="+regroups+" "+debug+" "+rescueRoute.report();}
 }
