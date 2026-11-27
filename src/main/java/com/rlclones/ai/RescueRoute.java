@@ -16,13 +16,15 @@ public final class RescueRoute {
     private final Motor motor;
     private record Route(BlockPos entry, BlockPos exit, Direction wall, Bases.Staircase stairs) {}
     private Route route;
+    private boolean direct;
+    public boolean active(){return route!=null||direct;}
     private Vec3 destination;
     private long nextSearch, lastProgress;
     private double bestDistance;
     public int routes, ladderTicks, stairTicks;
     public String debug = "";
     public RescueRoute(ClonePlayer self, Motor motor){this.self=self;this.motor=motor;}
-    public void reset(){route=null;destination=null;nextSearch=0;}
+    public void reset(){route=null;direct=false;destination=null;nextSearch=0;}
     private boolean loaded(BlockPos p){return self.level().hasChunkAt(p);}
     private boolean ladder(BlockPos p){return loaded(p)&&self.level().getBlockState(p).getBlock() instanceof LadderBlock;}
     private boolean free(BlockPos p){return loaded(p)&&self.level().getFluidState(p).isEmpty()&&self.level().getBlockState(p).getCollisionShape(self.level(),p).isEmpty();}
@@ -92,12 +94,19 @@ public final class RescueRoute {
             if(distance<bestDistance-.25){bestDistance=distance;lastProgress=now;}
             if(now-lastProgress>120){route=null;nextSearch=now+20;debug="route stalled; retry";}
         }
+        if(direct){
+            if(height<1.5&&self.position().distanceToSqr(goal)<9){direct=false;return false;}
+            double d=self.position().distanceToSqr(goal);
+            if(d<bestDistance-.25){bestDistance=d;lastProgress=now;}
+            if(now-lastProgress<=80&&motor.stuckCount()<3){motor.navigate(goal,1.0,true);return true;}
+            direct=false;nextSearch=now;motor.clearPath();
+        }
         if(route==null&&height<2.5)return false;
         if(route==null){
             if(now<nextSearch)return false;
             nextSearch=now+20;
-            if(motor.pathTo(goal)!=null){motor.navigate(goal,1.0,true);debug="direct rescue path";return true;}
             route=find(goal);
+            if(route==null&&motor.stuckCount()<3&&motor.pathTo(goal)!=null){direct=true;bestDistance=self.position().distanceToSqr(goal);lastProgress=now;motor.navigate(goal,1.0,true);debug="direct rescue path";return true;}
             if(route==null){debug="no known ascent";return false;}
             routes++;bestDistance=self.position().distanceToSqr(Vec3.atBottomCenterOf(route.exit));lastProgress=now;motor.clearPath();motor.resetStuck();
         }
