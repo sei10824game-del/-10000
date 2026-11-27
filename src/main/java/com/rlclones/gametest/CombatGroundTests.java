@@ -109,4 +109,24 @@ public final class CombatGroundTests {
         });
     }
 
+
+    @AfterBatch(batch="ground-scan-memo") public static void cleanScanMemo(ServerLevel l){cleanup(l);}
+    @GameTest(template="arena",batch="ground-scan-memo",timeoutTicks=40)
+    public static void tacticalScanMemoPreservesCandidatesAndDoesNotKeepStaleTerrain(GameTestHelper h){
+        arena(h);
+        coverWall(h);
+        var c=actor(h,4,7,true);
+        var e=enemy(h,EntityType.SKELETON,15,7);
+        hear(c,e);
+        var g=c.controller().ground();
+        var expected=g.candidatesUncached(e);
+        var actual=g.candidates(e);
+        h.assertTrue(!expected.isEmpty()&&expected.equals(actual),"cached scan keeps positions, scores and order");
+        h.assertTrue(g.lastScanSafetyHits+g.lastScanRayHits>0,"the scan eliminates repeated checks");
+        for(int y=2;y<=4;y++)for(int z=6;z<=8;z++)h.setBlock(new BlockPos(8,y,z),Blocks.AIR);
+        h.setBlock(new BlockPos(4,1,7),Blocks.AIR);
+        h.assertTrue(!g.safe(c.blockPosition()),"a changed floor is tested live outside a scan");
+        h.assertTrue(g.candidatesUncached(e).equals(g.candidates(e)),"next scan sees changed walls and floor");
+        h.succeed();
+    }
 }
