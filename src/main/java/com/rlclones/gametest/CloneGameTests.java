@@ -105,7 +105,7 @@ public final class CloneGameTests {
         }
         c.getInventory().add(new ItemStack(Items.COBBLESTONE,16));
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,2,9));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,2,8));
         enemy.setNoAi(true);
         enemy.setTarget(c);
         h.onEachTick(()->{
@@ -116,6 +116,7 @@ public final class CloneGameTests {
             h.assertTrue(c.controller().tunnelBarricade().placed>0,"lower tunnel gap should be barricaded");
             h.assertTrue(h.getBlockState(new BlockPos(7,2,7)).is(Blocks.COBBLESTONE),"barrier should be on the floor");
             h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).isAir(),"upper gap must stay open");
+            h.assertTrue(c.controller().tunnelBarricade().hits>0&&enemy.getHealth()<enemy.getMaxHealth(),"melee must damage the enemy through the opening");
             enemy.discard();finish(h,c);
         });
     }
