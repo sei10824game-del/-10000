@@ -4,9 +4,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Random;
 
@@ -159,28 +157,19 @@ public final class QTable {
     }
 
     public byte[] toBytes() {
-        try {
-            int length = Math.toIntExact(8L + map.size() * (8L + 12L * actions));
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream(length);
-            DataOutputStream out = new DataOutputStream(bytes);
-            out.writeInt(actions);
-            out.writeInt(map.size());
-            for (var it = map.int2ObjectEntrySet().fastIterator(); it.hasNext();) {
-                Int2ObjectMap.Entry<Entry> e = it.next();
-                Entry v = e.getValue();
-                out.writeInt(e.getIntKey());
-                out.writeInt(v.visits);
-                for (int a = 0; a < actions; a++) {
-                    out.writeFloat(v.q[a]);
-                    out.writeInt(v.n[a]);
-                    out.writeInt(v.demo[a]);
-                }
+        int length = Math.toIntExact(8L + map.size() * (8L + 12L * actions));
+        // Fixed-size records: write directly into the final array (big endian, canonical float NaNs).
+        java.nio.ByteBuffer out = java.nio.ByteBuffer.allocate(length);
+        out.putInt(actions).putInt(map.size());
+        for (var it = map.int2ObjectEntrySet().fastIterator(); it.hasNext();) {
+            var e = it.next();
+            Entry v = e.getValue();
+            out.putInt(e.getIntKey()).putInt(v.visits);
+            for (int a = 0; a < actions; a++) {
+                out.putInt(Float.floatToIntBits(v.q[a])).putInt(v.n[a]).putInt(v.demo[a]);
             }
-            out.flush();
-            return bytes.toByteArray();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
         }
+        return out.array();
     }
 
     public static QTable fromBytes(byte[] data, int expectedActions) {
