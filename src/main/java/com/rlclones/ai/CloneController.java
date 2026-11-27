@@ -46,6 +46,9 @@ import java.util.Random;
  * -> in fights pick low-level actions from the Q-table of that enemy type -> drive the {@link Motor}.
  */
 public final class CloneController {
+    private static final Direction[] ALL_DIRECTIONS = Direction.values();
+    private static final int[] TREAD_LANES = {0, 1, -1, 2};
+    private static final int[] REPAIR_HEIGHTS = {0, 1, -1};
     private static final long UNKNOWN = Long.MAX_VALUE / 4;
 
     private final ClonePlayer self;
@@ -484,7 +487,11 @@ public final class CloneController {
         Perception.Seen pick = boss;
         if (pick == null) {
             for (Perception.Seen s : foes) {
-                long crowd = foes.stream().filter(o -> o.pos.distanceTo(s.pos) < 8).count();
+                int crowd = 0;
+                // Only the threshold matters; preserve the same distance predicate and candidate order.
+                for (Perception.Seen o : foes) {
+                    if (o.pos.distanceTo(s.pos) < 8 && ++crowd >= 5) break;
+                }
                 if (crowd >= 5 && s.pos.distanceTo(self.position()) >= 16) {
                     pick = s;
                     break;
@@ -951,7 +958,7 @@ public final class CloneController {
         if (p.getY() < feet.getY() && (level.getBlockState(below).getCollisionShape(level, below).isEmpty() || !level.getFluidState(below).isEmpty())) {
             return false;
         }
-        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+        for (net.minecraft.core.Direction d : ALL_DIRECTIONS) {
             if (level.getFluidState(p.relative(d)).is(net.minecraft.tags.FluidTags.LAVA)) {
                 return false;
             }
@@ -1416,7 +1423,7 @@ public final class CloneController {
 
     private boolean safeToRemove(BlockPos p) {
         ServerLevel level = self.serverLevel();
-        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+        for (net.minecraft.core.Direction d : ALL_DIRECTIONS) {
             if (level.getFluidState(p.relative(d)).is(net.minecraft.tags.FluidTags.LAVA)) {
                 return false;
             }
@@ -4677,7 +4684,7 @@ public final class CloneController {
             // Only inspect the nearby, already excavated section, including active stairs.
             int near = s.top.getY() - self.blockPosition().getY();
             for (int i = Math.max(0, near - 4); i <= Math.min(s.steps(), near + 4); i++) {
-                for (int lane : new int[]{0, 1, -1, 2}) {
+                for (int lane : TREAD_LANES) {
                     BlockPos tread = s.top.relative(s.dir, i).below(i + 1).relative(s.dir.getClockWise(), lane);
                     if (self.getEyePosition().distanceToSqr(Vec3.atCenterOf(tread)) > 36
                             || !level.isLoaded(tread) || motor.repairs.contains(tread) || motor.deferredWorkRepairs.contains(tread)) continue;
@@ -4734,7 +4741,7 @@ public final class CloneController {
         if (self.getBoundingBox().intersects(new AABB(hole))) {
             // Never try to place a block through ourselves: step onto a supported cell first.
             for (Direction d : Direction.Plane.HORIZONTAL) {
-                for (int dy : new int[]{0, 1, -1}) {
+                for (int dy : REPAIR_HEIGHTS) {
                     BlockPos stand = self.blockPosition().relative(d).offset(0, dy, 0);
                     AABB box = self.getBoundingBox().move(Vec3.atBottomCenterOf(stand).subtract(self.position()));
                     if (box.intersects(new AABB(hole)) || !level.getFluidState(stand).isEmpty()
@@ -4756,7 +4763,7 @@ public final class CloneController {
                     if(!bases.isStairSpace(level.dimension(),head)||bases.isStairTread(level.dimension(),head)
                             ||!Config.get(Config.ALLOW_BLOCK_BREAKING,true)||state.hasBlockEntity()||state.getDestroySpeed(level,head)<0
                             ||state.getDestroySpeed(level,head)>=50||Motor.leftAlone(head,now)||!safeToDig(head)) {motor.stop();return true;}
-                    boolean wet=false;for(Direction d:Direction.values())if(!level.getFluidState(head.relative(d)).isEmpty())wet=true;
+                    boolean wet=false;for(Direction d:ALL_DIRECTIONS)if(!level.getFluidState(head.relative(d)).isEmpty())wet=true;
                     if(wet){motor.stop();return true;}
                     motor.stop();Equipment.select(self,Equipment.bestToolSlot(self,state));motor.mine(head);return true;
                 }
