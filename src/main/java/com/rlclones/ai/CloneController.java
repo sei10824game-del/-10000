@@ -1286,14 +1286,16 @@ public final class CloneController {
                 Chat.say(self, Component.translatable("rlclones.chat.coming", r.fromName()), "OMW " + r.fromName());
             }
         }
-        if (self.position().distanceTo(r.pos()) <= 5) {
+        if (self.position().distanceTo(r.pos()) <= 5 && Math.abs(self.getY()-r.pos().y) <= 2.0) {
             optionReward += 1.0f; // arrived to help: team reward
             requests.remove(r);
             answering = null;
             return true;
         }
-        motor.navigate(r.pos(), 4.0, true);
-        return motor.stuckCount() > 4;
+        if (defense.navigateHelp(r.pos(),now())) return false;
+        motor.navigate(r.pos(), 1.5, true);
+        if(motor.stuckCount()>4){responders(r.fromName()).remove(self.getUUID());answering=null;return true;}
+        return false;
     }
 
     // ------------------------------------------------------------------ harmful blocks
@@ -2831,6 +2833,7 @@ public final class CloneController {
         if (now < noPickUntil && !hasPickFor(null) && !self.isCreative()) {
             mask &= ~(Option.MINE.bit() | Option.QUARRY.bit() | Option.STAIRS.bit() | Option.SHAFT.bit());
         }
+        if (defense.rescuePending(now) && !com.rlclones.clone.CloneManager.coward() && forcedOption != Option.FLEE) mask |= Option.FIGHT.bit();
         if ((mask & BUSY_OPTIONS) != 0) {
             int idle = Option.STAIRS.bit() | Option.ACHIEVE.bit() | Option.SHAFT.bit();
             if (digPending(now) || stoneDig(mask)) {
@@ -2842,7 +2845,7 @@ public final class CloneController {
             mask &= ~idle; // those are for when there is nothing else to do
         }
         for (Option co : CHURN_OPTIONS) {
-            if (now < optionCooldown[co.ordinal()] && co != forcedOption && !(co==Option.FIGHT && now<forceFightUntil)) {
+            if (now < optionCooldown[co.ordinal()] && co != forcedOption && !(co==Option.FIGHT && (now<forceFightUntil || defense.rescuePending(now)))) {
                 mask &= ~co.bit(); // it keeps ending at once: not now
             }
         }
@@ -3296,6 +3299,7 @@ public final class CloneController {
     public int retargets;
 
     public boolean unreachable(Entity e, long now) {
+        if (defense.rescueFor(e,now)) return false;
         Long t = unreachableMobs.get(e.getId());
         if (t == null) {
             return false;
@@ -3309,6 +3313,7 @@ public final class CloneController {
 
     private final java.util.Map<Integer,Long> heardProbeAfter=new java.util.HashMap<>();
     public boolean ignoreBlockedSound(Perception.Seen seen,long now) {
+        if (defense.rescueFor(seen.entity,now)) return false;
         if(unreachable(seen.entity,now))return true;
         if(seen.visible||seen.heardAt<0||self.hurtTime>0||((now+self.getId())%20)!=0||now<heardProbeAfter.getOrDefault(seen.id,0L))return false;
         if(heardProbeAfter.size()>128)heardProbeAfter.clear();heardProbeAfter.put(seen.id,now+40);
@@ -3333,6 +3338,11 @@ public final class CloneController {
     public int simpleHunts;
 
     private boolean runFight(long now, boolean hunt) {
+        if (!hunt && !miningEmergency(now) && !hostileWithin(3.5,now) && defense.rescueTick(now)) {
+            if(action!=null)closeCombatStep(false,false);
+            ground.end(false); fightBestAt=now; fightBlocked=0;
+            return false;
+        }
         if(!hunt&&target!=null){Entity pursuer=nearestPursuer(now);if(pursuer!=null&&pursuer!=target)switchCombatTarget(pursuer,now);}
         if(!hunt&&target!=null&&unreachable(target,now)){closeCombatStep(false,false);target=null;dropVantage();}
         if (hunt && target instanceof net.minecraft.world.entity.animal.Animal prey && prey.isAlive() && simplePrey(prey)) {
