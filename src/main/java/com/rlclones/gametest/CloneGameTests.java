@@ -940,9 +940,12 @@ public final class CloneGameTests {
         BlockPos abs = h.absolutePos(log);
         h.onEachTick(() -> {
             if (!h.getBlockState(log).isAir()) {
+                // Match CloneController.tickInner: the work action refreshes
+                // lastMineCall before Motor.tick checks abandoned mining claims.
+                // Ticking first resets accumulated break progress every game tick.
                 c.controller().motor().lookAt(Vec3.atCenterOf(abs));
-                c.controller().motor().tick();
                 c.controller().motor().mine(abs);
+                c.controller().motor().tick();
             } else {
                 // walk onto the drop, as the COLLECT behaviour does
                 for (net.minecraft.world.entity.item.ItemEntity item : h.getLevel().getEntitiesOfClass(

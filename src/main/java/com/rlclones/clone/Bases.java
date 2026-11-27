@@ -43,7 +43,27 @@ public class Bases extends SavedData {
         }
     }
 
-    public final List<Base> bases = new ArrayList<>();
+    private final com.rlclones.ai.util.RevisionList<Base> baseList = new com.rlclones.ai.util.RevisionList<>();
+    public final List<Base> bases = baseList;
+
+    private record IndexedBase(Base base, int order) {}
+    private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<List<IndexedBase>> baseCells = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+    private long indexedBaseRevision = -1;
+
+    private static long cellKey(int x, int z) {
+        return ((long) x << 32) | (z & 0xffffffffL);
+    }
+
+    private void ensureBaseIndex() {
+        if (indexedBaseRevision == baseList.revision()) return;
+        baseCells.clear();
+        for (int i = 0; i < baseList.size(); i++) {
+            Base b = baseList.get(i);
+            long key = cellKey(Math.floorDiv(b.center.getX(), 32), Math.floorDiv(b.center.getZ(), 32));
+            baseCells.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new IndexedBase(b, i));
+        }
+        indexedBaseRevision = baseList.revision();
+    }
 
     /** A fenced 5x5 animal pen (origin = north-west corner, gate in the middle of the north side). */
     public record Pen(ResourceKey<Level> dimension, BlockPos origin, String kind, int size) {
@@ -328,10 +348,17 @@ public class Bases extends SavedData {
             if (s.dimension != dim) {
                 continue;
             }
-            for (int i = 0; i <= s.steps() + 1; i++) {
-                BlockPos c = s.top.relative(s.dir, i).below(i);
-                if (c.getY() <= top.getY() && Math.abs(c.getX() - top.getX()) <= 2 && Math.abs(c.getZ() - top.getZ()) <= 2) {
-                    return true;
+            if (s.dir.getAxis().isHorizontal()) {
+                if (com.rlclones.ai.util.StairFootprint.nearColumn(top.getX() - s.top.getX(),
+                        top.getY() - s.top.getY(), top.getZ() - s.top.getZ(),
+                        s.dir.getStepX(), s.dir.getStepZ(), s.steps())) return true;
+            } else {
+                // Preserve legacy behavior for non-horizontal records loaded from saves.
+                for (int i = 0; i <= s.steps() + 1; i++) {
+                    BlockPos c = s.top.relative(s.dir, i).below(i);
+                    if (c.getY() <= top.getY() && Math.abs(c.getX() - top.getX()) <= 2 && Math.abs(c.getZ() - top.getZ()) <= 2) {
+                        return true;
+                    }
                 }
             }
         }
@@ -486,6 +513,60 @@ public class Bases extends SavedData {
 
     @Nullable
     public Base nearest(ResourceKey<Level> dim, Vec3 pos, double radius) {
+        // For small lists or very wide/unusual queries, a scan is cheaper and preserves
+        // the original behavior. The index covers only immutable base centers.
+        if (bases.size() < 16) {
+            // A previously large colony can shrink. Do not keep removed bases
+            // (and their chest lists) alive just because the scan is now cheaper.
+            if (!baseCells.isEmpty()) baseCells.clear();
+            indexedBaseRevision = -1;
+            return nearestUnindexed(dim, pos, radius);
+        }
+        if (!(radius > 0 && radius <= 128)
+                || !Double.isFinite(pos.x) || !Double.isFinite(pos.z)
+                || Math.abs(pos.x) > 30_000_128 || Math.abs(pos.z) > 30_000_128) {
+            return nearestUnindexed(dim, pos, radius);
+        }
+        // Centers are at integer coordinates + 0.5. Include an extra block
+        // conservatively at each edge; the exact original distance test follows.
+        int minX = (int) Math.floor((pos.x - radius - 1) / 32);
+        int maxX = (int) Math.floor((pos.x + radius + 1) / 32);
+        int minZ = (int) Math.floor((pos.z - radius - 1) / 32);
+        int maxZ = (int) Math.floor((pos.z + radius + 1) / 32);
+        // Avoid a grid of mostly empty lookups for a broad search over a small list.
+        long cellCount = (long) (maxX - minX + 1) * (maxZ - minZ + 1);
+        if (cellCount >= bases.size()) {
+            if (indexedBaseRevision != baseList.revision()) {
+                baseCells.clear();
+                indexedBaseRevision = -1;
+            }
+            return nearestUnindexed(dim, pos, radius);
+        }
+        ensureBaseIndex();
+        Base best = null;
+        double bestD = radius;
+        int bestOrder = Integer.MAX_VALUE;
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                List<IndexedBase> candidates = baseCells.get(cellKey(x, z));
+                if (candidates == null) continue;
+                for (IndexedBase entry : candidates) {
+                    Base b = entry.base();
+                    if (b.dimension != dim) continue;
+                    double d = Vec3.atCenterOf(b.center).distanceTo(pos);
+                    if (d < bestD || best != null && d == bestD && entry.order() < bestOrder) {
+                        bestD = d;
+                        best = b;
+                        bestOrder = entry.order();
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    @Nullable
+    public Base nearestUnindexed(ResourceKey<Level> dim, Vec3 pos, double radius) {
         Base best = null;
         double bestD = radius;
         for (Base b : bases) {

@@ -717,13 +717,37 @@ public final class Motor {
         final BlockPos goal;
         final java.util.List<Node> nodes;
         final long tick;
+        final int minX, maxX, minY, maxY, minZ, maxZ;
 
         SharedPath(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, BlockPos goal, java.util.List<Node> nodes, long tick) {
             this.dim = dim;
             this.goal = goal;
             this.nodes = nodes;
             this.tick = tick;
+            int loX = Integer.MAX_VALUE, loY = Integer.MAX_VALUE, loZ = Integer.MAX_VALUE;
+            int hiX = Integer.MIN_VALUE, hiY = Integer.MIN_VALUE, hiZ = Integer.MIN_VALUE;
+            // The last node was never eligible as the start of a shared suffix.
+            for (int i = 0; i < nodes.size() - 1; i++) {
+                Node n = nodes.get(i);
+                loX = Math.min(loX, n.x); hiX = Math.max(hiX, n.x);
+                loY = Math.min(loY, n.y); hiY = Math.max(hiY, n.y);
+                loZ = Math.min(loZ, n.z); hiZ = Math.max(hiZ, n.z);
+            }
+            minX = loX; maxX = hiX; minY = loY; maxY = hiY; minZ = loZ; maxZ = hiZ;
         }
+
+        boolean mayContain(Vec3 pos) {
+            // Broad phase only: preserve the exact old strict X/Z and inclusive Y tests.
+            return Motor.pathBoundsMayContain(pos.x, pos.y, pos.z, minX, maxX, minY, maxY, minZ, maxZ);
+        }
+    }
+
+    /** A conservative broad-phase test; callers must still check individual nodes in order. */
+    public static boolean pathBoundsMayContain(double x, double y, double z,
+            int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
+        return !(minX + 0.5 - x >= 1.0 || maxX + 0.5 - x <= -1.0
+                || minY - y > 1.0 || maxY - y < -1.0
+                || minZ + 0.5 - z >= 1.0 || maxZ + 0.5 - z <= -1.0);
     }
 
     private static final java.util.ArrayDeque<SharedPath> RECENT = new java.util.ArrayDeque<>();
@@ -745,10 +769,16 @@ public final class Motor {
             if (sp.dim != level.dimension() || sp.goal.distManhattan(goal) > 3) {
                 continue;
             }
+            if (!sp.mayContain(pos)) continue;
             for (int i = 0; i < sp.nodes.size() - 1; i++) {
                 Node n = sp.nodes.get(i);
                 if (Math.abs(n.x + 0.5 - pos.x) < 1.0 && Math.abs(n.z + 0.5 - pos.z) < 1.0 && Math.abs(n.y - pos.y) <= 1.0) {
-                    return new Path(new java.util.ArrayList<>(sp.nodes.subList(i, sp.nodes.size())), sp.goal, true);
+                    // Keep an independent mutable list (Path can truncate or replace nodes).
+                    // Copy directly into the final backing array, avoiding a subList and
+                    // ArrayList(Collection)'s intermediate toArray/copy on Java 17.
+                    java.util.List<Node> suffix = new java.util.ArrayList<>(sp.nodes.size() - i);
+                    for (int j = i; j < sp.nodes.size(); j++) suffix.add(sp.nodes.get(j));
+                    return new Path(suffix, sp.goal, true);
                 }
             }
         }

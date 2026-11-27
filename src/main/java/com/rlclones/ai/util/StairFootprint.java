@@ -22,4 +22,13 @@ public final class StairFootprint {
         int lane = dx * -dirZ + dz * dirX;
         return along == i && lane >= -1 && lane <= 2;
     }
+    /** Whether any step center through steps+1 is at/below the point and within two blocks horizontally. */
+    public static boolean nearColumn(int dx, int dy, int dz, int dirX, int dirZ, int steps) {
+        long along = (long) dx * dirX + (long) dz * dirZ;
+        long side = (long) dx * -dirZ + (long) dz * dirX;
+        if (side < -2 || side > 2) return false;
+        long first = Math.max(Math.max(0L, -(long) dy), along - 2);
+        long last = Math.min((long) steps + 1, along + 2);
+        return first <= last;
+    }
 }

@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Random;
 
 /** Fixed-size ring buffer of transitions used for experience replay (Dyna-style re-learning). */
@@ -21,7 +22,9 @@ public final class ReplayBuffer {
         public float weight;
     }
 
-    private final Transition[] items;
+    private static final Transition[] EMPTY = new Transition[0];
+    private final int capacity;
+    private Transition[] items = EMPTY;
     private int next;
     private int size;
 
@@ -29,7 +32,7 @@ public final class ReplayBuffer {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be positive");
         }
-        items = new Transition[capacity];
+        this.capacity = capacity;
     }
 
     public int size() {
@@ -37,6 +40,12 @@ public final class ReplayBuffer {
     }
 
     public void add(String table, int s, int a, float r, int s2, boolean terminal, float gamma, int nextMask, float weight) {
+        // Before the first wrap, next is the number of stored transitions.
+        // Grow only on demand; after reaching capacity the old ring layout is unchanged.
+        if (next == items.length) {
+            int length = (int) Math.min(capacity, Math.max(16L, 2L * items.length));
+            items = Arrays.copyOf(items, length);
+        }
         Transition t = items[next];
         if (t == null) {
             t = new Transition();
@@ -51,8 +60,8 @@ public final class ReplayBuffer {
         t.gamma = gamma;
         t.nextMask = nextMask;
         t.weight = weight;
-        next = (next + 1) % items.length;
-        size = Math.min(size + 1, items.length);
+        if (++next == capacity) next = 0;
+        if (size < capacity) size++;
     }
 
     public Transition sample(Random random) {
@@ -74,7 +83,10 @@ public final class ReplayBuffer {
 
     /** Iterate in insertion order, including after the ring wraps. */
     private Transition oldest(int offset) {
-        return items[(next - size + items.length + offset) % items.length];
+        int start = next - size;
+        if (start < 0) start += capacity;
+        int untilEnd = capacity - start;
+        return items[offset < untilEnd ? start + offset : offset - untilEnd];
     }
 
     public byte[] toBytes() {

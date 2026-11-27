@@ -316,4 +316,130 @@ public final class CommunityResourcesTests {
         h.succeedWhen(()->{h.assertTrue(opened[0]&&h.getLevel().getBlockState(tread).is(Blocks.COBBLESTONE),"actual temporary step opening restored after work");h.assertTrue(c.getInventory().countItem(Items.COBBLESTONE)==7,"one real block consumed in restoration");});
     }
 
+
+    @GameTest(template="arena",batch="indexed-recipes",timeoutTicks=40)
+    public static void exactRecipeIndexPreservesOrderAndReload(GameTestHelper h) {
+        arena(h);
+        var c = actor(h,5,7);
+        var manager = h.getLevel().getRecipeManager();
+        var original = new ArrayList<Recipe<?>>(manager.getRecipes());
+        var sample = List.of(Items.STICK, Items.FURNACE, Items.CRAFTING_TABLE, Items.OAK_BOAT,
+                Items.WOODEN_HOE, Items.STONE_SHOVEL, Items.IRON_PICKAXE, Items.CHAINMAIL_BOOTS, Items.AIR);
+        try {
+            Crafting.invalidateRecipes();
+            for (Item item : sample) {
+                h.assertTrue(Crafting.recipesFor(c, s -> s.is(item)).equals(Crafting.recipesForItem(c,item)),
+                        "exact index matches full scan: " + item);
+            }
+            var custom = new ResourceLocation("coop_test","indexed_copper_boots");
+            var ingredients = NonNullList.withSize(1,Ingredient.of(Items.COPPER_INGOT));
+            var mixed = new ArrayList<>(original);
+            mixed.add(new ShapedRecipe(custom,"",CraftingBookCategory.EQUIPMENT,1,1,ingredients,new ItemStack(Items.CHAINMAIL_BOOTS)));
+            manager.replaceRecipes(mixed);
+            Crafting.invalidateRecipes();
+            var indexed = Crafting.recipesForItem(c,Items.CHAINMAIL_BOOTS);
+            h.assertTrue(indexed.equals(Crafting.recipesFor(c,s -> s.is(Items.CHAINMAIL_BOOTS)))
+                    && indexed.stream().anyMatch(recipe -> recipe.getId().equals(custom)), "reload keeps custom recipes and order");
+            manager.replaceRecipes(original);
+            Crafting.invalidateRecipes();
+            h.assertTrue(Crafting.recipesForItem(c,Items.CHAINMAIL_BOOTS).stream().noneMatch(recipe -> recipe.getId().equals(custom)),
+                    "removed recipe is no longer indexed");
+        } finally {
+            manager.replaceRecipes(original);
+            Crafting.invalidateRecipes();
+            cleanup(h.getLevel());
+        }
+        h.succeed();
+    }
+
+    @GameTest(template="arena",batch="inventory-scan-equivalence",timeoutTicks=40)
+    public static void consolidatedGearScansMatchLegacyAndSeeLiveChanges(GameTestHelper h) {
+        arena(h);
+        var c=actor(h,5,7);
+        var inv=c.getInventory();
+        Item[][] kinds={{Items.DIAMOND_PICKAXE,Items.IRON_PICKAXE,Items.STONE_PICKAXE,Items.WOODEN_PICKAXE},
+                {Items.DIAMOND_AXE,Items.IRON_AXE,Items.STONE_AXE,Items.WOODEN_AXE},
+                {Items.DIAMOND_SWORD,Items.IRON_SWORD,Items.STONE_SWORD,Items.WOODEN_SWORD}};
+        Item[] armor={Items.DIAMOND_HELMET,Items.DIAMOND_CHESTPLATE,Items.DIAMOND_LEGGINGS,Items.DIAMOND_BOOTS,
+                Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS};
+        var pool=new ArrayList<Item>();
+        for(Item[] kind:kinds)Collections.addAll(pool,kind);
+        Collections.addAll(pool,armor);
+        Collections.addAll(pool,Items.LEATHER_BOOTS,Items.CHAINMAIL_HELMET,Items.NETHERITE_CHESTPLATE,Items.STICK);
+        var random=new Random(10824);
+        try {
+            for(int trial=0;trial<100;trial++){
+                inv.clearContent();
+                for(int i=0;i<inv.items.size();i++){
+                    if(random.nextBoolean())continue;
+                    ItemStack stack=new ItemStack(pool.get(random.nextInt(pool.size())));
+                    if(stack.isDamageableItem()&&random.nextBoolean())stack.setDamageValue(stack.getMaxDamage()-1);
+                    inv.items.set(i,stack);
+                }
+                if(trial%3==0)c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.DIAMOND_HELMET));
+                if(trial%5==0)c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.CHEST,new ItemStack(Items.NETHERITE_CHESTPLATE));
+                var expectedArmor=new ArrayList<Item>();
+                for(Item item:armor)if(Crafting.armorImproves(c,new ItemStack(item)))expectedArmor.add(item);
+                var actualArmor=new ArrayList<Item>();
+                Crafting.addArmorUpgrades(c,actualArmor);
+                h.assertTrue(expectedArmor.equals(actualArmor),"armor order and scores agree at trial "+trial);
+                var expected=new ArrayList<Item>(List.of(Items.STICK));
+                for(Item[] kind:kinds)for(Item item:kind){
+                    boolean has=false,sound=false;
+                    for(ItemStack stack:inv.items)if(stack.is(item)){has=true;sound|=!Equipment.worn(stack);}
+                    if(has){if(!sound)expected.add(0,item);break;}
+                }
+                var actual=new ArrayList<Item>(List.of(Items.STICK));
+                Crafting.addWornReplacements(c,actual);
+                h.assertTrue(expected.equals(actual),"worn gear order agrees at trial "+trial);
+            }
+            inv.clearContent();
+            var pick=new ItemStack(Items.DIAMOND_PICKAXE);
+            inv.items.set(0,pick);
+            var replacements=new ArrayList<Item>();
+            Crafting.addWornReplacements(c,replacements);
+            h.assertTrue(replacements.isEmpty(),"sound tool is not replaced");
+            pick.setDamageValue(pick.getMaxDamage()-1);
+            Crafting.addWornReplacements(c,replacements);
+            h.assertTrue(replacements.equals(List.of(Items.DIAMOND_PICKAXE)),"direct mutation of existing stack is visible immediately");
+        } finally {cleanup(h.getLevel());}
+        h.succeed();
+    }
+
+    @GameTest(template="arena",batch="base-spatial-index",timeoutTicks=40)
+    public static void baseSpatialIndexMatchesScanAndTracksPublicListEdits(GameTestHelper h) {
+        var bases=new Bases();
+        var dim=h.getLevel().dimension();
+        var random=new Random(10824);
+        for(int i=0;i<180;i++)bases.add(dim,new BlockPos(random.nextInt(400)-200,random.nextInt(100)-40,random.nextInt(400)-200),"fixture");
+        var first=bases.add(dim,new BlockPos(-33,200,0),"first");
+        var second=bases.add(dim,new BlockPos(-31,200,0),"second");
+        Vec3 tie=new Vec3(-31.5,200.5,.5);
+        // Equal distance to both centers, across the -32 cell boundary.
+        h.assertTrue(bases.nearest(dim,tie,2)==first,"first inserted base wins an equal-distance tie");
+        Collections.swap(bases.bases,bases.bases.indexOf(first),bases.bases.indexOf(second));
+        h.assertTrue(bases.nearest(dim,tie,2)==second,"direct reorder invalidates tie order");
+        bases.bases.remove(second);
+        h.assertTrue(bases.nearest(dim,tie,2)==first,"direct remove invalidates index");
+        for(int i=0;i<1000;i++){
+            Vec3 p=new Vec3(random.nextDouble()*440-220,random.nextDouble()*140-60,random.nextDouble()*440-220);
+            double radius=1+random.nextInt(128);
+            h.assertTrue(bases.nearest(dim,p,radius)==bases.nearestUnindexed(dim,p,radius),"same base as linear scan "+i);
+        }
+        var it=bases.bases.iterator();
+        while(it.hasNext())if(it.next()==first){it.remove();break;}
+        h.assertTrue(bases.nearest(dim,tie,2)==null,"iterator removal invalidates index");
+        bases.bases.subList(0,20).clear();
+        bases.bases.add(first);
+        h.assertTrue(bases.nearest(dim,tie,2)==first,"direct add is indexed");
+        bases.bases.clear();
+        h.assertTrue(bases.nearest(dim,tie,128)==null,"clear never returns deleted base");
+        // Shrink below the indexed threshold, grow again, and exercise wide-query fallback.
+        for(int i=0;i<8;i++) bases.add(dim,new BlockPos(200+i,200,0),"small");
+        h.assertTrue(bases.nearest(dim,tie,128)==null,"small list cannot return stale indexed entries");
+        for(int i=0;i<16;i++) bases.add(dim,new BlockPos(-31-i,200,0),"regrown");
+        h.assertTrue(bases.nearest(dim,tie,128)==bases.nearestUnindexed(dim,tie,128),"wide scan preserves nearest and tie order");
+        h.assertTrue(bases.nearest(dim,tie,2)==bases.nearestUnindexed(dim,tie,2),"index rebuilt after shrink and growth");
+        h.succeed();
+    }
 }

@@ -83,4 +83,36 @@ class NearestCandidatesTest {
         nearest.sort();
         assertEquals("b", nearest.get(0));
     }
+
+    @Test
+    void repeatedFullAndPartialHeapsKeepStableOrder() {
+        Random random = new Random(10824);
+        double[] special = {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, -0.0, 0.0, 1.0};
+        for (int limit : new int[]{1, 2, 3, 16, 64, 128}) {
+            NearestCandidates<Candidate> nearest = new NearestCandidates<>(limit);
+            for (int scan = 0; scan < 2000; scan++) {
+                List<Candidate> expected = new ArrayList<>();
+                int count = random.nextInt(1100);
+                for (int i = 0; i < count; i++) {
+                    double distance = switch (scan % 5) {
+                        case 0 -> random.nextInt(10);
+                        case 1 -> i;
+                        case 2 -> -i;
+                        case 3 -> random.nextDouble();
+                        default -> special[random.nextInt(special.length)];
+                    };
+                    Candidate candidate = new Candidate(i, distance);
+                    expected.add(candidate);
+                    nearest.offer(candidate, distance);
+                }
+                expected.sort(Comparator.comparingDouble(Candidate::distance));
+                nearest.sort();
+                nearest.sort();
+                assertEquals(Math.min(limit, count), nearest.size());
+                for (int i = 0; i < nearest.size(); i++) assertSame(expected.get(i), nearest.get(i));
+                nearest.clear();
+                assertEquals(0, nearest.size());
+            }
+        }
+    }
 }

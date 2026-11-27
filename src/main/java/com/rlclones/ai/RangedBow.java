@@ -27,7 +27,12 @@ public final class RangedBow {
     private List<? extends net.minecraft.world.entity.player.Player> friends(){return self.level().players().stream().filter(p->p!=self&&p.isAlive()&&Senses.isAllyOf(p,self)).toList();}
     public Entity friendInLine(Entity enemy,Vec3 eye){
         Vec3 end=enemy.getBoundingBox().getCenter();
-        for(var p:friends())if(p!=enemy&&p.getBoundingBox().expandTowards(velocity(p).scale(8)).inflate(.6).clip(eye,end).isPresent())return p;
+        // The previous friends() list was used only for a first-match query here.
+        // Keep player iteration order and live team, health and motion checks.
+        for (var p : self.level().players()) {
+            if (p != self && p.isAlive() && Senses.isAllyOf(p,self) && p != enemy
+                    && p.getBoundingBox().expandTowards(velocity(p).scale(8)).inflate(.6).clip(eye,end).isPresent()) return p;
+        }
         return null;
     }
     private boolean positionSafe(Vec3 spot,Entity enemy){

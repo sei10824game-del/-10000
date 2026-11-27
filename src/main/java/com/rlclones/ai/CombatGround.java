@@ -30,8 +30,26 @@ public final class CombatGround {
     private Vec3 point(BlockPos p){return Vec3.atBottomCenterOf(p);}
     private Vec3 eye(BlockPos p){return point(p).add(0,self.getEyeHeight(),0);}
     private boolean solid(BlockPos p){return self.level().getFluidState(p).isEmpty()&&self.level().getBlockState(p).isFaceSturdy(self.level(),p,Direction.UP);}
+    // Only valid during one synchronous candidate scan. Never reuse across ticks,
+    // clones, or separate calls: terrain, pose and individual learned hazards can change.
+    private record Ray(Vec3 from, Vec3 to) {}
+    private static final class ScanMemo {
+        final Map<BlockPos, Boolean> safety = new HashMap<>();
+        final Map<Ray, Boolean> rays = new HashMap<>();
+    }
+    private ScanMemo scanMemo;
+    public int lastScanSafetyHits, lastScanRayHits;
+
     /** Room for the actual body and a stable neighbourhood, including the knockback side. */
     public boolean safe(BlockPos p){
+        if (scanMemo == null) return safeUncached(p);
+        Boolean result = scanMemo.safety.get(p);
+        if (result != null) { lastScanSafetyHits++; return result; }
+        boolean safe = safeUncached(p);
+        scanMemo.safety.put(p.immutable(), safe);
+        return safe;
+    }
+    private boolean safeUncached(BlockPos p){
         var l=self.level();if(!l.hasChunkAt(p)||!solid(p.below())||!l.getFluidState(p).isEmpty()||!l.getFluidState(p.above()).isEmpty()||Terrain.hazard(l,p))return false;
         double half=self.getBbWidth()*.5;AABB box=new AABB(p.getX()+.5-half,p.getY()+.01,p.getZ()+.5-half,p.getX()+.5+half,p.getY()+self.getBbHeight(),p.getZ()+.5+half);
         if(l.getBlockCollisions(self,box).iterator().hasNext())return false;
@@ -41,7 +59,16 @@ public final class CombatGround {
                 if(!s.getFluidState().isEmpty()||s.is(net.minecraft.tags.BlockTags.FIRE)||s.is(net.minecraft.world.level.block.Blocks.MAGMA_BLOCK)||s.is(net.minecraft.world.level.block.Blocks.CACTUS)||s.is(net.minecraft.tags.BlockTags.CAMPFIRES)||id!=null&&self.getCloneBrain().isHarmful(id.toString()))return false;}}
         return true;
     }
-    private boolean visible(Vec3 from,Vec3 to){return self.level().clip(new ClipContext(from,to,ClipContext.Block.COLLIDER,ClipContext.Fluid.ANY,self)).getType()==HitResult.Type.MISS;}
+    private boolean visible(Vec3 from,Vec3 to){
+        if (scanMemo == null) return visibleUncached(from,to);
+        Ray key = new Ray(from,to);
+        Boolean result = scanMemo.rays.get(key);
+        if (result != null) { lastScanRayHits++; return result; }
+        boolean clear = visibleUncached(from,to);
+        scanMemo.rays.put(key,clear);
+        return clear;
+    }
+    private boolean visibleUncached(Vec3 from,Vec3 to){return self.level().clip(new ClipContext(from,to,ClipContext.Block.COLLIDER,ClipContext.Fluid.ANY,self)).getType()==HitResult.Type.MISS;}
     public boolean area(Entity target){var k=self.getCloneBrain().knowledgeIfPresent(Perception.typeId(target));
         return target instanceof Creeper||k!=null&&(k.isExplosive()||k.effects.keySet().stream().anyMatch(id->{var key=net.minecraft.resources.ResourceLocation.tryParse(id);var e=key==null?null:net.minecraftforge.registries.ForgeRegistries.MOB_EFFECTS.getValue(key);return e!=null&&e.getCategory()==net.minecraft.world.effect.MobEffectCategory.HARMFUL;}));}
     private boolean rangedEnemy(Entity e){var k=self.getCloneBrain().knowledgeIfPresent(Perception.typeId(e));return e instanceof RangedAttackMob||k!=null&&k.isRanged();}
@@ -66,12 +93,45 @@ public final class CombatGround {
     private BlockPos peek(BlockPos p,Entity e){for(Direction d:Direction.Plane.HORIZONTAL){BlockPos q=p.relative(d);if(safe(q)&&visible(eye(q),e.getBoundingBox().getCenter())&&self.controller().rangedBow().friendInLine(e,eye(q))==null)return q;}return null;}
     private boolean hidden(BlockPos p,Entity e){if(visible(e.getEyePosition(),eye(p)))return false;for(var t:Senses.threats(self.controller().perception(),self,self.level().getGameTime(),20))if(t.entity!=e&&visible(t.entity.getEyePosition(),eye(p)))return false;return true;}
     public List<Site> candidates(Entity e){
+        ScanMemo previous = scanMemo;
+        scanMemo = new ScanMemo();
+        lastScanSafetyHits = lastScanRayHits = 0;
+        try { return collectCandidates(e); }
+        finally { scanMemo = previous; }
+    }
+
+    /** Reference scan for regression tests; no cached terrain or ray results. */
+    public List<Site> candidatesUncached(Entity e){
+        ScanMemo previous = scanMemo;
+        scanMemo = null;
+        try { return collectCandidates(e); }
+        finally { scanMemo = previous; }
+    }
+
+    // Immutable relative offsets, shared by every clone. Keep the legacy loop order
+    // and repeated coordinates (ties must retain their original order).
+    private static final List<BlockPos> CANDIDATE_OFFSETS = candidateOffsets();
+
+    private static List<BlockPos> candidateOffsets() {
+        List<BlockPos> offsets = new ArrayList<>();
+        for (int ring : new int[]{0,2,3,5}) {
+            for (int direction=0; direction<8; direction++) {
+                if (ring==0 && direction>0) continue;
+                double angle=direction*Math.PI/4;
+                int dx=(int)Math.round(Math.cos(angle)*ring);
+                int dz=(int)Math.round(Math.sin(angle)*ring);
+                for (int dy : new int[]{0,1,-1,2}) offsets.add(new BlockPos(dx,dy,dz));
+            }
+        }
+        return List.copyOf(offsets);
+    }
+
+    private List<Site> collectCandidates(Entity e){
         allies();boolean range=armedRanged(),aoe=nearbyArea(e),rangedThreat=nearbyRanged(e);
         boolean high=highUseful(e)&&!rangedThreat&&!aoe&&Senses.threats(self.controller().perception(),self,self.level().getGameTime(),16).stream().allMatch(t->highUseful(t.entity));int threats=Senses.threats(self.controller().perception(),self,self.level().getGameTime(),16).size();
         var best=new ArrayList<Site>();Vec3 towards=e.position().subtract(self.position()).multiply(1,0,1).normalize();
-        for(int ring:new int[]{0,2,3,5})for(int direction=0;direction<8;direction++)for(int dy:new int[]{0,1,-1,2}){
-            if(ring==0&&direction>0)continue;
-            double angle=direction*Math.PI/4;BlockPos p=self.blockPosition().offset((int)Math.round(Math.cos(angle)*ring),dy,(int)Math.round(Math.sin(angle)*ring));
+        for(BlockPos offset : CANDIDATE_OFFSETS){
+            BlockPos p=self.blockPosition().offset(offset.getX(),offset.getY(),offset.getZ());
             if(!safe(p)||occupied(p))continue;double distance=point(p).distanceTo(e.position());if(distance<Math.min(3,self.distanceTo(e))||distance>24)continue;
             BlockPos retreat=escape(p,e);if(retreat==null)continue;
             double moved=point(p).distanceTo(self.position()),space=spacing(point(p));if(aoe&&space<4)continue;
