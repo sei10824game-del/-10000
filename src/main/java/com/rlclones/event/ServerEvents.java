@@ -100,7 +100,7 @@ public final class ServerEvents {
     }
 
     @SubscribeEvent
-    public static void onTagsUpdated(net.minecraftforge.event.TagsUpdatedEvent event){Perception.invalidateClassifications();}
+    public static void onTagsUpdated(net.minecraftforge.event.TagsUpdatedEvent event){Perception.invalidateClassifications();if(event.getUpdateCause()==net.minecraftforge.event.TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD)com.rlclones.ai.Crafting.invalidateSmeltingIndex();}
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
