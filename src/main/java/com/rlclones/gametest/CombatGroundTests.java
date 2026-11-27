@@ -124,7 +124,7 @@ public final class CombatGroundTests {
             c.controller().forcedOption=com.rlclones.ai.strategy.Option.FIGHT;c.setAiEnabled(true);
         }
         h.succeedWhen(()->{
-            h.assertTrue(a.controller().glassBreaches+b.controller().glassBreaches>0,"actual hostile-facing glass was broken: "+a.controller().fightDebug+" / "+b.controller().fightDebug);
+            h.assertTrue(a.controller().glassBreaches+b.controller().glassBreaches>0,"actual hostile-facing glass was broken: "+a.controller().fightDebug()+" / "+b.controller().fightDebug());
             h.assertTrue(!foe.isAlive()||foe.getHealth()<foe.getMaxHealth(),"opening allowed real combat damage");
             h.assertTrue(h.getBlockState(new BlockPos(9,1,7)).is(Blocks.STONE),"solid foundation left intact");
         });
