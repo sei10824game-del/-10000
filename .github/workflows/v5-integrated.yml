@@ -1,0 +1,86 @@
+name: V5 integration performance and regression
+on:
+  push:
+    branches: [validation/v5-integrated-20261127]
+    paths: [.github/workflows/v5-integrated.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - count: 300
+            ticks: 2400
+            repeats: 3
+          - count: 100
+            ticks: 7200
+            repeats: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Isolate incremental V5 effect on the same feature set
+        run: |
+          python3 scripts/compare-population.py \
+            --baseline 49f5f2bf4340c462c0705007da75925dd8024700 \
+            --candidate a73cb5e79c9996be190fde1726dbf042e666b171 \
+            --counts ${{ matrix.count }} --ticks ${{ matrix.ticks }} \
+            --repeats ${{ matrix.repeats }} --timeout 4500 \
+            --seed rlclones --output "$RUNNER_TEMP/v5-integrated"
+      - name: Publish results
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/v5-integrated/comparison.csv"
+          if test -f "$report"; then cat "$report" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-${{ matrix.count }}-${{ matrix.ticks }}
+          path: ${{ runner.temp }}/v5-integrated/
+          if-no-files-found: warn
+  feature-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ref: 9e65a251d22b0abb3ff96207e8271bf8b4081cbb
+            name: feature-baseline
+          - ref: a73cb5e79c9996be190fde1726dbf042e666b171
+            name: integrated
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Focused feature regression and unit tests
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon test -Drlclones.gameTestNamespaces=rlclones_ground,rlclones_ore_learning,rlclones_gear,rlclones_sections runGameTestServer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: focused-${{ matrix.name }}
+          path: |
+            run/logs/
+            build/test-results/
+          if-no-files-found: warn
