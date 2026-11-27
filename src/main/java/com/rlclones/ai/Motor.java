@@ -773,7 +773,12 @@ public final class Motor {
             for (int i = 0; i < sp.nodes.size() - 1; i++) {
                 Node n = sp.nodes.get(i);
                 if (Math.abs(n.x + 0.5 - pos.x) < 1.0 && Math.abs(n.z + 0.5 - pos.z) < 1.0 && Math.abs(n.y - pos.y) <= 1.0) {
-                    return new Path(new java.util.ArrayList<>(sp.nodes.subList(i, sp.nodes.size())), sp.goal, true);
+                    // Keep an independent mutable list (Path can truncate or replace nodes).
+                    // Copy directly into the final backing array, avoiding a subList and
+                    // ArrayList(Collection)'s intermediate toArray/copy on Java 17.
+                    java.util.List<Node> suffix = new java.util.ArrayList<>(sp.nodes.size() - i);
+                    for (int j = i; j < sp.nodes.size(); j++) suffix.add(sp.nodes.get(j));
+                    return new Path(suffix, sp.goal, true);
                 }
             }
         }
