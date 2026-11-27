@@ -4,10 +4,9 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Random;
 
 /** Sparse tabular action-value function: state key -> Q values, visit counts and demonstration counts. */
@@ -145,26 +144,27 @@ public final class QTable {
     }
 
     public byte[] toBytes() {
-        try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(bytes);
-            out.writeInt(actions);
-            out.writeInt(map.size());
-            for (Int2ObjectMap.Entry<Entry> e : map.int2ObjectEntrySet()) {
-                Entry v = e.getValue();
-                out.writeInt(e.getIntKey());
-                out.writeInt(v.visits);
-                for (int a = 0; a < actions; a++) {
-                    out.writeFloat(v.q[a]);
-                    out.writeInt(v.n[a]);
-                    out.writeInt(v.demo[a]);
-                }
+        // The existing big-endian format has a fixed record width. Write straight
+        // into the final array instead of growing and copying an intermediate buffer.
+        int length = Math.toIntExact(8L + (8L + 12L * actions) * map.size());
+        ByteBuffer out = ByteBuffer.allocate(length);
+        out.putInt(actions);
+        out.putInt(map.size());
+        var iterator = map.int2ObjectEntrySet().fastIterator();
+        while (iterator.hasNext()) {
+            var e = iterator.next();
+            Entry v = e.getValue();
+            out.putInt(e.getIntKey());
+            out.putInt(v.visits);
+            for (int a = 0; a < actions; a++) {
+                // DataOutputStream.writeFloat canonicalizes NaN; preserve that
+                // behavior as well as signed zero and the original byte order.
+                out.putInt(Float.floatToIntBits(v.q[a]));
+                out.putInt(v.n[a]);
+                out.putInt(v.demo[a]);
             }
-            out.flush();
-            return bytes.toByteArray();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
         }
+        return out.array();
     }
 
     public static QTable fromBytes(byte[] data, int expectedActions) {
