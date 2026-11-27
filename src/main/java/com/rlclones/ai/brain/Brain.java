@@ -411,8 +411,7 @@ public final class Brain {
         if (STRATEGY.equals(name)) {
             return StrategyState::prior;
         }
-        EnemyKnowledge k = knowledge(name);
-        return (s, q) -> CombatState.prior(s, k.isExplosive(), k.isRanged(), q);
+        return knowledge(name).combatPrior;
     }
 
     public int chooseCombat(String type, int state, int mask) {
@@ -531,7 +530,7 @@ public final class Brain {
         float target = r;
         if (!terminal) {
             int mask = nextMask == 0 ? (1 << table.actions()) - 1 : nextMask;
-            target += gamma * QTable.max(table.get(s2, prior), mask);
+            target += gamma * QTable.max(s2 == s ? e : table.get(s2, prior), mask);
         }
         double base = Config.get(Config.LEARNING_RATE, 0.25);
         float alpha = (float) Math.max(0.02, base / Math.sqrt(1.0 + e.n[a] * 0.05)) * weight;
