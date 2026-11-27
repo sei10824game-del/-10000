@@ -130,4 +130,31 @@ public final class CombatGroundTests {
         });
     }
 
+
+    @AfterBatch(batch="vertical-rescue") public static void cleanRescue(ServerLevel level){cleanup(level);TeamDefense.clear();}
+    @GameTest(template="arena",batch="vertical-rescue",timeoutTicks=500)
+    public static void reinforcementClimbsLadderToAttackedAlly(GameTestHelper h){
+        arena(h);
+        // No straight walking route: a solid upper floor with a single ladder opening.
+        for(int x=1;x<18;x++)for(int z=1;z<18;z++)h.setBlock(new BlockPos(x,7,z),Blocks.STONE);
+        for(int y=2;y<=7;y++){
+            h.setBlock(new BlockPos(9,y,7),Blocks.STONE);
+            h.getLevel().setBlock(h.absolutePos(new BlockPos(8,y,7)),
+                Blocks.LADDER.defaultBlockState().setValue(net.minecraft.world.level.block.LadderBlock.FACING,net.minecraft.core.Direction.WEST),3);
+        }
+        var helper=actor(h,6,7,false);var victim=actor(h,11,7,false);
+        Vec3 upper=h.absoluteVec(new Vec3(11.5,8,7.5));
+        victim.teleportTo(upper.x,upper.y,upper.z);victim.setOnGround(true);
+        var foe=h.spawn(EntityType.HUSK,new Vec3(13.5,8,7.5));foe.setNoAi(true);MOBS.add(foe.getUUID());
+        helper.getInventory().setItem(0,new ItemStack(Items.IRON_SWORD));helper.getInventory().selected=0;
+        helper.setAiEnabled(true);helper.setYRot(-90);helper.setYHeadRot(-90);
+        // Same notification emitted by a witnessed/nearby attack, with the victim's actual reported coordinates.
+        TeamDefense.attacked(victim,foe,h.getLevel().getGameTime(),2);
+        h.assertTrue(helper.controller().defense().rescuePending(h.getLevel().getGameTime()),"ally attack above is an actionable rescue");
+        h.succeedWhen(()->{
+            h.assertTrue(helper.getY()>=upper.y-.15,"helper physically climbed to upper floor: "+helper.position()+" "+helper.controller().defense().report());
+            h.assertTrue(helper.position().distanceTo(upper)<5,"helper reached the ally, not just its horizontal coordinates");
+        });
+    }
+
 }
