@@ -17,7 +17,7 @@ public final class TeamDefense {
     public int alerts,joins,regroups;public String debug="";
     public TeamDefense(ClonePlayer self,Perception perception,Motor motor){this.self=self;this.perception=perception;this.motor=motor;this.rescueRoute=new RescueRoute(self,motor);}
     public static void clear(){CALLS.clear();}
-    public boolean rescuePending(long now){return rescueVictim!=null&&rescueVictim!=self&&rescueVictim.isAlive()&&!rescueVictim.isRemoved()&&rescueVictim.level()==self.level()&&rescuePosition!=null&&now<alertUntil&&alerted!=null&&alerted.isAlive()&&alerted.level()==self.level()&&self.position().distanceToSqr(rescuePosition)<32*32&&rescuePosition.y-self.getY()>2.5;}
+    public boolean rescuePending(long now){return rescueVictim!=null&&rescueVictim!=self&&rescueVictim.isAlive()&&!rescueVictim.isRemoved()&&rescueVictim.level()==self.level()&&rescuePosition!=null&&now<alertUntil&&alerted!=null&&alerted.isAlive()&&alerted.level()==self.level()&&self.position().distanceToSqr(rescuePosition)<32*32&&(rescuePosition.y-self.getY()>2.5||rescueRoute.active());}
     public boolean rescueFor(Entity e,long now){return e==alerted&&rescuePending(now);}
     public boolean rescueTick(long now){if(!rescuePending(now)){rescueRoute.reset();return false;}return rescueRoute.tick(rescuePosition,now);}
     public boolean navigateHelp(Vec3 position,long now){return rescueRoute.tick(position,now);}
