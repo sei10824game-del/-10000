@@ -1202,6 +1202,7 @@ public final class Crafting {
 
     // Only exact, simple vanilla smelting recipes can be classified by input Item.
     // Custom Forge recipes/ingredients and ambiguous matches keep vanilla lookup semantics.
+    public static void invalidateSmeltingIndex(){smeltingOwner=null;smeltingIndex=null;}
     private static Object smeltingOwner;
     private static long smeltingGeneration = Long.MIN_VALUE;
     private static java.util.Map<Item, List<SmeltingRecipe>> smeltingIndex;
