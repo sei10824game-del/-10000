@@ -48,4 +48,30 @@ class StairGeometryTest {
         assertTrue(StairFootprint.space(20,-20,0,1,0,20,true,false));
         assertTrue(StairFootprint.tread(20,-21,0,1,0,20));
     }
+    @Test void columnProximityMatchesOldStepScan() {
+        Random random = new Random(10824);
+        BlockPos top = new BlockPos(-37, 100, 89);
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            for (int steps : new int[]{-2, -1, 0, 1, 16, 150, 384}) {
+                for (int n = 0; n < 5000; n++) {
+                    int along = random.nextInt(Math.max(steps, 0) + 15) - 7;
+                    int side = random.nextInt(11) - 5;
+                    int dy = -along + random.nextInt(15) - 7;
+                    BlockPos p = top.relative(dir, along).relative(dir.getClockWise(), side).above(dy);
+                    boolean expected = false;
+                    for (int i = 0; i <= steps + 1; i++) {
+                        BlockPos c = top.relative(dir, i).below(i);
+                        if (c.getY() <= p.getY() && Math.abs(c.getX() - p.getX()) <= 2
+                                && Math.abs(c.getZ() - p.getZ()) <= 2) {
+                            expected = true;
+                            break;
+                        }
+                    }
+                    assertEquals(expected, StairFootprint.nearColumn(p.getX() - top.getX(),
+                            p.getY() - top.getY(), p.getZ() - top.getZ(),
+                            dir.getStepX(), dir.getStepZ(), steps));
+                }
+            }
+        }
+    }
 }
