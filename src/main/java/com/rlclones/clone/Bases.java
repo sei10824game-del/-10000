@@ -328,10 +328,17 @@ public class Bases extends SavedData {
             if (s.dimension != dim) {
                 continue;
             }
-            for (int i = 0; i <= s.steps() + 1; i++) {
-                BlockPos c = s.top.relative(s.dir, i).below(i);
-                if (c.getY() <= top.getY() && Math.abs(c.getX() - top.getX()) <= 2 && Math.abs(c.getZ() - top.getZ()) <= 2) {
-                    return true;
+            if (s.dir.getAxis().isHorizontal()) {
+                if (com.rlclones.ai.util.StairFootprint.nearColumn(top.getX() - s.top.getX(),
+                        top.getY() - s.top.getY(), top.getZ() - s.top.getZ(),
+                        s.dir.getStepX(), s.dir.getStepZ(), s.steps())) return true;
+            } else {
+                // Preserve legacy behavior for non-horizontal records loaded from saves.
+                for (int i = 0; i <= s.steps() + 1; i++) {
+                    BlockPos c = s.top.relative(s.dir, i).below(i);
+                    if (c.getY() <= top.getY() && Math.abs(c.getX() - top.getX()) <= 2 && Math.abs(c.getZ() - top.getZ()) <= 2) {
+                        return true;
+                    }
                 }
             }
         }
