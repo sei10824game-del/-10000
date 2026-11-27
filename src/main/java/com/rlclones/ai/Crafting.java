@@ -55,6 +55,7 @@ import java.util.Optional;
  * results / furnace inputs are moved with shift-clicks. Tables and furnaces are placed like any block.
  */
 public final class Crafting {
+    private static final Direction[] ALL_DIRECTIONS = Direction.values();
     public enum Status {WORKING, DONE}
 
     private static final Item[] SWORDS = {Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD, Items.WOODEN_SWORD};
@@ -1704,7 +1705,7 @@ public final class Crafting {
 
     /** No water or lava touching the block (taking it out would let it run). */
     private static boolean quietBehind(ServerLevel level, BlockPos p) {
-        for (Direction d : Direction.values()) {
+        for (Direction d : ALL_DIRECTIONS) {
             if (!level.getFluidState(p.relative(d)).isEmpty()) {
                 return false;
             }
