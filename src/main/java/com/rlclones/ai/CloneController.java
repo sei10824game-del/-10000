@@ -77,6 +77,10 @@ public final class CloneController {
     private final Animals animals;
     private final Fishing fishing;
     private final Explosives explosives;
+    private final SizeTactics sizeTactics;
+    private final AnchorAttack anchorAttack;
+    private final AnvilWork anvilWork;
+    private final EndEyeSearch endEyeSearch;
     private final Travel travel;
     private final Perch perch;
     private final BoatTrap boatTrap;
@@ -231,6 +235,10 @@ public final class CloneController {
         this.animals = new Animals(self, motor, perception);
         this.fishing = new Fishing(self, motor);
         this.explosives = new Explosives(self, motor, perception);
+        this.sizeTactics = new SizeTactics(self, motor);
+        this.anchorAttack = new AnchorAttack(self, motor, explosives);
+        this.anvilWork = new AnvilWork(self, motor);
+        this.endEyeSearch = new EndEyeSearch(self, motor, perception);
         this.travel = new Travel(self, motor, consumables);
         this.perch = new Perch(self, motor, perception);
         this.boatTrap = new BoatTrap(self, motor);
@@ -457,8 +465,14 @@ public final class CloneController {
         target = null;
         motor.resetStuck();
         motor.clearPath();
+        sizeTactics.reset(); anchorAttack.reset(); endEyeSearch.reset();
         portals.onArrived(from, now());
     }
+
+    public SizeTactics sizeTactics(){return sizeTactics;}
+    public AnchorAttack anchorAttack(){return anchorAttack;}
+    public AnvilWork anvilWork(){return anvilWork;}
+    public EndEyeSearch endEyeSearch(){return endEyeSearch;}
 
     public Travel travel() {
         return travel;
@@ -709,6 +723,8 @@ public final class CloneController {
         watchTells(now);
         boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
         boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || pits.tick(now, option) || persona.tick(now, option, threatened) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        if (!itemBusy && !escaping && option != Option.FIGHT) itemBusy = sizeTactics.recover(now);
+        if (!itemBusy && !escaping && option == Option.FIGHT) itemBusy = anchorAttack.tick(target, now);
         if (!itemBusy && !escaping && option != Option.ANIMALS) {
             itemBusy = explosives.tick(now, option == Option.FIGHT ? target : null);
         }
@@ -720,6 +736,10 @@ public final class CloneController {
         }
         if (!itemBusy) {
             itemBusy = portals.travelTick(now, threatened); // out of the portal we came through / home from the Nether
+        }
+        if (!itemBusy && !escaping && !threatened && option != Option.FIGHT && option != Option.FLEE && option != Option.PORTAL) {
+            itemBusy = anvilWork.tick(now);
+            if (!itemBusy) itemBusy = endEyeSearch.tick(now);
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
             travel.threatened = threatened;
@@ -2503,6 +2523,7 @@ public final class CloneController {
         expedition.abandon();
         storage.reset();
         perch.reset();
+        sizeTactics.reset(); anchorAttack.reset(); endEyeSearch.reset();
         boatTrap.reset();
         portals.reset();
         cleanTarget = null;
@@ -3540,6 +3561,10 @@ public final class CloneController {
             }
         }
         if(!hunt&&target!=null&&now>=forceFightUntil&&defense.regroup(target,now)){if(action!=null)closeCombatStep(false,false);return false;}
+        if(!hunt&&target!=null&&forcedAction==null&&sizeTactics.tick(target,now)) {
+            if(action!=null)closeCombatStep(false,false);
+            return false;
+        }
         if(!hunt&&target!=null){
             boolean tactical=ground.tick(target,now);
             if(ground.cancelAction&&action!=null)closeCombatStep(false,false);
