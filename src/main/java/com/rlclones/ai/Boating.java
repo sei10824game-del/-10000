@@ -22,6 +22,9 @@ public final class Boating {
     private enum State {NONE, DEPLOY, BREAK, FETCH}
 
     private static final double MAX_SPEED = 0.35;
+    private static final double ICE_SPEED = 0.65;
+    private boolean iceTrip;
+    public int iceTrips;
 
     private final ServerPlayer self;
     private final Motor motor;
@@ -89,14 +92,39 @@ public final class Boating {
             default -> {
             }
         }
-        // a long swim ahead and a boat in the bag: use it
-        if (self.isInWater() && !self.isUnderWater() && cooldown <= 0 && Motor.horizontalDistance(self.position(), goal) > 6
-                && boatSlot(self) >= 0) {
+        // A long swim or a broad ice route ahead; use the actual held boat.
+        double distance=Motor.horizontalDistance(self.position(),goal);
+        if (cooldown <= 0 && distance > 6 && boatSlot(self) >= 0 && !self.isPassenger()
+                && com.rlclones.clone.CloneMobs.canUseHands(self)) {
+            iceTrip=self.onGround()&&distance>12&&Math.abs(goal.y-self.getY())<2&&onIce(self)&&iceRoute(self.position(),goal,5);
+            if(!(self.isInWater()&&!self.isUnderWater())&&!iceTrip)return false;
             state = State.DEPLOY;
             stateTicks = 0;
             return deploy(goal);
         }
         return false;
+    }
+
+    public static boolean onIce(Player p) {
+        return p.level().getBlockState(net.minecraft.core.BlockPos.containing(p.getX(),p.getY()-.2,p.getZ()))
+                .is(net.minecraft.tags.BlockTags.ICE);
+    }
+
+    /** Only launch on a broad, level ice surface, not a narrow frozen ledge or a cliff. */
+    private boolean iceRoute(Vec3 at, Vec3 goal, double length) {
+        var level=self.level();
+        Vec3 dir=goal.subtract(at).multiply(1,0,1).normalize();
+        if(dir.lengthSqr()<.1)return false;
+        for(double d=0;d<=length;d+=.75){
+            Vec3 p=at.add(dir.scale(d));
+            var box=new net.minecraft.world.phys.AABB(p.x-.7,p.y+.05,p.z-.7,p.x+.7,p.y+1.9,p.z+.7);
+            if(level.getBlockCollisions(self,box).iterator().hasNext())return false;
+            for(double x:new double[]{-.6,.6})for(double z:new double[]{-.6,.6}){
+                var support=net.minecraft.core.BlockPos.containing(p.x+x,p.y-.2,p.z+z);
+                if(!level.hasChunkAt(support)||!level.getBlockState(support).is(net.minecraft.tags.BlockTags.ICE))return false;
+            }
+        }
+        return true;
     }
 
     private boolean deploy(Vec3 goal) {
@@ -110,7 +138,7 @@ public final class Boating {
         // look down at the water just ahead, like a player placing a boat
         self.setYRot(yaw);
         self.setYHeadRot(yaw);
-        self.setXRot(55f);
+        self.setXRot(iceTrip ? 40f : 55f);
         motor.stop();
         if (stateTicks >= 2) {
             motor.useHeldItem(InteractionHand.MAIN_HAND);
@@ -122,6 +150,7 @@ public final class Boating {
                     boat = b;
                     rodeBoat = true;
                     trips++;
+                    if(iceTrip)iceTrips++;
                     state = State.NONE;
                     lastPos = b.position();
                     stuck = 0;
@@ -141,8 +170,9 @@ public final class Boating {
         self.setYHeadRot(yaw);
         self.setXRot(10f);
         Vec3 before = b.position();
-        if (dist > arrive) {
-            double speed = Math.abs(diff) < 30 ? MAX_SPEED : 0.08;
+        boolean onIce=iceTrip&&iceRoute(b.position(),goal,2);
+        if (dist > arrive && (!iceTrip || onIce)) {
+            double speed = Math.abs(diff) < 30 ? (onIce ? Math.min(ICE_SPEED, Math.max(.08,dist-arrive)) : MAX_SPEED) : 0.08;
             Vec3 dir = Vec3.directionFromRotation(0f, yaw);
             b.setPaddleState(true, true);
             b.move(MoverType.SELF, new Vec3(dir.x * speed, 0, dir.z * speed));
@@ -150,7 +180,7 @@ public final class Boating {
         boolean noProgress = b.position().distanceTo(before) < 0.02;
         stuck = noProgress ? stuck + 1 : 0;
         // reached the goal, or ran onto the shore: get out
-        if (dist <= arrive + 1.0 || stuck > 10) {
+        if (dist <= arrive + 1.0 || stuck > 10 || iceTrip&&!onIce) {
             if (tripLog.length() < 300) {
                 tripLog.append(String.format(java.util.Locale.ROOT, "[out %.1f,%.1f d%.1f %s]", b.getX(), b.getZ(), dist, stuck > 10 ? "stuck" : "there"));
             }
@@ -158,6 +188,8 @@ public final class Boating {
             self.stopRiding();
             boat = b;
             state = State.BREAK;
+            if(iceTrip)cooldown=80;
+            iceTrip=false;
             stateTicks = 0;
             return true;
         }
