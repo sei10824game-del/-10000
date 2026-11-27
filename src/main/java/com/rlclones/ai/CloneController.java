@@ -5665,7 +5665,7 @@ public final class CloneController {
         }
         if (blockTicks > 240 && !motor.miningCommitted()) {
             oreWorkLearning.failed();
-            traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)) + " " + motor.mineDebug);
+            traceHarvest("timeout d=" + (int) self.getEyePosition().distanceTo(Vec3.atCenterOf(blockTarget)) + " " + motor.mineDebug());
             skipBlocks.put(blockTarget.immutable(), now());
             perception.forgetBlock(blockTarget);
             oreWorkLearning.cancel();
@@ -5795,7 +5795,7 @@ public final class CloneController {
         out.add(self.getGameProfile().getName() + " at " + p.toShortString() + " (" + level.dimension().location() + "), surface y=" + surface + ", sky " + level.canSeeSky(p.above())
                 + ", hp " + Math.round(self.getHealth()) + "/" + Math.round(self.getMaxHealth()) + ", food " + self.getFoodData().getFoodLevel() + ", food items " + FoodAid.foodItems(self));
         out.add("option " + (option == null ? "none" : option.key()) + " for " + optionTicks + " ticks; layer " + idleWhy + "; recent: " + optionLog.subList(Math.max(0, optionLog.size() - 8), optionLog.size()));
-        out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
+        out.add("stuck " + motor.stuckCount() + "; mining: " + motor.mineDebug() + "; goal " + (motor.recentGoal() == null ? "-" : new BlockPos((int) motor.recentGoal().x, (int) motor.recentGoal().y, (int) motor.recentGoal().z).toShortString()));
         out.add(motor.recoveryReport());
         out.add(oreWorkLearning.report());
         out.add(development.report());
