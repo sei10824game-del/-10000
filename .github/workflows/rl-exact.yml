@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [validation/rl-exact-base-20261128]
   workflow_dispatch:
+concurrency:
+  group: rl-exact-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -18,7 +21,7 @@ jobs:
         include:
           - ref: 7387f71923d14bc2d7d04943dcd740968b315b0c
             label: baseline
-          - ref: 431945326eddec83384f496fb512650f5bf6947a
+          - ref: cdf9861f31148eec166998ef6a07d0b989eee64e
             label: candidate
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +67,7 @@ jobs:
         run: |
           python3 scripts/compare-population.py \
             --baseline 7387f71923d14bc2d7d04943dcd740968b315b0c \
-            --candidate 431945326eddec83384f496fb512650f5bf6947a \
+            --candidate cdf9861f31148eec166998ef6a07d0b989eee64e \
             --counts 100 300 --ticks 2400 --repeats 2 --timeout 4500 \
             --seed "${{ matrix.seed }}" --output "$RUNNER_TEMP/rl-exact-confirmation"
       - name: Report measurements
@@ -84,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 431945326eddec83384f496fb512650f5bf6947a
+          ref: cdf9861f31148eec166998ef6a07d0b989eee64e
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
