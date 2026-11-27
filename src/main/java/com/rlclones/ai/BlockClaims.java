@@ -18,8 +18,10 @@ public final class BlockClaims {
         if(now<c.at()||now-c.at()>(c.state()==null?60:2))return false;
         if(c.active()==null)return true;
         var player=c.active().get();
-        return player!=null&&player.isAlive()&&!player.isRemoved()&&player.level()==key.level()
-                && (c.state()==null || key.level().hasChunkAt(BlockPos.of(key.pos())) && key.level().getBlockState(BlockPos.of(key.pos()))==c.state());
+        if(player==null||!player.isAlive()||player.isRemoved()||player.level()!=key.level())return false;
+        if(c.state()==null)return true;
+        BlockPos pos=BlockPos.of(key.pos());
+        return key.level().hasChunkAt(pos)&&key.level().getBlockState(pos)==c.state();
     }
     public static boolean takenByOther(Level level,BlockPos pos,UUID me,long now) {
         return takenByOther(new Key(level,pos.asLong()),me,now);
@@ -43,14 +45,23 @@ public final class BlockClaims {
     public static boolean claim(Level level,BlockPos pos,UUID me,long now) {
         Key key=new Key(level,pos.asLong());if(takenByOther(key,me,now)||!room(key,now))return false;
         var old=CLAIMS.get(key);
-        var owner=level.getServer()==null?null:level.getServer().getPlayerList().getPlayer(me);
-        CLAIMS.put(key,new Claim(me,now,old==null?(owner==null?null:new WeakReference<>(owner)):old.active(),old==null?null:old.state()));return true;
+        if(old!=null){
+            // Identical renewals in one tick need no allocation or player-list lookup.
+            if(old.at()!=now)CLAIMS.put(key,new Claim(me,now,old.active(),old.state()));
+        }else{
+            var owner=level.getServer()==null?null:level.getServer().getPlayerList().getPlayer(me);
+            CLAIMS.put(key,new Claim(me,now,owner==null?null:new WeakReference<>(owner),null));
+        }
+        return true;
     }
     public static boolean active(Level level,BlockPos pos,ServerPlayer player,long now) {
         Key key=new Key(level,pos.asLong());if(takenByOther(key,player.getUUID(),now)||!room(key,now))return false;
         var previous=CLAIMS.get(key);
         var ref=previous!=null&&previous.active()!=null&&previous.active().get()==player?previous.active():new WeakReference<>(player);
-        CLAIMS.put(key,new Claim(player.getUUID(),now,ref,level.getBlockState(pos)));return true;
+        var state=level.getBlockState(pos);
+        if(previous==null||previous.at()!=now||previous.active()!=ref||previous.state()!=state)
+            CLAIMS.put(key,new Claim(player.getUUID(),now,ref,state));
+        return true;
     }
     public static void human(ServerPlayer player,BlockPos pos) {
         var key=new Key(player.level(),pos.asLong());var old=HUMAN_POS.get(player.getUUID());
