@@ -18,6 +18,24 @@ import net.minecraft.world.phys.Vec3;
 
 /** While fleeing along a narrow bridge, erect a two-high wall behind us, then continue along the deck. */
 public final class BridgeRetreat {
+    // World identity matters: equal block coordinates in the Nether and Overworld are different walls.
+    private record WallMark(BlockState state,long at){}
+    private static final java.util.Map<ServerLevel,java.util.Map<BlockPos,WallMark>> WALLS=new java.util.WeakHashMap<>();
+    private static void remember(ServerLevel level,BlockPos cell,long now){
+        var map=WALLS.computeIfAbsent(level,k->new java.util.HashMap<>());
+        if(map.size()>=1024)map.entrySet().removeIf(e->now-e.getValue().at()>12000);
+        if(map.size()<1024)map.put(cell.immutable(),new WallMark(level.getBlockState(cell),now));
+    }
+    public static boolean removable(ServerLevel level,BlockPos cell,long now){
+        var map=WALLS.get(level);if(map==null)return false;
+        WallMark mark=map.get(cell);if(mark==null)return false;
+        if(level.getBlockState(cell)!=mark.state()||now-mark.at()>12000||now<mark.at()){map.remove(cell);return false;}
+        return now-mark.at()>=200;
+    }
+    public static void forget(ServerLevel level,BlockPos cell){
+        var map=WALLS.get(level);if(map!=null)map.remove(cell);
+    }
+
     private final ClonePlayer self;
     private final Motor motor;
     private BlockPos wall,stand,exit;
@@ -148,7 +166,7 @@ public final class BridgeRetreat {
         if(motor.placeBlockAt(cell)&&level().getBlockState(cell).isCollisionShapeFullBlock(level(),cell)){
             blocksPlaced++;
             placed.put(cell.immutable(),level().getBlockState(cell));
-            Motor.PLUGS.put(cell.immutable(),now);
+            remember(level(),cell,now);
             if(++next==plan.size()){
                 wallsBuilt++;retreats++;retreating=true;deadline=now+50;
                 motor.sneak(false);motor.movePrecisely(Vec3.atBottomCenterOf(exit));
