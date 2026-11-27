@@ -183,4 +183,38 @@ public final class GearRecipeTests {
         h.succeed();
     }
 
+
+    @GameTest(template="arena",batch="gear-reload",timeoutTicks=60)
+    public static void wornToolSingleScanMatchesOriginalAfterDirectStackEdits(GameTestHelper h) {
+        var c=clone(h);
+        Item[][] kinds={
+            {Items.DIAMOND_PICKAXE,Items.IRON_PICKAXE,Items.STONE_PICKAXE,Items.WOODEN_PICKAXE},
+            {Items.DIAMOND_AXE,Items.IRON_AXE,Items.STONE_AXE,Items.WOODEN_AXE},
+            {Items.DIAMOND_SWORD,Items.IRON_SWORD,Items.STONE_SWORD,Items.WOODEN_SWORD}
+        };
+        var rng=new java.util.Random(10824);
+        for(int trial=0;trial<256;trial++){
+            if(trial%8==0)c.getInventory().clearContent();
+            for(int n=0;n<4;n++){
+                Item item=kinds[rng.nextInt(kinds.length)][rng.nextInt(4)];
+                var stack=new ItemStack(item);
+                if(rng.nextBoolean())stack.setDamageValue(stack.getMaxDamage()-1);
+                c.getInventory().items.set(rng.nextInt(36),rng.nextBoolean()?stack:ItemStack.EMPTY);
+            }
+            var existing=c.getInventory().items.get(rng.nextInt(36));
+            if(existing.isDamageableItem())existing.setDamageValue(rng.nextBoolean()?0:existing.getMaxDamage()-1);
+            List<Item> expected=new ArrayList<>(List.of(Items.SHIELD)),actual=new ArrayList<>(expected);
+            for(Item[] kind:kinds)for(Item item:kind){
+                boolean has=false,sound=false;
+                for(ItemStack stack:c.getInventory().items)if(stack.is(item)){
+                    has=true;sound|=!Equipment.worn(stack);
+                }
+                if(has){if(!sound)expected.add(0,item);break;}
+            }
+            Crafting.addWornReplacements(c,actual);
+            h.assertTrue(expected.equals(actual),"worn replacement order and in-place inventory changes match at trial "+trial);
+        }
+        h.succeed();
+    }
+
 }
