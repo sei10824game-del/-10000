@@ -152,8 +152,7 @@ public final class Perception {
         double reach = full ? range : NEAR;
         java.util.function.Predicate<Entity> wanted = e -> e.isAlive() && !e.isSpectator()
                 && (e instanceof LivingEntity || e instanceof ItemEntity || e instanceof PrimedTnt || e instanceof net.minecraft.world.entity.AreaEffectCloud
-                || isRetrievable(e))
-                && e.getBoundingBox().getCenter().distanceToSqr(eye) <= reach * reach;
+                || isRetrievable(e));
         candidates.clear();
         if (full) farSeen.clear();
         for (Entity e : level.getEntities(self, self.getBoundingBox().inflate(reach), wanted)) {
@@ -222,6 +221,9 @@ public final class Perception {
         }
         Prof.add(Prof.P_BLOCKS, pb);
     }
+
+    private static final double[] LIGHT_FACTORS = new double[16];
+    static {for(int i=0;i<LIGHT_FACTORS.length;i++)LIGHT_FACTORS[i]=0.35+0.65*Math.pow(i/15.0,0.7);}
 
     /** Reject off-screen candidates before the bounded LOS budget; keep farSeen unfiltered
      * so turning the head still finds distant entities between full queries. */
@@ -327,7 +329,7 @@ public final class Perception {
             return 1.0;
         }
         int light = self.level().getMaxLocalRawBrightness(e.blockPosition());
-        return 0.35 + 0.65 * Math.pow(light / 15.0, 0.7);
+        return light>=0&&light<LIGHT_FACTORS.length?LIGHT_FACTORS[light]:0.35+0.65*Math.pow(light/15.0,0.7);
     }
 
     public boolean inFov(Vec3 eye, Vec3 point, double radius, double dist) {
