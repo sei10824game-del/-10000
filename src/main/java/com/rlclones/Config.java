@@ -4,6 +4,7 @@ import net.minecraftforge.common.ForgeConfigSpec;
 
 public final class Config {
     public static final ForgeConfigSpec SPEC;
+    public static final ForgeConfigSpec.BooleanValue PARALLEL_BRAIN_SAVE;
 
     public static final ForgeConfigSpec.IntValue MAX_CLONES;
     public static final ForgeConfigSpec.BooleanValue OPS_ONLY;
@@ -60,6 +61,9 @@ public final class Config {
         ALLOW_BLOCK_PLACING = b.comment("Clones may place blocks (pillar up to escape).").define("allowBlockPlacing", true);
         b.pop();
 
+        b.push("performance");
+        PARALLEL_BRAIN_SAVE = b.comment("Compress detached brain snapshots on up to four workers. World and learning updates stay on the server thread.").define("parallelBrainSave", true);
+        b.pop();
         SPEC = b.build();
     }
 
