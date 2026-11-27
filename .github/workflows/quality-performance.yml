@@ -1,0 +1,61 @@
+name: Quality-preserving optimization comparisons
+on:
+  push:
+    branches: [optimization/quality-preserving-20261127]
+    paths: [.github/workflows/quality-performance.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - count: 100
+            ticks: 2400
+            repeats: 3
+            timeout: 3000
+          - count: 300
+            ticks: 2400
+            repeats: 3
+            timeout: 3000
+          - count: 100
+            ticks: 7200
+            repeats: 2
+            timeout: 4500
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare same feature baseline with exact optimization commit
+        run: |
+          python3 scripts/compare-population.py \
+            --baseline 9e65a251d22b0abb3ff96207e8271bf8b4081cbb \
+            --candidate 2897d8a22c5aac74f94ee283ab04306510849193 \
+            --counts ${{ matrix.count }} --ticks ${{ matrix.ticks }} \
+            --repeats ${{ matrix.repeats }} --timeout ${{ matrix.timeout }} \
+            --seed rlclones --output "$RUNNER_TEMP/population-results"
+      - name: Report comparison
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/population-results/comparison.csv"
+          if test -f "$report"; then
+            cat "$report"
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-${{ matrix.count }}-${{ matrix.ticks }}
+          path: ${{ runner.temp }}/population-results/
+          if-no-files-found: warn
