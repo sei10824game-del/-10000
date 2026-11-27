@@ -3294,7 +3294,16 @@ public final class CloneController {
     public int glassBreaches;
     @Nullable
     private BlockPos fightSecond;
-    public String fightDebug = "";
+    private boolean fightDebugSet, fightDebugVisible;
+    private double fightDebugDistance, fightDebugBest;
+    private long fightDebugSince;
+    private int fightDebugDigs;
+
+    /** Format the last recorded fight state only when a diagnostic consumer asks for it. */
+    public String fightDebug() {
+        return fightDebugSet ? String.format("d=%.1f best=%.1f since=%d vis=%s digs=%d",
+                fightDebugDistance,fightDebugBest,fightDebugSince,fightDebugVisible,fightDebugDigs) : "";
+    }
     private int lastFightId = -1;
     private long lastFightAt;
     /** Fights given up because the enemy could not be got at (tests, soak). */
@@ -3377,7 +3386,8 @@ public final class CloneController {
                 fightBest = d;
                 fightBestAt = now;
             }
-            fightDebug = String.format("d=%.1f best=%.1f since=%d vis=%s digs=%d", d, fightBest, now - fightBestAt, perception.isVisible(target), fightDigs);
+            fightDebugSet=true;fightDebugDistance=d;fightDebugBest=fightBest;
+            fightDebugSince=now-fightBestAt;fightDebugVisible=perception.isVisible(target);fightDebugDigs=fightDigs;
             if (d > 2.5 && d <= 24 && now % 10 == 0) {
                 // seen, but no way to it on foot (behind a wall, through a window): after 2 seconds of that the wall is dug, instead of building towers to look over it
                 fightBlocked = motor.obstruction(target.blockPosition().above()) != null && motor.pathTo(target.position()) == null ? fightBlocked + 10 : 0;
