@@ -82,6 +82,7 @@ public final class CloneController {
     private final BridgeRetreat bridgeRetreat;
     private final AnchorAttack anchorAttack;
     private final AnvilWork anvilWork;
+    private final EnchantingWork enchantingWork;
     private final EndEyeSearch endEyeSearch;
     private final Travel travel;
     private final Perch perch;
@@ -242,6 +243,7 @@ public final class CloneController {
         this.bridgeRetreat = new BridgeRetreat(self, motor);
         this.anchorAttack = new AnchorAttack(self, motor, explosives);
         this.anvilWork = new AnvilWork(self, motor);
+        this.enchantingWork = new EnchantingWork(self, motor);
         this.endEyeSearch = new EndEyeSearch(self, motor, perception);
         this.travel = new Travel(self, motor, consumables);
         this.perch = new Perch(self, motor, perception);
@@ -478,6 +480,7 @@ public final class CloneController {
     public BridgeRetreat bridgeRetreat(){return bridgeRetreat;}
     public AnchorAttack anchorAttack(){return anchorAttack;}
     public AnvilWork anvilWork(){return anvilWork;}
+    public EnchantingWork enchantingWork(){return enchantingWork;}
     public EndEyeSearch endEyeSearch(){return endEyeSearch;}
 
     public Travel travel() {
@@ -746,6 +749,7 @@ public final class CloneController {
         }
         if (!itemBusy && !escaping && !threatened && option != Option.FIGHT && option != Option.FLEE && option != Option.PORTAL) {
             itemBusy = anvilWork.tick(now);
+            if (!itemBusy) itemBusy = enchantingWork.tick(now);
             if (!itemBusy) itemBusy = endEyeSearch.tick(now);
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
