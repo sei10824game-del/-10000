@@ -56,11 +56,12 @@ public final class EndEyeSearch {
             if(now>=until||motor.stuckCount()>5||Motor.horizontalDistance(self.position(),goal)<2){goal=null;retryAt=now+60;return false;}
             motor.navigate(goal,2,false);return true;
         }
-        if(now<retryAt||!self.onGround()||self.isUsingItem()||!self.serverLevel().canSeeSky(self.blockPosition().above()))return false;
+        if(now<retryAt||!self.onGround()||self.isUsingItem())return false;
         if(self.getInventory().countItem(Items.ENDER_EYE)<6)return false;
         retryAt=now+160;
         BlockPos frame=visibleFrame();
         if(frame!=null){portal=frame;framesFound++;return false;}
+        if(!self.serverLevel().canSeeSky(self.blockPosition().above()))return false;
         var level=self.serverLevel();
         var area=self.getBoundingBox().inflate(5);
         var previous=new HashSet<Integer>();
