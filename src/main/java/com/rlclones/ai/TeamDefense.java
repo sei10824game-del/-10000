@@ -9,6 +9,8 @@ import java.util.*;
 /** Local witnessed combat interrupts work; dangerous enemies are met together rather than one at a time. */
 public final class TeamDefense {
     private static final Map<UUID,Long> CALLS=new LinkedHashMap<>();
+    private record Notice(UUID victim,UUID attacker){}
+    private static final Map<Notice,Long> NOTICES=new LinkedHashMap<>();
     private final ClonePlayer self;private final Perception perception;private final Motor motor;
     private ClonePlayer rescueVictim;
     private Vec3 rescuePosition;
@@ -16,7 +18,7 @@ public final class TeamDefense {
     private Entity alerted,stageEnemy,intent;private long alertUntil,stageCheck,intentAt=Long.MIN_VALUE;private int ready,required;private Vec3 rallyGoal;
     public int alerts,joins,regroups;public String debug="";
     public TeamDefense(ClonePlayer self,Perception perception,Motor motor){this.self=self;this.perception=perception;this.motor=motor;this.rescueRoute=new RescueRoute(self,motor);}
-    public static void clear(){CALLS.clear();}
+    public static void clear(){CALLS.clear();NOTICES.clear();}
     public boolean rescuePending(long now){return rescueVictim!=null&&rescueVictim!=self&&rescueVictim.isAlive()&&!rescueVictim.isRemoved()&&rescueVictim.level()==self.level()&&rescuePosition!=null&&now<alertUntil&&alerted!=null&&alerted.isAlive()&&alerted.level()==self.level()&&self.position().distanceToSqr(rescuePosition)<32*32&&(rescuePosition.y-self.getY()>2.5||rescueRoute.active());}
     public boolean rescueFor(Entity e,long now){return e==alerted&&rescuePending(now);}
     public boolean rescueTick(long now){if(!rescuePending(now)){rescueRoute.reset();return false;}return rescueRoute.tick(rescuePosition,now);}
@@ -36,8 +38,19 @@ public final class TeamDefense {
         if(attacker==null||attacker==victim||!attacker.isAlive()||Senses.isAllyOf(attacker,victim)||com.rlclones.clone.CloneMobs.playerSide(attacker))return;
         if(CALLS.containsKey(attacker.getUUID())&&now-CALLS.get(attacker.getUUID())<10)return;
         if(CALLS.size()>=256)CALLS.remove(CALLS.keySet().iterator().next());CALLS.put(attacker.getUUID(),now);
+        boolean published=false;
         for(Player p:victim.level().players())if(p instanceof ClonePlayer c&&c.isAiEnabled()&&Senses.isAllyOf(c,victim)&&c.distanceToSqr(victim)<24*24){
             if(c!=victim&&c.distanceToSqr(victim)>8*8&&!c.controller().perception().canSee(attacker)&&!(c.distanceToSqr(victim)<16*16&&c.controller().perception().canSee(victim))&&!(victim.getY()-c.getY()>2.5&&c.distanceToSqr(victim)<16*16))continue;
+            if(c!=victim&&!published){
+                published=true;
+                Notice key=new Notice(victim.getUUID(),attacker.getUUID());Long previous=NOTICES.get(key);
+                if(previous==null||now<previous||now-previous>=100){
+                    var pos=victim.blockPosition();
+                    Chat.publish(victim,net.minecraft.network.chat.Component.literal("敵と交戦中！ "+pos.toShortString()+" に応援を頼む。敵: ").append(attacker.getType().getDescription()),"DEFENSE "+pos.getX()+" "+pos.getY()+" "+pos.getZ()+" "+Perception.typeId(attacker));
+                    if(NOTICES.size()>=256&&!NOTICES.containsKey(key))NOTICES.remove(NOTICES.keySet().iterator().next());
+                    NOTICES.put(key,now);
+                }
+            }
             if(c!=victim&&amount>0)c.getCloneBrain().knowledge(Perception.typeId(attacker)).receivedDamage.add(amount);
             var defense=c.controller().defense();defense.intentAt=Long.MIN_VALUE;defense.alerted=attacker;defense.alertUntil=now+(victim.getY()-c.getY()>2.5?400:100);defense.rescueVictim=victim;defense.rescuePosition=victim.position();defense.alerts++;
             c.controller().perception().hear(attacker,attacker.position(),now);
