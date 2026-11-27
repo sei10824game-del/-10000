@@ -130,6 +130,27 @@ public final class Motor {
     private ServerLevel breakingLevel;
     private long lastMineCall=Long.MIN_VALUE;
     private float breakProgress;
+    private BlockState breakingState;
+    private long lastProgressAt = Long.MIN_VALUE;
+
+    /** An actual, still viable block break, not merely an attempted swing or navigation target. */
+    public boolean miningCommitted() {
+        long now = self.level().getGameTime();
+        return breakingPos != null && breakingLevel == self.level() && breakProgress > 0
+                && now >= lastMineCall && now - lastMineCall <= 1
+                && now >= lastProgressAt && now - lastProgressAt <= 20
+                && self.isAlive() && !self.isRemoved()
+                && Config.get(Config.ALLOW_BLOCK_BREAKING, true)
+                && breakingLevel.hasChunkAt(breakingPos)
+                && breakingLevel.getBlockState(breakingPos) == breakingState
+                && !BlockClaims.takenByOther(breakingLevel, breakingPos, self.getUUID(), now);
+    }
+
+    public boolean miningCommitted(BlockPos pos) { return pos != null && pos.equals(breakingPos) && miningCommitted(); }
+
+    public boolean committedWorkObstruction(BlockPos goal) {
+        return goal != null && goal.equals(accessGoal) && miningCommitted(accessBlock);
+    }
     private int breakStage = -1;
 
     private final Boating boating;
@@ -908,7 +929,7 @@ public final class Motor {
         }
         if(!canClearWorkBlock(p)){accessBlock=null;return false;}
         accessGoal=key;accessBlock=p;
-        if(++accessTicks>180||accessBlocks>=8)return false;
+        if ((++accessTicks > 180 && !miningCommitted(p)) || accessBlocks >= 8) return false;
         var bases=com.rlclones.clone.Bases.get(self.getServer());boolean restore=bases.isStairTread(self.level().dimension(),p)||bases.nearest(self.level().dimension(),Vec3.atCenterOf(p),8)!=null;
         stop();cancelJump();Equipment.select(self,Equipment.bestToolSlot(self,self.level().getBlockState(p)));
         clearingWork=true;
@@ -954,10 +975,11 @@ public final class Motor {
             }
             Equipment.select(self, tool >= 0 ? tool : Equipment.bareSlot(self));
         }
-        if (!pos.equals(breakingPos) || breakingLevel!=level) {
+        if (!pos.equals(breakingPos) || breakingLevel!=level || breakingState != state) {
             resetMining();
             breakingPos = pos.immutable();
             breakingLevel = level;
+            breakingState = state;
         }
         if (self.isInWater() && !self.isPassenger() && !self.getAbilities().flying && dryFootingFor(pos)) {
             return false;
@@ -984,7 +1006,11 @@ public final class Motor {
         if(!BlockClaims.active(level,pos,self,lastMineCall)){resetMining();mineDebug="occupied by another miner";return false;}
         mineDebug = "progress " + String.format("%.2f", breakProgress);
         self.resetLastActionTime();
-        breakProgress += state.getDestroyProgress(self, level, pos);
+        float progress = state.getDestroyProgress(self, level, pos);
+        if (progress > 0 && Float.isFinite(progress)) {
+            breakProgress += progress;
+            lastProgressAt = lastMineCall;
+        }
         if (self.tickCount % 4 == 0) {
             self.swing(InteractionHand.MAIN_HAND);
         }
@@ -1098,6 +1124,8 @@ public final class Motor {
             BlockClaims.release(breakingLevel,breakingPos,self.getUUID());
         }
         breakingLevel=null;
+        breakingState=null;
+        lastProgressAt=Long.MIN_VALUE;
         breakingPos = null;
         breakProgress = 0;
         breakStage = -1;
