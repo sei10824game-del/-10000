@@ -164,6 +164,48 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "advancedtactics")
+    public static void bridgeWallSpansTwoLanes(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        for(int x=7;x<=8;x++)for(int z=2;z<=12;z++)h.setBlock(new BlockPos(x,4,z),Blocks.STONE);
+        Vec3 start=h.absoluteVec(new Vec3(7.5,5,7.5));
+        c.teleportTo(h.getLevel(),start.x,start.y,start.z,0f,0f);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,5,11));
+        enemy.setNoAi(true);enemy.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().bridgeRetreat().tick(enemy,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().bridgeRetreat().wallsBuilt>0,"complete two-lane wall");
+            for(int x=7;x<=8;x++)for(int y=5;y<=6;y++)
+                h.assertTrue(h.getBlockState(new BlockPos(x,y,8)).is(Blocks.COBBLESTONE),"every lane must be blocked");
+            h.assertTrue(c.position().distanceTo(start)>1.5&&c.getY()>=start.y-.1,"retreat safely");
+            enemy.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "advancedtactics")
+    public static void bridgeRetreatDoesNotTrapAlly(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        ClonePlayer ally=clone(h,7.5,9.5,0f,false);
+        c.setCloneTeam("bridge-test");ally.setCloneTeam("bridge-test");
+        for(int z=2;z<=12;z++)h.setBlock(new BlockPos(7,4,z),Blocks.STONE);
+        Vec3 start=h.absoluteVec(new Vec3(7.5,5,7.5)),friend=h.absoluteVec(new Vec3(7.5,5,9.5));
+        c.teleportTo(h.getLevel(),start.x,start.y,start.z,0f,0f);
+        ally.teleportTo(h.getLevel(),friend.x,friend.y,friend.z,0f,0f);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,5,11));
+        enemy.setNoAi(true);enemy.setTarget(c);
+        h.onEachTick(()->c.controller().bridgeRetreat().tick(enemy,h.getLevel().getGameTime()));
+        h.runAfterDelay(40,()->{
+            h.assertTrue(c.controller().bridgeRetreat().blocksPlaced==0,"do not trap a friendly clone behind the wall");
+            h.assertTrue(h.getBlockState(new BlockPos(7,5,8)).isAir(),"keep bridge open");
+            enemy.discard();finish(h,c,ally);
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
