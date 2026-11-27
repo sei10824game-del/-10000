@@ -70,4 +70,41 @@ public final class OreLearningTests {
         h.assertTrue(module.select(high,24,p->true).equals(high)&&module.report().contains("active=false"),"tool preparation remains with the existing planner");
         h.succeed();
     }
+
+    @AfterBatch(batch="mining-continuity") public static void cleanContinuity(ServerLevel level){GearRecipeTests.cleanup(level);}
+    private static void setField(Object o,String name,Object value){
+        try{var f=o.getClass().getDeclaredField(name);f.setAccessible(true);f.set(o,value);}
+        catch(ReflectiveOperationException e){throw new RuntimeException(e);}
+    }
+    @GameTest(template="arena",batch="mining-continuity",timeoutTicks=400)
+    public static void startedLogSurvivesNormalPlannerTimeout(GameTestHelper h){
+        for(var p:BlockPos.betweenClosed(new BlockPos(3,1,3),new BlockPos(12,6,12))){
+            boolean shell=p.getY()==1||p.getY()==6||p.getX()==3||p.getX()==12||p.getZ()==3||p.getZ()==12;
+            h.setBlock(p,shell?Blocks.STONE:Blocks.AIR);
+        }
+        var c=GearRecipeTests.clone(h);var feet=h.absolutePos(new BlockPos(7,2,7));
+        c.teleportTo(h.getLevel(),feet.getX()+.5,feet.getY(),feet.getZ()+.5,-90,0);
+        c.setYHeadRot(-90);c.setOnGround(true);
+        var local=new BlockPos(9,3,7);var log=h.absolutePos(local);
+        h.setBlock(local,Blocks.OAK_LOG);h.setBlock(local.above(),Blocks.OAK_LEAVES);
+        c.getInventory().setItem(0,new ItemStack(Items.WOODEN_AXE));c.getInventory().selected=0;
+        c.controller().perception().noteBlock(log);c.controller().forcedOption=Option.GATHER_WOOD;
+        c.setAiEnabled(true);
+        boolean[] stressed={false},continued={false};
+        h.onEachTick(()->{
+            var ctrl=c.controller();
+            if(!stressed[0]&&ctrl.option()==Option.GATHER_WOOD&&ctrl.motor().miningCommitted(log)){
+                setField(ctrl,"blockTicks",241);setField(ctrl,"optionTicks",Option.GATHER_WOOD.maxTicks);
+                stressed[0]=true;
+                var item=new net.minecraft.world.entity.item.ItemEntity(h.getLevel(),c.getX()-2,c.getY()+.2,c.getZ(),new ItemStack(Items.COBBLESTONE));
+                h.getLevel().addFreshEntity(item);
+            }
+            if(stressed[0]&&"mining-commit".equals(ctrl.idleWhy))continued[0]=true;
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(stressed[0]&&continued[0],"committed logging outlasts routine timeout and nearby drops");
+            h.assertTrue(h.getLevel().getBlockState(log).isAir(),"actual log destroyed after commitment");
+        });
+    }
+
 }
