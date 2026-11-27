@@ -12,10 +12,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.function.ToLongFunction;
@@ -29,6 +27,7 @@ import java.util.function.ToLongFunction;
 public final class AgentWatcher {
     private static final class Trace {
         long tick;
+        long seenInUpdate;
         Vec3 pos;
         int enemyId = -1;
         String enemyType;
@@ -45,7 +44,7 @@ public final class AgentWatcher {
     private final Supplier<Brain> brain;
     private final ToLongFunction<Entity> sinceEnemyAttack;
     private final Map<UUID, Trace> traces = new HashMap<>();
-    private final Set<UUID> seen = new HashSet<>();
+    private long updateEpoch;
     public long observedTransitions;
 
     public AgentWatcher(ServerPlayer self, Perception perception, Supplier<Brain> brain, ToLongFunction<Entity> sinceEnemyAttack) {
@@ -64,7 +63,7 @@ public final class AgentWatcher {
 
     public void update(long now) {
         int watched = 0;
-        seen.clear();
+        final long epoch = ++updateEpoch;
         float weight = (float) Config.get(Config.IMITATION_WEIGHT, 0.8);
         for (Perception.Seen s : perception.visible()) {
             if (!(s.entity instanceof ServerPlayer agent) || agent == self || agent.isSpectator()) {
@@ -73,17 +72,19 @@ public final class AgentWatcher {
             if (++watched > MAX_WATCHED) {
                 break; // (visible is nearest first: in a crowd of hundreds the nearest few are the ones worth learning from)
             }
-            seen.add(agent.getUUID());
-            Trace t = traces.get(agent.getUUID());
+            UUID id = agent.getUUID();
+            Trace t = traces.get(id);
             if (t == null) {
                 t = new Trace();
+                t.seenInUpdate = epoch;
                 t.tick = now;
                 t.pos = agent.position();
                 startStrategy(t, agent, now);
                 observeCombat(t, agent, now);
-                traces.put(agent.getUUID(), t);
+                traces.put(id, t);
                 continue;
             }
+            t.seenInUpdate = epoch;
             if (weight > 0) {
                 observeWork(agent,t.tick,now);
                 learnCombat(t, agent, now, weight);
@@ -96,7 +97,9 @@ public final class AgentWatcher {
             t.tick = now;
             t.pos = agent.position();
         }
-        traces.keySet().retainAll(seen);
+        // Keep exactly the agents visited this update, without rebuilding a HashSet of UUIDs.
+        // A generation (not game time) also handles repeated updates within a single tick.
+        traces.values().removeIf(trace -> trace.seenInUpdate != epoch);
     }
 
     private void observeWork(ServerPlayer agent,long from,long now) {
