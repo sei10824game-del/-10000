@@ -553,7 +553,7 @@ public final class Crafting {
                 && !satisfied(p, c.controller().crafting().forcedTarget)) {
             out.add(c.controller().crafting().forcedTarget);
         }
-        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot() && Boating.boatSlot(p) < 0) {
+        if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && (c.controller().swamALot() || Boating.onIce(p)) && Boating.boatSlot(p) < 0) {
             out.addAll(List.of(BOATS)); // lots of swimming lately: a boat would help
         }
         if (p instanceof com.rlclones.clone.ClonePlayer c && c.controller() != null && c.controller().swamALot()
