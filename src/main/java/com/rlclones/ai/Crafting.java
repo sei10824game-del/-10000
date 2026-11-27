@@ -590,7 +590,7 @@ public final class Crafting {
         int shovel = tierOf(p, net.minecraft.world.item.ShovelItem.class);
         for (Item it : SHOVELS) {
             if (((TieredItem) it).getTier().getLevel() > shovel && ((TieredItem) it).getTier().getLevel() <= Math.max(pick, 0) + 1
-                    && countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4 >= 12) { // (only from spare wood: the pen's gate, the table... come first)
+                    && woodUnits(p) >= 12) { // (only from spare wood: the pen's gate, the table... come first)
                 out.add(it); // dirt, sand and gravel go fast with it (stairs and shafts dig a lot of them); never a better one than the pickaxe
             }
         }
@@ -605,7 +605,7 @@ public final class Crafting {
         if (count(p, Items.GLASS) >= 3 && !hasItem(p, Items.GLASS_BOTTLE) && (hasItem(p, Items.BREWING_STAND) || brewingStandNearby(p))) {
             out.add(Items.GLASS_BOTTLE);
         }
-        int sticksAndPlanks = count(p, Items.STICK) + countTag(p, ItemTags.PLANKS) * 2 + countTag(p, ItemTags.LOGS) * 8;
+        int sticksAndPlanks = count(p, Items.STICK) + woodUnits(p) * 2;
         boolean launcher = false;
         for (ItemStack s : p.getInventory().items) {
             launcher |= Equipment.isLauncher(s);
@@ -1043,7 +1043,7 @@ public final class Crafting {
 
     /** Can this pickaxe be made right now from what is in the bag (sticks, the head material, a table here or in the bag)? */
     public static boolean makeable(Player p, Item pick) {
-        int wood = countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4;
+        int wood = woodUnits(p);
         int need = (count(p, Items.STICK) >= 2 ? 0 : 2) + (count(p, Items.CRAFTING_TABLE) > 0 || tableNearby(p) ? 0 : 4);
         if (pick == Items.WOODEN_PICKAXE) {
             need += 3;
@@ -1067,7 +1067,13 @@ public final class Crafting {
 
     /** Planks, counting each log as four. */
     public static int woodUnits(Player p) {
-        return countTag(p, ItemTags.PLANKS) + countTag(p, ItemTags.LOGS) * 4;
+        // Read the live main inventory once; the two tags are independent (a modded item can match both).
+        int units = 0;
+        for (ItemStack stack : p.getInventory().items) {
+            if (stack.is(ItemTags.PLANKS)) units += stack.getCount();
+            if (stack.is(ItemTags.LOGS)) units += stack.getCount() * 4;
+        }
+        return units;
     }
 
     /** A stone sword / axe / shovel / hoe the clone does not have a stone (or better) one of, with the cobblestone and wood for it in the bag (null = none). */
@@ -1215,7 +1221,7 @@ public final class Crafting {
             smeltUrgentAt = now; // raw iron / raw meat in the bag and a furnace to use (or a batch waiting in it): not left to chance
             return true;
         }
-        boolean tableAccess = count(self, Items.CRAFTING_TABLE) > 0 || tableNearby(self) || countTag(self, ItemTags.PLANKS) + countTag(self, ItemTags.LOGS) * 4 >= 4;
+        boolean tableAccess = count(self, Items.CRAFTING_TABLE) > 0 || tableNearby(self) || woodUnits(self) >= 4;
         if (tableAccess && now - armorUrgentAt >= 100) {
             armorUrgentAt = now;
             if (forcedTarget == null && craftableArmor(self)) return true;
