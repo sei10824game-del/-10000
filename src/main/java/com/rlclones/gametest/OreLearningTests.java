@@ -107,4 +107,32 @@ public final class OreLearningTests {
         });
     }
 
+
+    @GameTest(template="arena",batch="mining-continuity",timeoutTicks=40)
+    public static void repeatedMiningClaimsStillHonorLiveBlockChanges(GameTestHelper h){
+        var a=GearRecipeTests.clone(h);var b=GearRecipeTests.clone(h);
+        var level=h.getLevel();var pos=h.absolutePos(new BlockPos(10,3,7));
+        long now=level.getGameTime();
+        try{
+            level.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+            for(int i=0;i<32;i++){
+                h.assertTrue(BlockClaims.claim(level,pos,a.getUUID(),now),"owner can renew reservation");
+                h.assertTrue(BlockClaims.active(level,pos,a,now),"owner can renew active lease");
+                h.assertFalse(BlockClaims.claim(level,pos,b.getUUID(),now),"other clone cannot steal active lease");
+            }
+            level.setBlock(pos,Blocks.DIRT.defaultBlockState(),3);
+            h.assertTrue(BlockClaims.claim(level,pos,b.getUUID(),now),"changed block invalidates old active lease immediately");
+            h.assertTrue(BlockClaims.active(level,pos,b,now),"new owner can start mining changed block");
+            BlockClaims.human(a,pos);
+            h.assertFalse(BlockClaims.active(level,pos,b,now),"human-style mining claim takes precedence");
+            BlockClaims.humanStopped(a.getUUID());
+            h.assertTrue(BlockClaims.active(level,pos,b,now),"after human stops the clone may reclaim");
+        }finally{
+            BlockClaims.humanStopped(a.getUUID());
+            BlockClaims.release(level,pos,a.getUUID());
+            BlockClaims.release(level,pos,b.getUUID());
+        }
+        h.succeed();
+    }
+
 }
