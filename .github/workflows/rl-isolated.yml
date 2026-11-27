@@ -1,0 +1,96 @@
+name: Isolated reinforcement learning optimization comparison
+on:
+  push:
+    branches: [validation/rl-isolated-20261128]
+    paths: [.github/workflows/rl-isolated.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        candidate:
+          - {label: save, ref: 1c47254278768dca36eb897c1c4184cbb17b9a38}
+          - {label: observation, ref: d31b6fcac4e75365c9efbbd10c30387467ce7fcf}
+          - {label: q-update, ref: dd8d019c4f548c6f7be8756cab839c89ee66d7c8}
+        seed: [rlclones, rlclones-rl-exact-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare identical features with one isolated optimization
+        run: |
+          python3 scripts/compare-population.py --baseline 0936f313b4878cff2f5e96017a1baa0a886743ae \
+            --candidate "${{ matrix.candidate.ref }}" --counts 100 300 --ticks 2400 --repeats 2 \
+            --seed "${{ matrix.seed }}" --timeout 4500 --output "$RUNNER_TEMP/isolated"
+      - name: Publish results
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/isolated/comparison.csv"; then
+            cat "$RUNNER_TEMP/isolated/comparison.csv" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-${{ matrix.candidate.label }}-${{ matrix.seed }}
+          path: ${{ runner.temp }}/isolated/
+          if-no-files-found: warn
+  deterministic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        candidate:
+          - {label: save, ref: 1c47254278768dca36eb897c1c4184cbb17b9a38}
+          - {label: observation, ref: d31b6fcac4e75365c9efbbd10c30387467ce7fcf}
+          - {label: q-update, ref: dd8d019c4f548c6f7be8756cab839c89ee66d7c8}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ca6fe96fb39e517786d1ca7d105383751e1331f7
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 0936f313b4878cff2f5e96017a1baa0a886743ae
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.candidate.ref }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare exact learning traces
+        run: |
+          mkdir -p "$RUNNER_TEMP/traces"
+          testfile=src/test/java/com/rlclones/ai/brain/SeededLearningComparisonTest.java
+          for version in baseline candidate; do
+            cp "harness/$testfile" "$version/$testfile"
+            (cd "$version"; RL_EXACT_OUTPUT="$RUNNER_TEMP/traces/$version.txt" bash ./gradlew --no-daemon test)
+          done
+          diff -u "$RUNNER_TEMP/traces/baseline.txt" "$RUNNER_TEMP/traces/candidate.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exact-${{ matrix.candidate.label }}
+          path: |
+            ${{ runner.temp }}/traces/
+            baseline/build/test-results/
+            candidate/build/test-results/
+          if-no-files-found: warn
