@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Run the same real-world soak on two isolated Git revisions; no source branch is modified."""
+"""Run the same real-world soak on two isolated Git revisions (Linux/macOS, Java 17).
+No source branch is modified. Example from the repository root:
+  python3 scripts/compare-population.py --counts 100 200 300 --repeats 1 --output ../rlclones-comparison
+The probe samples Minecraft's reported average tick duration and used JVM heap,
+not raw per-tick p95 or process RSS. It runs only the soak; the full regression
+suite is a separate gate. World seed and test duration match, but AI randomness
+means repeated runs are necessary. A fresh world is used for every run.
+"""
 import argparse
 import csv
 import json
@@ -8,10 +15,29 @@ import os
 from pathlib import Path
 import re
 import statistics
+import shutil
+import signal
 import subprocess
 import tempfile
 
 SOURCE = Path("src/main/java/com/rlclones/gametest/CloneGameTests.java")
+PROBE_NAMESPACE = "rlclones_population_probe"
+PROBE = """package com.rlclones.gametest;
+
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraftforge.gametest.GameTestHolder;
+import net.minecraftforge.gametest.PrefixGameTestTemplate;
+
+@GameTestHolder("rlclones_population_probe")
+@PrefixGameTestTemplate(false)
+public final class PopulationSoakProbe {
+    @GameTest(template = "arena", timeoutTicks = 300600, batch = "population-probe")
+    public static void populationSoak(GameTestHelper h) {
+        CloneGameTests.soakHowFarCloneGetsOnItsOwn(h);
+    }
+}
+"""
 START = "public static void soakHowFarCloneGetsOnItsOwn(GameTestHelper h)"
 ANCHOR = "            tick[0]++;\n            try {"
 INSTRUMENT = """            tick[0]++;
@@ -37,6 +63,13 @@ def instrument(work):
     if not sep or after.count(ANCHOR) != 1:
         raise RuntimeError("Soak instrumentation anchor changed; inspect both revisions.")
     path.write_text(before + sep + after.replace(ANCHOR, INSTRUMENT, 1), encoding="utf-8")
+    # Select only the existing soak, not the hundreds of other regression tests.
+    # Both checked-out revisions receive identical temporary wrapper and template.
+    path.with_name("PopulationSoakProbe.java").write_text(PROBE, encoding="utf-8")
+    data = work / "src/main/resources/data"
+    template = data / PROBE_NAMESPACE / "structures/arena.nbt"
+    template.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(data / "rlclones/structures/arena.nbt", template)
 
 
 def parse(log, count, ticks):
@@ -80,16 +113,29 @@ def run_one(repo, sha, output, count, ticks, seed, timeout):
             (run / "server.properties").write_text(f"level-seed={seed}\n", encoding="utf-8")
             with (output / "console.log").open("w", encoding="utf-8") as f:
                 try:
-                    result = subprocess.run(
-                        ["bash", "./gradlew", "--no-daemon", "-Drlclones.gameTestNamespaces=rlclones", "runGameTestServer"],
-                        cwd=work, stdout=f, stderr=subprocess.STDOUT, timeout=timeout, check=False,
+                    proc = subprocess.Popen(
+                        ["bash", "./gradlew", "--no-daemon", "-Drlclones.gameTestNamespaces=" + PROBE_NAMESPACE, "runGameTestServer"],
+                        cwd=work, stdout=f, stderr=subprocess.STDOUT, start_new_session=True,
                     )
+                    try:
+                        returncode = proc.wait(timeout=timeout)
+                    except BaseException:
+                        # Stop the isolated Gradle/JVM process group before removing its worktree.
+                        try:
+                            os.killpg(proc.pid, signal.SIGTERM)
+                            proc.wait(timeout=15)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(proc.pid, signal.SIGKILL)
+                            proc.wait()
+                        except ProcessLookupError:
+                            pass
+                        raise
                 finally:
                     latest = run / "logs" / "latest.log"
                     if latest.exists():
                         (output / "latest.log").write_bytes(latest.read_bytes())
-            if result.returncode:
-                raise RuntimeError(f"Gradle exited {result.returncode}; see {output}")
+            if returncode:
+                raise RuntimeError(f"Gradle exited {returncode}; see {output}")
             latest = output / "latest.log"
             if not latest.exists():
                 raise RuntimeError(f"No server log: {output}")
