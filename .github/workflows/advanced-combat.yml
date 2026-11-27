@@ -1,0 +1,44 @@
+name: Advanced combat and progression validation
+on:
+  push:
+    branches: [feature/advanced-combat-progression-20261128]
+  pull_request:
+    branches: [validation/advanced-combat-base-20261128]
+  workflow_dispatch:
+concurrency:
+  group: advanced-combat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests, build and in-game regression
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon test build runGameTestServer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: advanced-combat-regression
+          path: |
+            run/logs/
+            build/test-results/
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: rlclones-advanced-combat-CANDIDATE
+          path: build/libs/*.jar
+          if-no-files-found: error

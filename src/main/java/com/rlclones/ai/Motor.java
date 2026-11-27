@@ -443,22 +443,28 @@ public final class Motor {
      * (Only the clones' own plugs: a wall or a door of a house is not for this.)
      */
     public boolean breakPlug(Vec3 goal) {
-        if (PLUGS.isEmpty() || !Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
+        if (!Config.get(Config.ALLOW_BLOCK_BREAKING, true)) {
             return false;
         }
         Vec3 d = goal.subtract(self.position());
         net.minecraft.core.Direction dir = net.minecraft.core.Direction.getNearest(d.x, 0, d.z);
         BlockPos lower = self.blockPosition().relative(dir);
         for (BlockPos c : new BlockPos[]{lower, lower.above()}) {
-            if (PLUGS.containsKey(c) && !leftAlone(c, self.level().getGameTime())) {
+            long now=self.level().getGameTime();
+            boolean bridgeWall=BridgeRetreat.removable(self.serverLevel(),c,now);
+            if (bridgeWall && self instanceof com.rlclones.clone.ClonePlayer clone
+                    && !Senses.threats(clone.controller().perception(),clone,now,12).isEmpty()) continue;
+            if ((PLUGS.containsKey(c)||bridgeWall) && !leftAlone(c, now)) {
                 if (self.level().getBlockState(c).getCollisionShape(self.level(), c).isEmpty()) {
                     PLUGS.remove(c);
+                    BridgeRetreat.forget(self.serverLevel(),c);
                     continue;
                 }
                 Equipment.select(self, Equipment.bestToolSlot(self, self.level().getBlockState(c)));
                 stop();
                 if (mine(c)) {
                     PLUGS.remove(c);
+                    BridgeRetreat.forget(self.serverLevel(),c);
                     resetStuck();
                 }
                 return true;

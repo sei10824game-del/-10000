@@ -58,6 +58,173 @@ public final class CloneGameTests {
         com.rlclones.clone.CloneMobs.clearAll(level.getServer());
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void tallEnemyMakesCloneUseLowRoof(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        for(int x=6;x<=8;x++)for(int z=6;z<=8;z++)h.setBlock(new BlockPos(x,4,z),Blocks.STONE);
+        var e=h.spawn(EntityType.ENDERMAN,new BlockPos(7,2,10));
+        e.setNoAi(true);
+        e.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().sizeTactics().tick(e,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().sizeTactics().shelters>0,"clone should choose a low roof against a tall pursuer");
+            e.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void enchantedBookUsesRealAnvil(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        h.setBlock(new BlockPos(8,2,7),Blocks.ANVIL);
+        c.giveExperienceLevels(20);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.getInventory().add(net.minecraft.world.item.EnchantedBookItem.createForEnchantment(
+                new net.minecraft.world.item.enchantment.EnchantmentInstance(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,2)));
+        h.onEachTick(()->c.controller().anvilWork().tick(h.getLevel().getGameTime()));
+        h.succeedWhen(()->{
+            boolean enchanted=false;
+            for(ItemStack s:c.getInventory().items)if(s.is(Items.IRON_SWORD)&&net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,s)>=2)enchanted=true;
+            h.assertTrue(enchanted,"the sword should receive Sharpness II via the anvil");
+            h.assertTrue(c.experienceLevel<20,"vanilla anvil should consume experience");
+            finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void barricadesLowTunnelAgainstHusk(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,5.5,0f,false);
+        for(int z=3;z<=12;z++){
+            h.setBlock(new BlockPos(7,4,z),Blocks.STONE);
+            for(int y=2;y<=3;y++){
+                h.setBlock(new BlockPos(6,y,z),Blocks.STONE);
+                h.setBlock(new BlockPos(8,y,z),Blocks.STONE);
+            }
+        }
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,16));
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,2,8));
+        enemy.setNoAi(true);
+        enemy.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().tunnelBarricade().tick(enemy,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().tunnelBarricade().placed>0,"lower tunnel gap should be barricaded");
+            h.assertTrue(h.getBlockState(new BlockPos(7,2,7)).is(Blocks.COBBLESTONE),"barrier should be on the floor");
+            h.assertTrue(h.getBlockState(new BlockPos(7,3,7)).isAir(),"upper gap must stay open");
+            h.assertTrue(c.controller().tunnelBarricade().hits>0&&enemy.getHealth()<enemy.getMaxHealth(),"melee must damage the enemy through the opening");
+            enemy.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void deploysBoatOnBroadIce(GameTestHelper h) {
+        ClonePlayer c=clone(h,3.5,7.5,-90f,false);
+        for(int x=1;x<=13;x++)for(int z=4;z<=10;z++)h.setBlock(new BlockPos(x,1,z),Blocks.PACKED_ICE);
+        c.getInventory().add(new ItemStack(Items.OAK_BOAT));
+        Vec3 goal=h.absoluteVec(new Vec3(17.5,2,7.5));
+        h.onEachTick(()->{
+            c.controller().motor().navigate(goal,1,false);
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().motor().boating().iceTrips>0,"clone should board a boat on broad ice");
+            h.assertTrue(c.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat,"clone should ride an actual boat");
+            if(c.getVehicle()!=null){var b=c.getVehicle();c.stopRiding();b.discard();}
+            finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "advancedtactics")
+    public static void fleeingCloneWallsOffNarrowBridge(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        // Raised, one-block-wide deck; the ground below cannot be used to step around the wall.
+        for(int z=2;z<=12;z++)h.setBlock(new BlockPos(7,4,z),Blocks.STONE);
+        Vec3 start=h.absoluteVec(new Vec3(7.5,5,7.5));
+        c.teleportTo(h.getLevel(),start.x,start.y,start.z,0f,0f);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,5,11));
+        enemy.setNoAi(true);
+        enemy.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().bridgeRetreat().tick(enemy,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().bridgeRetreat().wallsBuilt>0,"two-high bridge wall should be built");
+            h.assertTrue(h.getBlockState(new BlockPos(7,5,8)).is(Blocks.COBBLESTONE),"lower wall");
+            h.assertTrue(h.getBlockState(new BlockPos(7,6,8)).is(Blocks.COBBLESTONE),"upper wall");
+            h.assertTrue(c.position().distanceTo(start)>1.5,"clone should continue away after building");
+            h.assertTrue(c.getY()>=start.y-.1,"clone must not fall off the bridge");
+            enemy.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "advancedtactics")
+    public static void bridgeWallSpansTwoLanes(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        for(int x=7;x<=8;x++)for(int z=2;z<=12;z++)h.setBlock(new BlockPos(x,4,z),Blocks.STONE);
+        Vec3 start=h.absoluteVec(new Vec3(7.5,5,7.5));
+        c.teleportTo(h.getLevel(),start.x,start.y,start.z,0f,0f);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,5,11));
+        enemy.setNoAi(true);enemy.setTarget(c);
+        h.onEachTick(()->{
+            c.controller().bridgeRetreat().tick(enemy,h.getLevel().getGameTime());
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(c.controller().bridgeRetreat().wallsBuilt>0,"complete two-lane wall");
+            for(int x=7;x<=8;x++)for(int y=5;y<=6;y++)
+                h.assertTrue(h.getBlockState(new BlockPos(x,y,8)).is(Blocks.COBBLESTONE),"every lane must be blocked");
+            h.assertTrue(c.position().distanceTo(start)>1.5&&c.getY()>=start.y-.1,"retreat safely");
+            enemy.discard();finish(h,c);
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "advancedtactics")
+    public static void bridgeRetreatDoesNotTrapAlly(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        ClonePlayer ally=clone(h,7.5,9.5,0f,false);
+        c.setCloneTeam("bridge-test");ally.setCloneTeam("bridge-test");
+        for(int z=2;z<=12;z++)h.setBlock(new BlockPos(7,4,z),Blocks.STONE);
+        Vec3 start=h.absoluteVec(new Vec3(7.5,5,7.5)),friend=h.absoluteVec(new Vec3(7.5,5,9.5));
+        c.teleportTo(h.getLevel(),start.x,start.y,start.z,0f,0f);
+        ally.teleportTo(h.getLevel(),friend.x,friend.y,friend.z,0f,0f);
+        c.getInventory().add(new ItemStack(Items.COBBLESTONE,8));
+        Husk enemy=h.spawn(EntityType.HUSK,new BlockPos(7,5,11));
+        enemy.setNoAi(true);enemy.setTarget(c);
+        h.onEachTick(()->c.controller().bridgeRetreat().tick(enemy,h.getLevel().getGameTime()));
+        h.runAfterDelay(40,()->{
+            h.assertTrue(c.controller().bridgeRetreat().blocksPlaced==0,"do not trap a friendly clone behind the wall");
+            h.assertTrue(h.getBlockState(new BlockPos(7,5,8)).isAir(),"keep bridge open");
+            enemy.discard();finish(h,c,ally);
+            h.succeed(); // delayed assertion does not automatically complete a GameTest
+        });
+    }
+
+    @GameTest(template = ARENA, timeoutTicks = 400, batch = "advancedtactics")
+    public static void usesEnchantingTableWithRealCosts(GameTestHelper h) {
+        ClonePlayer c=clone(h,7.5,7.5,0f,false);
+        h.setBlock(new BlockPos(8,2,7),Blocks.ENCHANTING_TABLE);
+        c.giveExperienceLevels(30);
+        c.getInventory().add(new ItemStack(Items.DIAMOND_SWORD));
+        c.getInventory().add(new ItemStack(Items.LAPIS_LAZULI,8));
+        h.onEachTick(()->c.controller().enchantingWork().tick(h.getLevel().getGameTime()));
+        h.succeedWhen(()->{
+            boolean enchanted=false;
+            for(ItemStack s:c.getInventory().items)if(s.is(Items.DIAMOND_SWORD)&&s.isEnchanted())enchanted=true;
+            h.assertTrue(enchanted,"sword should receive vanilla enchantments");
+            h.assertTrue(c.experienceLevel<30,"experience must be consumed");
+            h.assertTrue(c.getInventory().countItem(Items.LAPIS_LAZULI)<8,"lapis must be consumed");
+            finish(h,c);
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CloneManager manager(GameTestHelper h) {
