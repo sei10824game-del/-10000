@@ -108,6 +108,14 @@ public class ClonePlayer extends ServerPlayer {
         // Do not construct a packet which CloneConnection would immediately discard.
     }
 
+    /** Synthetic clients cannot display an action bar; AI chat and sound delivery are independent.
+     * Leave the real player's implementation and all shared broadcasts unchanged.
+     */
+    @Override
+    public void displayClientMessage(Component message, boolean actionBar) {
+        // Non-sound UI packets are discarded by CloneConnection anyway.
+    }
+
     /** Called for every sound packet a human client at this position would have received. */
     public void hear(SoundEvent sound, double x, double y, double z, int entityId) {
         if (!this.isAlive() || this.isRemoved()) {
