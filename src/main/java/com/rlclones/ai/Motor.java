@@ -756,10 +756,14 @@ public final class Motor {
             minX=lx;maxX=hx;minY=ly;maxY=hy;minZ=lz;maxZ=hz;
         }
         boolean mayContain(Vec3 pos){
-            return !(minX+.5-pos.x>=1||maxX+.5-pos.x<=-1
-                    ||minY-pos.y>1||maxY-pos.y< -1
-                    ||minZ+.5-pos.z>=1||maxZ+.5-pos.z<=-1);
+            return pathBoundsMayContain(pos.x,pos.y,pos.z,minX,maxX,minY,maxY,minZ,maxZ);
         }
+    }
+
+    public static boolean pathBoundsMayContain(double x,double y,double z,int minX,int maxX,int minY,int maxY,int minZ,int maxZ){
+        return !(minX+.5-x>=1||maxX+.5-x<=-1
+                ||minY-y>1||maxY-y< -1
+                ||minZ+.5-z>=1||maxZ+.5-z<=-1);
     }
 
     private static final java.util.ArrayDeque<SharedPath> RECENT = new java.util.ArrayDeque<>();
