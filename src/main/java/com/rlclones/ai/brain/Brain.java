@@ -158,20 +158,21 @@ public final class Brain {
 
     public int itemUseTries(String item) {
         int[] n = useN.get(item);
-        return n == null ? 0 : java.util.Arrays.stream(n).sum();
+        if (n == null) return 0;
+        int total = 0;
+        for (int count : n) total += count;
+        return total;
     }
 
     /** Untried ways first, then mostly the best one so far (one time in six another, to keep learning). */
     public int chooseItemUse(String item, net.minecraft.util.RandomSource rnd) {
         int[] n = useN.computeIfAbsent(item, k -> new int[USE_MODES]);
-        List<Integer> untried = new java.util.ArrayList<>();
-        for (int m = 0; m < USE_MODES; m++) {
-            if (n[m] == 0) {
-                untried.add(m);
-            }
-        }
-        if (!untried.isEmpty()) {
-            return untried.get(rnd.nextInt(untried.size()));
+        int untried = 0;
+        for (int m = 0; m < USE_MODES; m++) if (n[m] == 0) untried |= 1 << m;
+        if (untried != 0) {
+            int pick = rnd.nextInt(Integer.bitCount(untried));
+            while (pick-- > 0) untried &= untried - 1;
+            return Integer.numberOfTrailingZeros(untried);
         }
         if (rnd.nextInt(6) == 0) {
             return rnd.nextInt(USE_MODES);
@@ -434,28 +435,21 @@ public final class Brain {
         e.visits++;
         if (random.nextDouble() < eps) {
             int demoTotal = 0;
-            for (int a = 0; a < e.demo.length; a++) {
-                if ((mask & (1 << a)) != 0) {
-                    demoTotal += e.demo[a];
-                }
+            for (int bits = mask & QTable.actionMask(e.demo.length); bits != 0; bits &= bits - 1) {
+                demoTotal += e.demo[Integer.numberOfTrailingZeros(bits)];
             }
             if (demoTotal > 0 && random.nextDouble() < 0.6) {
                 int pick = random.nextInt(demoTotal);
-                for (int a = 0; a < e.demo.length; a++) {
-                    if ((mask & (1 << a)) != 0) {
-                        pick -= e.demo[a];
-                        if (pick < 0) {
-                            return a;
-                        }
-                    }
+                for (int bits = mask & QTable.actionMask(e.demo.length); bits != 0; bits &= bits - 1) {
+                    int a = Integer.numberOfTrailingZeros(bits);
+                    pick -= e.demo[a];
+                    if (pick < 0) return a;
                 }
             }
             int count = Integer.bitCount(mask);
             int pick = random.nextInt(count);
-            for (int a = 0; a < e.q.length; a++) {
-                if ((mask & (1 << a)) != 0 && pick-- == 0) {
-                    return a;
-                }
+            for (int bits = mask & QTable.actionMask(e.q.length); bits != 0; bits &= bits - 1) {
+                if (pick-- == 0) return Integer.numberOfTrailingZeros(bits);
             }
         }
         return QTable.argmax(e, mask, random);
@@ -463,12 +457,12 @@ public final class Brain {
 
     /** Greedy action without exploration or bookkeeping (used for display). */
     public int greedy(String tableName, int state, int mask) {
-        QTable.Entry e = table(tableName).peek(state);
+        QTable table = table(tableName);
+        QTable.Entry e = table.peek(state);
         if (e == null) {
-            float[] q = new float[table(tableName).actions()];
+            float[] q = new float[table.actions()];
             prior(tableName).fill(state, q);
-            QTable.Entry tmp = new QTable(q.length).get(state, (s, out) -> System.arraycopy(q, 0, out, 0, q.length));
-            return QTable.argmax(tmp, mask, random);
+            return QTable.argmax(q, mask, random);
         }
         return QTable.argmax(e, mask, random);
     }
@@ -621,11 +615,11 @@ public final class Brain {
         tag.putLong("lookUpdates", lookUpdates);
         CompoundTag iu = new CompoundTag();
         useQ.forEach((k, q) -> {
-            int[] n = useN.getOrDefault(k, new int[USE_MODES]);
+            int[] n = useN.get(k);
             int[] packed = new int[USE_MODES * 2];
             for (int m = 0; m < USE_MODES; m++) {
                 packed[m] = Float.floatToIntBits(q[m]);
-                packed[USE_MODES + m] = n[m];
+                packed[USE_MODES + m] = n == null ? 0 : n[m];
             }
             iu.putIntArray(k, packed);
         });
