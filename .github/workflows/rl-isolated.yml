@@ -3,6 +3,8 @@ on:
   push:
     branches: [validation/rl-isolated-20261128]
     paths: [.github/workflows/rl-isolated.yml]
+  pull_request:
+    branches: [validation/rl-isolated-base-20261128]
   workflow_dispatch:
 permissions:
   contents: read
