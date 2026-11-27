@@ -472,11 +472,60 @@ public final class CloneManager {
         return b != null ? b : new Brain();
     }
 
+    /** Only detached snapshots enter the workers. All game/learning state and final file commits remain here. */
+    private void saveBrainsParallel() {
+        int workers=Math.min(4,Math.max(1,Runtime.getRuntime().availableProcessors()-1));
+        if(workers<2||clones.size()<2){
+            for(ClonePlayer c:clones.values())saveBrain(c.getUUID().toString(),c.getCloneBrain());
+            return;
+        }
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(workers);
+        try {
+            var it=clones.values().iterator();
+            while(it.hasNext()){
+                var batch=new java.util.ArrayList<ClonePlayer>(workers);
+                var tasks=new java.util.ArrayList<java.util.concurrent.Future<byte[]>>(workers);
+                while(it.hasNext()&&batch.size()<workers){
+                    ClonePlayer c=it.next();batch.add(c);
+                    try {
+                        // Copy all nested NBT data, including arrays, before any worker can see it.
+                        var snapshot=c.getCloneBrain().save().copy();
+                        tasks.add(pool.submit(()->{
+                            var out=new java.io.ByteArrayOutputStream();
+                            NbtIo.writeCompressed(snapshot,out);
+                            return out.toByteArray();
+                        }));
+                    } catch(RuntimeException e){tasks.add(null);}
+                }
+                for(int i=0;i<batch.size();i++){
+                    ClonePlayer c=batch.get(i);String name=c.getUUID().toString();
+                    var task=tasks.get(i);
+                    if(task==null){saveBrain(name,c.getCloneBrain());continue;}
+                    try{
+                        byte[] bytes=task.get();
+                        Path dir=brainDir();Files.createDirectories(dir);
+                        Path tmp=dir.resolve(name+".tmp");
+                        Files.write(tmp,bytes);
+                        Files.move(tmp,dir.resolve(name+".dat"),StandardCopyOption.REPLACE_EXISTING);
+                    }catch(InterruptedException e){
+                        Thread.currentThread().interrupt();
+                        saveBrain(name,c.getCloneBrain());
+                    }catch(java.util.concurrent.ExecutionException|IOException|RuntimeException e){
+                        RLClones.LOGGER.warn("Parallel brain compression failed for {}; using serial save",name,e);
+                        saveBrain(name,c.getCloneBrain());
+                    }
+                }
+            }
+        } finally {pool.shutdownNow();}
+    }
+
     public void saveAll() {
         if (isLinked()) {
             if (shared != null) {
                 saveBrain("shared", shared);
             }
+        } else if(server.isSameThread()&&Config.get(Config.PARALLEL_BRAIN_SAVE,true)) {
+            saveBrainsParallel();
         } else {
             for (ClonePlayer c : clones.values()) {
                 saveBrain(c.getUUID().toString(), c.getCloneBrain());
