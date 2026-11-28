@@ -3,6 +3,8 @@ on:
   push:
     branches: [validation/rl-determinism-20261128]
     paths: [.github/workflows/rl-determinism.yml]
+  pull_request:
+    branches: [validation/rl-determinism-base-20261128]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ca6fe96fb39e517786d1ca7d105383751e1331f7
+          ref: c56b998e7ca47c29275c8eaeb02529a152393701
           path: harness
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -40,7 +42,7 @@ jobs:
             cp "harness/$testfile" "$version/$testfile"
             (
               cd "$version"
-              RL_EXACT_OUTPUT="$RUNNER_TEMP/rl-traces/$version.txt" bash ./gradlew --no-daemon test --tests '*SeededLearningComparisonTest' --rerun-tasks
+              RL_EXACT_OUTPUT="$RUNNER_TEMP/rl-traces/$version.txt" bash ./gradlew --no-daemon test --tests '*SeededLearningComparisonTest' --rerun-tasks --stacktrace
             )
           done
           diff -u "$RUNNER_TEMP/rl-traces/baseline.txt" "$RUNNER_TEMP/rl-traces/candidate.txt"
