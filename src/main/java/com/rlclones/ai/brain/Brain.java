@@ -164,14 +164,14 @@ public final class Brain {
     /** Untried ways first, then mostly the best one so far (one time in six another, to keep learning). */
     public int chooseItemUse(String item, net.minecraft.util.RandomSource rnd) {
         int[] n = useN.computeIfAbsent(item, k -> new int[USE_MODES]);
-        List<Integer> untried = new java.util.ArrayList<>();
+        int untried = 0;
         for (int m = 0; m < USE_MODES; m++) {
-            if (n[m] == 0) {
-                untried.add(m);
-            }
+            if (n[m] == 0) untried |= 1 << m;
         }
-        if (!untried.isEmpty()) {
-            return untried.get(rnd.nextInt(untried.size()));
+        if (untried != 0) {
+            int pick = rnd.nextInt(Integer.bitCount(untried));
+            while (pick-- > 0) untried &= untried - 1;
+            return Integer.numberOfTrailingZeros(untried);
         }
         if (rnd.nextInt(6) == 0) {
             return rnd.nextInt(USE_MODES);
