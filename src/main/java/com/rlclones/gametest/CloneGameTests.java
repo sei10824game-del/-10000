@@ -5103,6 +5103,26 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r9quietmeal")
+    public static void quietOffhandMealActuallyConsumesFood(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getInventory().clearContent();
+        c.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
+        c.getInventory().selected = 0;
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, new ItemStack(Items.BREAD, 8));
+        c.getFoodData().setFoodLevel(10);
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.EAT;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().offhandMeals >= 1, "actual offhand consumption event");
+            h.assertTrue(c.getFoodData().getFoodLevel() > 10, "meal raises hunger gauge");
+            h.assertTrue(c.getOffhandItem().is(Items.BREAD) && c.getOffhandItem().getCount() < 8,
+                    "bread is actually consumed rather than merely credited");
+            h.assertTrue(c.getMainHandItem().is(Items.IRON_SWORD), "weapon stays in main hand");
+            finish(h,c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 300, batch = "r9offhandretry")
     public static void retriesInterruptedOffhandFoodTrial(GameTestHelper h) {
         ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
