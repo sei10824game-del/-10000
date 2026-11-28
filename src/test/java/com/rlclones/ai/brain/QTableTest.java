@@ -71,4 +71,51 @@ class QTableTest {
         assertThrows(IllegalArgumentException.class, () -> new QTable(33));
         assertThrows(IllegalArgumentException.class, () -> new QTable(2).mergeFrom(new QTable(3)));
     }
+
+    private static float referenceMax(QTable.Entry e, int mask) {
+        float best = Float.NEGATIVE_INFINITY;
+        for (int a=0;a<e.q.length;a++) if ((mask & (1<<a))!=0 && e.q[a]>best) best=e.q[a];
+        return best==Float.NEGATIVE_INFINITY ? 0f : best;
+    }
+
+    private static int referenceArgmax(QTable.Entry e, int mask, java.util.Random random) {
+        int best=-1, ties=0;
+        float bestQ=Float.NEGATIVE_INFINITY;
+        for(int a=0;a<e.q.length;a++) {
+            if((mask & (1<<a))==0) continue;
+            float q=e.q[a];
+            if(q>bestQ+1e-6f) {bestQ=q;best=a;ties=1;}
+            else if(Math.abs(q-bestQ)<=1e-6f) {
+                ties++;
+                if(random.nextInt(ties)==0) best=a;
+            }
+        }
+        return best;
+    }
+
+    @Test
+    void maskedIterationPreservesValuesTieBreakingAndRandomStream() {
+        var input=new java.util.Random(10824);
+        var reference=new java.util.Random(1729);
+        var optimized=new java.util.Random(1729);
+        float[] values={0f,-0f,1f,-1f,1.0000005f,Float.NaN,
+                Float.NEGATIVE_INFINITY,Float.POSITIVE_INFINITY,Float.MAX_VALUE};
+        for(int actions=1;actions<=32;actions++) {
+            var e=new QTable(actions).get(0,QTable.Prior.ZERO);
+            for(int i=0;i<2048;i++) {
+                for(int a=0;a<actions;a++) e.q[a]=values[input.nextInt(values.length)];
+                int mask=switch(i%6) {
+                    case 0 -> 0;
+                    case 1 -> -1;
+                    case 2 -> Integer.MIN_VALUE;
+                    case 3 -> 1<<input.nextInt(32);
+                    default -> input.nextInt();
+                };
+                assertEquals(Float.floatToRawIntBits(referenceMax(e,mask)),
+                        Float.floatToRawIntBits(QTable.max(e,mask)));
+                assertEquals(referenceArgmax(e,mask,reference),QTable.argmax(e,mask,optimized));
+                assertEquals(reference.nextLong(),optimized.nextLong());
+            }
+        }
+    }
 }
