@@ -907,6 +907,13 @@ public final class CloneGameTests {
         var kinds = java.util.List.<net.minecraft.world.entity.EntityType<?>>of(net.minecraft.world.entity.EntityType.ZOMBIE, net.minecraft.world.entity.EntityType.SKELETON);
         var main = com.rlclones.clone.CloneMobs.summonChimera(null, h.getLevel(), kinds, h.absoluteVec(new net.minecraft.world.phys.Vec3(3.5, 2, 3.5)));
         h.assertTrue(main != null && com.rlclones.clone.CloneMobs.bodiesOf(com.rlclones.clone.CloneMobs.soulOf(main)).size() == 2, "the chimera command's kinds make a two-body clone mob");
+        var chimera = com.rlclones.clone.CloneMobs.soulOf(main);
+        h.assertTrue(com.rlclones.ai.Specials.available(chimera, 0), "the second body's skeleton attack occupies the first available slot");
+        h.assertTrue(!com.rlclones.ai.Specials.available(chimera, 1), "there is no second special attack");
+        var skeleton = com.rlclones.clone.CloneMobs.bodiesOf(chimera).get(1);
+        skeleton.getPersistentData().putLong("rlclones_sp0", h.getLevel().getGameTime() + 100);
+        h.assertTrue(!com.rlclones.ai.Specials.available(chimera, 0), "the selected body owns the cooldown");
+        skeleton.getPersistentData().remove("rlclones_sp0");
         h.succeed();
     }
 

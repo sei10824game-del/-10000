@@ -47,18 +47,19 @@ public final class Specials {
     }
 
     private static Part part(Player p, int slot) {
-        java.util.List<Part> list = new java.util.ArrayList<>();
+        if (slot < 0) return null;
+        int remaining = slot;
         boolean first = true;
         for (Mob b : CloneMobs.bodiesOf(p)) {
             for (int s = 0; s < 2; s++) {
                 String k = kind(b, s);
                 if (k != null && (first || !k.equals("borrow"))) { // (another mod's AI on loan is for the main body only)
-                    list.add(new Part(b, s));
+                    if (remaining-- == 0) return new Part(b, s);
                 }
             }
             first = false;
         }
-        return slot < list.size() ? list.get(slot) : null;
+        return null;
     }
 
     private static String key(int slot) {
