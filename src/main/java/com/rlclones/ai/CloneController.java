@@ -4516,7 +4516,28 @@ public final class CloneController {
 
     /** Endpoint and complete path must be safe; the ordinary motor still checks every movement. */
     private boolean retreatGoalSafe(Vec3 spot,List<Perception.Seen> threats) {
-        return spot!=null&&spot.distanceToSqr(self.position())>=4&&retreatEndpointSafe(spot,threats)&&motor.pathTo(spot)!=null;
+        if (spot == null || spot.distanceToSqr(self.position()) < 4 || !retreatEndpointSafe(spot, threats)) return false;
+        var path = motor.pathTo(spot);
+        if (path == null) return false;
+        // A reachable endpoint is not a safe escape if the path runs back through a pursuer.
+        // Allow movement away when already close; reject nodes that approach into melee reach.
+        Vec3 start = self.position();
+        for (var threat : threats) {
+            if (!threat.alive()) continue;
+            Vec3 enemy = threat.entity.position();
+            double initial = Motor.horizontalDistance(start, enemy);
+            double danger = Math.min(2.5 + threat.entity.getBbWidth() * 0.5, initial - 0.35);
+            if (danger <= 0) continue;
+            double dangerSq = danger * danger;
+            for (int i = 0; i < path.getNodeCount(); i++) {
+                var node = path.getNode(i);
+                if (Math.abs(node.y - enemy.y) > 2.5) continue;
+                double dx = node.x + 0.5 - enemy.x;
+                double dz = node.z + 0.5 - enemy.z;
+                if (dx * dx + dz * dz < dangerSq) return false;
+            }
+        }
+        return true;
     }
     private boolean retreatEndpointSafe(Vec3 spot,List<Perception.Seen> threats) {
         if(spot==null)return false;
