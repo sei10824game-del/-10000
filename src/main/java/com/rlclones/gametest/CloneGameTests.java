@@ -1125,10 +1125,20 @@ public final class CloneGameTests {
         try {
             for (var block : List.of(Blocks.GRASS, Blocks.DANDELION, Blocks.TORCH)) {
                 h.setBlock(local, block);
-                Vec3 delta = Vec3.atCenterOf(pos).subtract(c.getEyePosition());
+                var state = h.getLevel().getBlockState(pos);
+                var bounds = state.getShape(h.getLevel(), pos).bounds();
+                Vec3 aim = bounds.getCenter().add(pos.getX(), pos.getY(), pos.getZ());
+                Vec3 delta = aim.subtract(c.getEyePosition());
                 c.setYRot((float) Math.toDegrees(Math.atan2(delta.z, delta.x)) - 90f);
+                c.setYHeadRot(c.getYRot());
                 c.setXRot((float) -Math.toDegrees(Math.atan2(delta.y, Math.hypot(delta.x, delta.z))));
-                float progress = h.getLevel().getBlockState(pos).getDestroyProgress(c, h.getLevel(), pos);
+                var hit = h.getLevel().clip(new net.minecraft.world.level.ClipContext(c.getEyePosition(),
+                        c.getEyePosition().add(c.getViewVector(1f).scale(Motor.BLOCK_REACH)),
+                        net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, c));
+                h.assertTrue(hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
+                        && hit.getBlockPos().equals(pos), "test ray actually hits the block outline: " + block);
+                float progress = state.getDestroyProgress(c, h.getLevel(), pos);
                 h.assertTrue(progress >= 1f, "vanilla instant break progress for " + block + ": " + progress);
                 h.assertTrue(motor.mine(pos) && h.getLevel().getBlockState(pos).isAir(),
                         "instant block breaks on first valid mining call: " + block + " " + motor.mineDebug());
