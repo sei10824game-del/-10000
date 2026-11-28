@@ -3892,6 +3892,11 @@ public final class CloneController {
             Equipment.select(self, slot);
             held = self.getMainHandItem();
         }
+        if (AttackLearning.useless(brain().knowledgeIfPresent(targetType), AttackLearning.rangedMethod(held))) {
+            self.stopUsingItem();
+            actionDone = true;
+            return;
+        }
         if(rangedBow.reposition(t,now())){lobDraw=0;return;}
         Entity friend = allyInLine(t);
         if (friend != null && Equipment.rangedKind(held) == Equipment.RangedKind.CROSSBOW) {
@@ -4274,6 +4279,14 @@ public final class CloneController {
             }
             useStarted = false;
             useDealtBefore = attacks.dealtTo(lt);
+        }
+        // Learning can finish while an action is still running, or another linked clone
+        // can publish the same evidence. Recheck before consuming another projectile.
+        if (AttackLearning.useless(brain().knowledgeIfPresent(targetType), AttackLearning.rangedMethod(self.getMainHandItem()))) {
+            self.stopUsingItem();
+            useMode = -1;
+            actionDone = true;
+            return;
         }
         if (!AttackLearning.itemId(self.getMainHandItem()).equals(useItem)) {
             useMode = -1;
