@@ -335,7 +335,10 @@ public final class Senses {
         for (Perception.Seen o : observer.remembered()) {
             if (o.entity.getType() == prey.entity.getType() && o.entity.isAlive() && !(o.entity instanceof Mob m && m.isBaby())
                     && now - o.lastSeen <= 200 && o.pos.distanceTo(prey.pos) < 16) {
-                n++;
+                // The predicate is monotone: additional qualifying animals cannot restore the last-pair condition.
+                if (++n > keep) {
+                    return false;
+                }
             }
         }
         return n <= keep;
