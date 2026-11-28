@@ -113,29 +113,44 @@ public final class AgentWatcher {
 
     // ------------------------------------------------------------------ combat imitation
 
-    private Entity focusEnemy(Player agent, List<AgentEvents.Event> recent) {
+    private record Focus(Entity enemy, int playerCrowd) {}
+
+    private Focus focusEnemy(Player agent, List<AgentEvents.Event> recent) {
         for (int i = recent.size() - 1; i >= 0; i--) {
             AgentEvents.Event e = recent.get(i);
             if (e.kind() == AgentEvents.Kind.ATTACK) {
                 Entity target = agent.level().getEntity(e.targetId());
                 if (target != null && perception.isVisible(target) && (Senses.isHostileTo(target, agent) || Senses.isFoodAnimal(target))) {
-                    return target;
+                    return new Focus(target, -1); // event fast path: original full crowd scan
                 }
             }
         }
         Entity best = null;
         double bestGap = 10.0;
+        int playerCrowd = 0;
         for (Perception.Seen s : perception.visible()) {
             if (s.entity == agent || !Senses.isHostileTo(s.entity, agent)) {
                 continue;
             }
             double g = Senses.gap(agent, s.entity);
+            if (s.entity instanceof Player && g <= 6.0) playerCrowd++;
             if (g < bestGap) {
                 bestGap = g;
                 best = s.entity;
             }
         }
-        return best;
+        return new Focus(best, playerCrowd);
+    }
+
+    private int observedCrowd(Player agent, int playerCrowd) {
+        if (playerCrowd < 0) return Senses.crowd(perception, agent);
+        int n = playerCrowd;
+        // Keep mob checks in the second pass: hostility may refresh unreachable memory.
+        for (Perception.Seen s : perception.visible()) {
+            if (!(s.entity instanceof Player) && s.entity != agent && Senses.isHostileTo(s.entity, agent)
+                    && Senses.gap(agent, s.entity) <= 6.0) n++;
+        }
+        return Math.max(1, n);
     }
 
     private void observeCombat(Trace t, Player agent, long now) {
@@ -144,7 +159,8 @@ public final class AgentWatcher {
             return;
         }
         List<AgentEvents.Event> recent = AgentEvents.sharedBetween(agent.getUUID(), now - 20, now);
-        Entity enemy = focusEnemy(agent, recent);
+        Focus focus = focusEnemy(agent, recent);
+        Entity enemy = focus.enemy();
         if (enemy == null) {
             t.combatState = -1;
             t.enemyId = -1;
@@ -152,7 +168,7 @@ public final class AgentWatcher {
         }
         t.enemyId = enemy.getId();
         t.enemyType = Perception.typeId(enemy);
-        t.combatState = Senses.combatState(agent, enemy, brain.get().knowledge(t.enemyType), sinceEnemyAttack.applyAsLong(enemy), Senses.crowd(perception, agent));
+        t.combatState = Senses.combatState(agent, enemy, brain.get().knowledge(t.enemyType), sinceEnemyAttack.applyAsLong(enemy), observedCrowd(agent, focus.playerCrowd()));
     }
 
     private void learnCombat(Trace t, Player agent, long now, float weight) {
