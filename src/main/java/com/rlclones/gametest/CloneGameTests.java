@@ -2892,6 +2892,36 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 200, batch = "seedpickup")
+    public static void collectsScatteredSeedsAfterGrassIsCut(GameTestHelper h) {
+        BlockPos grass = new BlockPos(12, 2, 7);
+        h.setBlock(grass.below(), Blocks.GRASS_BLOCK);
+        h.setBlock(grass, Blocks.GRASS);
+        ClonePlayer c = clone(h, 7.5, 7.5, -90f, false);
+        c.getInventory().clearContent();
+        var farming = c.controller().farming();
+        h.assertTrue(farming.tick() == com.rlclones.ai.Farming.Status.WORKING,
+                "grass has been selected for seed gathering");
+        // Model another cut while approaching, with a deterministic real drop away from the grass.
+        h.setBlock(grass, Blocks.AIR);
+        Vec3 landing = h.absoluteVec(new Vec3(10.5, 2.2, 8.5));
+        var seed = new net.minecraft.world.entity.item.ItemEntity(h.getLevel(), landing.x, landing.y, landing.z,
+                new ItemStack(Items.WHEAT_SEEDS, 4));
+        seed.setDeltaMovement(Vec3.ZERO);
+        seed.setNoPickUpDelay();
+        h.getLevel().addFreshEntity(seed);
+        h.onEachTick(() -> {
+            farming.tick();
+            c.controller().motor().tick();
+        });
+        h.succeedWhen(() -> {
+            h.assertTrue(c.getInventory().countItem(Items.WHEAT_SEEDS) >= 4,
+                    "scattered seed entity was physically collected: " + farming.debug());
+            h.assertTrue(!seed.isAlive(), "seed was removed by actual pickup");
+            finish(h, c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 2400, batch = "grass")
     public static void cutsGrassForSeedsThenFarms(GameTestHelper h) {
         for (int x = 1; x <= 13; x++) {
