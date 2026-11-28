@@ -1,0 +1,57 @@
+name: Adaptive core staged ablation
+on:
+  push:
+    branches: [optimization/adaptive-core-ablation-20261129]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: adaptive-core-ablation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - stage: replay-negative-path-herd
+            baseline: 1f351f21eab2fd30defc9c3319b88f2105008bd0
+            candidate: 23a8a4bf1b1ed1438b6e0b76f66fb58d96c079fd
+          - stage: block-memory-geometry
+            baseline: 23a8a4bf1b1ed1438b6e0b76f66fb58d96c079fd
+            candidate: 2b175e1266faf24be098ff510177d1d5b76f81a4
+          - stage: q-and-item-exploration
+            baseline: 2b175e1266faf24be098ff510177d1d5b76f81a4
+            candidate: 2597357723019a7a12b0f63895b8ff7c8a0354a7
+          - stage: strategy-and-leaf-filter
+            baseline: 2597357723019a7a12b0f63895b8ff7c8a0354a7
+            candidate: 268a65ef39eb45a47d80cee4b7a6f8bd37e046db
+          - stage: adaptive-sort
+            baseline: 268a65ef39eb45a47d80cee4b7a6f8bd37e046db
+            candidate: 8dd1687ae838eb096a9c73ac7c83c195760d9a6a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare adjacent source checkpoints at 100 clones
+        run: python3 scripts/compare-population.py --baseline ${{ matrix.baseline }} --candidate ${{ matrix.candidate }} --counts 100 --ticks 2400 --repeats 2 --seed rlclones --timeout 3600 --output "$RUNNER_TEMP/ablation"
+      - name: Publish comparison
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/ablation/comparison.csv"
+          if test -f "$f"; then cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ablation-${{ matrix.stage }}
+          path: ${{ runner.temp }}/ablation/
+          if-no-files-found: warn
