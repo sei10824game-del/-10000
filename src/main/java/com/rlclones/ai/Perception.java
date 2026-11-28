@@ -93,24 +93,40 @@ public final class Perception {
     private final ServerPlayer self;
     private final Int2ObjectOpenHashMap<Seen> memory = new Int2ObjectOpenHashMap<>();
     private final List<Seen> visible = new ArrayList<>();
-    private long blockVersion, indexedVersion = -1;
+    private long indexedVersion = -1;
     private final java.util.EnumMap<BlockKind, List<BlockPos>> blockIndex = new java.util.EnumMap<>(BlockKind.class);
-    private final Map<BlockPos, BlockKind> blocks = new LinkedHashMap<>(64, 0.75f, false) {
+    private final BlockMemory blocks = new BlockMemory();
+
+    /** The same bounded insertion-ordered memory, with exact counts updated on mutation. */
+    static final class BlockMemory extends LinkedHashMap<BlockPos, BlockKind> {
+        private final int[] counts = new int[BlockKind.values().length];
+        long version;
+        BlockMemory() { super(64, 0.75f, false); }
         @Override public BlockKind put(BlockPos p, BlockKind k) {
             BlockKind old = super.put(p, k);
-            if (old != k) blockVersion++;
+            if (old != k) {
+                if (old != null) counts[old.ordinal()]--;
+                counts[k.ordinal()]++;
+                version++;
+            }
             return old;
         }
         @Override public BlockKind remove(Object p) {
             BlockKind old = super.remove(p);
-            if (old != null) blockVersion++;
+            if (old != null) {
+                counts[old.ordinal()]--;
+                version++;
+            }
             return old;
         }
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<BlockPos, BlockKind> eldest) {
-            return size() > MAX_BLOCKS;
+        @Override protected boolean removeEldestEntry(Map.Entry<BlockPos, BlockKind> eldest) {
+            if (size() <= MAX_BLOCKS) return false;
+            counts[eldest.getValue().ordinal()]--;
+            version++;
+            return true;
         }
-    };
+        int count(BlockKind k) { return counts[k.ordinal()]; }
+    }
     private long lastUpdate = Long.MIN_VALUE;
     /** Block ids this clone has learned hurt (magma, infection blocks...). */
     private java.util.function.Predicate<String> harmful = id -> false;
@@ -593,13 +609,7 @@ public final class Perception {
     }
 
     private int count(BlockKind kind) {
-        int n = 0;
-        for (BlockKind k : blocks.values()) {
-            if (k == kind) {
-                n++;
-            }
-        }
-        return n;
+        return blocks.count(kind);
     }
 
     /** What this clone makes of the block at {@code pos} (its own harmful / unknown knowledge included). */
@@ -699,11 +709,11 @@ public final class Perception {
 
     /** Reuse known search results; never share personal discoveries with other clones. */
     public List<BlockPos> knownBlocks(BlockKind kind) {
-        if (indexedVersion != blockVersion) {
+        if (indexedVersion != blocks.version) {
             blockIndex.clear();
             blocks.forEach((pos, k) -> blockIndex.computeIfAbsent(k, ignored -> new ArrayList<>()).add(pos));
             blockIndex.replaceAll((k, positions) -> List.copyOf(positions));
-            indexedVersion = blockVersion;
+            indexedVersion = blocks.version;
         }
         return blockIndex.getOrDefault(kind, List.of());
     }
