@@ -1114,6 +1114,37 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 40, batch = "instantbreak")
+    public static void instantBlocksBreakOnFirstValidMiningCall(GameTestHelper h) {
+        ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
+        c.getInventory().clearContent();
+        var motor = c.controller().motor();
+        BlockPos local = new BlockPos(7, 2, 7);
+        BlockPos pos = h.absolutePos(local);
+        h.setBlock(local.below(), Blocks.GRASS_BLOCK);
+        try {
+            for (var block : List.of(Blocks.GRASS, Blocks.DANDELION, Blocks.TORCH)) {
+                h.setBlock(local, block);
+                Vec3 delta = Vec3.atCenterOf(pos).subtract(c.getEyePosition());
+                c.setYRot((float) Math.toDegrees(Math.atan2(delta.z, delta.x)) - 90f);
+                c.setXRot((float) -Math.toDegrees(Math.atan2(delta.y, Math.hypot(delta.x, delta.z))));
+                float progress = h.getLevel().getBlockState(pos).getDestroyProgress(c, h.getLevel(), pos);
+                h.assertTrue(progress >= 1f, "vanilla instant break progress for " + block + ": " + progress);
+                h.assertTrue(motor.mine(pos) && h.getLevel().getBlockState(pos).isAir(),
+                        "instant block breaks on first valid mining call: " + block + " " + motor.mineDebug());
+                h.assertTrue(!motor.miningCommitted(pos), "no ongoing mining commitment for instant block");
+            }
+            h.setBlock(local, Blocks.DIRT);
+            h.assertTrue(!motor.mine(pos) && h.getLevel().getBlockState(pos).is(Blocks.DIRT),
+                    "bare-handed dirt still takes multiple mining ticks");
+            h.assertTrue(motor.miningCommitted(pos), "ordinary mining progress is retained");
+        } finally {
+            motor.resetMining();
+            finish(h,c);
+        }
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 400)
     public static void cloneMinesLikePlayer(GameTestHelper h) {
         ClonePlayer c = clone(h, 5.5, 7.5, -90f, false);
