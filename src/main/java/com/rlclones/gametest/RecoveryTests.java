@@ -68,6 +68,34 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
+    public static void strategyDecisionMatchesIndependentQueries(GameTestHelper h) {
+        var c=GearRecipeTests.clone(h);
+        var observer=c.controller().perception();
+        var brain=c.getCloneBrain();
+        long now=h.getLevel().getGameTime();
+        c.getInventory().clearContent();
+        var ore=h.absolutePos(new BlockPos(9,2,7));
+        var old=h.getLevel().getBlockState(ore);
+        try {
+            for(int i=0;i<6;i++) {
+                boolean food=(i&1)!=0;
+                c.getFoodData().setFoodLevel(i<3?10:20);
+                c.getInventory().setItem(0,food?new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD,3):net.minecraft.world.item.ItemStack.EMPTY);
+                h.getLevel().setBlock(ore,food?Blocks.COAL_ORE.defaultBlockState():Blocks.AIR.defaultBlockState(),2);
+                if(food)observer.noteBlock(ore);else observer.forgetBlock(ore);
+                int expectedState=com.rlclones.ai.Senses.strategyState(observer,c,c,brain,now);
+                int expectedMask=com.rlclones.ai.Senses.strategyMask(observer,c,c,now);
+                var decision=com.rlclones.ai.Senses.strategyDecision(observer,c,c,brain,now);
+                h.assertTrue(expectedState==decision.state(),"paired strategy state matches independent evaluation");
+                h.assertTrue(expectedMask==decision.mask(),"paired strategy mask matches independent evaluation");
+            }
+        } finally {
+            observer.forgetBlock(ore);
+            h.getLevel().setBlock(ore,old,2);
+        }
+        h.succeed();
+    }
+    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void changingDestinationDoesNotRewardUnrelatedProgress(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);var motor=c.controller().motor();var goal=c.position().add(7,0,0);
         motor.navigate(goal,0.5,false);field(motor,"escapeBase",new Vec3(1,0,0));call(motor,"beginRecovery");
