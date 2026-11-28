@@ -66,6 +66,45 @@ public final class GearRecipeTests {
         h.getLevel().setBlock(pos,Blocks.CRAFTING_TABLE.defaultBlockState(),3);
         clone.controller().perception().noteBlock(pos);
     }
+    // Independent reference to the original per-slot full scans.
+    private static int referenceGearNeed(ClonePlayer p,Tiers tier,ArmorMaterials material) {
+        int pick=-1,sword=-1;
+        for(ItemStack st:p.getInventory().items) {
+            if(st.getItem() instanceof PickaxeItem a)pick=Math.max(pick,a.getTier().getLevel());
+            if(st.getItem() instanceof SwordItem a)sword=Math.max(sword,a.getTier().getLevel());
+        }
+        int need=(pick<tier.getLevel()?3:0)+(sword<tier.getLevel()?2:0);
+        EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
+        ArmorItem.Type[] types={ArmorItem.Type.HELMET,ArmorItem.Type.CHESTPLATE,ArmorItem.Type.LEGGINGS,ArmorItem.Type.BOOTS};
+        int[] costs={5,8,7,4};
+        for(int i=0;i<slots.length;i++) {
+            int defense=p.getItemBySlot(slots[i]).getItem() instanceof ArmorItem a?a.getDefense():0;
+            for(ItemStack st:p.getInventory().items)
+                if(st.getItem() instanceof ArmorItem a&&a.getEquipmentSlot()==slots[i])defense=Math.max(defense,a.getDefense());
+            if(defense<material.getDefenseForType(types[i]))need+=costs[i];
+        }
+        return need;
+    }
+    @GameTest(template="arena",batch="mod-gear",timeoutTicks=40)
+    public static void singlePassProgressionMatchesOriginalScans(GameTestHelper h) {
+        var p=clone(h);
+        Item[] choices={Items.AIR,Items.DIRT,Items.WOODEN_PICKAXE,Items.STONE_PICKAXE,Items.IRON_PICKAXE,Items.DIAMOND_PICKAXE,
+            Items.NETHERITE_PICKAXE,Items.IRON_SWORD,Items.DIAMOND_SWORD,Items.NETHERITE_SWORD,Items.IRON_HELMET,Items.DIAMOND_HELMET,
+            Items.IRON_CHESTPLATE,Items.DIAMOND_CHESTPLATE,Items.IRON_LEGGINGS,Items.DIAMOND_LEGGINGS,Items.IRON_BOOTS,Items.DIAMOND_BOOTS};
+        Random random=new Random(10824);
+        EquipmentSlot[] slots={EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET};
+        for(int round=0;round<256;round++) {
+            p.getInventory().clearContent();
+            for(int i=0;i<round%37;i++)p.getInventory().items.set(i,new ItemStack(choices[random.nextInt(choices.length)]));
+            for(EquipmentSlot slot:slots) {
+                Item choice=choices[random.nextInt(choices.length)];
+                p.setItemSlot(slot,choice instanceof ArmorItem a&&a.getEquipmentSlot()==slot?new ItemStack(choice):ItemStack.EMPTY);
+            }
+            h.assertTrue(Progression.ironNeed(p)==referenceGearNeed(p,Tiers.IRON,ArmorMaterials.IRON),"iron requirement mismatch");
+            h.assertTrue(Progression.diamondNeed(p)==referenceGearNeed(p,Tiers.DIAMOND,ArmorMaterials.DIAMOND),"diamond requirement mismatch");
+        }
+        h.succeed();
+    }
     @GameTest(template="arena",batch="mod-gear",timeoutTicks=40)
     public static void copperIsKeptAndFetchableForRecipeDrivenArmor(GameTestHelper h) {
         var c=clone(h);

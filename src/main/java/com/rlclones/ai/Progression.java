@@ -82,17 +82,6 @@ public final class Progression {
         return bestTier(p, PickaxeItem.class);
     }
 
-    private static int defense(Player p, int slot) {
-        EquipmentSlot s = SLOTS[slot];
-        int best = p.getItemBySlot(s).getItem() instanceof ArmorItem a ? a.getDefense() : 0;
-        for (ItemStack st : p.getInventory().items) {
-            if (st.getItem() instanceof ArmorItem a && a.getEquipmentSlot() == s) {
-                best = Math.max(best, a.getDefense());
-            }
-        }
-        return best;
-    }
-
     private static ArmorItem.Type type(int slot) {
         return switch (slot) {
             case 0 -> ArmorItem.Type.HELMET;
@@ -116,18 +105,29 @@ public final class Progression {
 
     /** Ingots / diamonds still needed for the pickaxe, sword and the four armour pieces that are not made yet at that grade. */
     private static int gearNeed(Player p, Tiers tier, ArmorMaterials material) {
-        int need = 0;
-        if (bestTier(p, PickaxeItem.class) < tier.getLevel()) {
-            need += PICK_COST;
-        }
-        if (bestTier(p, SwordItem.class) < tier.getLevel()) {
-            need += SWORD_COST;
-        }
+        // A live, single traversal: no cache keyed by Inventory.timesChanged.
+        int missing = 0;
         for (int i = 0; i < SLOTS.length; i++) {
-            if (defense(p, i) < material.getDefenseForType(type(i))) {
-                need += ARMOR_COST[i];
+            int worn = p.getItemBySlot(SLOTS[i]).getItem() instanceof ArmorItem a ? a.getDefense() : 0;
+            if (worn < material.getDefenseForType(type(i))) missing |= 1 << i;
+        }
+        boolean pick = false, sword = false;
+        int level = tier.getLevel();
+        for (ItemStack stack : p.getInventory().items) {
+            Item item = stack.getItem();
+            if (item instanceof PickaxeItem tool && tool.getTier().getLevel() >= level) pick = true;
+            if (item instanceof SwordItem tool && tool.getTier().getLevel() >= level) sword = true;
+            if (item instanceof ArmorItem armor) {
+                for (int i = 0; i < SLOTS.length; i++) {
+                    if ((missing & (1 << i)) != 0 && armor.getEquipmentSlot() == SLOTS[i]
+                            && armor.getDefense() >= material.getDefenseForType(type(i))) {
+                        missing &= ~(1 << i);
+                    }
+                }
             }
         }
+        int need = (pick ? 0 : PICK_COST) + (sword ? 0 : SWORD_COST);
+        for (int i = 0; i < SLOTS.length; i++) if ((missing & (1 << i)) != 0) need += ARMOR_COST[i];
         return need;
     }
 
