@@ -95,9 +95,12 @@ public final class Equipment {
         double bestScore = 0;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
-            if (!s.isEmpty() && kind.isInstance(s.getItem()) && attackDamage(s) > bestScore) {
-                bestScore = attackDamage(s);
-                best = i;
+            if (!s.isEmpty() && kind.isInstance(s.getItem())) {
+                double score = attackDamage(s);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = i;
+                }
             }
         }
         return best;
