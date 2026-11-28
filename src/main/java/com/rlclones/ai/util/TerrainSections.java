@@ -100,5 +100,33 @@ public final class TerrainSections {
         found.sort(ORDER);
         return found;
     }
+    private static final java.util.function.Predicate<BlockState> NATURAL_LEAF =
+            state -> state.getBlock() instanceof LeavesBlock && state.hasProperty(LeavesBlock.PERSISTENT)
+                    && !state.getValue(LeavesBlock.PERSISTENT);
+
+    /** Null means use the original world traversal (e.g. an unloaded column).
+     * No long-lived cache: consult the live section palette on every query. */
+    public static Boolean naturalLeavesInLoadedBox(Level level,BlockPos min,BlockPos max) {
+        int lowY=Math.max(min.getY(),level.getMinBuildHeight()),highY=Math.min(max.getY(),level.getMaxBuildHeight()-1);
+        if(lowY>highY)return false;
+        // Never replace a potentially loading world lookup with a missing-chunk assumption.
+        for(int sx=min.getX()>>4;sx<=max.getX()>>4;sx++)for(int sz=min.getZ()>>4;sz<=max.getZ()>>4;sz++)
+            if(!(level.getChunk(sx,sz,ChunkStatus.FULL,false) instanceof LevelChunk))return null;
+        for(int sx=min.getX()>>4;sx<=max.getX()>>4;sx++)for(int sz=min.getZ()>>4;sz<=max.getZ()>>4;sz++) {
+            var chunk=level.getChunk(sx,sz,ChunkStatus.FULL,false);
+            if(!(chunk instanceof LevelChunk))return null;
+            int ox=sx<<4,oz=sz<<4;
+            int minX=Math.max(min.getX(),ox),maxX=Math.min(max.getX(),ox+15);
+            int minZ=Math.max(min.getZ(),oz),maxZ=Math.min(max.getZ(),oz+15);
+            for(int sy=lowY>>4;sy<=highY>>4;sy++) {
+                var section=chunk.getSection(chunk.getSectionIndex(sy<<4));
+                if(section.hasOnlyAir()||!section.maybeHas(NATURAL_LEAF))continue;
+                int minY=Math.max(lowY,sy<<4),maxY=Math.min(highY,(sy<<4)+15);
+                for(BlockPos pos:BlockPos.betweenClosed(minX,minY,minZ,maxX,maxY,maxZ))
+                    if(NATURAL_LEAF.test(level.getBlockState(pos)))return true;
+            }
+        }
+        return false;
+    }
     private TerrainSections() {}
 }
