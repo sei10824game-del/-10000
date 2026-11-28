@@ -85,6 +85,8 @@ public final class Perception {
         }
     }
 
+    // Private, read-only iteration order; avoid cloning the enum array on every ore candidate.
+    private static final Direction[] ORE_FACE_DIRECTIONS = Direction.values();
     private static final int MAX_BLOCKS = 128;
     private static final int MAX_VISION_CHECKS = 64;
     private final NearestCandidates<Entity> candidates = new NearestCandidates<>(MAX_VISION_CHECKS);
@@ -373,18 +375,19 @@ public final class Perception {
             if (blocks.containsKey(p) || !level.getBlockState(p).is(Tags.Blocks.ORES)) {
                 continue;
             }
-            Vec3 to = Vec3.atCenterOf(p).subtract(eye);
+            Vec3 center = Vec3.atCenterOf(p);
+            Vec3 to = center.subtract(eye);
             if (to.lengthSqr() > 1.0e-4 && to.normalize().dot(look) < 0.5) {
                 continue; // behind or beside us
             }
             boolean open = false;
-            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+            for (Direction d : ORE_FACE_DIRECTIONS) {
                 open |= !level.getBlockState(p.relative(d)).canOcclude();
             }
             if (!open) {
                 continue;
             }
-            BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(p), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
+            BlockHitResult hit = level.clip(new ClipContext(eye, center, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, self));
             if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(p)) {
                 noteBlock(p);
                 oresNoticed++;
@@ -440,7 +443,7 @@ public final class Perception {
             if (!st.is(Tags.Blocks.ORES) || blocks.containsKey(p)) {
                 continue;
             }
-            for (Direction d : Direction.values()) {
+            for (Direction d : ORE_FACE_DIRECTIONS) {
                 if (level.getBlockState(p.relative(d)).isAir()) {
                     if (blocks.put(p.immutable(), BlockKind.ORE) == null) {
                         discoveries++;
