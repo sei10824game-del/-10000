@@ -58,8 +58,8 @@ public final class ReplayBuffer {
         t.gamma = gamma;
         t.nextMask = nextMask;
         t.weight = weight;
-        next = (next + 1) % capacity;
-        size = Math.min(size + 1, capacity);
+        if (++next == capacity) next = 0;
+        if (size < capacity) ++size;
     }
 
     public Transition sample(Random random) {
@@ -81,7 +81,10 @@ public final class ReplayBuffer {
 
     /** Iterate in insertion order, including after the ring wraps. */
     private Transition oldest(int offset) {
-        return items[(int) (((long) next - size + capacity + offset) % capacity)];
+        int start = next - size;
+        if (start < 0) start += capacity;
+        int tail = capacity - start;
+        return items[offset < tail ? start + offset : offset - tail];
     }
 
     public byte[] toBytes() {
