@@ -1,0 +1,48 @@
+name: Integrated repair population comparison
+on:
+  push:
+    branches: [validation/integrated-repair-load-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        count: [100, 300]
+        seed: [rlclones, rlclones-rl-exact-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare baseline and cumulative fixes
+        run: |
+          python3 scripts/compare-population.py \
+            --baseline 217eb662e7ed0770b25961e86ff4abcbb3ab5751 \
+            --candidate 5b5c0ef40033f5963997be8e5f7baf9848a824ac \
+            --counts ${{ matrix.count }} --ticks 2400 --repeats 2 \
+            --seed "${{ matrix.seed }}" --timeout 4500 \
+            --output "$RUNNER_TEMP/integrated-comparison"
+      - name: Report
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/integrated-comparison/comparison.csv"
+          if test -f "$report"; then
+            cat "$report" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-${{ matrix.count }}-${{ matrix.seed }}
+          path: ${{ runner.temp }}/integrated-comparison/
+          if-no-files-found: warn
