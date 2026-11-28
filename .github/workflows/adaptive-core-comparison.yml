@@ -1,0 +1,41 @@
+name: Adaptive core population comparison
+on:
+  push:
+    branches: [optimization/adaptive-core-experiments-20261129]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: adaptive-core-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        clones: [10, 100, 300]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare fixed-world-seed population runs
+        run: python3 scripts/compare-population.py --baseline 1f351f21eab2fd30defc9c3319b88f2105008bd0 --candidate HEAD --counts ${{ matrix.clones }} --ticks 1200 --repeats 2 --seed rlclones --timeout 2400 --output "$RUNNER_TEMP/adaptive-core"
+      - name: Publish comparison
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/adaptive-core/comparison.csv"
+          if test -f "$f"; then cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adaptive-core-population-${{ matrix.clones }}
+          path: ${{ runner.temp }}/adaptive-core/
+          if-no-files-found: warn
