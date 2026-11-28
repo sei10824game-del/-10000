@@ -1,0 +1,45 @@
+name: Event bounds only Java 17 comparison
+on:
+  push:
+    branches: [validation/event-bounds-only-java17-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Compare actual source against baseline
+        run: |
+          git show 935c09bd7a415e508de73c92584ef29bba16d152:scripts/EventIntervalBenchmark.java > scripts/EventIntervalBenchmark.java
+          git show 935c09bd7a415e508de73c92584ef29bba16d152:scripts/benchmark-event-interval.sh > scripts/benchmark-event-interval.sh
+          set -o pipefail
+          bash scripts/benchmark-event-interval.sh 5b5c0ef40033f5963997be8e5f7baf9848a824ac 57a13547ef8dfee302c65533be99f78bbe8fc656 2>&1 | tee event-bounds-results.txt
+      - name: Verify exact replay
+        run: |
+          python3 - <<'PY'
+          import re
+          from collections import defaultdict
+          rows = defaultdict(list)
+          for line in open('event-bounds-results.txt'):
+              m = re.fullmatch(r'empty=(\d+) ns=([\d.]+) bytes=([\d.]+) hash=(-?\d+)\n?', line)
+              if m: rows[int(m[1])].append(m[4])
+          assert set(rows) == {0,50,90,100}, rows
+          assert all(len(v)==4 and len(set(v))==1 for v in rows.values()), rows
+          print('All 16 replay checksums match.')
+          PY
+          cat event-bounds-results.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: event-bounds-java17
+          path: event-bounds-results.txt
