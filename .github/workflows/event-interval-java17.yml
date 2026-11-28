@@ -1,0 +1,43 @@
+name: Exact event interval Java 17 microbenchmark
+on:
+  push:
+    branches: [validation/event-interval-java17-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Compile and replay actual Git sources
+        run: |
+          set -o pipefail
+          bash scripts/benchmark-event-interval.sh 2>&1 | tee event-results.txt
+      - name: Verify output equivalence
+        run: |
+          python3 - <<'PY'
+          import re
+          from collections import defaultdict
+          rows = defaultdict(list)
+          for line in open('event-results.txt'):
+              m = re.fullmatch(r'empty=(\d+) ns=([\d.]+) bytes=([\d.]+) hash=(-?\d+)\n?', line)
+              if m: rows[int(m[1])].append(m[4])
+          assert set(rows) == {0,50,90,100}, rows
+          assert all(len(v)==4 and len(set(v))==1 for v in rows.values()), rows
+          print('All 16 replay checksums match across baseline and candidate.')
+          PY
+          cat event-results.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: event-java17-replay
+          path: event-results.txt
