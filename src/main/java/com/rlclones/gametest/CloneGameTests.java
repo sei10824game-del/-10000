@@ -4557,6 +4557,34 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r8civicack")
+    public static void claimedFoodDeliverySurvivesAvailabilityCheck(GameTestHelper h) {
+        ClonePlayer worker = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer recipient = clone(h, 8.5, 7.5, 0f, false);
+        worker.getInventory().clearContent();
+        recipient.getInventory().clearContent();
+        worker.getFoodData().setFoodLevel(20);
+        recipient.getFoodData().setFoodLevel(4);
+        worker.getInventory().add(new ItemStack(Items.BREAD, 8));
+        var board = manager(h).workBoard();
+        var key = com.rlclones.ai.civilization.CivicWork.key(recipient, com.rlclones.ai.civilization.WorkBoard.FOOD);
+        // Claim explicitly to isolate the availability-check race from unrelated requests.
+        long now = h.getLevel().getGameTime();
+        h.assertTrue(board.post(key, 4, now), "food request posted");
+        h.assertTrue(board.claim(key, worker.getUUID(), now), "worker owns request");
+        try {
+            recipient.getInventory().add(new ItemStack(Items.BREAD, 4));
+            var civic = worker.controller().civicWork();
+            civic.canHelp();
+            h.assertTrue(board.find(key, now) != null, "availability query must not erase an owned delivery");
+            h.assertTrue(board.complete(key, worker.getUUID(), now), "owner can acknowledge completed delivery");
+        } finally {
+            board.cancel(key);
+            finish(h, worker, recipient);
+        }
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r8child")
     public static void parentsFeedTheirChildFirst(GameTestHelper h) {
         ClonePlayer parent = clone(h, 7.5, 3.5, 0f, true);
