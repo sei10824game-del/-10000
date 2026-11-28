@@ -18,7 +18,15 @@ public final class LearningEvidence {
     public void mergeHints(LearningEvidence other){if(other==this)return;for(int d=0;d<DOMAINS;d++)for(int s=0;s<8;s++)hints[d][s]|=other.hints[d][s];}
     /** Histories of independent brains have no common time order; keep this brain's own window on merge. */
     public void copyHistoryFrom(LearningEvidence other){for(int d=0;d<DOMAINS;d++){System.arraycopy(other.outcomes[d],0,outcomes[d],0,32);size[d]=other.size[d];next[d]=other.next[d];}}
-    public byte[] save(){try{var bytes=new ByteArrayOutputStream();var out=new DataOutputStream(bytes);out.writeInt(1);for(int d=0;d<DOMAINS;d++){for(int v:hints[d])out.writeInt(v);out.writeInt(size[d]);out.writeInt(next[d]);out.write(outcomes[d]);}return bytes.toByteArray();}catch(IOException e){throw new UncheckedIOException(e);}}
+    public byte[] save(){
+        var out=java.nio.ByteBuffer.allocate(4+DOMAINS*72);
+        out.putInt(1);
+        for(int d=0;d<DOMAINS;d++){
+            for(int v:hints[d])out.putInt(v);
+            out.putInt(size[d]).putInt(next[d]).put(outcomes[d]);
+        }
+        return out.array();
+    }
     public static LearningEvidence load(byte[] bytes){var result=new LearningEvidence();if(bytes.length!=4+DOMAINS*72)return result;try{var in=new DataInputStream(new ByteArrayInputStream(bytes));if(in.readInt()!=1)return result;
         for(int d=0;d<DOMAINS;d++){for(int s=0;s<8;s++){int v=in.readInt();if(v<0||v>15)return new LearningEvidence();result.hints[d][s]=v;}result.size[d]=in.readInt();result.next[d]=in.readInt();if(result.size[d]<0||result.size[d]>32||result.next[d]<0||result.next[d]>=32)return new LearningEvidence();in.readFully(result.outcomes[d]);for(byte v:result.outcomes[d])if(v<0||v>1)return new LearningEvidence();}return result;
         }catch(IOException e){return new LearningEvidence();}}
