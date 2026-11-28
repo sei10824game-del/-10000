@@ -3,12 +3,27 @@
 import argparse
 import csv
 import math
+import json
 import statistics
 from pathlib import Path
 
 def evaluate(paths, min_gain=0.02, max_heap_growth=0.05):
     reports = []
+    seeds = set()
+    common = None
     for path in paths:
+        with (path.parent / 'settings.json').open(encoding='utf-8') as f:
+            settings = json.load(f)
+        seed = settings['seed']
+        if not isinstance(seed, str) or not seed.strip() or seed in seeds:
+            raise ValueError(f'{path}: missing or duplicate seed')
+        seeds.add(seed)
+        refs = settings['refs']
+        if set(refs) != {'baseline', 'candidate'} or refs['baseline'] == refs['candidate']:
+            raise ValueError(f'{path}: invalid comparison refs')
+        signature = (refs, settings['counts'], settings['ticks'], settings['repeats'])
+        if common is None: common = signature
+        if common != signature: raise ValueError(f'{path}: different commits or workload')
         with open(path, newline='', encoding='utf-8') as f:
             rows = list(csv.DictReader(f))
         pairs = {}
@@ -22,6 +37,16 @@ def evaluate(paths, min_gain=0.02, max_heap_growth=0.05):
             raise ValueError(f'{path}: need at least two complete paired runs')
         if len({k[:3] for k in pairs}) != 1:
             raise ValueError(f'{path}: mixed population, duration or site')
+        if len(settings['counts']) != 1 or len(pairs) != settings['repeats']:
+            raise ValueError(f'{path}: incomplete or mixed workload')
+        if {int(k[3]) for k in pairs} != set(range(1, settings['repeats'] + 1)):
+            raise ValueError(f'{path}: missing repeat')
+        for key, pair in pairs.items():
+            if int(key[0]) != settings['counts'][0] or int(key[1]) != settings['ticks']:
+                raise ValueError(f'{path}: workload differs from settings')
+            samples = [int(r['samples']) for r in pair.values()]
+            if samples[0] <= 0 or samples[0] != samples[1]:
+                raise ValueError(f'{path}: unmatched sample counts')
         def avg(version, metric):
             vals = [float(p[version][metric]) for p in pairs.values()]
             if not all(math.isfinite(x) and x >= 0 for x in vals):
@@ -55,7 +80,7 @@ def main():
     if len(a.csv)<2: p.error('provide CSVs from at least two independent seed runs')
     if len({x.resolve() for x in a.csv})!=len(a.csv): p.error('duplicate CSV')
     try: reports=evaluate(a.csv,a.min_gain,a.max_heap_growth)
-    except (ValueError,KeyError,OSError) as e: p.error(str(e))
+    except (ValueError,KeyError,OSError,TypeError) as e: p.error(str(e))
     for path,mspt,p95,heap,reasons in reports:
         print(f'{path}: MSPT {mspt:+.2%}, sampled p95 {p95:+.2%}, heap {heap:+.2%}: '+('; '.join(reasons) or 'passes performance screen'))
     passed=all(not x[-1] for x in reports)
