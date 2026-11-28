@@ -20,6 +20,9 @@ public final class CivicWork {
     public int bundledDeliveries, toppedUpTrips;
     private boolean fetching, dropped;
     private int beforeFetch, cargo, ticks, deliveryTicks;
+    private int foodBeforeDrop, foodReceived;
+    private final java.util.Map<UUID, Integer> foodGifts = new java.util.HashMap<>();
+    public static final String FOOD_DELIVERY_WORKER = "rlclonesCivicFoodWorker";
     private long retryAfter;
     public int completed;
 
@@ -98,6 +101,7 @@ public final class CivicWork {
         active = pick();
         if (active == null || !board().claim(active.key, self.getUUID(), now())) { active = null; return false; }
         ticks = cargo = deliveryTicks = 0; dropped = false;
+        resetFoodReceipt();
         int shortage=active.count-count(requester(active),active);
         int carried=spare(active);
         // Food already in hand goes immediately. Materials can fill the requested load before leaving.
@@ -122,7 +126,8 @@ public final class CivicWork {
         ServerPlayer recipient = requester(active);
         if (board().find(active.key,now())!=active || recipient == null || self.getFoodData().getFoodLevel() <= 6 || ++ticks > 1800
                 || !board().claim(active.key, self.getUUID(), now())) { cancel(); retryAfter = now() + 200; return false; }
-        if (count(recipient, active) >= active.count) {
+        if (count(recipient, active) >= active.count || (dropped && WorkBoard.FOOD.equals(active.key.item())
+                && foodBeforeDrop + foodReceived >= active.count)) {
             if (board().complete(active.key, self.getUUID(), now())) {
                 completed++;
                 if (dropped) {
@@ -138,6 +143,7 @@ public final class CivicWork {
             }
             if(!bundled.isEmpty()) {
                 warehouse.reset();active=bundled.removeFirst();fetching=dropped=false;cargo=deliveryTicks=0;bundledDeliveries++;
+                resetFoodReceipt();
                 return true;
             }
             cancel(); return false;
@@ -159,7 +165,9 @@ public final class CivicWork {
             return true;
         }
         int available = WorkBoard.FOOD.equals(active.key.item()) ? spare(active) : Math.max(cargo, spare(active));
-        int amount = Math.min(active.count - count(recipient, active), available);
+        int held = count(recipient, active);
+        int amount = Math.min(active.count - held, available);
+        foodBeforeDrop = held;
         if (amount <= 0) { cancel(); return false; }
         motor.stop(); motor.lookAt(recipient);
         java.util.List<ItemStack> supplies = new java.util.ArrayList<>(self.getInventory().items);
@@ -174,6 +182,10 @@ public final class CivicWork {
                 // Same reach as handing an item to a friend, with exclusive pickup ownership.
                 gift.setDeltaMovement(recipient.position().subtract(self.position()).normalize().scale(0.2).add(0, 0.1, 0));
                 ItemAid.gift(gift, recipient.getUUID());
+                if (WorkBoard.FOOD.equals(active.key.item())) {
+                    foodGifts.put(gift.getUUID(), n);
+                    gift.getPersistentData().putUUID(FOOD_DELIVERY_WORKER, self.getUUID());
+                }
             }
             amount -= n;
         }
@@ -200,11 +212,30 @@ public final class CivicWork {
         }
     }
 
+    /** Called only for actual server-side pickup events, not for an attempted drop. */
+    public void confirmFoodPickup(UUID recipient, UUID gift, ItemStack picked) {
+        if (active == null || !dropped || !WorkBoard.FOOD.equals(active.key.item())
+                || !active.key.requester().equals(recipient) || !FoodAid.goodFood(picked)) return;
+        Integer remaining = foodGifts.get(gift);
+        if (remaining == null) return;
+        int accepted = Math.min(remaining, picked.getCount());
+        if (accepted <= 0) return;
+        foodReceived += accepted;
+        if (accepted == remaining) foodGifts.remove(gift);
+        else foodGifts.put(gift, remaining - accepted);
+    }
+
+    private void resetFoodReceipt() {
+        foodGifts.clear();
+        foodBeforeDrop = foodReceived = 0;
+    }
+
     public void cancel() {
         if (active != null) board().release(active.key, self.getUUID());
         for(var job:bundled)board().release(job.key,self.getUUID());
         bundled.clear();
         if (fetching) warehouse.reset();
         active = null; fetching = false;
+        resetFoodReceipt();
     }
 }
