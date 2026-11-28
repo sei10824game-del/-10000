@@ -171,7 +171,8 @@ public final class Senses {
         if (!Equipment.hasShield(agent)) {
             mask &= ~CombatAction.BLOCK.bit();
         }
-        if (Equipment.rangedSlot(agent) < 0 && !Equipment.offhandRanged(agent)) {
+        int launcher = Equipment.rangedSlot(agent);
+        if (launcher < 0 && !Equipment.offhandRanged(agent)) {
             mask &= ~CombatAction.SHOOT.bit();
         }
         if (Equipment.usableSlot(agent, x -> true) < 0) {
@@ -183,7 +184,6 @@ public final class Senses {
         if (!Specials.available(agent, 1)) {
             mask &= ~CombatAction.SPECIAL2.bit();
         }
-        int launcher = Equipment.rangedSlot(agent);
         if (launcher >= 0 && Equipment.isLauncher(agent.getInventory().getItem(launcher)) && Equipment.canFire(agent, agent.getInventory().getItem(launcher))
                 && Equipment.bestWeaponSlot(agent) < 0) {
             mask &= ~(CombatAction.ATTACK.bit() | CombatAction.CRIT_ATTACK.bit() | CombatAction.SPRINT_ATTACK.bit()); // a bow and nothing else: no beating with it - shoot, or step back
