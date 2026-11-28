@@ -69,6 +69,10 @@ class SeededLearningComparisonTest {
         }
         return HexFormat.of().formatHex(digest.digest());
     }
+    @org.junit.jupiter.api.BeforeAll static void bootstrapMinecraft() {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        net.minecraft.server.Bootstrap.bootStrap();
+    }
     @Test void identicalInputAndPolicySeedProduceComparableTrace() throws Exception {
         StringBuilder result=new StringBuilder();
         for(long s:new long[]{81,92177,660911}){
