@@ -41,6 +41,8 @@ public final class Farming {
     private int ticks;
     private int tries;
     private int collect;
+    private int seedsBeforeCollect;
+    @Nullable private net.minecraft.world.entity.item.ItemEntity seedDrop;
     private long cachedAt = -1000;
     /** Spots where the job did not work out (too dark for crops, out of reach...), skipped for a while. */
     private final java.util.Map<BlockPos, Long> failed = new java.util.HashMap<>();
@@ -433,7 +435,33 @@ public final class Farming {
         ticks = 0;
         tries = 0;
         collect = 0;
+        seedDrop = null;
         motor.resetMining();
+    }
+
+    private void beginSeedCollection() {
+        seedsBeforeCollect = seedCount();
+        seedDrop = null;
+        collect = 60; // enough time to walk to scattered drops, including the vanilla pickup delay
+    }
+
+    @Nullable
+    private net.minecraft.world.entity.item.ItemEntity nearbySeedDrop(ServerLevel level) {
+        Vec3 eye = self.getEyePosition();
+        Vec3 origin = Vec3.atCenterOf(target);
+        net.minecraft.world.entity.item.ItemEntity best = null;
+        double bestDistance = 36;
+        for (var item : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                new net.minecraft.world.phys.AABB(target).inflate(3),
+                e -> e.isAlive() && Storage.isSeed(e.getItem()) && !ItemAid.giftForOther(e, self))) {
+            double distance = item.distanceToSqr(self);
+            if (distance >= bestDistance || item.position().distanceToSqr(origin) > 9) continue;
+            if (level.clip(new ClipContext(eye, item.position(), ClipContext.Block.VISUAL,
+                    ClipContext.Fluid.NONE, self)).getType() != HitResult.Type.MISS) continue;
+            best = item;
+            bestDistance = distance;
+        }
+        return best;
     }
 
     public Status tick() {
@@ -443,11 +471,25 @@ public final class Farming {
             return Status.DONE;
         }
         if (collect > 0) {
-            // walk over the dropped wheat / seeds like a player would
+            // Grass drops can scatter away from the original block, and vanilla pickup takes time.
+            // Follow a nearby visible seed entity rather than waiting over an empty block.
             collect--;
-            motor.navigate(Vec3.atBottomCenterOf(target), 0.3, false);
+            if (job == Job.SEEDS) {
+                if (seedCount() > seedsBeforeCollect) {
+                    collect = 0;
+                } else {
+                    if (seedDrop == null || !seedDrop.isAlive()) {
+                        if ((collect & 3) == 0 || seedDrop != null) seedDrop = nearbySeedDrop(level);
+                    }
+                    Vec3 goal = seedDrop != null && seedDrop.isAlive() ? seedDrop.position() : Vec3.atBottomCenterOf(target);
+                    motor.navigate(goal, 0.1, false);
+                }
+            } else {
+                motor.navigate(Vec3.atBottomCenterOf(target), 0.3, false);
+            }
             if (collect == 0) {
                 target = null;
+                seedDrop = null;
             }
             return Status.WORKING;
         }
@@ -473,7 +515,7 @@ public final class Farming {
         };
         if (!stillValid) {
             if (job == Job.SEEDS && !isGrass(st) && collect == 0) {
-                collect = 15; // cut on the way (R-17) or by someone: walk over where it fell to pick the seeds up
+                beginSeedCollection(); // grass was cut while approaching; look for the real drops
                 return Status.WORKING;
             }
             target = null;
@@ -555,7 +597,7 @@ public final class Farming {
                 Equipment.select(self, -1);
                 if (motor.mine(target)) {
                     grassCut++;
-                    collect = 15;
+                    beginSeedCollection();
                 }
             }
             case HARVEST -> {
