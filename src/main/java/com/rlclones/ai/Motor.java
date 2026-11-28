@@ -209,8 +209,13 @@ public final class Motor {
             double dist = Math.sqrt(dx * dx + dz * dz);
             if (dist <= 2.5 && (dist < 0.4 || (dx * moveDir.x + dz * moveDir.z) / (dist * len) >= 0.7071)) {
                 self.gameMode.destroyBlock(p.immutable());
-                sweepCuts++;
-                return; // one a tick
+                if (!Farming.isGrass(level.getBlockState(p))) {
+                    sweepCuts++;
+                    if (self instanceof com.rlclones.clone.ClonePlayer clone && clone.controller() != null) {
+                        clone.controller().farming().onSweptGrass();
+                    }
+                }
+                return; // one attempt a tick
             }
         }
     }
