@@ -6,6 +6,56 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class QTableTest {
     @Test
+    void fastMergeMatchesLegacyIterationAndExactBytes() {
+        var rng = new java.util.Random(10824);
+        for (int actions : new int[]{1, 15, 30, 32}) {
+            QTable expected = new QTable(actions);
+            QTable actual = new QTable(actions);
+            QTable source = new QTable(actions);
+            for (int i = 0; i < 1024; i++) {
+                int key = rng.nextInt(4096)-2048;
+                var e = expected.get(key, QTable.Prior.ZERO);
+                var a = actual.get(key, QTable.Prior.ZERO);
+                var s = source.get(i-512, QTable.Prior.ZERO);
+                e.visits = a.visits = rng.nextInt(1000);
+                s.visits = rng.nextInt(1000);
+                for (int j=0;j<actions;j++) {
+                    e.q[j] = a.q[j] = rng.nextFloat()*20f-10f;
+                    e.n[j] = a.n[j] = rng.nextInt(100);
+                    e.demo[j] = a.demo[j] = rng.nextInt(30);
+                    s.q[j] = rng.nextFloat()*20f-10f;
+                    s.n[j] = rng.nextInt(100);
+                    s.demo[j] = rng.nextInt(30);
+                }
+            }
+            byte[] original = source.toBytes();
+            for (var row : source.entries()) {
+                var s = row.getValue();
+                var d = expected.peek(row.getIntKey());
+                if (d == null) {
+                    d = expected.get(row.getIntKey(), QTable.Prior.ZERO);
+                    System.arraycopy(s.q,0,d.q,0,actions);
+                    System.arraycopy(s.n,0,d.n,0,actions);
+                    System.arraycopy(s.demo,0,d.demo,0,actions);
+                    d.visits=s.visits;
+                    continue;
+                }
+                for (int j=0;j<actions;j++) {
+                    long n=(long)d.n[j]+s.n[j];
+                    d.q[j]=n==0?(float)(((double)d.q[j]+s.q[j])*0.5)
+                        :(float)(((double)d.q[j]*d.n[j]+(double)s.q[j]*s.n[j])/n);
+                    d.n[j]=(int)Math.min(Integer.MAX_VALUE,n);
+                    d.demo[j]=(int)Math.min(Integer.MAX_VALUE,(long)d.demo[j]+s.demo[j]);
+                }
+                d.visits=(int)Math.min(Integer.MAX_VALUE,(long)d.visits+s.visits);
+            }
+            actual.mergeFrom(source);
+            assertArrayEquals(expected.toBytes(),actual.toBytes());
+            assertArrayEquals(original,source.toBytes());
+        }
+    }
+
+    @Test
     void mergeKeepsWeightedValuesWhenCountsOverflow() {
         QTable a = new QTable(2);
         QTable b = new QTable(2);
