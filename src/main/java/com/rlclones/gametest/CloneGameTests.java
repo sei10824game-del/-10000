@@ -4585,6 +4585,56 @@ public final class CloneGameTests {
         h.succeed();
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 100, batch = "r8civicreceipt")
+    public static void foodDeliverySurvivesImmediateConsumption(GameTestHelper h) {
+        ClonePlayer worker = clone(h, 7.5, 7.5, 0f, false);
+        ClonePlayer recipient = clone(h, 8.5, 7.5, 0f, false);
+        worker.getInventory().clearContent();
+        recipient.getInventory().clearContent();
+        worker.getFoodData().setFoodLevel(20);
+        recipient.getFoodData().setFoodLevel(4);
+        worker.getInventory().add(new ItemStack(Items.BREAD, 8));
+        var board = manager(h).workBoard();
+        var key = com.rlclones.ai.civilization.CivicWork.key(recipient, com.rlclones.ai.civilization.WorkBoard.FOOD);
+        long now = h.getLevel().getGameTime();
+        var civic = worker.controller().civicWork();
+        h.assertTrue(board.post(key, 4, now), "food request posted");
+        h.assertTrue(board.claim(key, worker.getUUID(), now), "worker owns request");
+        try {
+            var field = civic.getClass().getDeclaredField("active");
+            field.setAccessible(true);
+            field.set(civic, board.find(key, now));
+            h.assertTrue(civic.tick(), "worker drops food");
+            var gifts = h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    worker.getBoundingBox().inflate(4),
+                    e -> e.getPersistentData().hasUUID(com.rlclones.ai.civilization.CivicWork.FOOD_DELIVERY_WORKER)
+                        && e.getPersistentData().getUUID(com.rlclones.ai.civilization.CivicWork.FOOD_DELIVERY_WORKER).equals(worker.getUUID()));
+            h.assertTrue(gifts.size() == 1, "one targeted delivery stack");
+            var gift = gifts.get(0);
+            civic.confirmFoodPickup(worker.getUUID(), gift.getUUID(), new ItemStack(Items.BREAD, 4));
+            h.assertTrue(civic.tick() && civic.completed == 0, "wrong recipient cannot acknowledge delivery");
+            gift.setNoPickUpDelay();
+            gift.playerTouch(recipient);
+            h.assertTrue(recipient.getInventory().countItem(Items.BREAD) == 4, "recipient really picked up the four bread");
+            // Model one bread leaving the inventory before the worker next ticks.
+            for (var stack : recipient.getInventory().items) {
+                if (stack.is(Items.BREAD)) { stack.shrink(1); break; }
+            }
+            h.assertTrue(recipient.getInventory().countItem(Items.BREAD) == 3, "recipient no longer holds all four");
+            h.assertTrue(!civic.tick() && civic.completed == 1, "real receipt completes the job despite consumption");
+            h.assertTrue(board.find(key, now) == null && worker.controller().foodAid().given == 1,
+                    "delivery is completed and credited once");
+            h.assertTrue(worker.getInventory().countItem(Items.BREAD) == 4, "worker retains reserve");
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        } finally {
+            civic.cancel();
+            board.cancel(key);
+            finish(h, worker, recipient);
+        }
+        h.succeed();
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 1600, batch = "r8child")
     public static void parentsFeedTheirChildFirst(GameTestHelper h) {
         ClonePlayer parent = clone(h, 7.5, 3.5, 0f, true);
