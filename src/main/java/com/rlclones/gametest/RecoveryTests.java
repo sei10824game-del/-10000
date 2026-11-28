@@ -46,6 +46,43 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
+    public static void movementHazardSamplesMatchOriginalTraversal(GameTestHelper h) {
+        var c=GearRecipeTests.clone(h);var motor=c.controller().motor();
+        var level=h.getLevel();
+        var lava=c.blockPosition().south();
+        var previous=level.getBlockState(lava);
+        try {
+            level.setBlock(lava,Blocks.LAVA.defaultBlockState(),2);
+            var hazard=Motor.class.getDeclaredMethod("hazardAhead",float.class,float.class,float.class);
+            var drop=Motor.class.getDeclaredMethod("deadlyDropAhead",float.class,float.class,float.class);
+            hazard.setAccessible(true);drop.setAccessible(true);
+            for(float yaw=0;yaw<360;yaw+=15) for(float forward:new float[]{-1,0,1}) for(float side:new float[]{-1,0,1}) {
+                double rad=Math.toRadians(yaw);
+                double mx=-Math.sin(rad)*forward+Math.cos(rad)*side;
+                double mz=Math.cos(rad)*forward+Math.sin(rad)*side;
+                double len=Math.sqrt(mx*mx+mz*mz);
+                boolean expectedHazard=false,expectedDrop=false;
+                if(len>=1e-4) {
+                    mx/=len;mz/=len;
+                    for(double ahead:new double[]{0.6,1.1}) {
+                        var feet=BlockPos.containing(c.getX()+mx*ahead,c.getY()+0.01,c.getZ()+mz*ahead);
+                        for(int dy=0;dy<=1;dy++) {
+                            var pos=feet.above(dy);
+                            expectedHazard |= level.getFluidState(pos).is(net.minecraft.tags.FluidTags.LAVA)
+                                    ||level.getBlockState(pos).is(net.minecraft.tags.BlockTags.FIRE);
+                        }
+                    }
+                    for(double ahead:new double[]{0.5,0.9})
+                        expectedDrop |= motor.dropAt(c.getX()+mx*ahead,c.getZ()+mz*ahead)>=4+(c.getHealth()>10?1:0);
+                }
+                h.assertTrue(expectedHazard==(boolean)hazard.invoke(motor,yaw,forward,side),"hazard sample mismatch");
+                h.assertTrue(expectedDrop==(boolean)drop.invoke(motor,yaw,forward,side),"drop sample mismatch");
+            }
+        } catch(ReflectiveOperationException e) {throw new RuntimeException(e);}
+        finally {level.setBlock(lava,previous,2);}
+        h.succeed();
+    }
+    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void changingDestinationDoesNotRewardUnrelatedProgress(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);var motor=c.controller().motor();var goal=c.position().add(7,0,0);
         motor.navigate(goal,0.5,false);field(motor,"escapeBase",new Vec3(1,0,0));call(motor,"beginRecovery");

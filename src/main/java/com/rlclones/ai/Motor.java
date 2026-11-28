@@ -254,16 +254,20 @@ public final class Motor {
 
     /** How far one would fall stepping off at (x, z) from the current feet level; 64 = no ground / deadly below. */
     public int dropAt(double x, double z) {
+        return dropAt(BlockPos.containing(x, self.getY() + 0.01, z));
+    }
+
+    private int dropAt(BlockPos feet) {
         ServerLevel level = self.serverLevel();
-        BlockPos feet = BlockPos.containing(x, self.getY() + 0.01, z);
         if (!level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()) {
             return 0; // a wall / step, not a drop
         }
         for (int d = 1; d <= 24; d++) {
             BlockPos p = feet.below(d);
             BlockState st = level.getBlockState(p);
-            if (!level.getFluidState(p).isEmpty()) {
-                return level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) ? 64 : 0; // water breaks the fall
+            var fluid = level.getFluidState(p);
+            if (!fluid.isEmpty()) {
+                return fluid.is(net.minecraft.tags.FluidTags.LAVA) ? 64 : 0; // water breaks the fall
             }
             if (!st.getCollisionShape(level, p).isEmpty()) {
                 boolean hurts = st.getBlock() instanceof net.minecraft.world.level.block.MagmaBlock
@@ -303,14 +307,16 @@ public final class Motor {
         mx /= len;
         mz /= len;
         ServerLevel level = self.serverLevel();
-        for (double ahead : new double[]{0.6, 1.1}) {
-            BlockPos feet = BlockPos.containing(self.getX() + mx * ahead, self.getY() + 0.01, self.getZ() + mz * ahead);
-            for (int dy = 0; dy <= 1; dy++) {
-                BlockPos p = feet.above(dy);
-                if (level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(p).is(BlockTags.FIRE)) {
-                    return true;
-                }
-            }
+        BlockPos first = BlockPos.containing(self.getX() + mx * 0.6, self.getY() + 0.01, self.getZ() + mz * 0.6);
+        if (hazardCell(level, first)) return true;
+        BlockPos second = BlockPos.containing(self.getX() + mx * 1.1, self.getY() + 0.01, self.getZ() + mz * 1.1);
+        return !first.equals(second) && hazardCell(level, second);
+    }
+
+    private static boolean hazardCell(ServerLevel level, BlockPos feet) {
+        for (int dy = 0; dy <= 1; dy++) {
+            BlockPos p = feet.above(dy);
+            if (level.getFluidState(p).is(net.minecraft.tags.FluidTags.LAVA) || level.getBlockState(p).is(BlockTags.FIRE)) return true;
         }
         return false;
     }
@@ -332,12 +338,10 @@ public final class Motor {
         }
         mx /= len;
         mz /= len;
-        for (double ahead : new double[]{0.5, 0.9}) {
-            if (dropAt(self.getX() + mx * ahead, self.getZ() + mz * ahead) >= 4 + (self.getHealth() > 10 ? 1 : 0)) {
-                return true;
-            }
-        }
-        return false;
+        BlockPos first = BlockPos.containing(self.getX() + mx * 0.5, self.getY() + 0.01, self.getZ() + mz * 0.5);
+        if (dropAt(first) >= 4 + (self.getHealth() > 10 ? 1 : 0)) return true;
+        BlockPos second = BlockPos.containing(self.getX() + mx * 0.9, self.getY() + 0.01, self.getZ() + mz * 0.9);
+        return !first.equals(second) && dropAt(second) >= 4 + (self.getHealth() > 10 ? 1 : 0);
     }
 
     /** Where to walk to work on a block: on top of it when one can stand there, else next to it. */
