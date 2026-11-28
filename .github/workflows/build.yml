@@ -5,6 +5,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Supersede older builds of the same branch or pull request, never other branches.
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,6 +31,14 @@ jobs:
             grep -a -E "error:|\.java:[0-9]+: " build.log | head -40 | while IFS= read -r l; do echo "::error::${l:0:300}"; done
             exit 1
           }
+
+      # A successful compile is not a passing gameplay regression.
+      - name: Upload unverified candidate jar before gameplay tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlclones-jar-CANDIDATE
+          path: build/libs/*.jar
+          if-no-files-found: error
 
       - name: Run GameTests (headless server)
         # a fixed world seed: the test arenas sit underground, and random terrain around them (falling gravel,
@@ -63,13 +76,13 @@ jobs:
           d=$(grep -a 'CLONE-DEATH' "$log" | grep -a -v ', -58, ' | tail -8 | esc)
           if [ -n "$d" ]; then echo "::notice title=Soak deaths::$d"; fi
 
-      - name: Upload mod jar
-        if: always()
+      - name: Upload gameplay-verified jar
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: rlclones-jar
           path: build/libs/*.jar
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Upload gametest logs
         if: always()
