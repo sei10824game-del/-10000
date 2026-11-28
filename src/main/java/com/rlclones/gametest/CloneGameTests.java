@@ -5948,6 +5948,25 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 900, batch = "r10fishforced")
+    public static void ordinaryHuntRecognizesFishTargets(GameTestHelper h) {
+        deepPool(h, 4, 10);
+        var cod = h.spawn(EntityType.COD, new Vec3(9.5, 0, 7.5));
+        cod.setPersistenceRequired();
+        ClonePlayer c = clone(h, 3.5, 7.5, -90f, false);
+        Vec3 shore = h.absoluteVec(new Vec3(3.5, 2, 7.5));
+        c.teleportTo(h.getLevel(), shore.x, shore.y, shore.z, -90f, 20f);
+        c.getInventory().add(new ItemStack(Items.STONE_SWORD));
+        // Forced HUNT bypasses the special random fish preference, as ordinary Q choices can.
+        c.controller().forcedOption = com.rlclones.ai.strategy.Option.HUNT;
+        c.setAiEnabled(true);
+        h.succeedWhen(() -> {
+            h.assertTrue(c.controller().fishHunts >= 1, "fish selected through ordinary HUNT is counted");
+            h.assertTrue(!cod.isAlive(), "ordinary hunt actually catches the fish");
+            finish(h,c);
+        });
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 900, batch = "r10fish")
     public static void huntsFishInTheWater(GameTestHelper h) {
         deepPool(h, 4, 10);
