@@ -83,4 +83,29 @@ class NearestCandidatesTest {
         nearest.sort();
         assertEquals("b", nearest.get(0));
     }
+
+    @Test
+    void adaptiveSortPreservesOrderAtThresholdAndAfterOverflow() {
+        Random random = new Random(10824);
+        double[] special = {Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, -0.0, 0.0, 1.0, 1.0};
+        for (int limit : new int[]{8, 15, 16, 17, 64}) {
+            var nearest = new NearestCandidates<Candidate>(limit);
+            for (int count : new int[]{0, 1, 7, 8, 9, 15, 16, 17, 18, 64, 65, 16, 0}) {
+                for (int pass = 0; pass < 100; pass++) {
+                    List<Candidate> expected = new ArrayList<>();
+                    for (int i = 0; i < count; i++) {
+                        double d = pass % 2 == 0 ? special[random.nextInt(special.length)] : random.nextDouble();
+                        Candidate c = new Candidate(i, d);
+                        expected.add(c);
+                        nearest.offer(c, d);
+                    }
+                    expected.sort(Comparator.comparingDouble(Candidate::distance));
+                    nearest.sort();
+                    assertEquals(Math.min(count, limit), nearest.size());
+                    for (int i = 0; i < nearest.size(); i++) assertSame(expected.get(i), nearest.get(i));
+                    nearest.clear();
+                }
+            }
+        }
+    }
 }
