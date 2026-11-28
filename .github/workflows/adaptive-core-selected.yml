@@ -1,0 +1,58 @@
+name: Selected optimization validation
+on:
+  push:
+    branches: [optimization/adaptive-core-selected-20261129]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: adaptive-selected-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - label: selected-10
+            baseline: 1f351f21eab2fd30defc9c3319b88f2105008bd0
+            candidate: 0963c85bc53e5e98de93472dc68c569550e0c6c9
+            clones: 10
+          - label: selected-100
+            baseline: 1f351f21eab2fd30defc9c3319b88f2105008bd0
+            candidate: 0963c85bc53e5e98de93472dc68c569550e0c6c9
+            clones: 100
+          - label: selected-300
+            baseline: 1f351f21eab2fd30defc9c3319b88f2105008bd0
+            candidate: 0963c85bc53e5e98de93472dc68c569550e0c6c9
+            clones: 300
+          - label: held-group-100
+            baseline: 0963c85bc53e5e98de93472dc68c569550e0c6c9
+            candidate: 6dfba4ef236c9a122a688bd5df8de40e29ef338e
+            clones: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare isolated builds
+        run: python3 scripts/compare-population.py --baseline ${{ matrix.baseline }} --candidate ${{ matrix.candidate }} --counts ${{ matrix.clones }} --ticks 2400 --repeats 3 --seed rlclones --timeout 3600 --output "$RUNNER_TEMP/selected"
+      - name: Publish comparison
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/selected/comparison.csv"
+          if test -f "$f"; then cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selected-${{ matrix.label }}
+          path: ${{ runner.temp }}/selected/
+          if-no-files-found: warn
