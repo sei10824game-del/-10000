@@ -75,10 +75,24 @@ public final class NearestCandidates<T> {
     /** Sort the retained candidates in place, without allocating temporary arrays. */
     public void sort() {
         if (sorted) return;
-        heapify();
-        for (int end = size - 1; end > 0; end--) {
-            swap(0, end);
-            siftDown(0, end);
+        // Small unheapified batches need no heap setup. The comparator and tie order are identical.
+        // Larger or overflowing batches retain the bounded heap algorithm.
+        if (!heapified && size <= 16) {
+            for (int i = 1; i < size; i++) {
+                Entry entry = heap[i];
+                int j = i;
+                while (j > 0 && compare(heap[j - 1], entry) > 0) {
+                    heap[j] = heap[j - 1];
+                    j--;
+                }
+                heap[j] = entry;
+            }
+        } else {
+            heapify();
+            for (int end = size - 1; end > 0; end--) {
+                swap(0, end);
+                siftDown(0, end);
+            }
         }
         sorted = true;
     }
