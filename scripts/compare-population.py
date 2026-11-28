@@ -135,6 +135,16 @@ def run_one(repo, sha, output, count, ticks, seed, timeout):
                     if latest.exists():
                         (output / "latest.log").write_bytes(latest.read_bytes())
             if returncode:
+                # Preserve complete artifacts, but also expose the final diagnostics in CI
+                # so a baseline infrastructure failure cannot be mistaken for a regression.
+                from collections import deque
+                for name in ("console.log", "latest.log"):
+                    log = output / name
+                    if log.exists():
+                        print(f"--- {name} (last 60 lines) ---", flush=True)
+                        with log.open(encoding="utf-8", errors="replace") as stream:
+                            for line in deque(stream, maxlen=60):
+                                print(line.rstrip()[:2000], flush=True)
                 raise RuntimeError(f"Gradle exited {returncode}; see {output}")
             latest = output / "latest.log"
             if not latest.exists():
