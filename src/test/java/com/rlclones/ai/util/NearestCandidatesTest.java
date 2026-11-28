@@ -70,6 +70,31 @@ class NearestCandidatesTest {
     }
 
     @Test
+    void allocatesEntriesOnlyWhenNeededAndReusesThemAfterClear() throws Exception {
+        NearestCandidates<Integer> nearest = new NearestCandidates<>(64);
+        var field = NearestCandidates.class.getDeclaredField("heap");
+        field.setAccessible(true);
+        Object[] heap = (Object[]) field.get(nearest);
+        for (Object entry : heap) assertNull(entry);
+        for (int i = 0; i < 12; i++) nearest.offer(i, 12-i);
+        nearest.sort();
+        for (int i = 0; i < 12; i++) assertEquals(11-i, nearest.get(i));
+        Object[] retained = heap.clone();
+        nearest.clear();
+        for (int i = 0; i < 12; i++) nearest.offer(i, i);
+        for (int i = 0; i < 12; i++) assertSame(retained[i], heap[i]);
+        for (int i = 12; i < 64; i++) assertNull(heap[i]);
+        for (int i = 12; i < 128; i++) nearest.offer(i, -i);
+        nearest.sort();
+        assertEquals(64, nearest.size());
+        for (int i = 0; i < 64; i++) assertEquals(127-i, nearest.get(i));
+        nearest.clear();
+        nearest.offer(999, 0);
+        nearest.sort();
+        assertEquals(999, nearest.get(0));
+    }
+
+    @Test
     void enforcesBatchLifecycle() {
         assertThrows(IllegalArgumentException.class, () -> new NearestCandidates<>(0));
         NearestCandidates<String> nearest = new NearestCandidates<>(1);
