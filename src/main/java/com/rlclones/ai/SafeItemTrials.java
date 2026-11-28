@@ -21,7 +21,7 @@ public final class SafeItemTrials {
     private Set<String> harmfulEffects(){Set<String> set=new HashSet<>();for(var effect:self.getActiveEffects())if(!effect.getEffect().isBeneficial())set.add(String.valueOf(net.minecraftforge.registries.ForgeRegistries.MOB_EFFECTS.getKey(effect.getEffect())));return set;}
     private void begin(String key,EquipmentSlot slot){this.key=key;wornSlot=slot;owner=self.getCloneBrain();dimension=self.level().dimension();began=now();finished=-1;health=self.getHealth();food=self.getFoodData().getFoodLevel();effects=harmfulEffects();beforeUses=uses;next=now()+600;}
     public int foodSlot(int fallback){
-        if(key!=null&&key.startsWith("food|")&&self.getFoodData().getFoodLevel()>6){
+        if(key!=null&&key.startsWith("food|")&&finished>=0&&self.getFoodData().getFoodLevel()>6){
             if(fallback<0||!key.equals(key("food",self.getInventory().items.get(fallback))))return fallback;
             for(int i=0;i<self.getInventory().items.size();i++){var other=self.getInventory().items.get(i);if(other.isEdible()&&!key.equals(key("food",other))&&Equipment.foodScore(self,other)>0&&!Equipment.keepForFurnace(self,other))return i;}
             return -1;
@@ -36,7 +36,8 @@ public final class SafeItemTrials {
     }
     public boolean beforeOffhandFood(){
         var stack=self.getOffhandItem();String id=key("food",stack);
-        if(self.getFoodData().getFoodLevel()>6&&(self.getCloneBrain().itemTrials.harmful(id)||key!=null&&key.equals(id)))return false;
+        // An interrupted first bite has no observation yet: allow it to be retried.
+        if(self.getFoodData().getFoodLevel()>6&&(self.getCloneBrain().itemTrials.harmful(id)||key!=null&&key.equals(id)&&finished>=0))return false;
         var properties=stack.getFoodProperties(self);
         if(key==null&&now()>=next&&safe()&&self.getFoodData().getFoodLevel()<=14&&FoodAid.foodItems(self)>=4
                 &&properties!=null&&properties.getNutrition()>=2&&stack.getRarity()==Rarity.COMMON&&!(stack.getItem() instanceof SuspiciousStewItem)

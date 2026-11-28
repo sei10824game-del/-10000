@@ -5010,6 +5010,21 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 300, batch = "r9offhandretry")
+    public static void retriesInterruptedOffhandFoodTrial(GameTestHelper h) {
+        ClonePlayer c = clone(h, 7.5, 7.5, 0f, false);
+        c.getFoodData().setFoodLevel(10);
+        c.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, new ItemStack(Items.BREAD, 8));
+        var trial = new com.rlclones.ai.SafeItemTrials(c, c.controller().perception());
+        h.assertTrue(trial.beforeOffhandFood(), "first bite allowed");
+        h.assertTrue(trial.report().contains("food|minecraft:bread"), "food observation really started");
+        h.assertTrue(trial.beforeOffhandFood(), "interrupted bite can be retried before consumption");
+        trial.consumed(c.getOffhandItem());
+        h.assertTrue(!trial.beforeOffhandFood(), "completed trial is not duplicated during observation");
+        finish(h, c);
+    }
+
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9sapling")
     public static void plantsSaplings(GameTestHelper h) {
         clearBases(h);

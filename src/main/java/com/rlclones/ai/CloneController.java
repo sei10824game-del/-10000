@@ -192,6 +192,7 @@ public final class CloneController {
     private float bestProgress = -1f;
     public int progressRewards;
     private boolean eatStarted;
+    private boolean eatConsumed, eatFromOffhand;
     private int closeTicks;
 
     private final OreWorkLearning oreWorkLearning;
@@ -2182,7 +2183,13 @@ public final class CloneController {
         optionReward += Math.min(count, 5) * 0.2f;
     }
 
-    public void onFoodConsumed(net.minecraft.world.item.ItemStack stack) {safeTrials.consumed(stack);}
+    public void onFoodConsumed(net.minecraft.world.item.ItemStack stack) {
+        safeTrials.consumed(stack);
+        if (option == Option.EAT && eatStarted && !eatConsumed) {
+            eatConsumed = true;
+            if (eatFromOffhand) offhandMeals++;
+        }
+    }
 
     public void onConfirmedMining(BlockState state, BlockPos pos) {
         safeTrials.used();
@@ -2947,6 +2954,8 @@ public final class CloneController {
         blockTicks = 0;
         blocksDone = 0;
         eatStarted = false;
+        eatConsumed = false;
+        eatFromOffhand = false;
         closeTicks = 0;
         switch (option) {
             case STORE -> storage.begin(Storage.Mode.STORE);
@@ -5080,7 +5089,7 @@ public final class CloneController {
     private boolean runEat() {
         if (!eatStarted && FoodAid.goodFood(self.getOffhandItem()) && !Equipment.keepForFurnace(self, self.getOffhandItem()) && self.canEat(false) && safeTrials.beforeOffhandFood()) {
             eatStarted = motor.useHeldItem(InteractionHand.OFF_HAND) && self.isUsingItem(); // food at the ready in the other hand
-            offhandMeals += eatStarted ? 1 : 0;
+            eatFromOffhand = eatStarted;
             if (eatStarted) {
                 return false;
             }
@@ -5095,10 +5104,17 @@ public final class CloneController {
                 return eatCake();
             }
             Equipment.select(self, slot);
+            eatFromOffhand = false;
             eatStarted = motor.useHeldItem(InteractionHand.MAIN_HAND) && self.isUsingItem();
             return !eatStarted;
         }
         if (!self.isUsingItem()) {
+            if (!eatConsumed && self.canEat(false)) {
+                // Item use was interrupted, not completed. Retry within the existing option budget.
+                eatStarted = false;
+                eatFromOffhand = false;
+                return false;
+            }
             Equipment.manage(self, true);
             return true;
         }
