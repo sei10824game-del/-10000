@@ -129,6 +129,11 @@ public final class Farming {
 
     public int grassCut;
 
+    /** Grass actually removed by our motor while collecting seeds, not by another player. */
+    public void onSweptGrass() {
+        if (target != null && job == Job.SEEDS) grassCut++;
+    }
+
     public static int hoeSlot(Player p) {
         Inventory inv = p.getInventory();
         for (int i = 0; i < inv.items.size(); i++) {
@@ -479,7 +484,7 @@ public final class Farming {
             if (job == Job.SEEDS) {
                 motor.sweep(); // R-17: cut the grass on the way there
             }
-            motor.navigate(top, 1.5, false);
+            motor.navigate(job == Job.SEEDS ? Vec3.atBottomCenterOf(target) : top, 1.5, false);
             if (motor.stuckCount() > 6) {
                 failed.put(target, level.getGameTime()); // cannot get there: try other spots first
                 last = "stuck going to " + target.toShortString();
