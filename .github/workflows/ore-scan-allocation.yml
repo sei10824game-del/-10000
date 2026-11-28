@@ -1,0 +1,63 @@
+name: Ore scan allocation regression and population load
+on:
+  push:
+    branches: [optimization/ore-scan-allocation-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Existing assertions
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon test build runGameTestServer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ore-scan-regression
+          path: |
+            build/test-results/
+            run/logs/
+          if-no-files-found: warn
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [rlclones, rlclones-rl-exact-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare 300 clones
+        run: python3 scripts/compare-population.py --baseline 5b5c0ef40033f5963997be8e5f7baf9848a824ac --candidate acaba5b2c0418915b9731cac089ddcfbfe1d2d49 --counts 300 --ticks 2400 --repeats 2 --seed "${{ matrix.seed }}" --timeout 4500 --output "$RUNNER_TEMP/ore-scan"
+      - name: Report
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/ore-scan/comparison.csv"
+          if test -f "$f"; then cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ore-scan-${{ matrix.seed }}
+          path: ${{ runner.temp }}/ore-scan/
+          if-no-files-found: warn
