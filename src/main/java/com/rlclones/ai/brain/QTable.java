@@ -68,16 +68,10 @@ public final class QTable {
         return map.int2ObjectEntrySet();
     }
 
-    // Traverse only allowed actions, in exactly the original ascending order (including bit 31).
-    private static int validMask(Entry e, int mask) {
-        return mask & (-1 >>> (Integer.SIZE - e.q.length));
-    }
-
     public static float max(Entry e, int mask) {
         float best = Float.NEGATIVE_INFINITY;
-        for (int remaining = validMask(e, mask); remaining != 0; remaining &= remaining - 1) {
-            int a = Integer.numberOfTrailingZeros(remaining);
-            if (e.q[a] > best) {
+        for (int a = 0; a < e.q.length; a++) {
+            if ((mask & (1 << a)) != 0 && e.q[a] > best) {
                 best = e.q[a];
             }
         }
@@ -88,8 +82,10 @@ public final class QTable {
         int best = -1;
         float bestQ = Float.NEGATIVE_INFINITY;
         int ties = 0;
-        for (int remaining = validMask(e, mask); remaining != 0; remaining &= remaining - 1) {
-            int a = Integer.numberOfTrailingZeros(remaining);
+        for (int a = 0; a < e.q.length; a++) {
+            if ((mask & (1 << a)) == 0) {
+                continue;
+            }
             float q = e.q[a];
             if (q > bestQ + 1e-6f) {
                 bestQ = q;

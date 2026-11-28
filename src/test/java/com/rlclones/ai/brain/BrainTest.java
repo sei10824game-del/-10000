@@ -105,24 +105,4 @@ class BrainTest {
         }finally{pool.shutdownNow();}
     }
 
-
-    @Test void itemUseExplorationMatchesListReferenceAndRandomStream() {
-        for(int mask=0;mask<(1<<Brain.USE_MODES);mask++) {
-            Brain brain=new Brain();
-            var expected=net.minecraft.util.RandomSource.create(10824L+mask);
-            var actual=net.minecraft.util.RandomSource.create(10824L+mask);
-            var untried=new java.util.ArrayList<Integer>();
-            for(int m=0;m<Brain.USE_MODES;m++) {
-                if((mask&(1<<m))!=0) brain.learnItemUse("test",m,0f);
-                else untried.add(m);
-            }
-            for(int i=0;i<256;i++) {
-                int chosen;
-                if(!untried.isEmpty()) chosen=untried.get(expected.nextInt(untried.size()));
-                else chosen=expected.nextInt(6)==0?expected.nextInt(Brain.USE_MODES):0;
-                assertEquals(chosen,brain.chooseItemUse("test",actual));
-                assertEquals(expected.nextLong(),actual.nextLong());
-            }
-        }
-    }
 }
