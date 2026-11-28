@@ -2875,8 +2875,9 @@ public final class CloneController {
     }
 
     private void startOption(long now) {
-        int s = Senses.strategyState(perception, self, self, brain(), now);
-        int mask = Senses.strategyMask(perception, self, self, now);
+        var decision = Senses.strategyDecision(perception, self, self, brain(), now);
+        int s = decision.state();
+        int mask = decision.mask();
         if (now < noPickUntil && !hasPickFor(null) && !self.isCreative()) {
             mask &= ~(Option.MINE.bit() | Option.QUARRY.bit() | Option.STAIRS.bit() | Option.SHAFT.bit());
         }
@@ -3086,8 +3087,9 @@ public final class CloneController {
         if (expedition.takeFinished()) {
             optionReward += 5f;
         }
-        int s2 = died ? 0 : Senses.strategyState(perception, self, self, brain(), now);
-        int mask2 = died ? 0 : Senses.strategyMask(perception, self, self, now);
+        var decision = died ? null : Senses.strategyDecision(perception, self, self, brain(), now);
+        int s2 = died ? 0 : decision.state();
+        int mask2 = died ? 0 : decision.mask();
         float gamma = (float) Math.pow(0.995, Math.max(1, optionTicks));
         brain().learn(Brain.STRATEGY, optionState, option.ordinal(), optionReward, s2, died, gamma, mask2, 1f, false);
         if (option == Option.CRAFT) {
