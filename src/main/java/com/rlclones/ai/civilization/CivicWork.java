@@ -64,7 +64,7 @@ public final class CivicWork {
     private WorkBoard.Job pick() {
         if (!com.rlclones.clone.CloneMobs.canUseHands(self) || self.isCreative() || self.getFoodData().getFoodLevel() <= 6 || now() < retryAfter) return null;
         WorkBoard.Job best = null;
-        double distance = 64 * 64;
+        double bestScore = Double.POSITIVE_INFINITY;
         for (var job : board().jobs(now())) {
             if (job.key.requester().equals(self.getUUID()) || !job.key.dimension().equals(self.level().dimension().location().toString())
                     || !job.key.team().equals(team(self))) continue;
@@ -74,8 +74,12 @@ public final class CivicWork {
             if (recipient == null) continue;
             if (count(recipient, job) >= job.count) { board().cancel(job.key); continue; }
             double d = recipient.distanceToSqr(self);
-            if (d >= distance || spare(job) == 0 && !warehouse.canSupply(wanted(job))) continue;
-            best = job; distance = d;
+            if (d >= 64 * 64 || spare(job) == 0 && !warehouse.canSupply(wanted(job))) continue;
+            // Preserve parental food priority across both the local and civic aid planners.
+            double score = Math.sqrt(d) - (WorkBoard.FOOD.equals(job.key.item())
+                    && CloneManager.isParentOf(self, recipient) ? 1000 : 0);
+            if (score >= bestScore) continue;
+            best = job; bestScore = score;
         }
         return best;
     }
@@ -116,6 +120,14 @@ public final class CivicWork {
         if (count(recipient, active) >= active.count) {
             if (board().complete(active.key, self.getUUID(), now())) {
                 completed++;
+                if (dropped) {
+                    String name = recipient.getGameProfile().getName();
+                    if (WorkBoard.FOOD.equals(active.key.item())) {
+                        self.controller().foodAid().recordDelivery(recipient.getUUID(), name);
+                    } else {
+                        self.controller().itemAid().recordDelivery(active.key.item(), name);
+                    }
+                }
                 Chat.say(self, Component.translatable("rlclones.civic.complete", recipient.getGameProfile().getName()), "CIVIC_DONE " + active.key.item());
                 if (recipient instanceof ClonePlayer clone) clone.controller().foodAid().thank(self.getUUID(), 2);
             }

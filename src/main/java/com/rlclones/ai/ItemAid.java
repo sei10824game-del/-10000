@@ -56,6 +56,12 @@ public final class ItemAid {
 
     public int asked;
     public int given;
+
+    /** A successful delivery, regardless of which aid planner fulfilled it. */
+    public void recordDelivery(String item, String name) {
+        given++;
+        debug = "gave " + item + " to " + name;
+    }
     public String debug = "";
 
     public ItemAid(ClonePlayer self, Motor motor) {
@@ -329,6 +335,12 @@ public final class ItemAid {
                 }
             }
         }
+        if (give <= 0) {
+            asks.remove(a);
+            offered.remove(a);
+            helping = null;
+            return Status.FAILED;
+        }
         if (worst >= 0) {
             gift(self.drop(inv.items.get(worst).split(1), false, true), a.from);
         } else {
@@ -341,8 +353,7 @@ public final class ItemAid {
                 }
             }
         }
-        given++;
-        debug = "gave " + a.item + " to " + a.name;
+        recordDelivery(a.item, a.name);
         if (p instanceof ClonePlayer other && other.controller() != null) {
             other.controller().foodAid().thank(self.getUUID(), 2f); // they know who brought it
         }

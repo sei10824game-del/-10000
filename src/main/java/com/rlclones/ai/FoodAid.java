@@ -49,6 +49,13 @@ public final class FoodAid {
 
     public int asked;
     public int given;
+
+    /** Record a confirmed delivery, including those fulfilled by the shared job board. */
+    public void recordDelivery(UUID recipient, String name) {
+        given++;
+        lastHelped = recipient;
+        debug = "fed " + name;
+    }
     @Nullable
     public UUID lastHelped;
     public String debug = "";
@@ -214,13 +221,19 @@ public final class FoodAid {
             ItemStack s = inv.items.get(i);
             if (goodFood(s)) {
                 int n = Math.min(give, s.getCount());
-                self.drop(s.split(n), false, true);
+                ItemAid.gift(self.drop(s.split(n), false, true), a.from);
                 give -= n;
             }
         }
-        given++;
-        lastHelped = a.from;
-        debug = "fed " + a.name;
+        // The reserve calculation includes offhand food, so delivery must too.
+        ItemStack off = self.getOffhandItem();
+        if (give > 0 && goodFood(off)) {
+            int n = Math.min(give, off.getCount());
+            ItemAid.gift(self.drop(off.split(n), false, true), a.from);
+            give -= n;
+        }
+        self.getInventory().setChanged();
+        recordDelivery(a.from, a.name);
         if (p instanceof ClonePlayer other && other.controller() != null) {
             other.controller().foodAid().thank(self.getUUID(), 3f); // they know who brought it
         }
