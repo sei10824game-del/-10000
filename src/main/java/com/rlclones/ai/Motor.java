@@ -1081,17 +1081,25 @@ public final class Motor {
         mineDebug = "progress";mineDebugNumber=breakProgress;
         self.resetLastActionTime();
         float progress = state.getDestroyProgress(self, level, pos);
-        if (progress > 0 && Float.isFinite(progress)) {
+        // Vanilla treats progress >= 1 as instant breaking. Zero-hardness blocks
+        // (grass, flowers, torches...) may legitimately return positive infinity.
+        boolean instant = progress >= 1.0F;
+        if (instant) {
+            breakProgress = 1.0F;
+            lastProgressAt = lastMineCall;
+        } else if (progress > 0 && Float.isFinite(progress)) {
             breakProgress += progress;
             lastProgressAt = lastMineCall;
         }
-        if (self.tickCount % 4 == 0) {
+        if (instant || self.tickCount % 4 == 0) {
             self.swing(InteractionHand.MAIN_HAND);
         }
-        int stage = (int) (breakProgress * 10.0F);
-        if (stage != breakStage) {
-            level.destroyBlockProgress(self.getId(), pos, Math.min(stage, 9));
-            breakStage = stage;
+        if (!instant) {
+            int stage = (int) (breakProgress * 10.0F);
+            if (stage != breakStage) {
+                level.destroyBlockProgress(self.getId(), pos, Math.min(stage, 9));
+                breakStage = stage;
+            }
         }
         if (breakProgress >= 1.0F) {
             level.destroyBlockProgress(self.getId(), pos, -1);
