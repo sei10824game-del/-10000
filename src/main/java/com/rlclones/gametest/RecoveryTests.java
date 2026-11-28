@@ -46,6 +46,23 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
+    public static void strategyDecisionMatchesIndependentQueries(GameTestHelper h) {
+        var c=GearRecipeTests.clone(h);
+        var observer=c.controller().perception();
+        var brain=c.getCloneBrain();
+        long now=h.getLevel().getGameTime();
+        c.getFoodData().setFoodLevel(10);
+        for(boolean food:new boolean[]{false,true,false}) {
+            c.getInventory().setItem(0,food?new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD,3):net.minecraft.world.item.ItemStack.EMPTY);
+            int expectedState=com.rlclones.ai.Senses.strategyState(observer,c,c,brain,now);
+            int expectedMask=com.rlclones.ai.Senses.strategyMask(observer,c,c,now);
+            var decision=com.rlclones.ai.Senses.strategyDecision(observer,c,c,brain,now);
+            h.assertTrue(expectedState==decision.state(),"combined strategy state matches independent evaluation");
+            h.assertTrue(expectedMask==decision.mask(),"combined strategy mask matches independent evaluation");
+        }
+        h.succeed();
+    }
+    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void changingDestinationDoesNotRewardUnrelatedProgress(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);var motor=c.controller().motor();var goal=c.position().add(7,0,0);
         motor.navigate(goal,0.5,false);field(motor,"escapeBase",new Vec3(1,0,0));call(motor,"beginRecovery");

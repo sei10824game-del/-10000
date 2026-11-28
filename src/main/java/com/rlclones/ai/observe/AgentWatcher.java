@@ -289,8 +289,9 @@ public final class AgentWatcher {
         }
         boolean died = !agent.isAlive();
         Brain b = brain.get();
-        int s2 = died ? 0 : Senses.strategyState(perception, agent, self, b, now);
-        int mask2 = died ? 0 : Senses.strategyMask(perception, agent, self, now);
+        var decision = died ? null : Senses.strategyDecision(perception, agent, self, b, now);
+        int s2 = died ? 0 : decision.state();
+        int mask2 = died ? 0 : decision.mask();
         b.learn(Brain.STRATEGY, t.stratState, option.ordinal(), reward, s2, died, (float) Math.pow(0.995, dt), mask2, weight, true);
         observedTransitions++;
         if (reward >= 0) {
