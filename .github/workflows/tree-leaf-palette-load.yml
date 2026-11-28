@@ -1,0 +1,38 @@
+name: Natural tree palette filtering performance
+on:
+  push:
+    branches: [validation/tree-leaf-palette-load-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [rlclones, rlclones-rl-exact-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare 300 clones
+        run: python3 scripts/compare-population.py --baseline 5b5c0ef40033f5963997be8e5f7baf9848a824ac --candidate a643b428a8da92080dd3c676f9140eac1d0fd60a --counts 300 --ticks 2400 --repeats 2 --seed "${{ matrix.seed }}" --timeout 4500 --output "$RUNNER_TEMP/tree-palette"
+      - name: Report
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/tree-palette/comparison.csv"
+          if test -f "$f"; then cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tree-palette-${{ matrix.seed }}
+          path: ${{ runner.temp }}/tree-palette/
+          if-no-files-found: warn
