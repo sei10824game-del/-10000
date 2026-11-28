@@ -96,6 +96,33 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
+    public static void naturalLeafPaletteFilteringMatchesLiveWorld(GameTestHelper h) {
+        var level=h.getLevel();
+        var min=h.absolutePos(new BlockPos(5,2,5));
+        var max=min.offset(4,5,4);
+        var pos=min.offset(2,3,2);
+        var before=level.getBlockState(pos);
+        try {
+            for(var state:new net.minecraft.world.level.block.state.BlockState[]{
+                Blocks.AIR.defaultBlockState(),
+                Blocks.OAK_LEAVES.defaultBlockState().setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT,true),
+                Blocks.OAK_LEAVES.defaultBlockState().setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT,false),
+                Blocks.STONE.defaultBlockState()}) {
+                level.setBlock(pos,state,2);
+                boolean expected=false;
+                for(var q:BlockPos.betweenClosed(min,max)) {
+                    var st=level.getBlockState(q);
+                    if(st.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock
+                        && st.hasProperty(net.minecraft.world.level.block.LeavesBlock.PERSISTENT)
+                        && !st.getValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT)) {expected=true;break;}
+                }
+                Boolean actual=com.rlclones.ai.util.TerrainSections.naturalLeavesInLoadedBox(level,min,max);
+                h.assertTrue(actual!=null&&actual==expected,"palette filtering must match direct traversal");
+            }
+        } finally {level.setBlock(pos,before,2);}
+        h.succeed();
+    }
+    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void changingDestinationDoesNotRewardUnrelatedProgress(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);var motor=c.controller().motor();var goal=c.position().add(7,0,0);
         motor.navigate(goal,0.5,false);field(motor,"escapeBase",new Vec3(1,0,0));call(motor,"beginRecovery");
