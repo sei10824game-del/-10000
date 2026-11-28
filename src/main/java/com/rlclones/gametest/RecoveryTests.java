@@ -46,6 +46,42 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
+    public static void rangedSelectionMatchesIndependentScoring(GameTestHelper h) {
+        var c=GearRecipeTests.clone(h);
+        var inv=c.getInventory();
+        inv.clearContent();
+        var bow=new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BOW);
+        var crossbow=new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CROSSBOW);
+        var trident=new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.TRIDENT);
+        inv.setItem(0,bow); inv.setItem(1,crossbow); inv.setItem(2,trident);
+        for(boolean ammo:new boolean[]{false,true}) {
+            inv.setItem(3,ammo?new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW,16):net.minecraft.world.item.ItemStack.EMPTY);
+            for(boolean charged:new boolean[]{false,true}) {
+                net.minecraft.world.item.CrossbowItem.setCharged(crossbow,charged);
+                for(int selected=0;selected<4;selected++) {
+                    inv.selected=selected;
+                    int best=-1,bestScore=0;
+                    for(int i=0;i<inv.items.size();i++) {
+                        var stack=inv.items.get(i);
+                        if(!com.rlclones.ai.Equipment.canFire(c,stack))continue;
+                        int score=switch(com.rlclones.ai.Equipment.rangedKind(stack)){
+                            case CROSSBOW -> net.minecraft.world.item.CrossbowItem.isCharged(stack)?5:3;
+                            case BOW -> 4;
+                            case THROWN -> 2;
+                            default -> 0;
+                        };
+                        if(i==selected)score++;
+                        if(score>bestScore){bestScore=score;best=i;}
+                    }
+                    h.assertTrue(best==com.rlclones.ai.Equipment.rangedSlot(c),"ranged selection must preserve original scoring and ties");
+                    c.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND,bow.copy());
+                    h.assertTrue(com.rlclones.ai.Equipment.offhandRanged(c)==com.rlclones.ai.Equipment.canFire(c,c.getOffhandItem()),"offhand firing eligibility");
+                }
+            }
+        }
+        h.succeed();
+    }
+    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void changingDestinationDoesNotRewardUnrelatedProgress(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);var motor=c.controller().motor();var goal=c.position().add(7,0,0);
         motor.navigate(goal,0.5,false);field(motor,"escapeBase",new Vec3(1,0,0));call(motor,"beginRecovery");
