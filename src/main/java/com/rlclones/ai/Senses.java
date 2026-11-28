@@ -419,46 +419,77 @@ public final class Senses {
         return agent.level().getMaxLocalRawBrightness(agent.blockPosition()) < 7;
     }
 
+    /** Query reuse is scoped to one synchronous state/mask evaluation. No cross-tick or cross-observer cache. */
+    private static final class StrategyQueries {
+        final Perception observer;
+        final Player agent;
+        final long now;
+        Boolean food, items, logs, ores, animals;
+        StrategyQueries(Perception observer, Player agent, long now) {
+            this.observer=observer; this.agent=agent; this.now=now;
+        }
+        boolean food() { if(food==null) food=hasFood(agent); return food; }
+        boolean items() { if(items==null) items=nearestItem(observer,agent,now,16)!=null; return items; }
+        boolean logs() { if(logs==null) logs=nearestBlock(observer,agent,Perception.BlockKind.LOG,32)!=null; return logs; }
+        boolean ores() { if(ores==null) ores=nearestBlock(observer,agent,Perception.BlockKind.ORE,24)!=null; return ores; }
+        boolean animals() { if(animals==null) animals=nearestAnimal(observer,agent,now,24)!=null; return animals; }
+    }
+
+    public record StrategyDecision(int state, int mask) {}
+    public static StrategyDecision strategyDecision(Perception observer, Player agent, Player observerSelf, Brain brain, long now) {
+        StrategyQueries queries = new StrategyQueries(observer,agent,now);
+        int state = strategyState(observer,agent,observerSelf,brain,now,queries);
+        int mask = strategyMask(observer,agent,observerSelf,now,queries);
+        return new StrategyDecision(state,mask);
+    }
+
     /**
      * @param observerSelf the observing clone; when describing another agent the observer itself counts as an ally
      */
     public static int strategyState(Perception observer, Player agent, Player observerSelf, Brain brain, long now) {
+        return strategyState(observer,agent,observerSelf,brain,now,new StrategyQueries(observer,agent,now));
+    }
+
+    private static int strategyState(Perception observer, Player agent, Player observerSelf, Brain brain, long now, StrategyQueries queries) {
         float hpFrac = agent.getHealth() / Math.max(1f, agent.getMaxHealth());
         int hp = hpFrac <= 0.35f ? 0 : hpFrac <= 0.7f ? 1 : 2;
         int foodLevel = agent.getFoodData().getFoodLevel();
         int food = foodLevel <= 6 ? 0 : foodLevel <= 16 ? 1 : 2;
         int threat = threatLevel(observer, agent, brain, now);
-        boolean items = nearestItem(observer, agent, now, 16) != null;
-        boolean resource = nearestBlock(observer, agent, Perception.BlockKind.LOG, 32) != null
-                || nearestBlock(observer, agent, Perception.BlockKind.ORE, 24) != null;
+        boolean items = queries.items();
+        boolean resource = queries.logs() || queries.ores();
         boolean ally = nearestAlly(observer, agent, observerSelf, now, 48) != null
                 || (observerSelf != agent && observerSelf.distanceTo(agent) < 48);
-        boolean animals = nearestAnimal(observer, agent, now, 24) != null;
-        return StrategyState.encode(hp, food, threat, hasFood(agent), items, resource, ally, isDark(agent), Equipment.isArmed(agent), animals);
+        boolean animals = queries.animals();
+        return StrategyState.encode(hp, food, threat, queries.food(), items, resource, ally, isDark(agent), Equipment.isArmed(agent), animals);
     }
 
     public static int strategyMask(Perception observer, Player agent, Player observerSelf, long now) {
+        return strategyMask(observer,agent,observerSelf,now,new StrategyQueries(observer,agent,now));
+    }
+
+    private static int strategyMask(Perception observer, Player agent, Player observerSelf, long now, StrategyQueries queries) {
         int mask = Option.EXPLORE.bit() | Option.REST.bit();
         if (!threats(observer, agent, now, 24).isEmpty()) {
             mask |= Option.FIGHT.bit() | Option.FLEE.bit();
         }
-        if (hasFood(agent) && agent.getFoodData().getFoodLevel() < 20) {
+        if (queries.food() && agent.getFoodData().getFoodLevel() < 20) {
             mask |= Option.EAT.bit();
         }
-        if (nearestItem(observer, agent, now, 16) != null) {
+        if (queries.items()) {
             mask |= Option.COLLECT.bit();
         }
         Perception.Seen ally = nearestAlly(observer, agent, observerSelf, now, 64);
         if (ally != null && ally.pos.distanceTo(agent.position()) > 5) {
             mask |= Option.FOLLOW.bit();
         }
-        if (nearestBlock(observer, agent, Perception.BlockKind.LOG, 32) != null) {
+        if (queries.logs()) {
             mask |= Option.GATHER_WOOD.bit();
         }
-        if (nearestBlock(observer, agent, Perception.BlockKind.ORE, 24) != null) {
+        if (queries.ores()) {
             mask |= Option.MINE.bit();
         }
-        if (nearestAnimal(observer, agent, now, 24) != null) {
+        if (queries.animals()) {
             mask |= Option.HUNT.bit();
         }
         // never while swimming: a crafting table cannot be put on water
