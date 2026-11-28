@@ -2925,7 +2925,8 @@ public final class CloneGameTests {
                     planted++;
                 }
             }
-            h.assertTrue(c.controller().farming().grassCut >= 1, "clone should cut grass to get seeds");
+            h.assertTrue(c.controller().farming().grassCut >= 1, "clone should cut grass to get seeds: sweep="
+                    + c.controller().motor().sweepCuts + " " + c.controller().farming().debug() + " " + c.controller().farming().diag());
             h.assertTrue(planted >= 1, "and then till by the water and plant them: seeds=" + c.getInventory().countItem(Items.WHEAT_SEEDS)
                     + " cut=" + c.controller().farming().grassCut + " " + c.controller().farming().debug() + " " + c.controller().farming().diag());
             finish(h, c);
