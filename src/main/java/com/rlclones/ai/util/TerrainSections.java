@@ -91,14 +91,30 @@ public final class TerrainSections {
             for(int sy=lowY>>4;sy<=highY>>4;sy++) {
                 var section=chunk.getSection(chunk.getSectionIndex(sy<<4));
                 if(section.hasOnlyAir())continue; // match LevelChunk.getBlockState, even during bulk/mod edits
-                for(int packed:offsets(section,target)) {
-                    int x=(sx<<4)+(packed&15),z=(sz<<4)+((packed>>4)&15),y=(sy<<4)+(packed>>8);
-                    if(x>=min.getX()&&x<=max.getX()&&y>=lowY&&y<=highY&&z>=min.getZ()&&z<=max.getZ())found.add(new BlockPos(x,y,z));
+                int[] packedCells=offsets(section,target);
+                int sectionY=sy<<4;
+                int lowLocalY=Math.max(0,lowY-sectionY),highLocalY=Math.min(15,highY-sectionY);
+                // BitSet.stream returns ascending offsets, with Y in the high bits.
+                // Restrict the scan to intersecting layers, without changing global output order.
+                int first=lowerBound(packedCells,lowLocalY<<8);
+                int end=lowerBound(packedCells,(highLocalY+1)<<8);
+                for(int i=first;i<end;i++) {
+                    int packed=packedCells[i];
+                    int x=(sx<<4)+(packed&15),z=(sz<<4)+((packed>>4)&15),y=sectionY+(packed>>8);
+                    if(x>=min.getX()&&x<=max.getX()&&z>=min.getZ()&&z<=max.getZ())found.add(new BlockPos(x,y,z));
                 }
             }
         }
         found.sort(ORDER);
         return found;
+    }
+    static int lowerBound(int[] sorted,int value) {
+        int low=0,high=sorted.length;
+        while(low<high) {
+            int mid=(low+high)>>>1;
+            if(sorted[mid]<value)low=mid+1;else high=mid;
+        }
+        return low;
     }
     private TerrainSections() {}
 }
