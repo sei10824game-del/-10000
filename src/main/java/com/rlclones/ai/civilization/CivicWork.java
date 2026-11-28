@@ -72,7 +72,12 @@ public final class CivicWork {
             if (owner != null && !owner.equals(self.getUUID())) continue;
             ServerPlayer recipient = requester(job);
             if (recipient == null) continue;
-            if (count(recipient, job) >= job.count) { board().cancel(job.key); continue; }
+            if (count(recipient, job) >= job.count) {
+                // A claimed job belongs to its worker until tick() can acknowledge delivery.
+                // Availability checks must not erase that completion (and its learning evidence).
+                if (owner == null) board().cancel(job.key);
+                continue;
+            }
             double d = recipient.distanceToSqr(self);
             if (d >= 64 * 64 || spare(job) == 0 && !warehouse.canSupply(wanted(job))) continue;
             // Preserve parental food priority across both the local and civic aid planners.
