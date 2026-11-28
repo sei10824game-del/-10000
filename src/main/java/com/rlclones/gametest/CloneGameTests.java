@@ -5104,6 +5104,15 @@ public final class CloneGameTests {
 
     @GameTest(template = ARENA, timeoutTicks = 600, batch = "r9offhand")
     public static void keepsTheBowOrFoodInTheOffHand(GameTestHelper h) {
+        // The two independent hand-use checks share an arena. Keep the hostile
+        // shooting dummy out of the eater's sight; team defense rightly interrupts
+        // meals when a hostile is visible. Neither assertion should require that
+        // safety behavior to be disabled.
+        for (int x = 1; x <= 13; x++) {
+            for (int y = 2; y <= 4; y++) {
+                h.setBlock(new BlockPos(x, y, 5), Blocks.STONE);
+            }
+        }
         ClonePlayer c = clone(h, 2.5, 7.5, -90f, true);
         c.getInventory().add(new ItemStack(Items.IRON_SWORD));
         c.getInventory().add(new ItemStack(Items.BOW));
@@ -5129,7 +5138,9 @@ public final class CloneGameTests {
             h.assertTrue(c.controller().offhandShots >= 1, "arrows are shot with the bow in the off hand (" + c.controller().shootDebug + ")");
             h.assertTrue(sword[0], "the sword never leaves the main hand");
             h.assertTrue(d.controller().offhandMeals >= 1 && d.getFoodData().getFoodLevel() > 10 && d.getMainHandItem().is(Items.IRON_SWORD),
-                    "and the food is eaten straight from the off hand");
+                    "and the food is eaten straight from the off hand: meals=" + d.controller().offhandMeals
+                            + " food=" + d.getFoodData().getFoodLevel() + " main=" + d.getMainHandItem()
+                            + " off=" + d.getOffhandItem() + " options=" + d.controller().optionLog);
             finish(h, c, d);
         });
     }
