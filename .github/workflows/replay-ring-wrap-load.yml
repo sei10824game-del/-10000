@@ -1,0 +1,56 @@
+name: Replay ring arithmetic equivalence and population load
+on:
+  push:
+    branches: [optimization/replay-ring-wrap-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: bash ./gradlew --no-daemon test build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: replay-ring-tests
+          path: build/test-results/
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [rlclones, rlclones-rl-exact-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare only ring arithmetic
+        run: python3 scripts/compare-population.py --baseline 96f6e02d242c660829a8cc267b27cce9b96f1167 --candidate 700d91fcd72a8e65118a5bdd3a8b30e0ec1dde72 --counts 300 --ticks 2400 --repeats 2 --seed "${{ matrix.seed }}" --timeout 4500 --output "$RUNNER_TEMP/replay-ring"
+      - name: Report
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/replay-ring/comparison.csv"
+          if test -f "$f"; then cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: replay-ring-${{ matrix.seed }}
+          path: ${{ runner.temp }}/replay-ring/
+          if-no-files-found: warn
