@@ -1,0 +1,66 @@
+name: Watcher player crowd reuse
+on:
+  pull_request:
+    branches: [validation/watcher-player-crowd-base-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [rlclones, rlclones-rl-exact-independent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compare watcher candidate
+        run: |
+          python3 scripts/compare-population.py --baseline 217eb662e7ed0770b25961e86ff4abcbb3ab5751 --candidate e94424ac6baa18cbb719e52459e685a499f61ffa --counts 100 300 --ticks 2400 --repeats 2 --seed "${{ matrix.seed }}" --timeout 4500 --output "$RUNNER_TEMP/watcher-comparison"
+      - name: Report
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/watcher-comparison/comparison.csv"; then
+            cat "$RUNNER_TEMP/watcher-comparison/comparison.csv" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: watcher-${{ matrix.seed }}
+          path: ${{ runner.temp }}/watcher-comparison/
+          if-no-files-found: warn
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e94424ac6baa18cbb719e52459e685a499f61ffa
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Existing regression assertions
+        run: |
+          mkdir -p run
+          printf 'level-seed=rlclones\n' > run/server.properties
+          bash ./gradlew --no-daemon test build runGameTestServer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: watcher-regression
+          path: |
+            run/logs/
+            build/test-results/
+          if-no-files-found: warn
