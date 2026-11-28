@@ -3565,8 +3565,8 @@ public final class CloneController {
             Perception.Seen animal = hunt ? Senses.nearestAnimal(perception, self, now, 24) : null;
             Entity fish = hunt && huntFish ? fishInSight(24) : null;
             target = hunt ? (fish != null ? fish : animal == null ? null : animal.entity) : pickHostile(now);
-            if (fish != null && target == fish) {
-                fishHunts++;
+            if (hunt && target instanceof net.minecraft.world.entity.animal.AbstractFish) {
+                fishHunts++; // count the actual target, regardless of which strategy selected HUNT
             }
             if (target == null) {
                 return true;
@@ -3771,6 +3771,14 @@ public final class CloneController {
     private void executeAction() {
         Entity t = target;
         double gap = Senses.gap(self, t);
+        // Horizontal movement alone cannot close the vertical gap to a fish below us.
+        // Keep the learned combat action and the motor's normal air-supply safety check.
+        if (option == Option.HUNT && t instanceof net.minecraft.world.entity.animal.AbstractFish
+                && self.isInWater() && t.getY() < self.getY() - 0.8
+                && (action == CombatAction.APPROACH || action == CombatAction.ATTACK
+                    || action == CombatAction.CRIT_ATTACK || action == CombatAction.SPRINT_ATTACK)) {
+            motor.dive();
+        }
         switch (action) {
             case APPROACH -> {
                 motor.lookAt(t);
