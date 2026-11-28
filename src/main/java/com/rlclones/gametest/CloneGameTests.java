@@ -5023,6 +5023,7 @@ public final class CloneGameTests {
         trial.consumed(c.getOffhandItem());
         h.assertTrue(!trial.beforeOffhandFood(), "completed trial is not duplicated during observation");
         finish(h, c);
+        h.succeed();
     }
 
     @GameTest(template = ARENA, timeoutTicks = 800, batch = "r9sapling")
