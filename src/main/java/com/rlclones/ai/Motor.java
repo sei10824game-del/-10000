@@ -1653,8 +1653,11 @@ public final class Motor {
     public int ridden;
 
     public void tick() {
-        if(breakingPos!=null && (lastMineCall!=self.level().getGameTime() || !self.isAlive() || breakingLevel!=self.level()
-                || BlockClaims.takenByOther(self.level(),breakingPos,self.getUUID(),self.level().getGameTime())))resetMining();
+        // Motor.tick may precede this tick's mine() call. Retain the previous tick's
+        // progress for one tick, matching miningCommitted() and the active claim lease.
+        long mineNow = self.level().getGameTime();
+        if(breakingPos!=null && (lastMineCall>mineNow || lastMineCall<mineNow-1 || !self.isAlive() || self.isRemoved() || breakingLevel!=self.level()
+                || BlockClaims.takenByOther(self.level(),breakingPos,self.getUUID(),mineNow)))resetMining();
         ladderAssist();
         flight();
         waterEscape();
