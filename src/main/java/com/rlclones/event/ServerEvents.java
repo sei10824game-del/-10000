@@ -457,6 +457,16 @@ public final class ServerEvents {
         if (p.level().isClientSide) {
             return;
         }
+        var gift = event.getOriginalEntity();
+        var receiptTag = gift.getPersistentData();
+        String workerTag = com.rlclones.ai.civilization.CivicWork.FOOD_DELIVERY_WORKER;
+        if (receiptTag.hasUUID(workerTag) && p.getServer() != null) {
+            var worker = p.getServer().getPlayerList().getPlayer(receiptTag.getUUID(workerTag));
+            var workerController = controllerOf(worker);
+            if (workerController != null) {
+                workerController.civicWork().confirmFoodPickup(p.getUUID(), gift.getUUID(), event.getStack());
+            }
+        }
         int count = event.getStack().getCount();
         AgentEvents.record(p.getUUID(), p.level().getGameTime(), AgentEvents.Kind.PICKUP, count, -1, 0);
         CloneController c = controllerOf(p);
