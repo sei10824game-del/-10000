@@ -109,7 +109,9 @@ public final class QTable {
         if (other == this) {
             return;
         }
-        for (Int2ObjectMap.Entry<Entry> oe : other.map.int2ObjectEntrySet()) {
+        // The source table is never modified and entries never escape this loop.
+        for (var it = other.map.int2ObjectEntrySet().fastIterator(); it.hasNext();) {
+            var oe = it.next();
             Entry src = oe.getValue();
             Entry dst = map.get(oe.getIntKey());
             if (dst == null) {
