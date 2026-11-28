@@ -675,23 +675,38 @@ public final class CloneGameTests {
     @GameTest(template = ARENA, timeoutTicks = 100, batch = "clonemobs")
     public static void stairsGetWiderTheMoreClonesAreAbout(GameTestHelper h) {
         ClonePlayer a = clone(h, 3.5, 3.5, 0f, false);
+        java.util.List<ClonePlayer> spawned = new java.util.ArrayList<>();
+        spawned.add(a);
         var s = a.controller().stairs();
-        java.lang.reflect.Method m;
         try {
-            m = s.getClass().getDeclaredMethod("lanes");
+            var m = s.getClass().getDeclaredMethod("lanes");
             m.setAccessible(true);
             int alone = (int) m.invoke(s);
             for (int i = 0; i < 5; i++) {
-                clone(h, 4.5 + i, 4.5, 0f, false);
+                spawned.add(clone(h, 4.5 + i, 4.5, 0f, false));
             }
             int five = (int) m.invoke(s);
             for (int i = 0; i < 6; i++) {
-                clone(h, 4.5 + i, 6.5, 0f, false);
+                spawned.add(clone(h, 4.5 + i, 6.5, 0f, false));
             }
             int eleven = (int) m.invoke(s);
-            h.assertTrue(alone <= five && five <= eleven && eleven == 2, "lanes grow with the clones about (other tests leave clones too): " + alone + "/" + five + "/" + eleven);
+            h.assertTrue(alone <= five && five <= eleven && eleven <= 2,
+                    "lanes are monotonic and never wider than two: " + alone + "/" + five + "/" + eleven);
+            if (a.level().players().size() < 30) {
+                h.assertTrue(eleven == 2, "nearby companions widen the stairs in a small population");
+            }
+            // Large populations count actual miners, not idle passers-by.
+            // Set the current option explicitly because these test clones have their AI paused.
+            var option = com.rlclones.ai.CloneController.class.getDeclaredField("option");
+            option.setAccessible(true);
+            option.set(spawned.get(1).controller(), com.rlclones.ai.strategy.Option.STAIRS);
+            h.assertTrue((int)m.invoke(s) == 2, "a nearby active stair miner widens the staircase even in a crowded world");
+            option.set(spawned.get(1).controller(), com.rlclones.ai.strategy.Option.SHAFT);
+            h.assertTrue((int)m.invoke(s) == 2, "a nearby active shaft miner also widens the staircase");
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
+        } finally {
+            finish(h, spawned.toArray(new ClonePlayer[0]));
         }
         h.succeed();
     }
