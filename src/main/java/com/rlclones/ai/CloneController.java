@@ -3580,7 +3580,7 @@ public final class CloneController {
             if(action!=null)closeCombatStep(false,false);
             return false;
         }
-        if(!hunt&&target!=null){
+        if(!hunt&&target!=null&&forcedAction==null){
             boolean tactical=ground.tick(target,now);
             if(ground.cancelAction&&action!=null)closeCombatStep(false,false);
             if(tactical)return false;
@@ -3619,8 +3619,9 @@ public final class CloneController {
                     }
                 }
             }
-            CombatAction pick = ground.exposed()&&forcedAction==null&&(mask&CombatAction.SHOOT.bit())!=0?CombatAction.SHOOT
-                    :free != null && (mask & free.bit()) != 0 ? free : forcedAction;
+            CombatAction pick = forcedAction != null ? forcedAction
+                    : ground.exposed()&&(mask&CombatAction.SHOOT.bit())!=0?CombatAction.SHOOT
+                    : free != null && (mask & free.bit()) != 0 ? free : null;
             int a = pick != null && (mask & pick.bit()) != 0 ? pick.ordinal() : brain().chooseCombat(targetType, s, mask);
             if (a < 0) {
                 return;
@@ -3890,6 +3891,11 @@ public final class CloneController {
             }
             Equipment.select(self, slot);
             held = self.getMainHandItem();
+        }
+        if (AttackLearning.useless(brain().knowledgeIfPresent(targetType), AttackLearning.rangedMethod(held))) {
+            self.stopUsingItem();
+            actionDone = true;
+            return;
         }
         if(rangedBow.reposition(t,now())){lobDraw=0;return;}
         Entity friend = allyInLine(t);
@@ -4273,6 +4279,14 @@ public final class CloneController {
             }
             useStarted = false;
             useDealtBefore = attacks.dealtTo(lt);
+        }
+        // Learning can finish while an action is still running, or another linked clone
+        // can publish the same evidence. Recheck before consuming another projectile.
+        if (AttackLearning.useless(brain().knowledgeIfPresent(targetType), AttackLearning.rangedMethod(self.getMainHandItem()))) {
+            self.stopUsingItem();
+            useMode = -1;
+            actionDone = true;
+            return;
         }
         if (!AttackLearning.itemId(self.getMainHandItem()).equals(useItem)) {
             useMode = -1;

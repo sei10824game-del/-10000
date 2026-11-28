@@ -68,8 +68,12 @@ public final class SafeItemTrials {
     private void cancel(){key=null;owner=null;effects=Set.of();}
     public String report(){return self.getCloneBrain().itemTrials.report()+" 観測中="+(key==null?"なし":key);}
     public static boolean canTryWeapon(ClonePlayer self,ItemStack stack,net.minecraft.world.entity.LivingEntity target,Perception perception){
-        if(stack.getRarity()!=Rarity.COMMON||self.getHealth()<self.getMaxHealth()*0.85f||self.getFoodData().getFoodLevel()<10
-                ||target instanceof net.minecraft.world.entity.player.Player||target.getMaxHealth()>40||!com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING,true)
+        // These exact vanilla items have bounded, understood use behaviour. Enchantment
+        // rarity and high enemy HP are not evidence that a trident or snowball is dangerous to try.
+        boolean knownProjectile=stack.is(net.minecraft.world.item.Items.TRIDENT)||stack.is(net.minecraft.world.item.Items.SNOWBALL);
+        if((!knownProjectile&&(stack.getRarity()!=Rarity.COMMON||target.getMaxHealth()>40))
+                ||self.getHealth()<self.getMaxHealth()*0.85f||self.getFoodData().getFoodLevel()<10
+                ||target instanceof net.minecraft.world.entity.player.Player||!com.rlclones.Config.get(com.rlclones.Config.ALLOW_BLOCK_BREAKING,true)
                 ||Senses.threats(perception,self,self.level().getGameTime(),24).size()>1)return false;
         String id=String.valueOf(net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem()));
         for(String dangerous:new String[]{"bomb","grenade","launcher","cannon","tnt"})if(id.contains(dangerous))return false;
