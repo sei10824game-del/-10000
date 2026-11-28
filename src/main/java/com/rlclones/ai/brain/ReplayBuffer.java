@@ -21,7 +21,8 @@ public final class ReplayBuffer {
         public float weight;
     }
 
-    private final Transition[] items;
+    private final int capacity;
+    private Transition[] items;
     private int next;
     private int size;
 
@@ -29,7 +30,9 @@ public final class ReplayBuffer {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be positive");
         }
-        items = new Transition[capacity];
+        this.capacity = capacity;
+        // Allocate only the visited part of the ring until it fills.
+        items = new Transition[Math.min(16, capacity)];
     }
 
     public int size() {
@@ -37,6 +40,10 @@ public final class ReplayBuffer {
     }
 
     public void add(String table, int s, int a, float r, int s2, boolean terminal, float gamma, int nextMask, float weight) {
+        if (next == items.length) {
+            int grown = (int) Math.min((long) capacity, 2L * items.length);
+            items = java.util.Arrays.copyOf(items, grown);
+        }
         Transition t = items[next];
         if (t == null) {
             t = new Transition();
@@ -51,8 +58,8 @@ public final class ReplayBuffer {
         t.gamma = gamma;
         t.nextMask = nextMask;
         t.weight = weight;
-        next = (next + 1) % items.length;
-        size = Math.min(size + 1, items.length);
+        next = (next + 1) % capacity;
+        size = Math.min(size + 1, capacity);
     }
 
     public Transition sample(Random random) {
@@ -74,7 +81,7 @@ public final class ReplayBuffer {
 
     /** Iterate in insertion order, including after the ring wraps. */
     private Transition oldest(int offset) {
-        return items[(next - size + items.length + offset) % items.length];
+        return items[(int) (((long) next - size + capacity + offset) % capacity)];
     }
 
     public byte[] toBytes() {
