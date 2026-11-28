@@ -17,7 +17,7 @@ public final class NearestCandidates<T> {
     public NearestCandidates(int limit) {
         if (limit < 1) throw new IllegalArgumentException("limit must be positive");
         heap = new Entry[limit];
-        for (int i = 0; i < limit; i++) heap[i] = new Entry();
+        // Allocate entries on demand; a quiet clone need not own a full scan workspace.
     }
 
     public int size() {
@@ -36,7 +36,10 @@ public final class NearestCandidates<T> {
             return;
         }
         // Small scans only append; build a heap once if the scan exceeds the limit.
-        set(heap[size++], value, distance, arrival);
+        Entry entry = heap[size];
+        if (entry == null) heap[size] = entry = new Entry();
+        set(entry, value, distance, arrival);
+        size++;
     }
 
     private void heapify() {
