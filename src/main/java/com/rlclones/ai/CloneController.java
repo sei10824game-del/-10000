@@ -731,8 +731,12 @@ public final class CloneController {
         }
         long pr = Prof.t();
         watchTells(now);
+        // Do not let optional work switch equipment during an uninterrupted meal.
+        // Threats and the emergency reflexes below still take precedence.
+        boolean quietMeal = option == Option.EAT && self.isUsingItem() && self.getUseItem().isEdible()
+                && !threatened && !escaping;
         boolean cloudBusy = !escaping && effects.tick(now, threatened); // effects on us learned; bad lingering clouds left
-        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || pits.tick(now, option) || persona.tick(now, option, threatened) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
+        boolean itemBusy = buriedReflex(now) || doorBreath.tick(now) || pits.tick(now, option) || (!quietMeal && persona.tick(now, option, threatened)) || cloudBusy || tellReflex(now) || consumables.tick(now, threatened, option == Option.FIGHT ? target : null);
         if (!itemBusy && !escaping && option != Option.FIGHT) itemBusy = sizeTactics.recover(now);
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE && !threatened) itemBusy = tunnelBarricade.recover(now);
         if (!itemBusy && !escaping && option == Option.FIGHT) itemBusy = anchorAttack.tick(target, now);
@@ -753,7 +757,7 @@ public final class CloneController {
             if (!itemBusy) itemBusy = enchantingWork.tick(now);
             if (!itemBusy) itemBusy = endEyeSearch.tick(now);
         }
-        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FISH) {
+        if (!itemBusy && !escaping && !quietMeal && option != Option.FIGHT && option != Option.FISH) {
             travel.threatened = threatened;
             itemBusy = travel.tick(now); // bridging a gap / pearling across
         }
@@ -763,10 +767,10 @@ public final class CloneController {
         if (!itemBusy && option == Option.REST && !escaping) {
             itemBusy = lighting.proofTick(now); // R-26: spare torches go round the base
         }
-        if (!itemBusy && !scaffold.isEmpty() && option != Option.GATHER_WOOD && option != Option.FIGHT && option != Option.FLEE && !escaping && !threatened) {
+        if (!itemBusy && !quietMeal && !scaffold.isEmpty() && option != Option.GATHER_WOOD && option != Option.FIGHT && option != Option.FLEE && !escaping && !threatened) {
             itemBusy = scaffoldCleanup(); // a pillar of dirt left beside a tree: taken down, as a tidy player does
         }
-        if (!itemBusy && (option == Option.REST || tradeTrip) && !escaping) {
+        if (!itemBusy && !quietMeal && (option == Option.REST || tradeTrip) && !escaping) {
             itemBusy = trading.tick(now); // R-50: a villager near: sell the surplus, buy food / gear
         }
         if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
@@ -790,10 +794,10 @@ public final class CloneController {
                 && (now + self.getId()) % 10 == 0) {
             itemBusy = shafts.repairKnownRoute();
         }
-        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
+        if (!itemBusy && !escaping && !quietMeal && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = campfire.tick(now, threatened); // raw food in the bag: laid on a campfire (one is put down if it is in the bag)
         }
-        if (!itemBusy && !escaping && option != Option.FIGHT && option != Option.FLEE) {
+        if (!itemBusy && !escaping && !quietMeal && option != Option.FIGHT && option != Option.FLEE) {
             itemBusy = lavaScoop.tick(now, threatened); // an empty bucket and a lava pool near: a bucket of lava (fuel, weapon)
         }
         if (!itemBusy && option == Option.REST && !escaping) {
