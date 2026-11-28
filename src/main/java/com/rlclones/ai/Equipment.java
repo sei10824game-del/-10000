@@ -149,7 +149,10 @@ public final class Equipment {
 
     /** Can this ranged weapon be fired right now (ammo, riptide rules)? */
     public static boolean canFire(Player p, ItemStack s) {
-        RangedKind k = rangedKind(s);
+        return canFire(p, s, rangedKind(s));
+    }
+
+    private static boolean canFire(Player p, ItemStack s, RangedKind k) {
         if (k == RangedKind.NONE) {
             return false;
         }
@@ -191,7 +194,7 @@ public final class Equipment {
     /** A ranged weapon ready in the off hand (the main hand keeps the sword). */
     public static boolean offhandRanged(Player p) {
         ItemStack off = p.getOffhandItem();
-        return rangedKind(off) != RangedKind.NONE && canFire(p, off);
+        return canFire(p, off);
     }
 
     /** Swap inventory slot {@code slot} with whatever is in the off hand. */
@@ -278,7 +281,7 @@ public final class Equipment {
         Inventory inv = p.getInventory();
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
-            if (rangedKind(s) == RangedKind.BOW && canFire(p, s)) {
+            if (rangedKind(s) == RangedKind.BOW && canFire(p, s, RangedKind.BOW)) {
                 return i;
             }
         }
@@ -291,10 +294,11 @@ public final class Equipment {
         int bestScore = 0;
         for (int i = 0; i < inv.items.size(); i++) {
             ItemStack s = inv.items.get(i);
-            if (!canFire(p, s)) {
+            RangedKind kind = rangedKind(s);
+            if (!canFire(p, s, kind)) {
                 continue;
             }
-            int score = switch (rangedKind(s)) {
+            int score = switch (kind) {
                 case CROSSBOW -> CrossbowItem.isCharged(s) ? 5 : 3;
                 case BOW -> 4;
                 case THROWN -> 2;
