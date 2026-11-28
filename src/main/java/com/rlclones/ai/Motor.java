@@ -1550,6 +1550,8 @@ public final class Motor {
     }
 
     private int breathSteps;
+    // Once an emergency pocket is found, stay there until the air reserve is restored.
+    private boolean recoveringAirPocket;
 
     public int breathStepsTaken() {
         return breathSteps;
@@ -1561,19 +1563,28 @@ public final class Motor {
      */
     private boolean breathSteer() {
         if (!self.isInWater() || self.isPassenger() || self.isInLava() || self.hasEffect(MobEffects.WATER_BREATHING) || self.canBreatheUnderwater()
-                || self.getAirSupply() >= self.getMaxAirSupply() * 0.5) {
+                || self.getAbilities().flying) {
+            recoveringAirPocket = false;
+            return false;
+        }
+        if (self.getAirSupply() >= self.getMaxAirSupply() * (recoveringAirPocket ? 0.9 : 0.5)) {
+            recoveringAirPocket = false;
             return false;
         }
         BlockPos head = BlockPos.containing(self.getEyePosition());
         if (!water(head)) {
-            return false;
+            if (!recoveringAirPocket || !airCell(head)) return false;
+            holdAirColumn(head);
+            return true;
         }
         BlockPos up = head;
         while (water(up) && up.getY() < head.getY() + 40) {
             up = up.above();
         }
         if (airCell(up)) {
-            return false; // the surface is straight above
+            if (!recoveringAirPocket) return false; // ordinary surface swimming is unchanged
+            holdAirColumn(up);
+            return true;
         }
         java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
         java.util.HashMap<BlockPos, BlockPos> from = new java.util.HashMap<>();
@@ -1605,6 +1616,8 @@ public final class Motor {
         while (!from.get(step).equals(head)) {
             step = from.get(step);
         }
+        recoveringAirPocket = true;
+        prepareAirRecovery();
         Vec3 to = Vec3.atCenterOf(step).subtract(self.position().add(0, self.getBbHeight() / 2, 0));
         Vec3 flat = new Vec3(to.x, 0, to.z);
         moveDir = flat.lengthSqr() > 0.09 ? flat.normalize() : null;
@@ -1616,6 +1629,25 @@ public final class Motor {
         }
         breathSteps++;
         return true;
+    }
+
+    private void prepareAirRecovery() {
+        // Ignore stale goal input and sprint-swimming while seeking or holding air.
+        forward = 0; strafe = 0; sprint = false; sneak = false;
+        dive = false; diveHard = false; swimSteer = null; swimGoal = null;
+        sweep = false;
+    }
+
+    private void holdAirColumn(BlockPos air) {
+        prepareAirRecovery();
+        Vec3 center = Vec3.atCenterOf(air);
+        Vec3 flat = new Vec3(center.x - self.getX(), 0, center.z - self.getZ());
+        // Slow down within the column so momentum does not carry us back underwater.
+        moveDir = flat.lengthSqr() > 0.04 ? flat.scale(Math.min(3.0, 1.0 / flat.length())) : null;
+        Vec3 velocity = self.getDeltaMovement();
+        self.setDeltaMovement(velocity.x * 0.5, Math.max(0, velocity.y), velocity.z * 0.5);
+        jump = true;
+        breathSteps++;
     }
 
     /** Open air we can breathe in: no solid block, no fluid. */
