@@ -1,0 +1,24 @@
+name: Exact replay buffer compatibility Java 17
+on:
+  push:
+    branches: [validation/replay-exact-java17-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Compare original and lazy ring
+        run: |
+          set -o pipefail
+          bash scripts/check-replay-exact.sh | tee -a "$GITHUB_STEP_SUMMARY"
