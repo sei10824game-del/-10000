@@ -30,6 +30,8 @@ public final class AgentEvents {
         final ArrayDeque<Event> events = new ArrayDeque<>();
         final Range[] ranges = new Range[4];
         int next;
+        // Upper bound, not the last appended timestamp: clocks may move backwards.
+        long latestTick = Long.MIN_VALUE;
         void invalidate() { java.util.Arrays.fill(ranges, null); next = 0; }
     }
     private static final Map<UUID, AgentLog> LOGS = new HashMap<>();
@@ -40,6 +42,7 @@ public final class AgentEvents {
     public static void record(UUID agent, long tick, Kind kind, float amount, int targetId, int flags) {
         AgentLog entry = LOGS.computeIfAbsent(agent, k -> new AgentLog());
         entry.invalidate();
+        entry.latestTick = Math.max(entry.latestTick, tick);
         ArrayDeque<Event> log = entry.events;
         log.addLast(new Event(tick, kind, amount, targetId, flags));
         while (!log.isEmpty() && (tick - log.peekFirst().tick() > KEEP_TICKS || log.size() > 256)) {
@@ -65,11 +68,19 @@ public final class AgentEvents {
     /** Immutable shared snapshot; recording or pruning invalidates every cached range for this agent. */
     public static List<Event> sharedBetween(UUID agent, long from, long to) {
         AgentLog entry = LOGS.get(agent);
-        if (entry == null || entry.events.isEmpty()) return List.of();
+        if (entry == null || entry.events.isEmpty() || from >= to || from >= entry.latestTick) return List.of();
         for (Range range : entry.ranges) {
             if (range != null && range.from == from && range.to == to) return range.events;
         }
-        List<Event> snapshot = List.copyOf(between(agent, from, to));
+        // Avoid a second map lookup and a temporary list for empty intervals.
+        ArrayList<Event> selected = null;
+        for (Event e : entry.events) {
+            if (e.tick() > from && e.tick() <= to) {
+                if (selected == null) selected = new ArrayList<>();
+                selected.add(e);
+            }
+        }
+        List<Event> snapshot = selected == null ? List.of() : List.copyOf(selected);
         entry.ranges[entry.next] = new Range(from, to, snapshot);
         entry.next = (entry.next + 1) % entry.ranges.length;
         return snapshot;
