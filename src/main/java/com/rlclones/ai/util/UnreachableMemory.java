@@ -18,15 +18,12 @@ public final class UnreachableMemory {
         int maxY=Math.min(level.getMaxBuildHeight()-1,Math.max(from.getY(),target.getY())+8)>>4;
         if(minY>maxY || (long)(maxX-minX+1)*(maxZ-minZ+1)*(maxY-minY+1)>128){failures.remove(target);return;}
         List<Cell> cells=new ArrayList<>();
-        for(int x=minX;x<=maxX;x++)for(int z=minZ;z<=maxZ;z++) {
-            // All vertical sections in this column belong to the same loaded chunk.
+        for(int x=minX;x<=maxX;x++)for(int z=minZ;z<=maxZ;z++)for(int y=minY;y<=maxY;y++) {
             var chunk=level.getChunk(x,z,ChunkStatus.FULL,false);
-            for(int y=minY;y<=maxY;y++) {
-                if(chunk==null){cells.add(new Cell(x,y,z,null,0));continue;}
-                var palette=chunk.getSection(chunk.getSectionIndex(y<<4)).getStates();
-                if(!(palette instanceof TerrainVersion tracked)){failures.remove(target);return;}
-                cells.add(new Cell(x,y,z,new WeakReference<>(palette),tracked.rlclones$terrainVersion()));
-            }
+            if(chunk==null){cells.add(new Cell(x,y,z,null,0));continue;}
+            var palette=chunk.getSection(chunk.getSectionIndex(y<<4)).getStates();
+            if(!(palette instanceof TerrainVersion tracked)){failures.remove(target);return;}
+            cells.add(new Cell(x,y,z,new WeakReference<>(palette),tracked.rlclones$terrainVersion()));
         }
         if(failures.size()>=8 && !failures.containsKey(target))failures.remove(failures.keySet().iterator().next());
         failures.put(target.immutable(),new Failure(new WeakReference<>(level),from.immutable(),now,Math.max(1,ttl),TerrainSections.generation(),cells));
@@ -34,20 +31,11 @@ public final class UnreachableMemory {
     public boolean blocked(Level level,BlockPos from,BlockPos target,long now) {
         Failure f=failures.get(target);if(f==null)return false;
         boolean valid=f.level().get()==level && f.generation()==TerrainSections.generation() && f.from().distSqr(from)<=4 && now>=f.at() && now-f.at()<f.ttl();
-        if(valid) {
-            // Reuse only within this synchronous validation, never across ticks.
-            ChunkAccess chunk=null;
-            boolean first=true;
-            int lastX=0,lastZ=0;
-            for(var cell:f.cells()) {
-                if(first || cell.x()!=lastX || cell.z()!=lastZ) {
-                    chunk=level.getChunk(cell.x(),cell.z(),ChunkStatus.FULL,false);
-                    lastX=cell.x();lastZ=cell.z();first=false;
-                }
-                if(chunk==null){if(cell.palette()!=null){valid=false;break;}continue;}
-                var palette=chunk.getSection(chunk.getSectionIndex(cell.y()<<4)).getStates();
-                if(cell.palette()==null || cell.palette().get()!=palette || !(palette instanceof TerrainVersion tracked) || tracked.rlclones$terrainVersion()!=cell.version()){valid=false;break;}
-            }
+        if(valid)for(var cell:f.cells()) {
+            var chunk=level.getChunk(cell.x(),cell.z(),ChunkStatus.FULL,false);
+            if(chunk==null){if(cell.palette()!=null){valid=false;break;}continue;}
+            var palette=chunk.getSection(chunk.getSectionIndex(cell.y()<<4)).getStates();
+            if(cell.palette()==null || cell.palette().get()!=palette || !(palette instanceof TerrainVersion tracked) || tracked.rlclones$terrainVersion()!=cell.version()){valid=false;break;}
         }
         if(!valid)failures.remove(target);
         return valid;

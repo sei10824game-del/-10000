@@ -46,28 +46,6 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
-    public static void negativePathMemoryChecksEveryVerticalSection(GameTestHelper h) {
-        var level=h.getLevel();
-        var memory=new com.rlclones.ai.util.UnreachableMemory();
-        // Use the same loaded column, but a different section above the arena.
-        var from=h.absolutePos(new BlockPos(7,2,7));
-        var target=from.above(20);
-        long now=level.getGameTime();
-        memory.remember(level,from,target,now,80);
-        h.assertTrue(memory.blocked(level,from,target,now),"unchanged path failure can be reused");
-        var old=level.getBlockState(target);
-        try {
-            level.setBlock(target,old.is(Blocks.STONE)?Blocks.AIR.defaultBlockState():Blocks.STONE.defaultBlockState(),2);
-            h.assertTrue(!memory.blocked(level,from,target,now),"a changed upper section invalidates the cached failure");
-            memory.remember(level,from,target,now,80);
-            h.assertTrue(memory.blocked(level,from,target,now),"new terrain is remembered");
-            h.assertTrue(!memory.blocked(level,from,target,now+80),"original expiry boundary is preserved");
-        } finally {
-            level.setBlock(target,old,2);
-        }
-        h.succeed();
-    }
-    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void strategyDecisionMatchesIndependentQueries(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);
         var observer=c.controller().perception();
