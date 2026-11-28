@@ -1,0 +1,32 @@
+name: Direct learning save benchmark
+on:
+  pull_request:
+    branches: [optimization/rl-save-only-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Exact binary comparison and direct JVM allocation/time benchmark
+        run: |
+          RL_SAVE_BENCH_OUTPUT="$RUNNER_TEMP/save-bench.txt" bash ./gradlew --no-daemon test --tests '*SaveBenchmarkTest' --tests '*FixedLearningSaveTest'
+          cat "$RUNNER_TEMP/save-bench.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: direct-save-benchmark
+          path: |
+            ${{ runner.temp }}/save-bench.txt
+            build/test-results/
+          if-no-files-found: warn
