@@ -504,7 +504,10 @@ public final class Perception {
         while (top.getY() - pos.getY() < 32 && level.getBlockState(top.above()).is(BlockTags.LOGS)) {
             top = top.above();
         }
-        for (BlockPos p : BlockPos.betweenClosed(pos.offset(-2, 0, -2), top.offset(2, 5, 2))) {
+        BlockPos min=pos.offset(-2,0,-2),max=top.offset(2,5,2);
+        Boolean indexed=com.rlclones.ai.util.TerrainSections.naturalLeavesInLoadedBox(level,min,max);
+        if(indexed!=null)return indexed;
+        for (BlockPos p : BlockPos.betweenClosed(min,max)) {
             BlockState s = level.getBlockState(p);
             if (s.getBlock() instanceof LeavesBlock && s.hasProperty(LeavesBlock.PERSISTENT) && !s.getValue(LeavesBlock.PERSISTENT)) {
                 return true;
