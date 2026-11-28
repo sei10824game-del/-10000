@@ -46,6 +46,36 @@ public final class RecoveryTests {
         h.succeed();
     }
     @GameTest(template="arena",batch="recovery",timeoutTicks=40)
+    public static void bestWeaponOfKindPreservesLiveScoresAndTies(GameTestHelper h) {
+        var c=GearRecipeTests.clone(h);
+        var inv=c.getInventory();
+        inv.clearContent();
+        var items=new net.minecraft.world.item.Item[]{
+            net.minecraft.world.item.Items.WOODEN_SWORD,
+            net.minecraft.world.item.Items.IRON_SWORD,
+            net.minecraft.world.item.Items.IRON_SWORD,
+            net.minecraft.world.item.Items.DIAMOND_AXE,
+            net.minecraft.world.item.Items.STONE_AXE};
+        for(int i=0;i<items.length;i++)inv.setItem(i,new net.minecraft.world.item.ItemStack(items[i]));
+        for(int step=0;step<3;step++) {
+            for(Class<?> kind:new Class<?>[]{net.minecraft.world.item.SwordItem.class,net.minecraft.world.item.AxeItem.class,net.minecraft.world.item.BowItem.class}) {
+                int best=-1;
+                double bestScore=0;
+                for(int i=0;i<inv.items.size();i++) {
+                    var stack=inv.items.get(i);
+                    if(!stack.isEmpty()&&kind.isInstance(stack.getItem())&&com.rlclones.ai.Equipment.attackDamage(stack)>bestScore) {
+                        bestScore=com.rlclones.ai.Equipment.attackDamage(stack);
+                        best=i;
+                    }
+                }
+                h.assertTrue(best==com.rlclones.ai.Equipment.bestOfKind(c,kind),"same result as original selection including ties and empty inventory");
+            }
+            if(step==0)inv.getItem(2).enchant(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,1);
+            if(step==1)inv.clearContent();
+        }
+        h.succeed();
+    }
+    @GameTest(template="arena",batch="recovery",timeoutTicks=40)
     public static void changingDestinationDoesNotRewardUnrelatedProgress(GameTestHelper h) {
         var c=GearRecipeTests.clone(h);var motor=c.controller().motor();var goal=c.position().add(7,0,0);
         motor.navigate(goal,0.5,false);field(motor,"escapeBase",new Vec3(1,0,0));call(motor,"beginRecovery");
