@@ -1128,6 +1128,36 @@ public final class CloneGameTests {
         });
     }
 
+    @GameTest(template = ARENA, timeoutTicks = 160, batch = "miningorder")
+    public static void miningProgressSurvivesMotorBeforeMineButExpiresWhenIdle(GameTestHelper h) {
+        ClonePlayer c=clone(h,5.5,7.5,-90f,false);
+        BlockPos local=new BlockPos(6,2,7),abs=h.absolutePos(local);
+        h.setBlock(local,Blocks.OAK_LOG);
+        long[] started={-1};
+        boolean[] carried={false};
+        h.onEachTick(()->{
+            var motor=c.controller().motor();
+            long tick=h.getTick();
+            motor.lookAt(Vec3.atCenterOf(abs));
+            motor.tick();
+            if(started[0]<0){
+                motor.mine(abs);
+                if(motor.miningCommitted(abs))started[0]=tick;
+            }else if(tick==started[0]+1){
+                carried[0]=motor.miningCommitted(abs);
+                motor.mine(abs);
+            }
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(started[0]>=0,"actual mining progress started");
+            h.assertTrue(h.getTick()>=started[0]+4,"wait for idle expiry");
+            h.assertTrue(carried[0],"motor-before-mine preserves previous tick progress");
+            h.assertTrue(!c.controller().motor().miningCommitted(abs),"idle mining progress expires");
+            h.assertTrue(!com.rlclones.ai.BlockClaims.takenByOther(h.getLevel(),abs,java.util.UUID.randomUUID(),h.getLevel().getGameTime()),"idle claim released");
+            finish(h,c);
+        });
+    }
+
     // ------------------------------------------------------------------ AC: brains persist and merge correctly
 
     @GameTest(template = ARENA, timeoutTicks = 20)
