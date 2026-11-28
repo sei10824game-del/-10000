@@ -72,15 +72,8 @@ public final class AgentEvents {
         for (Range range : entry.ranges) {
             if (range != null && range.from == from && range.to == to) return range.events;
         }
-        // Avoid a second map lookup and a temporary list for empty intervals.
-        ArrayList<Event> selected = null;
-        for (Event e : entry.events) {
-            if (e.tick() > from && e.tick() <= to) {
-                if (selected == null) selected = new ArrayList<>();
-                selected.add(e);
-            }
-        }
-        List<Event> snapshot = selected == null ? List.of() : List.copyOf(selected);
+        // Keep the original allocation path for nonempty intervals; only skip provably empty ranges.
+        List<Event> snapshot = List.copyOf(between(agent, from, to));
         entry.ranges[entry.next] = new Range(from, to, snapshot);
         entry.next = (entry.next + 1) % entry.ranges.length;
         return snapshot;
